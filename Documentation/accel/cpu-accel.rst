@@ -41,13 +41,17 @@ small ioctl interface:
 * ``RESET`` returns the device to its initial state after a completed run.
 
 The shared mapping contains the state, run timestamps, aggregate lateness,
-and up to ``CPU_ACCEL_MAX_SAMPLES`` timestamp samples.  ABI version 2 also
+and up to ``CPU_ACCEL_MAX_SAMPLES`` timestamp samples.  ABI version 3 also
 reports lifecycle entry/exit timestamps, interrupt and softirq deltas,
 timer, hrtimer, RCU, and scheduler softirq deltas, current-task
 context-switch deltas, CPU-entry/exit identity, migration detection, pending
 scheduler and softirq state, and preemption state.  On x86 it additionally
 reports architecture interrupt, IPI, and TLB counter deltas;
 ``arch_counters_valid`` identifies whether those counters are available.
+The x86 staged backend is reported as ``CPU_ACCEL_BACKEND_X86_STAGED_IPI``;
+it uses one normal IPI for entry and does not yet provide direct APIC entry.
+Workqueue queue and execution tracepoints report activity targeted at the
+accelerator CPU while it is running.
 These are observations made by the prototype, not suppression or admission
 controls for the corresponding activity.
 
@@ -72,9 +76,10 @@ are sampled around the target callback; the context-switch value is the
 current task's switch-counter delta.  x86 IPI/TLB counters are read from the
 per-CPU architecture interrupt statistics.  ``CPU_ACCEL_REPEATS`` repeats the
 normal run, while ``CPU_ACCEL_LOAD_CPUS`` starts a busy loop on the listed
-non-target CPUs for a loaded measurement.  Workqueue execution is not given a
-separate counter yet: it requires scheduler/core trace instrumentation, and
-cannot execute on this target while preemption and interrupts are disabled.
+non-target CPUs for a loaded measurement.  Workqueue counters depend on
+tracepoint exports from the core workqueue implementation and count only
+queueing requested for, or execution occurring on, the target CPU during the
+accelerator interval.
 The tool pins its control process to CPU 0.  CPU 0 is reserved for
 control-plane work by this prototype and is rejected as a target.
 
@@ -88,6 +93,5 @@ implementation is not assumed to be recoverable without reverting to the
 known-good kernel.  This lifecycle is the first step toward that model, but
 the synchronous SMP dispatch still uses the normal IPI entry path and does
 not suppress Linux-generated IPIs while the target is running.  The next
-phase should add explicit lifecycle instrumentation and an x86_64 backend
-boundary for interrupt, workqueue, RCU, timer, and TLB activity before
-attempting a stronger latency claim.
+phase should replace the staged x86 handoff with direct APIC ownership and
+explicit pending-IPI/TLB policy before attempting a stronger latency claim.

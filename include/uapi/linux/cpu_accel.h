@@ -6,7 +6,7 @@
 #include <linux/types.h>
 
 /* The first prototype uses a fixed-size shared control and sample area. */
-#define CPU_ACCEL_ABI_VERSION		2
+#define CPU_ACCEL_ABI_VERSION		3
 #define CPU_ACCEL_MAP_SIZE		(64U * 1024U)
 #define CPU_ACCEL_MAX_SAMPLES		2048U
 
@@ -29,6 +29,11 @@ enum cpu_accel_state {
 /* Keep the target owned until STOP or the configured watchdog fires. */
 #define CPU_ACCEL_FLAG_PERSISTENT	(1U << 1)
 
+enum cpu_accel_backend {
+	CPU_ACCEL_BACKEND_GENERIC_SMP = 0,
+	CPU_ACCEL_BACKEND_X86_STAGED_IPI,
+};
+
 struct cpu_accel_config {
 	__u32 cpu;
 	__u32 flags;
@@ -47,6 +52,8 @@ struct cpu_accel_shared {
 	__u32 state;
 	__u32 cpu;
 	__u32 flags;
+	__u32 backend;
+	__u32 backend_flags;
 	__u32 stop_requested;
 	__u32 samples_valid;
 	__u32 reserved0;
@@ -67,6 +74,8 @@ struct cpu_accel_shared {
 	__u64 hrtimer_softirq_count;
 	__u64 rcu_softirq_count;
 	__u64 sched_softirq_count;
+	__u64 workqueue_queued;
+	__u64 workqueue_executed;
 	__u64 context_switches;
 	__u64 need_resched_samples;
 	__u64 arch_irq_count;

@@ -35,14 +35,15 @@ static int parse_u64(const char *text, uint64_t *value)
 
 static void print_status(const volatile struct cpu_accel_shared *shared)
 {
-	printf("state=%u sequence=%" PRIu64 " cpu=%u samples=%" PRIu64
+	printf("state=%u sequence=%" PRIu64 " cpu=%u backend=%u samples=%" PRIu64
 	       " max_lateness_ns=%" PRIu64 " min_lateness_ns=%" PRIu64
 	       " last_lateness_ns=%" PRIu64 " duration_ns=%" PRIu64
 	       " period_ns=%" PRIu64 " lifecycle_entry_ns=%" PRIu64
 	       " lifecycle_exit_ns=%" PRIu64 " irq_count=%" PRIu64
 	       " softirq_count=%" PRIu64 " timer_softirq_count=%" PRIu64
 	       " hrtimer_softirq_count=%" PRIu64 " rcu_softirq_count=%" PRIu64
-	       " sched_softirq_count=%" PRIu64 " context_switches=%" PRIu64
+	       " sched_softirq_count=%" PRIu64 " workqueue_queued=%" PRIu64
+	       " workqueue_executed=%" PRIu64 " context_switches=%" PRIu64
 	       " need_resched_samples=%" PRIu64 " arch_irq_count=%" PRIu64
 	       " arch_ipi_count=%" PRIu64 " arch_tlb_count=%" PRIu64
 	       " need_resched_entry=%u need_resched_exit=%u"
@@ -51,6 +52,7 @@ static void print_status(const volatile struct cpu_accel_shared *shared)
 	       " arch_counters_valid=%u lifecycle_cpu_entry=%u"
 	       " lifecycle_cpu_exit=%u migration_detected=%u\n",
 	       shared->state, (uint64_t)shared->sequence, shared->cpu,
+	       shared->backend,
 	       (uint64_t)shared->samples_produced,
 	       (uint64_t)shared->max_lateness_ns,
 	       (uint64_t)shared->min_lateness_ns,
@@ -64,6 +66,8 @@ static void print_status(const volatile struct cpu_accel_shared *shared)
 	       (uint64_t)shared->hrtimer_softirq_count,
 	       (uint64_t)shared->rcu_softirq_count,
 	       (uint64_t)shared->sched_softirq_count,
+	       (uint64_t)shared->workqueue_queued,
+	       (uint64_t)shared->workqueue_executed,
 	       (uint64_t)shared->context_switches,
 	       (uint64_t)shared->need_resched_samples,
 	       (uint64_t)shared->arch_irq_count,

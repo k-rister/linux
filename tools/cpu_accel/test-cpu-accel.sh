@@ -61,6 +61,12 @@ while [ "$run" -le "$repeats" ]; do
 		fail "timer softirq telemetry was not reported"
 	echo "$output" | grep -q 'rcu_softirq_count=' || \
 		fail "RCU softirq telemetry was not reported"
+	echo "$output" | grep -q 'workqueue_queued=' || \
+		fail "workqueue queue telemetry was not reported"
+	echo "$output" | grep -q 'workqueue_executed=' || \
+		fail "workqueue execution telemetry was not reported"
+	echo "$output" | grep -q 'backend=1' || \
+		fail "x86 staged backend was not selected"
 	echo "$output" | grep -q 'arch_counters_valid=1' || \
 		fail "architecture counters were not reported on x86"
 	run=$((run + 1))

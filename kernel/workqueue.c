@@ -555,6 +555,8 @@ static void show_one_worker_pool(struct worker_pool *pool);
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/workqueue.h>
+EXPORT_TRACEPOINT_SYMBOL_GPL(workqueue_queue_work);
+EXPORT_TRACEPOINT_SYMBOL_GPL(workqueue_execute_start);
 
 #define assert_rcu_or_pool_mutex()					\
 	RCU_LOCKDEP_WARN(!rcu_read_lock_any_held() &&			\

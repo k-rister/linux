@@ -28,6 +28,8 @@
 #include <asm/hardirq.h>
 #endif
 
+#include <trace/events/workqueue.h>
+
 struct cpu_accel_observation {
 	u64 lifecycle_entry_ns;
 	u64 irq_entry;
@@ -46,6 +48,37 @@ struct cpu_accel_observation {
 	u32 preempt_count_entry;
 	u32 cpu;
 };
+
+typedef void (*cpu_accel_entry_fn)(void *data);
+
+#ifdef CONFIG_X86
+/*
+ * Staged x86 handoff: one normal IPI enters the callback, after which the
+ * callback owns execution until it returns.  A direct APIC handoff will
+ * replace this function without changing the lifecycle or control ABI.
+ */
+static int cpu_accel_arch_enter(unsigned int cpu, cpu_accel_entry_fn entry,
+				void *data)
+{
+	return smp_call_function_single(cpu, entry, data, 1);
+}
+
+static u32 cpu_accel_backend_id(void)
+{
+	return CPU_ACCEL_BACKEND_X86_STAGED_IPI;
+}
+#else
+static int cpu_accel_arch_enter(unsigned int cpu, cpu_accel_entry_fn entry,
+				void *data)
+{
+	return smp_call_function_single(cpu, entry, data, 1);
+}
+
+static u32 cpu_accel_backend_id(void)
+{
+	return CPU_ACCEL_BACKEND_GENERIC_SMP;
+}
+#endif
 
 #ifdef CONFIG_X86
 static u64 cpu_accel_arch_irq_count(unsigned int cpu)
@@ -122,6 +155,8 @@ struct cpu_accel_device {
 	atomic_t stop_requested;
 	atomic_t watchdog_fired;
 	atomic_t running;
+	atomic64_t workqueue_queued;
+	atomic64_t workqueue_executed;
 	unsigned int sequence;
 	unsigned int controller_cpu;
 	int lifecycle_ret;
@@ -129,6 +164,61 @@ struct cpu_accel_device {
 };
 
 static struct cpu_accel_device cpu_accel;
+
+static bool cpu_accel_workqueue_target_active(struct cpu_accel_device *dev,
+						int cpu)
+{
+	return cpu == READ_ONCE(dev->config.cpu) &&
+		atomic_read(&dev->running);
+}
+
+static void cpu_accel_workqueue_queue(void *data, int req_cpu,
+				      struct pool_workqueue *pwq,
+				      struct work_struct *work)
+{
+	struct cpu_accel_device *dev = data;
+
+	(void)pwq;
+	(void)work;
+	if (cpu_accel_workqueue_target_active(dev, req_cpu))
+		atomic64_inc(&dev->workqueue_queued);
+}
+
+static void cpu_accel_workqueue_execute_start(void *data,
+					       struct work_struct *work)
+{
+	struct cpu_accel_device *dev = data;
+
+	(void)work;
+	if (cpu_accel_workqueue_target_active(dev, raw_smp_processor_id()))
+		atomic64_inc(&dev->workqueue_executed);
+}
+
+static int cpu_accel_register_workqueue_tracepoints(void)
+{
+	int ret;
+
+	ret = register_trace_workqueue_queue_work(cpu_accel_workqueue_queue,
+						  &cpu_accel);
+	if (ret)
+		return ret;
+
+	ret = register_trace_workqueue_execute_start(
+		cpu_accel_workqueue_execute_start, &cpu_accel);
+	if (ret)
+		unregister_trace_workqueue_queue_work(cpu_accel_workqueue_queue,
+						      &cpu_accel);
+	return ret;
+}
+
+static void cpu_accel_unregister_workqueue_tracepoints(void)
+{
+	unregister_trace_workqueue_execute_start(
+		cpu_accel_workqueue_execute_start, &cpu_accel);
+	unregister_trace_workqueue_queue_work(cpu_accel_workqueue_queue,
+					      &cpu_accel);
+	tracepoint_synchronize_unregister();
+}
 
 static void cpu_accel_watchdog(struct timer_list *timer)
 {
@@ -148,6 +238,7 @@ static void cpu_accel_reset_shared(struct cpu_accel_device *dev)
 	memset(dev->shared, 0, CPU_ACCEL_MAP_SIZE);
 	dev->shared->abi_version = CPU_ACCEL_ABI_VERSION;
 	dev->shared->struct_size = sizeof(*dev->shared);
+	dev->shared->backend = cpu_accel_backend_id();
 	WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_IDLE);
 }
 
@@ -220,6 +311,8 @@ static void cpu_accel_observation_finish(struct cpu_accel_device *dev,
 	shared->hrtimer_softirq_count = hrtimer_softirq_delta;
 	shared->rcu_softirq_count = rcu_softirq_delta;
 	shared->sched_softirq_count = sched_softirq_delta;
+	shared->workqueue_queued = atomic64_read(&dev->workqueue_queued);
+	shared->workqueue_executed = atomic64_read(&dev->workqueue_executed);
 	shared->context_switches = context_switch_delta;
 	shared->need_resched_samples = obs->need_resched_samples;
 	shared->arch_irq_count = arch_irq_delta;
@@ -346,8 +439,8 @@ static void cpu_accel_lifecycle_entry(void *data)
  */
 static int cpu_accel_lifecycle_enter(struct cpu_accel_device *dev)
 {
-	return smp_call_function_single(dev->config.cpu,
-				       cpu_accel_lifecycle_entry, dev, 1);
+	return cpu_accel_arch_enter(dev->config.cpu,
+				   cpu_accel_lifecycle_entry, dev);
 }
 
 static int cpu_accel_lifecycle_thread(void *data)
@@ -501,6 +594,8 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 	dev->shared->hrtimer_softirq_count = 0;
 	dev->shared->rcu_softirq_count = 0;
 	dev->shared->sched_softirq_count = 0;
+	dev->shared->workqueue_queued = 0;
+	dev->shared->workqueue_executed = 0;
 	dev->shared->context_switches = 0;
 	dev->shared->need_resched_samples = 0;
 	dev->shared->arch_irq_count = 0;
@@ -516,6 +611,8 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 	dev->shared->lifecycle_cpu_entry = 0;
 	dev->shared->lifecycle_cpu_exit = 0;
 	dev->shared->migration_detected = 0;
+	atomic64_set(&dev->workqueue_queued, 0);
+	atomic64_set(&dev->workqueue_executed, 0);
 	reinit_completion(&dev->lifecycle_done);
 	dev->lifecycle_ret = -EINPROGRESS;
 	atomic_set(&dev->stop_requested, 0);
@@ -653,11 +750,18 @@ static int __init cpu_accel_init(void)
 	atomic_set(&cpu_accel.stop_requested, 0);
 	atomic_set(&cpu_accel.watchdog_fired, 0);
 	atomic_set(&cpu_accel.running, 0);
+	atomic64_set(&cpu_accel.workqueue_queued, 0);
+	atomic64_set(&cpu_accel.workqueue_executed, 0);
 	timer_setup(&cpu_accel.watchdog_timer, cpu_accel_watchdog, 0);
 	cpu_accel.shared = vmalloc_user(CPU_ACCEL_MAP_SIZE);
 	if (!cpu_accel.shared)
 		return -ENOMEM;
 	cpu_accel_reset_shared(&cpu_accel);
+	ret = cpu_accel_register_workqueue_tracepoints();
+	if (ret) {
+		vfree(cpu_accel.shared);
+		return ret;
+	}
 
 	cpu_accel.misc.minor = MISC_DYNAMIC_MINOR;
 	cpu_accel.misc.name = "cpu_accel";
@@ -665,6 +769,7 @@ static int __init cpu_accel_init(void)
 	cpu_accel.misc.mode = 0600;
 	ret = misc_register(&cpu_accel.misc);
 	if (ret) {
+		cpu_accel_unregister_workqueue_tracepoints();
 		vfree(cpu_accel.shared);
 		return ret;
 	}
@@ -687,6 +792,7 @@ static void __exit cpu_accel_exit(void)
 	mutex_unlock(&cpu_accel.lock);
 
 	misc_deregister(&cpu_accel.misc);
+	cpu_accel_unregister_workqueue_tracepoints();
 	vfree(cpu_accel.shared);
 	cpu_accel.shared = NULL;
 }

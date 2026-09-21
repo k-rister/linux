@@ -7,10 +7,13 @@ CPPFLAGS += -D_GNU_SOURCE -Wno-cpp -I../../include/uapi -I../../usr/include
 
 all: cpu-accelctl
 
+test: cpu-accelctl
+	CPU_ACCELCTL=./cpu-accelctl sh ./test-cpu-accel.sh
+
 cpu-accelctl: cpu-accelctl.o libcpu_accel.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 clean:
 	rm -f cpu-accelctl cpu-accelctl.o libcpu_accel.o
 
-.PHONY: all clean
+.PHONY: all clean test

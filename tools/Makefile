@@ -14,6 +14,7 @@ help:
 	@echo '  counter                - counter tools'
 	@echo '  cpupower               - a tool for all things x86 CPU power'
 	@echo '  cpu_accel              - single-CPU accelerator prototype tool'
+	@echo '  cpu_accel_test         - accelerator control and recovery tests'
 	@echo '  debugging              - tools for debugging'
 	@echo '  dma                    - tools for DMA mapping'
 	@echo '  firewire               - the userspace part of nosy, an IEEE-1394 traffic sniffer'
@@ -73,6 +74,9 @@ cpupower: FORCE
 
 cpu_accel: FORCE
 	$(call descend,$@)
+
+cpu_accel_test: FORCE
+	$(call descend,cpu_accel,test)
 
 counter dma firewire hv guest bootconfig spi usb virtio mm bpf iio gpio objtool leds wmi firmware debugging tracing: FORCE
 	$(call descend,$@)

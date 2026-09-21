@@ -8,6 +8,7 @@ Compute Accelerators
    :maxdepth: 1
 
    introduction
+   cpu-accel
    amdxdna/index
    qaic/index
    rocket/index

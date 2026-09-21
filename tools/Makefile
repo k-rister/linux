@@ -13,6 +13,7 @@ help:
 	@echo '  bpf                    - misc BPF tools'
 	@echo '  counter                - counter tools'
 	@echo '  cpupower               - a tool for all things x86 CPU power'
+	@echo '  cpu_accel              - single-CPU accelerator prototype tool'
 	@echo '  debugging              - tools for debugging'
 	@echo '  dma                    - tools for DMA mapping'
 	@echo '  firewire               - the userspace part of nosy, an IEEE-1394 traffic sniffer'
@@ -70,6 +71,9 @@ acpi: FORCE
 cpupower: FORCE
 	$(call descend,power/$@)
 
+cpu_accel: FORCE
+	$(call descend,$@)
+
 counter dma firewire hv guest bootconfig spi usb virtio mm bpf iio gpio objtool leds wmi firmware debugging tracing: FORCE
 	$(call descend,$@)
 
@@ -123,7 +127,7 @@ kvm_stat: FORCE
 ynl: FORCE
 	$(call descend,net/ynl)
 
-all: acpi counter cpupower dma gpio hv firewire \
+all: acpi counter cpupower cpu_accel dma gpio hv firewire \
 		perf selftests bootconfig spi turbostat usb \
 		virtio mm bpf x86_energy_perf_policy \
 		tmon freefall iio objtool kvm_stat wmi \
@@ -131,6 +135,9 @@ all: acpi counter cpupower dma gpio hv firewire \
 
 acpi_install:
 	$(call descend,power/$(@:_install=),install)
+
+cpu_accel_install:
+	$(call descend,$(@:_install=),install)
 
 cpupower_install:
 	$(call descend,power/$(@:_install=),install)
@@ -165,7 +172,7 @@ kvm_stat_install:
 ynl_install:
 	$(call descend,net/$(@:_install=),install)
 
-install: acpi_install counter_install cpupower_install dma_install gpio_install \
+install: acpi_install counter_install cpupower_install cpu_accel_install dma_install gpio_install \
 		hv_install firewire_install iio_install \
 		perf_install selftests_install turbostat_install usb_install \
 		virtio_install mm_install bpf_install x86_energy_perf_policy_install \

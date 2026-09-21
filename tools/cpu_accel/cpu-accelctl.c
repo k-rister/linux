@@ -1,0 +1,172 @@
+// SPDX-License-Identifier: GPL-2.0-only
+
+#include "cpu_accel.h"
+
+#include <errno.h>
+#include <inttypes.h>
+#include <limits.h>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
+
+static volatile sig_atomic_t interrupted;
+
+static void handle_signal(int signal_number)
+{
+	(void)signal_number;
+	interrupted = 1;
+}
+
+static int parse_u64(const char *text, uint64_t *value)
+{
+	char *end;
+	unsigned long long parsed;
+
+	errno = 0;
+	parsed = strtoull(text, &end, 0);
+	if (errno || end == text || *end || parsed > UINT64_MAX)
+		return -1;
+	*value = parsed;
+	return 0;
+}
+
+static void print_status(const volatile struct cpu_accel_shared *shared)
+{
+	printf("state=%u sequence=%" PRIu64 " cpu=%u samples=%" PRIu64
+	       " max_lateness_ns=%" PRIu64 " min_lateness_ns=%" PRIu64
+	       " last_lateness_ns=%" PRIu64 " duration_ns=%" PRIu64
+	       " period_ns=%" PRIu64 "\n",
+	       shared->state, (uint64_t)shared->sequence, shared->cpu,
+	       (uint64_t)shared->samples_produced,
+	       (uint64_t)shared->max_lateness_ns,
+	       (uint64_t)shared->min_lateness_ns,
+	       (uint64_t)shared->last_lateness_ns,
+	       (uint64_t)shared->duration_ns, (uint64_t)shared->period_ns);
+}
+
+static void usage(FILE *stream, const char *program)
+{
+	fprintf(stream,
+		"Usage:\n"
+		"  %s run [--cpu N] [--duration-ms N] [--period-us N]\n"
+		"  %s status\n"
+		"  %s reset\n",
+		program, program, program);
+}
+
+static int run_workload(const char *program, int argc, char **argv)
+{
+	struct cpu_accel_config config = {
+		.cpu = 1,
+		.flags = CPU_ACCEL_FLAG_IRQS_OFF,
+		.duration_ns = CPU_ACCEL_DEFAULT_DURATION_NS,
+		.period_ns = CPU_ACCEL_DEFAULT_PERIOD_NS,
+	};
+	struct sigaction action = {
+		.sa_handler = handle_signal,
+	};
+	struct cpu_accel_handle handle;
+	uint64_t value;
+	unsigned int timeout_ms;
+	int ret;
+
+	sigemptyset(&action.sa_mask);
+	if (sigaction(SIGINT, &action, NULL) < 0 ||
+	    sigaction(SIGTERM, &action, NULL) < 0) {
+		perror("sigaction");
+		return 1;
+	}
+
+	for (int index = 0; index < argc; index++) {
+		if (!strcmp(argv[index], "--cpu") && index + 1 < argc) {
+			if (parse_u64(argv[++index], &value) || value > UINT_MAX) {
+				fprintf(stderr, "%s: invalid CPU\n", program);
+				return 2;
+			}
+			config.cpu = value;
+		} else if (!strcmp(argv[index], "--duration-ms") &&
+			   index + 1 < argc) {
+			if (parse_u64(argv[++index], &value) ||
+			    value > CPU_ACCEL_MAX_DURATION_NS / 1000000ULL) {
+				fprintf(stderr, "%s: invalid duration\n", program);
+				return 2;
+			}
+			config.duration_ns = value * 1000000ULL;
+		} else if (!strcmp(argv[index], "--period-us") &&
+			   index + 1 < argc) {
+			if (parse_u64(argv[++index], &value) || !value ||
+			    value > UINT64_MAX / 1000ULL) {
+				fprintf(stderr, "%s: invalid period\n", program);
+				return 2;
+			}
+			config.period_ns = value * 1000ULL;
+		} else {
+			usage(stderr, program);
+			return 2;
+		}
+	}
+
+	timeout_ms = (unsigned int)(config.duration_ns / 1000000ULL) + 1000;
+	if (cpu_accel_open(&handle) < 0) {
+		perror("open /dev/cpu_accel");
+		return 1;
+	}
+	ret = cpu_accel_configure(&handle, &config);
+	if (ret < 0) {
+		perror("configure");
+		cpu_accel_close(&handle);
+		return 1;
+	}
+	ret = cpu_accel_start(&handle);
+	if (ret < 0) {
+		perror("start");
+		cpu_accel_close(&handle);
+		return 1;
+	}
+
+	ret = cpu_accel_wait(&handle, timeout_ms);
+	if (ret < 0 && errno == ETIMEDOUT) {
+		(void)cpu_accel_stop(&handle);
+		(void)cpu_accel_wait(&handle, 1000);
+	}
+	if (interrupted)
+		(void)cpu_accel_stop(&handle);
+	if (ret < 0 && !interrupted)
+		perror("wait");
+	print_status(handle.shared);
+	cpu_accel_close(&handle);
+	return ret < 0 && !interrupted ? 1 : 0;
+}
+
+int main(int argc, char **argv)
+{
+	struct cpu_accel_handle handle;
+	int ret = 0;
+
+	if (argc < 2) {
+		usage(stderr, argv[0]);
+		return 2;
+	}
+	if (!strcmp(argv[1], "run"))
+		return run_workload(argv[0], argc - 2, argv + 2);
+	if (strcmp(argv[1], "status") && strcmp(argv[1], "reset")) {
+		usage(stderr, argv[0]);
+		return 2;
+	}
+
+	if (cpu_accel_open(&handle) < 0) {
+		perror("open /dev/cpu_accel");
+		return 1;
+	}
+	if (!strcmp(argv[1], "reset")) {
+		ret = cpu_accel_reset(&handle);
+		if (ret < 0)
+			perror("reset");
+	} else {
+		print_status(handle.shared);
+	}
+	cpu_accel_close(&handle);
+	return ret < 0 ? 1 : 0;
+}

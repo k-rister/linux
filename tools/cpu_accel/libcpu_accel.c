@@ -122,6 +122,9 @@ int cpu_accel_wait(struct cpu_accel_handle *handle, unsigned int timeout_ms)
 			errno = ETIMEDOUT;
 			return -1;
 		}
-		nanosleep(&sleep_for, NULL);
+		if (nanosleep(&sleep_for, NULL) < 0 && errno == EINTR) {
+			errno = EINTR;
+			return -1;
+		}
 	}
 }

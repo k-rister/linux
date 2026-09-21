@@ -127,12 +127,11 @@ static int run_workload(const char *program, int argc, char **argv)
 	}
 
 	ret = cpu_accel_wait(&handle, timeout_ms);
-	if (ret < 0 && errno == ETIMEDOUT) {
+	if (ret < 0 && (errno == ETIMEDOUT ||
+			(errno == EINTR && interrupted))) {
 		(void)cpu_accel_stop(&handle);
-		(void)cpu_accel_wait(&handle, 1000);
+		ret = cpu_accel_wait(&handle, 1000);
 	}
-	if (interrupted)
-		(void)cpu_accel_stop(&handle);
 	if (ret < 0 && !interrupted)
 		perror("wait");
 	print_status(handle.shared);

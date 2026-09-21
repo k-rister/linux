@@ -349,7 +349,7 @@ static int __init cpu_accel_init(void)
 	atomic_set(&cpu_accel.start_requested, 0);
 	atomic_set(&cpu_accel.stop_requested, 0);
 	atomic_set(&cpu_accel.running, 0);
-	cpu_accel.shared = vzalloc(CPU_ACCEL_MAP_SIZE);
+	cpu_accel.shared = vmalloc_user(CPU_ACCEL_MAP_SIZE);
 	if (!cpu_accel.shared)
 		return -ENOMEM;
 	cpu_accel_reset_shared(&cpu_accel);

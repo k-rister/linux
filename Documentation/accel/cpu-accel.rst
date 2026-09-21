@@ -61,6 +61,13 @@ The mode reports ``LINUX``, ``ENTERING``, ``ACCELERATOR``, ``EXITING``, or
 plane, but does not yet claim that Linux has removed every scheduler,
 interrupt, RCU, workqueue, or TLB responsibility from the target CPU.
 
+While the target is entering or in accelerator mode, the workqueue core
+reserves it for unbound-work selection and redirects eligible unbound work to
+another online CPU.  Per-CPU work remains associated with its target and is
+deferred until Linux mode resumes.  This is the first active quarantine
+mechanism; it does not yet cover interrupt affinity, timers, RCU callbacks,
+or TLB shootdowns.
+
 The first ABI supports ``CPU_ACCEL_FLAG_IRQS_OFF`` and
 ``CPU_ACCEL_FLAG_PERSISTENT``.  ``CPU_ACCEL_FLAG_REQUIRE_QUIESCENT`` adds an
 entry admission check that rejects a target with a pending reschedule or

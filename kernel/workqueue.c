@@ -505,6 +505,35 @@ static DEFINE_PER_CPU_SHARED_ALIGNED(struct worker_pool [NR_STD_WORKER_POOLS], b
 /* the per-cpu worker pools */
 static DEFINE_PER_CPU_SHARED_ALIGNED(struct worker_pool [NR_STD_WORKER_POOLS], cpu_worker_pools);
 
+/* CPUs owned by an accelerator must not receive unbound workqueue work. */
+static DEFINE_PER_CPU(atomic_t, workqueue_accel_reserved);
+
+bool workqueue_accel_cpu_reserved(unsigned int cpu)
+{
+	if (cpu >= nr_cpu_ids)
+		return false;
+	return atomic_read(per_cpu_ptr(&workqueue_accel_reserved, cpu));
+}
+EXPORT_SYMBOL_GPL(workqueue_accel_cpu_reserved);
+
+int workqueue_accel_cpu_reserve(unsigned int cpu)
+{
+	if (cpu >= nr_cpu_ids)
+		return -EINVAL;
+	if (atomic_cmpxchg(per_cpu_ptr(&workqueue_accel_reserved, cpu),
+			  0, 1))
+		return -EBUSY;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(workqueue_accel_cpu_reserve);
+
+void workqueue_accel_cpu_release(unsigned int cpu)
+{
+	if (cpu < nr_cpu_ids)
+		atomic_set(per_cpu_ptr(&workqueue_accel_reserved, cpu), 0);
+}
+EXPORT_SYMBOL_GPL(workqueue_accel_cpu_release);
+
 static DEFINE_IDR(worker_pool_idr);	/* PR: idr of all pools */
 
 /* PL: hash of all unbound pools keyed by pool->attrs */
@@ -2302,22 +2331,47 @@ static bool is_chained_work(struct workqueue_struct *wq)
  */
 static int wq_select_unbound_cpu(int cpu)
 {
-	int new_cpu;
+	int new_cpu, first_cpu;
 
-	if (likely(!wq_debug_force_rr_cpu)) {
+	if (likely(!wq_debug_force_rr_cpu) &&
+	    !workqueue_accel_cpu_reserved(cpu)) {
 		if (cpumask_test_cpu(cpu, wq_unbound_cpumask))
 			return cpu;
 	} else {
 		pr_warn_once("workqueue: round-robin CPU selection forced, expect performance impact\n");
 	}
 
-	new_cpu = __this_cpu_read(wq_rr_cpu_last);
-	new_cpu = cpumask_next_and_wrap(new_cpu, wq_unbound_cpumask, cpu_online_mask);
-	if (unlikely(new_cpu >= nr_cpu_ids))
+	first_cpu = cpumask_first_and(wq_unbound_cpumask, cpu_online_mask);
+	if (unlikely(first_cpu >= nr_cpu_ids))
 		return cpu;
-	__this_cpu_write(wq_rr_cpu_last, new_cpu);
 
-	return new_cpu;
+	new_cpu = __this_cpu_read(wq_rr_cpu_last);
+	new_cpu = cpumask_next_and_wrap(new_cpu, wq_unbound_cpumask,
+					cpu_online_mask);
+	if (new_cpu >= nr_cpu_ids)
+		new_cpu = first_cpu;
+
+	for (;;) {
+		if (!workqueue_accel_cpu_reserved(new_cpu)) {
+			__this_cpu_write(wq_rr_cpu_last, new_cpu);
+			return new_cpu;
+		}
+		new_cpu = cpumask_next_and_wrap(new_cpu, wq_unbound_cpumask,
+						cpu_online_mask);
+		if (new_cpu >= nr_cpu_ids)
+			new_cpu = first_cpu;
+		if (new_cpu == first_cpu)
+			break;
+	}
+
+	/* The wraparound candidate still needs to be checked. */
+	if (!workqueue_accel_cpu_reserved(first_cpu)) {
+		__this_cpu_write(wq_rr_cpu_last, first_cpu);
+		return first_cpu;
+	}
+
+	/* All eligible CPUs are reserved; leave the work deferred on @cpu. */
+	return cpu;
 }
 
 static void __queue_work(int cpu, struct workqueue_struct *wq,
@@ -2376,6 +2430,9 @@ retry:
 		else
 			cpu = raw_smp_processor_id();
 	}
+	if ((wq->flags & WQ_UNBOUND) &&
+	    workqueue_accel_cpu_reserved(cpu))
+		cpu = wq_select_unbound_cpu(cpu);
 
 	pwq = rcu_dereference(*per_cpu_ptr(wq->cpu_pwq, cpu));
 	pool = pwq->pool;

@@ -620,6 +620,11 @@ int apply_workqueue_attrs(struct workqueue_struct *wq,
 			  const struct workqueue_attrs *attrs);
 extern int workqueue_unbound_housekeeping_update(const struct cpumask *hk);
 
+/* Reserve a CPU so unbound workqueue selection redirects away from it. */
+extern int workqueue_accel_cpu_reserve(unsigned int cpu);
+extern void workqueue_accel_cpu_release(unsigned int cpu);
+extern bool workqueue_accel_cpu_reserved(unsigned int cpu);
+
 extern bool queue_work_on(int cpu, struct workqueue_struct *wq,
 			struct work_struct *work);
 extern bool queue_work_node(int node, struct workqueue_struct *wq,

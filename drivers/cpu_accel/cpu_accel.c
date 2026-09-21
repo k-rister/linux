@@ -21,6 +21,7 @@
 #include <linux/timer.h>
 #include <linux/uaccess.h>
 #include <linux/vmalloc.h>
+#include <linux/workqueue.h>
 
 #include <uapi/linux/cpu_accel.h>
 
@@ -468,6 +469,7 @@ static int cpu_accel_lifecycle_thread(void *data)
 	cpus_read_lock();
 	ret = cpu_accel_lifecycle_enter(dev);
 	cpus_read_unlock();
+	workqueue_accel_cpu_release(dev->config.cpu);
 	dev->lifecycle_ret = ret;
 	atomic_set(&dev->enter_requested, 0);
 	if (ret) {
@@ -595,6 +597,10 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 	if (ret)
 		return ret;
 
+	ret = workqueue_accel_cpu_reserve(dev->config.cpu);
+	if (ret)
+		return ret;
+
 	dev->sequence++;
 	dev->shared->sequence = dev->sequence;
 	dev->shared->samples_produced = 0;
@@ -642,6 +648,7 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 
 	ret = cpu_accel_create_lifecycle_thread(dev);
 	if (ret) {
+		workqueue_accel_cpu_release(dev->config.cpu);
 		atomic_set(&dev->enter_requested, 0);
 		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_RECOVERY);
 		WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_ERROR);

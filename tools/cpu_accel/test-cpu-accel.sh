@@ -73,6 +73,8 @@ while [ "$run" -le "$repeats" ]; do
 		fail "workqueue queue telemetry was not reported"
 	echo "$output" | grep -q 'workqueue_executed=' || \
 		fail "workqueue execution telemetry was not reported"
+	echo "$output" | grep -q 'workqueue_executed=0' || \
+		fail "workqueue executed on the accelerator CPU"
 	echo "$output" | grep -q 'backend=1' || \
 		fail "x86 staged backend was not selected"
 	echo "$output" | grep -q 'arch_counters_valid=1' || \

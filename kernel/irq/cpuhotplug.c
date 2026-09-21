@@ -104,6 +104,8 @@ static void irq_accel_set_affinity_on_cpu(void *arg)
 	 */
 	raw_spin_lock_irqsave(&desc->lock, flags);
 	irq_force_complete_move(desc);
+	if (irqd_is_setaffinity_pending(data))
+		irq_move_irq(data);
 	effective = irq_data_get_effective_affinity_mask(data);
 	owner = cpumask_first_and(effective, cpu_online_mask);
 	if (owner != smp_processor_id()) {
@@ -134,23 +136,30 @@ static int irq_accel_set_affinity(struct irq_desc *desc,
 	struct irq_data *data;
 	const struct cpumask *effective;
 	unsigned int cpu;
+	unsigned int attempt;
 
 	if (!desc)
 		return -EINVAL;
 
 	data = irq_desc_get_irq_data(desc);
-	effective = irq_data_get_effective_affinity_mask(data);
-	cpu = cpumask_first_and(effective, cpu_online_mask);
-	if (cpu >= nr_cpu_ids)
-		return -ENODEV;
+	for (attempt = 0; attempt <= nr_cpu_ids; attempt++) {
+		effective = irq_data_get_effective_affinity_mask(data);
+		cpu = cpumask_first_and(effective, cpu_online_mask);
+		if (cpu >= nr_cpu_ids)
+			return -ENODEV;
+		request.ret = -EAGAIN;
 
-	if (cpu == smp_processor_id())
-		irq_accel_set_affinity_on_cpu(&request);
-	else if (smp_call_function_single(cpu, irq_accel_set_affinity_on_cpu,
-						 &request, true))
-		return -ENODEV;
+		if (cpu == smp_processor_id())
+			irq_accel_set_affinity_on_cpu(&request);
+		else if (smp_call_function_single(cpu, irq_accel_set_affinity_on_cpu,
+						  &request, true))
+			return -ENODEV;
 
-	return request.ret;
+		if (request.ret != -EAGAIN)
+			return request.ret;
+	}
+
+	return -EBUSY;
 }
 
 static int irq_accel_restore_entries(struct irq_accel_quarantine *quarantine)
@@ -171,6 +180,19 @@ static int irq_accel_restore_entries(struct irq_accel_quarantine *quarantine)
 	}
 
 	return first_error;
+}
+
+static bool irq_accel_effective_targets_cpu(struct irq_data *data,
+						unsigned int cpu,
+						const struct cpumask *affinity)
+{
+	const struct cpumask *effective =
+		irq_data_get_effective_affinity_mask(data);
+
+	/* Some interrupt chips do not provide an effective affinity mask. */
+	if (cpumask_empty(effective))
+		return cpumask_test_cpu(cpu, affinity);
+	return cpumask_test_cpu(cpu, effective);
 }
 
 /**
@@ -244,17 +266,24 @@ int irq_accel_quarantine_cpu(unsigned int cpu,
 		data = irq_desc_get_irq_data(desc);
 		affinity = irq_data_get_affinity_mask(data);
 		if (!irqd_is_started(data) ||
-		    !cpumask_test_cpu(cpu, affinity))
+		    !irq_accel_effective_targets_cpu(data, cpu, affinity))
 			continue;
 
 		chip = irq_data_get_irq_chip(data);
-		if (!irqd_can_balance(data) || !chip ||
-		    !chip->irq_set_affinity ||
-		    irqd_is_setaffinity_pending(data)) {
+		if (irqd_affinity_is_managed(data) ||
+		    !irqd_can_balance(data) || !chip || !chip->irq_set_affinity) {
 			if (blocked)
 				(*blocked)++;
-			pr_warn_ratelimited("cpu_accel: IRQ %u blocks CPU %u quarantine\n",
-					    irq, cpu);
+			pr_warn_ratelimited(
+				"cpu_accel: IRQ %u blocks CPU %u quarantine "
+				"requested=%*pbl effective=%*pbl managed=%u balance=%u "
+				"chip=%s set_affinity=%ps pending=%u\n", irq, cpu,
+				cpumask_pr_args(affinity),
+				cpumask_pr_args(irq_data_get_effective_affinity_mask(data)),
+				irqd_affinity_is_managed(data), irqd_can_balance(data),
+				chip ? chip->name : "none",
+				chip ? chip->irq_set_affinity : NULL,
+				irqd_is_setaffinity_pending(data));
 			ret = -EBUSY;
 			break;
 		}
@@ -274,11 +303,14 @@ int irq_accel_quarantine_cpu(unsigned int cpu,
 		list_add_tail(&entry->node, &state->entries);
 		ret = irq_accel_set_affinity(desc, state->destination, false);
 		effective = irq_data_get_effective_affinity_mask(data);
-		if (ret || cpumask_test_cpu(cpu, affinity) ||
+		if (ret || irqd_is_setaffinity_pending(data) ||
 		    cpumask_test_cpu(cpu, effective)) {
 			pr_warn_ratelimited(
-				"cpu_accel: IRQ %u could not leave CPU %u (ret=%d)\n",
-				irq, cpu, ret);
+				"cpu_accel: IRQ %u could not leave CPU %u (ret=%d "
+				"requested=%*pbl effective=%*pbl pending=%u)\n", irq,
+				cpu, ret, cpumask_pr_args(affinity),
+				cpumask_pr_args(effective),
+				irqd_is_setaffinity_pending(data));
 			if (!ret)
 				ret = -EBUSY;
 			break;

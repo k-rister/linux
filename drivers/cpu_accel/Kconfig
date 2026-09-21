@@ -4,6 +4,7 @@ config CPU_ACCEL
 	tristate "Single CPU accelerator prototype"
 	depends on SMP
 	depends on MMU
+	depends on GENERIC_IRQ_MIGRATION
 	help
 	  Build the first experimental single-CPU accelerator control plane and
 	  lifecycle backend.

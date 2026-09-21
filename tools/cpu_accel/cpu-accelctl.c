@@ -40,6 +40,7 @@ static void print_status(const volatile struct cpu_accel_shared *shared)
 	       " last_lateness_ns=%" PRIu64 " duration_ns=%" PRIu64
 	       " period_ns=%" PRIu64 " lifecycle_entry_ns=%" PRIu64
 	       " lifecycle_exit_ns=%" PRIu64 " irq_count=%" PRIu64
+	       " irq_quarantined=%u irq_quarantine_blockers=%u"
 	       " softirq_count=%" PRIu64 " timer_softirq_count=%" PRIu64
 	       " hrtimer_softirq_count=%" PRIu64 " rcu_softirq_count=%" PRIu64
 	       " sched_softirq_count=%" PRIu64 " workqueue_queued=%" PRIu64
@@ -62,6 +63,7 @@ static void print_status(const volatile struct cpu_accel_shared *shared)
 	       (uint64_t)shared->lifecycle_entry_ns,
 	       (uint64_t)shared->lifecycle_exit_ns,
 	       (uint64_t)shared->irq_count,
+	       shared->irq_quarantined, shared->irq_quarantine_blockers,
 	       (uint64_t)shared->softirq_count,
 	       (uint64_t)shared->timer_softirq_count,
 	       (uint64_t)shared->hrtimer_softirq_count,
@@ -87,7 +89,7 @@ static void usage(FILE *stream, const char *program)
 	fprintf(stream,
 		"Usage:\n"
 		"  %s run [--cpu N] [--duration-ms N] [--period-us N]"
-		" [--persistent] [--require-quiescent]\n"
+		" [--persistent] [--require-quiescent] [--quarantine-irqs]\n"
 		"  %s exit\n"
 		"  %s status\n"
 		"  %s reset\n",
@@ -119,6 +121,7 @@ static int run_workload(const char *program, int argc, char **argv)
 	unsigned int timeout_ms;
 	int persistent = 0;
 	int require_quiescent = 0;
+	int quarantine_irqs = 0;
 	int ret;
 
 	sigemptyset(&action.sa_mask);
@@ -155,6 +158,8 @@ static int run_workload(const char *program, int argc, char **argv)
 			persistent = 1;
 		} else if (!strcmp(argv[index], "--require-quiescent")) {
 			require_quiescent = 1;
+		} else if (!strcmp(argv[index], "--quarantine-irqs")) {
+			quarantine_irqs = 1;
 		} else {
 			usage(stderr, program);
 			return 2;
@@ -164,6 +169,8 @@ static int run_workload(const char *program, int argc, char **argv)
 		config.flags |= CPU_ACCEL_FLAG_PERSISTENT;
 	if (require_quiescent)
 		config.flags |= CPU_ACCEL_FLAG_REQUIRE_QUIESCENT;
+	if (quarantine_irqs)
+		config.flags |= CPU_ACCEL_FLAG_IRQ_QUARANTINE;
 
 	timeout_ms = (unsigned int)(config.duration_ns / 1000000ULL) + 1000;
 	if (pin_control_cpu() < 0) {

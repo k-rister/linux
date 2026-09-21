@@ -28,6 +28,7 @@ struct seq_file;
 struct module;
 struct msi_msg;
 struct irq_affinity_desc;
+struct irq_accel_quarantine;
 enum irqchip_irq_state;
 
 /*
@@ -614,6 +615,11 @@ extern int irq_set_vcpu_affinity(unsigned int irq, void *vcpu_info);
 #if defined(CONFIG_SMP) && defined(CONFIG_GENERIC_IRQ_MIGRATION)
 extern void irq_migrate_all_off_this_cpu(void);
 extern int irq_affinity_online_cpu(unsigned int cpu);
+int irq_accel_quarantine_cpu(unsigned int cpu,
+				     struct irq_accel_quarantine **quarantine,
+				     unsigned int *migrated,
+				     unsigned int *blocked);
+int irq_accel_restore_cpu(struct irq_accel_quarantine *quarantine);
 #else
 # define irq_affinity_online_cpu	NULL
 #endif

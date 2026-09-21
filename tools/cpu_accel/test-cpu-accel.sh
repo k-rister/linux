@@ -12,9 +12,13 @@ load_pid=0
 repeats=${CPU_ACCEL_REPEATS:-1}
 load_cpus=${CPU_ACCEL_LOAD_CPUS:-}
 quiescent_arg=
+quarantine_arg=
 
 if [ "${CPU_ACCEL_REQUIRE_QUIESCENT:-0}" = 1 ]; then
 	quiescent_arg=--require-quiescent
+fi
+if [ "${CPU_ACCEL_QUARANTINE_IRQS:-0}" = 1 ]; then
+	quarantine_arg=--quarantine-irqs
 fi
 
 fail()
@@ -49,7 +53,7 @@ fi
 run=1
 while [ "$run" -le "$repeats" ]; do
 	output=$($tool run --cpu "$target_cpu" --duration-ms 20 --period-us 1000 \
-		$quiescent_arg)
+		$quiescent_arg $quarantine_arg)
 	echo "$output"
 	case "$output" in
 		state=3\ *) ;;
@@ -75,6 +79,12 @@ while [ "$run" -le "$repeats" ]; do
 		fail "workqueue execution telemetry was not reported"
 	echo "$output" | grep -q 'workqueue_executed=0' || \
 		fail "workqueue executed on the accelerator CPU"
+	if [ -n "$quarantine_arg" ]; then
+		echo "$output" | grep -q 'irq_quarantined=[1-9][0-9]*' || \
+			fail "IRQ quarantine did not move any IRQs"
+		echo "$output" | grep -q 'irq_quarantine_blockers=0' || \
+			fail "IRQ quarantine reported blockers"
+	fi
 	echo "$output" | grep -q 'backend=1' || \
 		fail "x86 staged backend was not selected"
 	echo "$output" | grep -q 'arch_counters_valid=1' || \
@@ -83,7 +93,7 @@ while [ "$run" -le "$repeats" ]; do
 done
 
 $tool run --cpu "$target_cpu" --duration-ms 5000 --period-us 1000 \
-	--persistent $quiescent_arg >"$stop_output" 2>&1 &
+	--persistent $quiescent_arg $quarantine_arg >"$stop_output" 2>&1 &
 run_pid=$!
 sleep 0.1
 [ "$(cat "$online_file")" = 1 ] || fail "target CPU went offline during accelerator run"
@@ -94,7 +104,7 @@ grep -q '^state=4 ' "$stop_output" || fail "STOP did not produce state=4"
 grep -q 'mode=0' "$stop_output" || fail "STOP did not return to Linux mode"
 
 output=$($tool run --cpu "$target_cpu" --duration-ms 100 \
-	--period-us 1000 --persistent $quiescent_arg)
+	--period-us 1000 --persistent $quiescent_arg $quarantine_arg)
 echo "$output"
 case "$output" in
 	state=6\ *) ;;

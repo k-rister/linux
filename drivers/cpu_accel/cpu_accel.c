@@ -6,6 +6,7 @@
 #include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
+#include <linux/irq.h>
 #include <linux/kernel_stat.h>
 #include <linux/kthread.h>
 #include <linux/kernel.h>
@@ -149,6 +150,7 @@ struct cpu_accel_device {
 	struct completion lifecycle_done;
 	struct task_struct *lifecycle_thread;
 	struct timer_list watchdog_timer;
+	struct irq_accel_quarantine *irq_quarantine;
 	struct cpu_accel_shared *shared;
 	struct cpu_accel_config config;
 	atomic_t opened;
@@ -160,11 +162,34 @@ struct cpu_accel_device {
 	atomic64_t workqueue_executed;
 	unsigned int sequence;
 	unsigned int controller_cpu;
+	unsigned int irq_quarantined;
+	unsigned int irq_quarantine_blockers;
 	int lifecycle_ret;
 	bool configured;
+	bool workqueue_reserved;
 };
 
 static struct cpu_accel_device cpu_accel;
+
+static int cpu_accel_restore_irq_quarantine(struct cpu_accel_device *dev)
+{
+	int ret;
+
+	if (!dev->irq_quarantine)
+		return 0;
+	ret = irq_accel_restore_cpu(dev->irq_quarantine);
+	if (!ret)
+		dev->irq_quarantine = NULL;
+	return ret;
+}
+
+static void cpu_accel_release_workqueue(struct cpu_accel_device *dev)
+{
+	if (!dev->workqueue_reserved)
+		return;
+	workqueue_accel_cpu_release(dev->config.cpu);
+	dev->workqueue_reserved = false;
+}
 
 static bool cpu_accel_workqueue_target_active(struct cpu_accel_device *dev,
 						int cpu)
@@ -308,6 +333,8 @@ static void cpu_accel_observation_finish(struct cpu_accel_device *dev,
 	shared->lifecycle_entry_ns = obs->lifecycle_entry_ns;
 	shared->lifecycle_exit_ns = now;
 	shared->irq_count = irq_delta;
+	shared->irq_quarantined = dev->irq_quarantined;
+	shared->irq_quarantine_blockers = dev->irq_quarantine_blockers;
 	shared->softirq_count = softirq_delta;
 	shared->timer_softirq_count = timer_softirq_delta;
 	shared->hrtimer_softirq_count = hrtimer_softirq_delta;
@@ -463,13 +490,18 @@ static int cpu_accel_lifecycle_enter(struct cpu_accel_device *dev)
 static int cpu_accel_lifecycle_thread(void *data)
 {
 	struct cpu_accel_device *dev = data;
+	int irq_ret;
 	int ret;
 
 	/* Hold the CPU-hotplug read lock for the complete accelerator interval. */
 	cpus_read_lock();
 	ret = cpu_accel_lifecycle_enter(dev);
+	irq_ret = cpu_accel_restore_irq_quarantine(dev);
+	if (!ret && irq_ret)
+		ret = irq_ret;
 	cpus_read_unlock();
-	workqueue_accel_cpu_release(dev->config.cpu);
+	if (!irq_ret)
+		cpu_accel_release_workqueue(dev);
 	dev->lifecycle_ret = ret;
 	atomic_set(&dev->enter_requested, 0);
 	if (ret) {
@@ -545,6 +577,14 @@ static int cpu_accel_release(struct inode *inode, struct file *file)
 	int ret;
 
 	mutex_lock(&dev->lock);
+	if (!dev->lifecycle_thread) {
+		ret = cpu_accel_restore_irq_quarantine(dev);
+		if (ret)
+			pr_err("unable to restore accelerator IRQ quarantine for CPU %u: %d\n",
+			       dev->config.cpu, ret);
+		else
+			cpu_accel_release_workqueue(dev);
+	}
 	if (READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_READY ||
 	    READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_RUNNING) {
 		atomic_set(&dev->stop_requested, 1);
@@ -574,6 +614,8 @@ static int cpu_accel_mmap(struct file *file, struct vm_area_struct *vma)
 
 static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 {
+	unsigned int irq_quarantined = 0;
+	unsigned int irq_quarantine_blockers = 0;
 	int current_cpu;
 	int ret;
 
@@ -582,6 +624,10 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 	if (READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_READY ||
 	    READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_RUNNING)
 		return -EBUSY;
+	ret = cpu_accel_restore_irq_quarantine(dev);
+	if (ret)
+		return ret;
+	cpu_accel_release_workqueue(dev);
 
 	current_cpu = get_cpu();
 	if (current_cpu == dev->config.cpu) {
@@ -593,13 +639,36 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 
 	cpus_read_lock();
 	ret = cpu_online(dev->config.cpu) ? 0 : -ENODEV;
+	if (!ret) {
+		ret = workqueue_accel_cpu_reserve(dev->config.cpu);
+		dev->workqueue_reserved = !ret;
+	}
+	if (!ret && dev->config.flags & CPU_ACCEL_FLAG_IRQ_QUARANTINE)
+		ret = irq_accel_quarantine_cpu(dev->config.cpu,
+					       &dev->irq_quarantine,
+					       &irq_quarantined,
+					       &irq_quarantine_blockers);
 	cpus_read_unlock();
-	if (ret)
-		return ret;
+	if (ret) {
+		if (irq_quarantine_blockers)
+			dev->irq_quarantine_blockers = irq_quarantine_blockers;
+		if (dev->irq_quarantine) {
+			int irq_ret;
 
-	ret = workqueue_accel_cpu_reserve(dev->config.cpu);
-	if (ret)
+			irq_ret = cpu_accel_restore_irq_quarantine(dev);
+			if (irq_ret)
+				pr_err("cpu_accel: IRQ quarantine cleanup failed for CPU %u: %d\n",
+				       dev->config.cpu, irq_ret);
+		}
+		if (!dev->irq_quarantine)
+			cpu_accel_release_workqueue(dev);
+		dev->shared->irq_quarantined = 0;
+		dev->shared->irq_quarantine_blockers =
+			irq_quarantine_blockers;
 		return ret;
+	}
+	dev->irq_quarantined = irq_quarantined;
+	dev->irq_quarantine_blockers = irq_quarantine_blockers;
 
 	dev->sequence++;
 	dev->shared->sequence = dev->sequence;
@@ -614,6 +683,8 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 	dev->shared->lifecycle_entry_ns = 0;
 	dev->shared->lifecycle_exit_ns = 0;
 	dev->shared->irq_count = 0;
+	dev->shared->irq_quarantined = irq_quarantined;
+	dev->shared->irq_quarantine_blockers = irq_quarantine_blockers;
 	dev->shared->softirq_count = 0;
 	dev->shared->timer_softirq_count = 0;
 	dev->shared->hrtimer_softirq_count = 0;
@@ -648,7 +719,16 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 
 	ret = cpu_accel_create_lifecycle_thread(dev);
 	if (ret) {
-		workqueue_accel_cpu_release(dev->config.cpu);
+		if (dev->irq_quarantine) {
+			int irq_ret;
+
+			irq_ret = cpu_accel_restore_irq_quarantine(dev);
+			if (irq_ret)
+				pr_err("cpu_accel: IRQ quarantine cleanup failed for CPU %u: %d\n",
+				       dev->config.cpu, irq_ret);
+		}
+		if (!dev->irq_quarantine)
+			cpu_accel_release_workqueue(dev);
 		atomic_set(&dev->enter_requested, 0);
 		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_RECOVERY);
 		WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_ERROR);
@@ -691,7 +771,8 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 		if (!(config.flags & CPU_ACCEL_FLAG_IRQS_OFF) ||
 		    config.flags & ~(CPU_ACCEL_FLAG_IRQS_OFF |
 				     CPU_ACCEL_FLAG_PERSISTENT |
-				     CPU_ACCEL_FLAG_REQUIRE_QUIESCENT) ||
+				     CPU_ACCEL_FLAG_REQUIRE_QUIESCENT |
+				     CPU_ACCEL_FLAG_IRQ_QUARANTINE) ||
 		    !config.period_ns || !config.duration_ns ||
 		    config.duration_ns > CPU_ACCEL_MAX_DURATION_NS ||
 		    config.cpu >= nr_cpu_ids || config.cpu == 0) {

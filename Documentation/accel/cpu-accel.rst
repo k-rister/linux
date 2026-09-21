@@ -42,7 +42,7 @@ small ioctl interface:
 
 The shared mapping contains the state, explicit Linux/accelerator transition
 mode, run timestamps, aggregate lateness, and up to
-``CPU_ACCEL_MAX_SAMPLES`` timestamp samples.  ABI version 4 also
+``CPU_ACCEL_MAX_SAMPLES`` timestamp samples.  ABI version 5 also
 reports lifecycle entry/exit timestamps, interrupt and softirq deltas,
 timer, hrtimer, RCU, and scheduler softirq deltas, current-task
 context-switch deltas, CPU-entry/exit identity, migration detection, pending
@@ -64,12 +64,24 @@ interrupt, RCU, workqueue, or TLB responsibility from the target CPU.
 While the target is entering or in accelerator mode, the workqueue core
 reserves it for unbound-work selection and redirects eligible unbound work to
 another online CPU.  Per-CPU work remains associated with its target and is
-deferred until Linux mode resumes.  This is the first active quarantine
-mechanism; it does not yet cover interrupt affinity, timers, RCU callbacks,
-or TLB shootdowns.
+deferred until Linux mode resumes.  Together with the opt-in IRQ quarantine
+below, this is the first active execution-source quarantine mechanism; it
+does not yet cover local timers, RCU callbacks, or TLB shootdowns.
 
 The first ABI supports ``CPU_ACCEL_FLAG_IRQS_OFF`` and
-``CPU_ACCEL_FLAG_PERSISTENT``.  ``CPU_ACCEL_FLAG_REQUIRE_QUIESCENT`` adds an
+``CPU_ACCEL_FLAG_PERSISTENT``.  ``CPU_ACCEL_FLAG_IRQ_QUARANTINE`` is an
+explicit opt-in admission step that reserves the target against new normal
+IRQ affinity assignments, snapshots active IRQ affinity, moves migratable
+IRQs to other online CPUs, and waits for in-flight handlers.  Architecture
+specific deferred moves are completed on the CPU currently owning the IRQ
+vector during this transition; this transition-time cross-CPU activity is
+not part of the accelerator interval.  It fails closed and rolls back if an
+active IRQ is per-CPU, non-balancable, has no affinity setter, or cannot be
+moved.  ``irq_quarantined`` reports the number moved;
+``irq_quarantine_blockers`` reports blockers from a rejected start.  This
+does not suppress IPIs, local timers, NMIs, firmware activity, or later IRQ
+affinity changes made through internal paths.
+``CPU_ACCEL_FLAG_REQUIRE_QUIESCENT`` adds an
 entry admission check that rejects a target with a pending reschedule or
 softirq request and reports ``RECOVERY`` mode.  It is a precondition check,
 not a mechanism for draining or suppressing those sources.  A watchdog
@@ -86,6 +98,8 @@ The companion SDK in ``tools/cpu_accel`` wraps the device and
   sudo insmod drivers/cpu_accel/cpu_accel.ko
   sudo tools/cpu_accel/cpu-accelctl run --cpu 1 --duration-ms 100 \
     --period-us 1000 --persistent
+  sudo tools/cpu_accel/cpu-accelctl run --cpu 1 --duration-ms 100 \
+    --period-us 1000 --quarantine-irqs
 
 The tool prints the shared result, including the maximum observed lateness
 and lifecycle telemetry.  The generic interrupt and context-switch deltas

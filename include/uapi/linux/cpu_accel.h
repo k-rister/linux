@@ -6,7 +6,7 @@
 #include <linux/types.h>
 
 /* The first prototype uses a fixed-size shared control and sample area. */
-#define CPU_ACCEL_ABI_VERSION		4
+#define CPU_ACCEL_ABI_VERSION		5
 #define CPU_ACCEL_MAP_SIZE		(64U * 1024U)
 #define CPU_ACCEL_MAX_SAMPLES		2048U
 
@@ -38,6 +38,8 @@ enum cpu_accel_mode {
 #define CPU_ACCEL_FLAG_PERSISTENT	(1U << 1)
 /* Refuse entry when scheduler or softirq work is already pending. */
 #define CPU_ACCEL_FLAG_REQUIRE_QUIESCENT	(1U << 2)
+/* Move active migratable IRQs away from the accelerator CPU before entry. */
+#define CPU_ACCEL_FLAG_IRQ_QUARANTINE	(1U << 3)
 
 enum cpu_accel_backend {
 	CPU_ACCEL_BACKEND_GENERIC_SMP = 0,
@@ -79,6 +81,8 @@ struct cpu_accel_shared {
 	__u64 lifecycle_entry_ns;
 	__u64 lifecycle_exit_ns;
 	__u64 irq_count;
+	__u32 irq_quarantined;
+	__u32 irq_quarantine_blockers;
 	__u64 softirq_count;
 	__u64 timer_softirq_count;
 	__u64 hrtimer_softirq_count;

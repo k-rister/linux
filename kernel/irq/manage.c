@@ -381,6 +381,10 @@ int irq_set_affinity_locked(struct irq_data *data, const struct cpumask *mask,
 	struct irq_desc *desc = irq_data_to_desc(data);
 	int ret = 0;
 
+	/* Do not let normal affinity changes reintroduce IRQs on an owned CPU. */
+	if (!force && !irq_accel_affinity_allowed(mask))
+		return -EBUSY;
+
 	if (!chip || !chip->irq_set_affinity)
 		return -EINVAL;
 

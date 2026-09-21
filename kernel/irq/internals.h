@@ -160,6 +160,21 @@ extern int irq_do_set_affinity(struct irq_data *data,
 			       const struct cpumask *dest, bool force);
 extern void irq_affinity_schedule_notify_work(struct irq_desc *desc);
 
+#ifdef CONFIG_GENERIC_IRQ_MIGRATION
+bool irq_accel_cpu_reserved(unsigned int cpu);
+bool irq_accel_affinity_allowed(const struct cpumask *mask);
+int irq_accel_reserve_cpu(unsigned int cpu);
+void irq_accel_release_cpu(unsigned int cpu);
+#else
+static inline bool irq_accel_cpu_reserved(unsigned int cpu) { return false; }
+static inline bool irq_accel_affinity_allowed(const struct cpumask *mask)
+{
+	return true;
+}
+static inline int irq_accel_reserve_cpu(unsigned int cpu) { return -EOPNOTSUPP; }
+static inline void irq_accel_release_cpu(unsigned int cpu) { }
+#endif
+
 #ifdef CONFIG_SMP
 extern int irq_setup_affinity(struct irq_desc *desc);
 #else

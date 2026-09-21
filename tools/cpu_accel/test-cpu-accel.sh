@@ -35,6 +35,7 @@ $tool run --cpu "$target_cpu" --duration-ms 5000 --period-us 1000 \
 	--persistent >"$stop_output" 2>&1 &
 run_pid=$!
 sleep 0.1
+[ "$(cat "$online_file")" = 1 ] || fail "target CPU went offline during accelerator run"
 kill -TERM "$run_pid"
 wait "$run_pid"
 cat "$stop_output"
@@ -54,5 +55,5 @@ if $tool run --cpu 0 --duration-ms 10 --period-us 1000 \
 fi
 cat "$invalid_output"
 
-[ "$(cat "$online_file")" = 1 ] || fail "target CPU did not rejoin Linux"
-echo "cpu_accel: normal, STOP, watchdog, invalid-target, and rejoin tests passed"
+[ "$(cat "$online_file")" = 1 ] || fail "target CPU is not online after accelerator run"
+echo "cpu_accel: lifecycle, normal, STOP, watchdog, invalid-target, and online-state tests passed"

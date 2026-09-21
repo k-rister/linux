@@ -6,19 +6,23 @@ Single-CPU accelerator prototype
 
 The ``CPU_ACCEL`` driver is the first foundation prototype for a Linux
 dataplane accelerator environment.  It is an experimental control plane for
-one hotpluggable, non-boot CPU and is intended to make the control and
-measurement interfaces concrete for a persistent accelerator ownership mode.
+one online CPU and is intended to make the control and measurement interfaces
+concrete for a persistent accelerator ownership mode.
 
 This version is deliberately not a complete isolated accelerator CPU.  It
-uses a CPU-hotplug teardown callback as the transition boundary.  In
-persistent mode the target CPU remains in the accelerator callback, with
-preemption and local maskable interrupts disabled, until ``STOP`` or the
-configured watchdog.  Normal Linux hotplug then completes taking it offline;
-``EXIT`` brings it back online.  It does not yet provide a dedicated
-architecture-independent persistent CPU state, a memory-protection domain,
-explicit interrupt source ownership, TLB-shootdown suppression, or a hard
-latency bound.  NMIs, SMIs, machine checks, pending IPIs, firmware activity,
-and hardware execution effects remain outside this prototype's control.
+Its architecture-neutral lifecycle boundary synchronously dispatches an entry
+function to the target CPU while a controller thread holds the CPU-hotplug
+read lock.  The target remains online, but preemption and local maskable
+interrupts are disabled until ``STOP``, completion, or the configured
+watchdog.  Returning from the entry function returns the CPU to normal Linux
+execution; no CPU offline/online transition is required.  The dispatch is
+currently implemented with ``smp_call_function_single()`` as a stepping stone
+for a future architecture-specific direct entry/exit backend.
+
+It does not yet provide a memory-protection domain, explicit interrupt source
+ownership, TLB-shootdown suppression, or a hard latency bound.  NMIs, SMIs,
+machine checks, pending IPIs, firmware activity, and hardware execution
+effects remain outside this prototype's control.
 
 Interface
 =========
@@ -28,12 +32,12 @@ small ioctl interface:
 
 * ``CONFIG`` selects an online CPU other than CPU 0 and supplies a duration
   and sample period.
-* ``START`` explicitly enters the CPU-hotplug-backed accelerator workload.
+* ``START`` explicitly enters the lifecycle-backed accelerator workload.
   ``CPU_ACCEL_FLAG_PERSISTENT`` keeps ownership until STOP or the duration
   watchdog; the SDK tool exposes this as ``--persistent``.
 * ``STOP`` requests an orderly exit at the next sample boundary.
-* ``EXIT`` explicitly brings the target CPU back into Linux after the
-  workload has stopped and hotplug has completed.
+* ``EXIT`` waits for the target CPU to return from the accelerator entry
+  function and completes the transition back to Linux.
 * ``RESET`` returns the device to its initial state after a completed run.
 
 The shared mapping contains the state, run timestamps, aggregate lateness,
@@ -54,14 +58,16 @@ The tool prints the shared result, including the maximum observed lateness.
 The tool pins its control process to CPU 0.  CPU 0 is reserved for
 control-plane work by this prototype and is rejected as a target.
 
-Recovery and next steps
-=======================
+Lifecycle and next steps
+========================
 
 The watchdog is capped at five seconds and ``STOP`` is cooperative.  It can
 recover this prototype's timestamp loop, but it cannot rescue arbitrary code
 that fails to observe the shared stop state.  A malfunctioning kernel
 implementation is not assumed to be recoverable without reverting to the
-known-good kernel.  The next implementation phase should replace the
-hotplug-callback ownership mechanism with a dedicated architecture-neutral
-accelerator CPU lifecycle, plus validation of interrupt, workqueue, RCU,
-timer, and TLB activity before attempting a stronger latency claim.
+known-good kernel.  This lifecycle is the first step toward that model, but
+the synchronous SMP dispatch still uses the normal IPI entry path and does
+not suppress Linux-generated IPIs while the target is running.  The next
+phase should add explicit lifecycle instrumentation and an x86_64 backend
+boundary for interrupt, workqueue, RCU, timer, and TLB activity before
+attempting a stronger latency claim.

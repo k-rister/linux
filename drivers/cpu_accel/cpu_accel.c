@@ -239,6 +239,7 @@ static void cpu_accel_reset_shared(struct cpu_accel_device *dev)
 	dev->shared->abi_version = CPU_ACCEL_ABI_VERSION;
 	dev->shared->struct_size = sizeof(*dev->shared);
 	dev->shared->backend = cpu_accel_backend_id();
+	dev->shared->mode = CPU_ACCEL_MODE_LINUX;
 	WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_IDLE);
 }
 
@@ -426,8 +427,10 @@ static void cpu_accel_lifecycle_entry(void *data)
 
 	preempt_disable();
 	local_irq_save(irq_flags);
+	WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_ACCELERATOR);
 	cpu_accel_observation_begin(&obs);
 	cpu_accel_run(dev, &obs);
+	WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_EXITING);
 	local_irq_restore(irq_flags);
 	preempt_enable();
 }
@@ -455,9 +458,12 @@ static int cpu_accel_lifecycle_thread(void *data)
 	dev->lifecycle_ret = ret;
 	atomic_set(&dev->enter_requested, 0);
 	if (ret) {
+		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_RECOVERY);
 		if (READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_READY ||
 		    READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_RUNNING)
 			WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_ERROR);
+	} else {
+		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_LINUX);
 	}
 	complete(&dev->lifecycle_done);
 	module_put(THIS_MODULE);
@@ -618,11 +624,13 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 	atomic_set(&dev->stop_requested, 0);
 	atomic_set(&dev->watchdog_fired, 0);
 	atomic_set(&dev->enter_requested, 1);
+	WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_ENTERING);
 	WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_READY);
 
 	ret = cpu_accel_create_lifecycle_thread(dev);
 	if (ret) {
 		atomic_set(&dev->enter_requested, 0);
+		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_RECOVERY);
 		WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_ERROR);
 	} else if (dev->config.flags & CPU_ACCEL_FLAG_PERSISTENT) {
 		unsigned long watchdog_jiffies;
@@ -698,6 +706,7 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 		}
 		atomic_set(&dev->stop_requested, 1);
 		WRITE_ONCE(dev->shared->stop_requested, 1);
+		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_EXITING);
 		break;
 
 	case CPU_ACCEL_IOC_EXIT:

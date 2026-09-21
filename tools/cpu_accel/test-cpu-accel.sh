@@ -49,6 +49,8 @@ while [ "$run" -le "$repeats" ]; do
 		state=3\ *) ;;
 		*) fail "normal run did not complete" ;;
 	esac
+	echo "$output" | grep -q 'mode=0' || \
+		fail "normal run did not return to Linux mode"
 	echo "$output" | grep -q 'lifecycle_entry_ns=[1-9][0-9]*' || \
 		fail "lifecycle entry timestamp was not recorded"
 	echo "$output" | grep -q 'lifecycle_exit_ns=[1-9][0-9]*' || \
@@ -81,6 +83,7 @@ kill -TERM "$run_pid"
 wait "$run_pid"
 cat "$stop_output"
 grep -q '^state=4 ' "$stop_output" || fail "STOP did not produce state=4"
+grep -q 'mode=0' "$stop_output" || fail "STOP did not return to Linux mode"
 
 output=$($tool run --cpu "$target_cpu" --duration-ms 100 \
 	--period-us 1000 --persistent)
@@ -89,6 +92,8 @@ case "$output" in
 	state=6\ *) ;;
 	*) fail "watchdog run did not produce state=6" ;;
 esac
+echo "$output" | grep -q 'mode=0' || \
+	fail "watchdog did not return to Linux mode"
 
 if $tool run --cpu 0 --duration-ms 10 --period-us 1000 \
 	>"$invalid_output" 2>&1; then

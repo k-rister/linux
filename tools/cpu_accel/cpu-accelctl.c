@@ -35,7 +35,7 @@ static int parse_u64(const char *text, uint64_t *value)
 
 static void print_status(const volatile struct cpu_accel_shared *shared)
 {
-	printf("state=%u sequence=%" PRIu64 " cpu=%u backend=%u samples=%" PRIu64
+	printf("state=%u mode=%u sequence=%" PRIu64 " cpu=%u backend=%u samples=%" PRIu64
 	       " max_lateness_ns=%" PRIu64 " min_lateness_ns=%" PRIu64
 	       " last_lateness_ns=%" PRIu64 " duration_ns=%" PRIu64
 	       " period_ns=%" PRIu64 " lifecycle_entry_ns=%" PRIu64
@@ -51,7 +51,8 @@ static void print_status(const volatile struct cpu_accel_shared *shared)
 	       " preempt_count_entry=%u preempt_count_exit=%u"
 	       " arch_counters_valid=%u lifecycle_cpu_entry=%u"
 	       " lifecycle_cpu_exit=%u migration_detected=%u\n",
-	       shared->state, (uint64_t)shared->sequence, shared->cpu,
+	       shared->state, shared->mode, (uint64_t)shared->sequence,
+	       shared->cpu,
 	       shared->backend,
 	       (uint64_t)shared->samples_produced,
 	       (uint64_t)shared->max_lateness_ns,

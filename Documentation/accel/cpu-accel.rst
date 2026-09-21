@@ -9,8 +9,8 @@ dataplane accelerator environment.  It is an experimental control plane for
 one online CPU and is intended to make the control and measurement interfaces
 concrete for a persistent accelerator ownership mode.
 
-This version is deliberately not a complete isolated accelerator CPU.  It
-Its architecture-neutral lifecycle boundary synchronously dispatches an entry
+This version is deliberately not a complete isolated accelerator CPU.  Its
+architecture-neutral lifecycle boundary synchronously dispatches an entry
 function to the target CPU while a controller thread holds the CPU-hotplug
 read lock.  The target remains online, but preemption and local maskable
 interrupts are disabled until ``STOP``, completion, or the configured
@@ -40,8 +40,9 @@ small ioctl interface:
   function and completes the transition back to Linux.
 * ``RESET`` returns the device to its initial state after a completed run.
 
-The shared mapping contains the state, run timestamps, aggregate lateness,
-and up to ``CPU_ACCEL_MAX_SAMPLES`` timestamp samples.  ABI version 3 also
+The shared mapping contains the state, explicit Linux/accelerator transition
+mode, run timestamps, aggregate lateness, and up to
+``CPU_ACCEL_MAX_SAMPLES`` timestamp samples.  ABI version 4 also
 reports lifecycle entry/exit timestamps, interrupt and softirq deltas,
 timer, hrtimer, RCU, and scheduler softirq deltas, current-task
 context-switch deltas, CPU-entry/exit identity, migration detection, pending
@@ -54,6 +55,11 @@ Workqueue queue and execution tracepoints report activity targeted at the
 accelerator CPU while it is running.
 These are observations made by the prototype, not suppression or admission
 controls for the corresponding activity.
+
+The mode reports ``LINUX``, ``ENTERING``, ``ACCELERATOR``, ``EXITING``, or
+``RECOVERY``.  It makes the lifecycle transition explicit for the control
+plane, but does not yet claim that Linux has removed every scheduler,
+interrupt, RCU, workqueue, or TLB responsibility from the target CPU.
 
 The first ABI supports ``CPU_ACCEL_FLAG_IRQS_OFF`` and
 ``CPU_ACCEL_FLAG_PERSISTENT``.  A watchdog termination is reported as
@@ -93,5 +99,7 @@ implementation is not assumed to be recoverable without reverting to the
 known-good kernel.  This lifecycle is the first step toward that model, but
 the synchronous SMP dispatch still uses the normal IPI entry path and does
 not suppress Linux-generated IPIs while the target is running.  The next
-phase should replace the staged x86 handoff with direct APIC ownership and
-explicit pending-IPI/TLB policy before attempting a stronger latency claim.
+phase should use the explicit mode transitions to implement target CPU
+quiescing and ownership transfer, then replace the staged x86 handoff with
+direct APIC ownership and explicit pending-IPI/TLB policy before attempting a
+stronger latency claim.

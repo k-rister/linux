@@ -6,7 +6,7 @@
 #include <linux/types.h>
 
 /* The first prototype uses a fixed-size shared control and sample area. */
-#define CPU_ACCEL_ABI_VERSION		3
+#define CPU_ACCEL_ABI_VERSION		4
 #define CPU_ACCEL_MAP_SIZE		(64U * 1024U)
 #define CPU_ACCEL_MAX_SAMPLES		2048U
 
@@ -22,6 +22,14 @@ enum cpu_accel_state {
 	CPU_ACCEL_STATE_STOPPED,
 	CPU_ACCEL_STATE_ERROR,
 	CPU_ACCEL_STATE_WATCHDOG,
+};
+
+enum cpu_accel_mode {
+	CPU_ACCEL_MODE_LINUX = 0,
+	CPU_ACCEL_MODE_ENTERING,
+	CPU_ACCEL_MODE_ACCELERATOR,
+	CPU_ACCEL_MODE_EXITING,
+	CPU_ACCEL_MODE_RECOVERY,
 };
 
 /* The first prototype always runs with local interrupts disabled. */
@@ -56,7 +64,7 @@ struct cpu_accel_shared {
 	__u32 backend_flags;
 	__u32 stop_requested;
 	__u32 samples_valid;
-	__u32 reserved0;
+	__u32 mode;
 	__u64 sequence;
 	__u64 start_ns;
 	__u64 end_ns;

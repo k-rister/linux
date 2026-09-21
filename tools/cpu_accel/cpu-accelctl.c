@@ -38,13 +38,43 @@ static void print_status(const volatile struct cpu_accel_shared *shared)
 	printf("state=%u sequence=%" PRIu64 " cpu=%u samples=%" PRIu64
 	       " max_lateness_ns=%" PRIu64 " min_lateness_ns=%" PRIu64
 	       " last_lateness_ns=%" PRIu64 " duration_ns=%" PRIu64
-	       " period_ns=%" PRIu64 "\n",
+	       " period_ns=%" PRIu64 " lifecycle_entry_ns=%" PRIu64
+	       " lifecycle_exit_ns=%" PRIu64 " irq_count=%" PRIu64
+	       " softirq_count=%" PRIu64 " timer_softirq_count=%" PRIu64
+	       " hrtimer_softirq_count=%" PRIu64 " rcu_softirq_count=%" PRIu64
+	       " sched_softirq_count=%" PRIu64 " context_switches=%" PRIu64
+	       " need_resched_samples=%" PRIu64 " arch_irq_count=%" PRIu64
+	       " arch_ipi_count=%" PRIu64 " arch_tlb_count=%" PRIu64
+	       " need_resched_entry=%u need_resched_exit=%u"
+	       " softirq_pending_entry=%u softirq_pending_exit=%u"
+	       " preempt_count_entry=%u preempt_count_exit=%u"
+	       " arch_counters_valid=%u lifecycle_cpu_entry=%u"
+	       " lifecycle_cpu_exit=%u migration_detected=%u\n",
 	       shared->state, (uint64_t)shared->sequence, shared->cpu,
 	       (uint64_t)shared->samples_produced,
 	       (uint64_t)shared->max_lateness_ns,
 	       (uint64_t)shared->min_lateness_ns,
 	       (uint64_t)shared->last_lateness_ns,
-	       (uint64_t)shared->duration_ns, (uint64_t)shared->period_ns);
+	       (uint64_t)shared->duration_ns, (uint64_t)shared->period_ns,
+	       (uint64_t)shared->lifecycle_entry_ns,
+	       (uint64_t)shared->lifecycle_exit_ns,
+	       (uint64_t)shared->irq_count,
+	       (uint64_t)shared->softirq_count,
+	       (uint64_t)shared->timer_softirq_count,
+	       (uint64_t)shared->hrtimer_softirq_count,
+	       (uint64_t)shared->rcu_softirq_count,
+	       (uint64_t)shared->sched_softirq_count,
+	       (uint64_t)shared->context_switches,
+	       (uint64_t)shared->need_resched_samples,
+	       (uint64_t)shared->arch_irq_count,
+	       (uint64_t)shared->arch_ipi_count,
+	       (uint64_t)shared->arch_tlb_count,
+	       shared->need_resched_entry, shared->need_resched_exit,
+	       shared->softirq_pending_entry, shared->softirq_pending_exit,
+	       shared->preempt_count_entry, shared->preempt_count_exit,
+	       shared->arch_counters_valid,
+	       shared->lifecycle_cpu_entry, shared->lifecycle_cpu_exit,
+	       shared->migration_detected);
 }
 
 static void usage(FILE *stream, const char *program)

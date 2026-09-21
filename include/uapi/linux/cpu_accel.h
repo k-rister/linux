@@ -6,7 +6,7 @@
 #include <linux/types.h>
 
 /* The first prototype uses a fixed-size shared control and sample area. */
-#define CPU_ACCEL_ABI_VERSION		1
+#define CPU_ACCEL_ABI_VERSION		2
 #define CPU_ACCEL_MAP_SIZE		(64U * 1024U)
 #define CPU_ACCEL_MAX_SAMPLES		2048U
 
@@ -59,6 +59,30 @@ struct cpu_accel_shared {
 	__u64 max_lateness_ns;
 	__u64 min_lateness_ns;
 	__u64 last_lateness_ns;
+	__u64 lifecycle_entry_ns;
+	__u64 lifecycle_exit_ns;
+	__u64 irq_count;
+	__u64 softirq_count;
+	__u64 timer_softirq_count;
+	__u64 hrtimer_softirq_count;
+	__u64 rcu_softirq_count;
+	__u64 sched_softirq_count;
+	__u64 context_switches;
+	__u64 need_resched_samples;
+	__u64 arch_irq_count;
+	__u64 arch_ipi_count;
+	__u64 arch_tlb_count;
+	__u32 need_resched_entry;
+	__u32 need_resched_exit;
+	__u32 softirq_pending_entry;
+	__u32 softirq_pending_exit;
+	__u32 preempt_count_entry;
+	__u32 preempt_count_exit;
+	__u32 arch_counters_valid;
+	__u32 lifecycle_cpu_entry;
+	__u32 lifecycle_cpu_exit;
+	__u32 migration_detected;
+	__u32 reserved1;
 	struct cpu_accel_sample samples[CPU_ACCEL_MAX_SAMPLES];
 };
 

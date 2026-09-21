@@ -41,20 +41,40 @@ small ioctl interface:
 * ``RESET`` returns the device to its initial state after a completed run.
 
 The shared mapping contains the state, run timestamps, aggregate lateness,
-and up to ``CPU_ACCEL_MAX_SAMPLES`` timestamp samples.  The first ABI supports
-``CPU_ACCEL_FLAG_IRQS_OFF`` and ``CPU_ACCEL_FLAG_PERSISTENT``.  A watchdog
-termination is reported as ``CPU_ACCEL_STATE_WATCHDOG``.
+and up to ``CPU_ACCEL_MAX_SAMPLES`` timestamp samples.  ABI version 2 also
+reports lifecycle entry/exit timestamps, interrupt and softirq deltas,
+timer, hrtimer, RCU, and scheduler softirq deltas, current-task
+context-switch deltas, CPU-entry/exit identity, migration detection, pending
+scheduler and softirq state, and preemption state.  On x86 it additionally
+reports architecture interrupt, IPI, and TLB counter deltas;
+``arch_counters_valid`` identifies whether those counters are available.
+These are observations made by the prototype, not suppression or admission
+controls for the corresponding activity.
+
+The first ABI supports ``CPU_ACCEL_FLAG_IRQS_OFF`` and
+``CPU_ACCEL_FLAG_PERSISTENT``.  A watchdog termination is reported as
+``CPU_ACCEL_STATE_WATCHDOG``.
 
 The companion SDK in ``tools/cpu_accel`` wraps the device and
 ``cpu-accelctl`` provides a minimal command-line exerciser::
 
   make -C tools/cpu_accel
   sudo make -C tools/cpu_accel test
+  CPU_ACCEL_REPEATS=5 CPU_ACCEL_LOAD_CPUS=2-7 \
+    sudo make -C tools/cpu_accel test
   sudo insmod drivers/cpu_accel/cpu_accel.ko
   sudo tools/cpu_accel/cpu-accelctl run --cpu 1 --duration-ms 100 \
     --period-us 1000 --persistent
 
-The tool prints the shared result, including the maximum observed lateness.
+The tool prints the shared result, including the maximum observed lateness
+and lifecycle telemetry.  The generic interrupt and context-switch deltas
+are sampled around the target callback; the context-switch value is the
+current task's switch-counter delta.  x86 IPI/TLB counters are read from the
+per-CPU architecture interrupt statistics.  ``CPU_ACCEL_REPEATS`` repeats the
+normal run, while ``CPU_ACCEL_LOAD_CPUS`` starts a busy loop on the listed
+non-target CPUs for a loaded measurement.  Workqueue execution is not given a
+separate counter yet: it requires scheduler/core trace instrumentation, and
+cannot execute on this target while preemption and interrupts are disabled.
 The tool pins its control process to CPU 0.  CPU 0 is reserved for
 control-plane work by this prototype and is rejected as a target.
 

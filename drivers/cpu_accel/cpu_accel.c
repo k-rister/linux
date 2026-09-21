@@ -5,6 +5,8 @@
 #include <linux/cpu.h>
 #include <linux/fs.h>
 #include <linux/init.h>
+#include <linux/interrupt.h>
+#include <linux/kernel_stat.h>
 #include <linux/kthread.h>
 #include <linux/kernel.h>
 #include <linux/miscdevice.h>
@@ -21,6 +23,90 @@
 #include <linux/vmalloc.h>
 
 #include <uapi/linux/cpu_accel.h>
+
+#ifdef CONFIG_X86
+#include <asm/hardirq.h>
+#endif
+
+struct cpu_accel_observation {
+	u64 lifecycle_entry_ns;
+	u64 irq_entry;
+	u64 softirq_entry;
+	u64 timer_softirq_entry;
+	u64 hrtimer_softirq_entry;
+	u64 rcu_softirq_entry;
+	u64 sched_softirq_entry;
+	u64 context_switches_entry;
+	u64 arch_irq_entry;
+	u64 arch_ipi_entry;
+	u64 arch_tlb_entry;
+	u64 need_resched_samples;
+	u32 need_resched_entry;
+	u32 softirq_pending_entry;
+	u32 preempt_count_entry;
+	u32 cpu;
+};
+
+#ifdef CONFIG_X86
+static u64 cpu_accel_arch_irq_count(unsigned int cpu)
+{
+	const irq_cpustat_t *stats = per_cpu_ptr(&irq_stat, cpu);
+	u64 count = 0;
+
+	for (unsigned int index = 0; index < IRQ_COUNT_MAX; index++)
+		count += READ_ONCE(stats->counts[index]);
+
+	return count;
+}
+
+static u64 cpu_accel_arch_ipi_count(unsigned int cpu)
+{
+	const irq_cpustat_t *stats = per_cpu_ptr(&irq_stat, cpu);
+
+	return READ_ONCE(stats->counts[IRQ_COUNT_RESCHEDULE]) +
+		READ_ONCE(stats->counts[IRQ_COUNT_CALL_FUNCTION]);
+}
+
+static u64 cpu_accel_arch_tlb_count(unsigned int cpu)
+{
+	const irq_cpustat_t *stats = per_cpu_ptr(&irq_stat, cpu);
+
+	return READ_ONCE(stats->counts[IRQ_COUNT_TLB]);
+}
+
+static bool cpu_accel_arch_counters_valid(void)
+{
+	return true;
+}
+#else
+static u64 cpu_accel_arch_irq_count(unsigned int cpu)
+{
+	(void)cpu;
+	return U64_MAX;
+}
+
+static u64 cpu_accel_arch_ipi_count(unsigned int cpu)
+{
+	(void)cpu;
+	return U64_MAX;
+}
+
+static u64 cpu_accel_arch_tlb_count(unsigned int cpu)
+{
+	(void)cpu;
+	return U64_MAX;
+}
+
+static bool cpu_accel_arch_counters_valid(void)
+{
+	return false;
+}
+#endif
+
+static u64 cpu_accel_counter_delta(u64 end, u64 start)
+{
+	return end >= start ? end - start : 0;
+}
 
 struct cpu_accel_device {
 	struct miscdevice misc;
@@ -65,13 +151,100 @@ static void cpu_accel_reset_shared(struct cpu_accel_device *dev)
 	WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_IDLE);
 }
 
+static void cpu_accel_observation_begin(struct cpu_accel_observation *obs)
+{
+	obs->cpu = smp_processor_id();
+	obs->lifecycle_entry_ns = ktime_get_mono_fast_ns();
+	obs->irq_entry = kstat_cpu_irqs_sum(obs->cpu);
+	obs->softirq_entry = kstat_cpu_softirqs_sum(obs->cpu);
+	obs->timer_softirq_entry = kstat_softirqs_cpu(TIMER_SOFTIRQ, obs->cpu);
+	obs->hrtimer_softirq_entry = kstat_softirqs_cpu(HRTIMER_SOFTIRQ, obs->cpu);
+	obs->rcu_softirq_entry = kstat_softirqs_cpu(RCU_SOFTIRQ, obs->cpu);
+	obs->sched_softirq_entry = kstat_softirqs_cpu(SCHED_SOFTIRQ, obs->cpu);
+	obs->context_switches_entry = READ_ONCE(current->nvcsw) +
+		READ_ONCE(current->nivcsw);
+	obs->arch_irq_entry = cpu_accel_arch_irq_count(obs->cpu);
+	obs->arch_ipi_entry = cpu_accel_arch_ipi_count(obs->cpu);
+	obs->arch_tlb_entry = cpu_accel_arch_tlb_count(obs->cpu);
+	obs->need_resched_entry = need_resched();
+	obs->softirq_pending_entry = local_softirq_pending();
+	obs->preempt_count_entry = preempt_count();
+	obs->need_resched_samples = 0;
+}
+
+static void cpu_accel_observation_finish(struct cpu_accel_device *dev,
+					 struct cpu_accel_observation *obs)
+{
+	struct cpu_accel_shared *shared = dev->shared;
+	u64 now = ktime_get_mono_fast_ns();
+	u64 irq_count = kstat_cpu_irqs_sum(obs->cpu);
+	u64 softirq_count = kstat_cpu_softirqs_sum(obs->cpu);
+	u64 timer_softirq_count = kstat_softirqs_cpu(TIMER_SOFTIRQ,
+		obs->cpu);
+	u64 hrtimer_softirq_count = kstat_softirqs_cpu(HRTIMER_SOFTIRQ,
+		obs->cpu);
+	u64 rcu_softirq_count = kstat_softirqs_cpu(RCU_SOFTIRQ, obs->cpu);
+	u64 sched_softirq_count = kstat_softirqs_cpu(SCHED_SOFTIRQ,
+		obs->cpu);
+	u64 context_switches = READ_ONCE(current->nvcsw) +
+		READ_ONCE(current->nivcsw);
+	u64 arch_irq_count = cpu_accel_arch_irq_count(obs->cpu);
+	u64 arch_ipi_count = cpu_accel_arch_ipi_count(obs->cpu);
+	u64 arch_tlb_count = cpu_accel_arch_tlb_count(obs->cpu);
+	u64 irq_delta = cpu_accel_counter_delta(irq_count, obs->irq_entry);
+	u64 softirq_delta = cpu_accel_counter_delta(softirq_count,
+		obs->softirq_entry);
+	u64 context_switch_delta = cpu_accel_counter_delta(context_switches,
+		obs->context_switches_entry);
+	u64 arch_irq_delta = cpu_accel_counter_delta(arch_irq_count,
+		obs->arch_irq_entry);
+	u64 arch_ipi_delta = cpu_accel_counter_delta(arch_ipi_count,
+		obs->arch_ipi_entry);
+	u64 arch_tlb_delta = cpu_accel_counter_delta(arch_tlb_count,
+		obs->arch_tlb_entry);
+	u64 timer_softirq_delta = cpu_accel_counter_delta(timer_softirq_count,
+		obs->timer_softirq_entry);
+	u64 hrtimer_softirq_delta = cpu_accel_counter_delta(hrtimer_softirq_count,
+		obs->hrtimer_softirq_entry);
+	u64 rcu_softirq_delta = cpu_accel_counter_delta(rcu_softirq_count,
+		obs->rcu_softirq_entry);
+	u64 sched_softirq_delta = cpu_accel_counter_delta(sched_softirq_count,
+		obs->sched_softirq_entry);
+	u32 exit_cpu = smp_processor_id();
+
+	shared->lifecycle_entry_ns = obs->lifecycle_entry_ns;
+	shared->lifecycle_exit_ns = now;
+	shared->irq_count = irq_delta;
+	shared->softirq_count = softirq_delta;
+	shared->timer_softirq_count = timer_softirq_delta;
+	shared->hrtimer_softirq_count = hrtimer_softirq_delta;
+	shared->rcu_softirq_count = rcu_softirq_delta;
+	shared->sched_softirq_count = sched_softirq_delta;
+	shared->context_switches = context_switch_delta;
+	shared->need_resched_samples = obs->need_resched_samples;
+	shared->arch_irq_count = arch_irq_delta;
+	shared->arch_ipi_count = arch_ipi_delta;
+	shared->arch_tlb_count = arch_tlb_delta;
+	shared->need_resched_entry = obs->need_resched_entry;
+	shared->need_resched_exit = need_resched();
+	shared->softirq_pending_entry = obs->softirq_pending_entry;
+	shared->softirq_pending_exit = local_softirq_pending();
+	shared->preempt_count_entry = obs->preempt_count_entry;
+	shared->preempt_count_exit = preempt_count();
+	shared->arch_counters_valid = cpu_accel_arch_counters_valid();
+	shared->lifecycle_cpu_entry = obs->cpu;
+	shared->lifecycle_cpu_exit = exit_cpu;
+	shared->migration_detected = obs->cpu != exit_cpu;
+}
+
 /*
  * This is the first architecture-neutral accelerator workload.  The
  * lifecycle backend dispatches this function synchronously to the target CPU.
  * The target stays online, but does not return to the scheduler while this
  * function is running.
  */
-static void cpu_accel_run(struct cpu_accel_device *dev)
+static void cpu_accel_run(struct cpu_accel_device *dev,
+			  struct cpu_accel_observation *obs)
 {
 	struct cpu_accel_shared *shared = dev->shared;
 	u64 start = 0, deadline = 0, now, lateness;
@@ -100,6 +273,8 @@ static void cpu_accel_run(struct cpu_accel_device *dev)
 			cpu_relax();
 			continue;
 		}
+		if (need_resched())
+			obs->need_resched_samples++;
 
 		lateness = now - deadline;
 		if (samples_valid < CPU_ACCEL_MAX_SAMPLES) {
@@ -144,6 +319,7 @@ finish:
 	atomic_set(&dev->stop_requested, 0);
 	atomic_set(&dev->watchdog_fired, 0);
 	atomic_set(&dev->running, 0);
+	cpu_accel_observation_finish(dev, obs);
 	/* Publish all result fields before publishing the terminal state. */
 	smp_wmb();
 	WRITE_ONCE(shared->state, final_state);
@@ -152,11 +328,13 @@ finish:
 static void cpu_accel_lifecycle_entry(void *data)
 {
 	struct cpu_accel_device *dev = data;
+	struct cpu_accel_observation obs;
 	unsigned long irq_flags;
 
 	preempt_disable();
 	local_irq_save(irq_flags);
-	cpu_accel_run(dev);
+	cpu_accel_observation_begin(&obs);
+	cpu_accel_run(dev, &obs);
 	local_irq_restore(irq_flags);
 	preempt_enable();
 }
@@ -315,6 +493,29 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 	dev->shared->max_lateness_ns = 0;
 	dev->shared->min_lateness_ns = 0;
 	dev->shared->last_lateness_ns = 0;
+	dev->shared->lifecycle_entry_ns = 0;
+	dev->shared->lifecycle_exit_ns = 0;
+	dev->shared->irq_count = 0;
+	dev->shared->softirq_count = 0;
+	dev->shared->timer_softirq_count = 0;
+	dev->shared->hrtimer_softirq_count = 0;
+	dev->shared->rcu_softirq_count = 0;
+	dev->shared->sched_softirq_count = 0;
+	dev->shared->context_switches = 0;
+	dev->shared->need_resched_samples = 0;
+	dev->shared->arch_irq_count = 0;
+	dev->shared->arch_ipi_count = 0;
+	dev->shared->arch_tlb_count = 0;
+	dev->shared->need_resched_entry = 0;
+	dev->shared->need_resched_exit = 0;
+	dev->shared->softirq_pending_entry = 0;
+	dev->shared->softirq_pending_exit = 0;
+	dev->shared->preempt_count_entry = 0;
+	dev->shared->preempt_count_exit = 0;
+	dev->shared->arch_counters_valid = 0;
+	dev->shared->lifecycle_cpu_entry = 0;
+	dev->shared->lifecycle_cpu_exit = 0;
+	dev->shared->migration_detected = 0;
 	reinit_completion(&dev->lifecycle_done);
 	dev->lifecycle_ret = -EINPROGRESS;
 	atomic_set(&dev->stop_requested, 0);

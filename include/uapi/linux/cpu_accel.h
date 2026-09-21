@@ -21,10 +21,13 @@ enum cpu_accel_state {
 	CPU_ACCEL_STATE_COMPLETE,
 	CPU_ACCEL_STATE_STOPPED,
 	CPU_ACCEL_STATE_ERROR,
+	CPU_ACCEL_STATE_WATCHDOG,
 };
 
 /* The first prototype always runs with local interrupts disabled. */
 #define CPU_ACCEL_FLAG_IRQS_OFF		(1U << 0)
+/* Keep the target owned until STOP or the configured watchdog fires. */
+#define CPU_ACCEL_FLAG_PERSISTENT	(1U << 1)
 
 struct cpu_accel_config {
 	__u32 cpu;

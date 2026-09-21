@@ -17,6 +17,7 @@
 #include <linux/processor.h>
 #include <linux/sched.h>
 #include <linux/timekeeping.h>
+#include <linux/timer.h>
 #include <linux/uaccess.h>
 #include <linux/vmalloc.h>
 
@@ -28,11 +29,13 @@ struct cpu_accel_device {
 	struct completion enter_ready;
 	struct completion hotplug_done;
 	struct task_struct *hotplug_thread;
+	struct timer_list watchdog_timer;
 	struct cpu_accel_shared *shared;
 	struct cpu_accel_config config;
 	atomic_t opened;
 	atomic_t enter_requested;
 	atomic_t stop_requested;
+	atomic_t watchdog_fired;
 	atomic_t running;
 	unsigned int sequence;
 	unsigned int controller_cpu;
@@ -42,6 +45,19 @@ struct cpu_accel_device {
 };
 
 static struct cpu_accel_device cpu_accel;
+
+static void cpu_accel_watchdog(struct timer_list *timer)
+{
+	struct cpu_accel_device *dev =
+		container_of(timer, struct cpu_accel_device, watchdog_timer);
+
+	if (!atomic_read(&dev->enter_requested))
+		return;
+
+	atomic_set(&dev->watchdog_fired, 1);
+	atomic_set(&dev->stop_requested, 1);
+	WRITE_ONCE(dev->shared->stop_requested, 1);
+}
 
 static void cpu_accel_reset_shared(struct cpu_accel_device *dev)
 {
@@ -67,12 +83,14 @@ static void cpu_accel_run(struct cpu_accel_device *dev)
 	u64 min_lateness = U64_MAX;
 	u32 samples_valid = 0;
 	u32 final_state = CPU_ACCEL_STATE_COMPLETE;
+	bool persistent = dev->config.flags & CPU_ACCEL_FLAG_PERSISTENT;
 
 	preempt_disable();
 	local_irq_save(irq_flags);
 
 	if (atomic_read(&dev->stop_requested)) {
-		final_state = CPU_ACCEL_STATE_STOPPED;
+		final_state = atomic_read(&dev->watchdog_fired) ?
+			CPU_ACCEL_STATE_WATCHDOG : CPU_ACCEL_STATE_STOPPED;
 		complete(&dev->enter_ready);
 		goto out;
 	}
@@ -101,12 +119,19 @@ static void cpu_accel_run(struct cpu_accel_device *dev)
 		max_lateness = max(max_lateness, lateness);
 		min_lateness = min(min_lateness, lateness);
 
+		if (atomic_read(&dev->watchdog_fired)) {
+			final_state = CPU_ACCEL_STATE_WATCHDOG;
+			break;
+		}
 		if (atomic_read(&dev->stop_requested)) {
 			final_state = CPU_ACCEL_STATE_STOPPED;
 			break;
 		}
-		if (now - start >= dev->config.duration_ns)
+		if (now - start >= dev->config.duration_ns) {
+			final_state = persistent ? CPU_ACCEL_STATE_WATCHDOG :
+				CPU_ACCEL_STATE_COMPLETE;
 			break;
+		}
 		if (deadline > U64_MAX - dev->config.period_ns) {
 			final_state = CPU_ACCEL_STATE_ERROR;
 			break;
@@ -125,6 +150,7 @@ out:
 		shared->samples[samples_valid - 1].lateness_ns : 0;
 	shared->stop_requested = 0;
 	atomic_set(&dev->stop_requested, 0);
+	atomic_set(&dev->watchdog_fired, 0);
 	atomic_set(&dev->running, 0);
 	smp_wmb();
 	WRITE_ONCE(shared->state, final_state);
@@ -203,6 +229,7 @@ static int cpu_accel_rejoin(struct cpu_accel_device *dev)
 			return -ETIMEDOUT;
 
 		ret = dev->hotplug_ret;
+		timer_delete_sync(&dev->watchdog_timer);
 		cpu_accel_destroy_hotplug_thread(dev);
 		if (ret)
 			return ret;
@@ -300,6 +327,7 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 	reinit_completion(&dev->hotplug_done);
 	dev->hotplug_ret = -EINPROGRESS;
 	atomic_set(&dev->stop_requested, 0);
+	atomic_set(&dev->watchdog_fired, 0);
 	atomic_set(&dev->enter_requested, 1);
 	WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_READY);
 
@@ -307,6 +335,12 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 	if (ret) {
 		atomic_set(&dev->enter_requested, 0);
 		WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_ERROR);
+	} else if (dev->config.flags & CPU_ACCEL_FLAG_PERSISTENT) {
+		unsigned long watchdog_jiffies;
+
+		watchdog_jiffies = max_t(unsigned long, 1,
+			nsecs_to_jiffies(dev->config.duration_ns));
+		mod_timer(&dev->watchdog_timer, jiffies + watchdog_jiffies);
 	}
 	return ret;
 }
@@ -337,7 +371,9 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 		}
 		if (!config.flags)
 			config.flags = CPU_ACCEL_FLAG_IRQS_OFF;
-		if (config.flags != CPU_ACCEL_FLAG_IRQS_OFF ||
+		if (!(config.flags & CPU_ACCEL_FLAG_IRQS_OFF) ||
+		    config.flags & ~(CPU_ACCEL_FLAG_IRQS_OFF |
+				     CPU_ACCEL_FLAG_PERSISTENT) ||
 		    !config.period_ns || !config.duration_ns ||
 		    config.duration_ns > CPU_ACCEL_MAX_DURATION_NS ||
 		    config.cpu >= nr_cpu_ids || config.cpu == 0) {
@@ -428,7 +464,9 @@ static int __init cpu_accel_init(void)
 	atomic_set(&cpu_accel.opened, 0);
 	atomic_set(&cpu_accel.enter_requested, 0);
 	atomic_set(&cpu_accel.stop_requested, 0);
+	atomic_set(&cpu_accel.watchdog_fired, 0);
 	atomic_set(&cpu_accel.running, 0);
+	timer_setup(&cpu_accel.watchdog_timer, cpu_accel_watchdog, 0);
 	cpu_accel.cpuhp_state = -1;
 	cpu_accel.shared = vmalloc_user(CPU_ACCEL_MAP_SIZE);
 	if (!cpu_accel.shared)
@@ -469,6 +507,7 @@ static void __exit cpu_accel_exit(void)
 	}
 	if (cpu_accel.hotplug_thread)
 		cpu_accel_rejoin(&cpu_accel);
+	timer_delete_sync(&cpu_accel.watchdog_timer);
 	mutex_unlock(&cpu_accel.lock);
 
 	misc_deregister(&cpu_accel.misc);

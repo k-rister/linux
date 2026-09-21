@@ -6,16 +6,19 @@ Single-CPU accelerator prototype
 
 The ``CPU_ACCEL`` driver is the first foundation prototype for a Linux
 dataplane accelerator environment.  It is an experimental control plane for
-one online, non-boot CPU and is intended to make the control and measurement
-interfaces concrete before implementing full CPU mode transitions.
+one hotpluggable, non-boot CPU and is intended to make the control and
+measurement interfaces concrete before implementing a persistent accelerator
+CPU mode.
 
 This version is deliberately not a complete isolated accelerator CPU.  It
-does not offline a CPU, migrate or mask its interrupt sources, suppress TLB
-shootdowns, provide a memory-protection domain, or provide a hard latency
-bound.  During the bounded timestamp workload it disables preemption and
-local maskable interrupts on the target CPU.  NMIs, SMIs, machine checks,
-pending IPIs, firmware activity, and hardware execution effects remain
-outside this prototype's control.
+uses a CPU-hotplug teardown callback as the transition boundary: the target
+CPU runs the bounded timestamp workload with preemption and local maskable
+interrupts disabled, then normal Linux hotplug completes taking it offline.
+``EXIT`` brings it back online.  It does not yet provide a persistent
+accelerator execution loop, a memory-protection domain, explicit interrupt
+source ownership, TLB-shootdown suppression, or a hard latency bound.  NMIs,
+SMIs, machine checks, pending IPIs, firmware activity, and hardware execution
+effects remain outside this prototype's control.
 
 Interface
 =========
@@ -25,8 +28,10 @@ small ioctl interface:
 
 * ``CONFIG`` selects an online CPU other than CPU 0 and supplies a duration
   and sample period.
-* ``START`` explicitly enters the bounded accelerator workload.
+* ``START`` explicitly enters the CPU-hotplug-backed accelerator workload.
 * ``STOP`` requests an orderly exit at the next sample boundary.
+* ``EXIT`` explicitly brings the target CPU back into Linux after the
+  workload has stopped and hotplug has completed.
 * ``RESET`` returns the device to its initial state after a completed run.
 
 The shared mapping contains the state, run timestamps, aggregate lateness,
@@ -41,7 +46,7 @@ The companion SDK in ``tools/cpu_accel`` wraps the device and
   sudo tools/cpu_accel/cpu-accelctl run --cpu 1 --duration-ms 100 --period-us 1000
 
 The tool prints the shared result, including the maximum observed lateness.
-The control process should run on a non-target CPU.  CPU 0 is reserved for
+The tool pins its control process to CPU 0.  CPU 0 is reserved for
 control-plane work by this prototype and is rejected as a target.
 
 Recovery and next steps
@@ -50,7 +55,7 @@ Recovery and next steps
 The workload is capped at five seconds and ``STOP`` is cooperative.  A
 malfunctioning kernel implementation is not assumed to be recoverable
 without reverting to the known-good kernel.  The next implementation phase
-must add an explicit Linux-to-accelerator and accelerator-to-Linux CPU
-lifecycle, with CPU-hotplug-style quiescence and validation of interrupt,
-workqueue, RCU, timer, and TLB activity before attempting a stronger latency
-claim.
+must replace this bounded hotplug callback with an explicit persistent
+Linux-to-accelerator and accelerator-to-Linux CPU lifecycle, plus validation
+of interrupt, workqueue, RCU, timer, and TLB activity before attempting a
+stronger latency claim.

@@ -6,6 +6,7 @@
 #include <inttypes.h>
 #include <limits.h>
 #include <signal.h>
+#include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -51,9 +52,19 @@ static void usage(FILE *stream, const char *program)
 	fprintf(stream,
 		"Usage:\n"
 		"  %s run [--cpu N] [--duration-ms N] [--period-us N]\n"
+		"  %s exit\n"
 		"  %s status\n"
 		"  %s reset\n",
-		program, program, program);
+		program, program, program, program);
+}
+
+static int pin_control_cpu(void)
+{
+	cpu_set_t set;
+
+	CPU_ZERO(&set);
+	CPU_SET(0, &set);
+	return sched_setaffinity(0, sizeof(set), &set);
 }
 
 static int run_workload(const char *program, int argc, char **argv)
@@ -109,6 +120,10 @@ static int run_workload(const char *program, int argc, char **argv)
 	}
 
 	timeout_ms = (unsigned int)(config.duration_ns / 1000000ULL) + 1000;
+	if (pin_control_cpu() < 0) {
+		perror("pin control process to CPU 0");
+		return 1;
+	}
 	if (cpu_accel_open(&handle) < 0) {
 		perror("open /dev/cpu_accel");
 		return 1;
@@ -132,6 +147,11 @@ static int run_workload(const char *program, int argc, char **argv)
 		(void)cpu_accel_stop(&handle);
 		ret = cpu_accel_wait(&handle, 1000);
 	}
+	if (cpu_accel_exit(&handle) < 0) {
+		if (!ret)
+			ret = -1;
+		perror("exit");
+	}
 	if (ret < 0 && !interrupted)
 		perror("wait");
 	print_status(handle.shared);
@@ -150,7 +170,8 @@ int main(int argc, char **argv)
 	}
 	if (!strcmp(argv[1], "run"))
 		return run_workload(argv[0], argc - 2, argv + 2);
-	if (strcmp(argv[1], "status") && strcmp(argv[1], "reset")) {
+	if (strcmp(argv[1], "exit") && strcmp(argv[1], "status") &&
+	    strcmp(argv[1], "reset")) {
 		usage(stderr, argv[0]);
 		return 2;
 	}
@@ -159,7 +180,11 @@ int main(int argc, char **argv)
 		perror("open /dev/cpu_accel");
 		return 1;
 	}
-	if (!strcmp(argv[1], "reset")) {
+	if (!strcmp(argv[1], "exit")) {
+		ret = cpu_accel_exit(&handle);
+		if (ret < 0)
+			perror("exit");
+	} else if (!strcmp(argv[1], "reset")) {
 		ret = cpu_accel_reset(&handle);
 		if (ret < 0)
 			perror("reset");

@@ -15,6 +15,7 @@ int cpu_accel_configure(struct cpu_accel_handle *handle,
 			const struct cpu_accel_config *config);
 int cpu_accel_start(struct cpu_accel_handle *handle);
 int cpu_accel_stop(struct cpu_accel_handle *handle);
+int cpu_accel_exit(struct cpu_accel_handle *handle);
 int cpu_accel_reset(struct cpu_accel_handle *handle);
 int cpu_accel_wait(struct cpu_accel_handle *handle, unsigned int timeout_ms);
 

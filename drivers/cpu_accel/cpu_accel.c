@@ -3,6 +3,7 @@
 #include <linux/atomic.h>
 #include <linux/completion.h>
 #include <linux/cpu.h>
+#include <linux/cpuhotplug.h>
 #include <linux/cpuhplock.h>
 #include <linux/fs.h>
 #include <linux/init.h>
@@ -18,23 +19,25 @@
 #include <linux/timekeeping.h>
 #include <linux/uaccess.h>
 #include <linux/vmalloc.h>
-#include <linux/wait.h>
 
 #include <uapi/linux/cpu_accel.h>
 
 struct cpu_accel_device {
 	struct miscdevice misc;
 	struct mutex lock;
-	wait_queue_head_t start_wait;
-	struct completion run_done;
-	struct task_struct *thread;
+	struct completion enter_ready;
+	struct completion hotplug_done;
+	struct task_struct *hotplug_thread;
 	struct cpu_accel_shared *shared;
 	struct cpu_accel_config config;
 	atomic_t opened;
-	atomic_t start_requested;
+	atomic_t enter_requested;
 	atomic_t stop_requested;
 	atomic_t running;
 	unsigned int sequence;
+	unsigned int controller_cpu;
+	int cpuhp_state;
+	int hotplug_ret;
 	bool configured;
 };
 
@@ -48,11 +51,17 @@ static void cpu_accel_reset_shared(struct cpu_accel_device *dev)
 	WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_IDLE);
 }
 
+/*
+ * This function is entered by the CPU-hotplug teardown callback.  The target
+ * CPU is still online at this point, but the callback prevents preemption and
+ * masks local interrupts before doing any accelerator work.  Returning from
+ * the callback lets the normal hotplug path finish taking the CPU offline.
+ */
 static void cpu_accel_run(struct cpu_accel_device *dev)
 {
 	struct cpu_accel_shared *shared = dev->shared;
 	unsigned long irq_flags;
-	u64 start, deadline, now, lateness;
+	u64 start = 0, deadline = 0, now, lateness;
 	u64 samples = 0;
 	u64 max_lateness = 0;
 	u64 min_lateness = U64_MAX;
@@ -64,11 +73,13 @@ static void cpu_accel_run(struct cpu_accel_device *dev)
 
 	if (atomic_read(&dev->stop_requested)) {
 		final_state = CPU_ACCEL_STATE_STOPPED;
+		complete(&dev->enter_ready);
 		goto out;
 	}
 
 	atomic_set(&dev->running, 1);
 	WRITE_ONCE(shared->state, CPU_ACCEL_STATE_RUNNING);
+	complete(&dev->enter_ready);
 	start = ktime_get_mono_fast_ns();
 	shared->start_ns = start;
 	deadline = start + dev->config.period_ns;
@@ -120,52 +131,90 @@ out:
 
 	local_irq_restore(irq_flags);
 	preempt_enable();
-	complete(&dev->run_done);
 }
 
-static int cpu_accel_thread(void *data)
+static int cpu_accel_cpu_down(unsigned int cpu)
 {
-	struct cpu_accel_device *dev = data;
+	if (cpu != cpu_accel.config.cpu ||
+	    !atomic_read(&cpu_accel.enter_requested))
+		return 0;
 
-	while (!kthread_should_stop()) {
-		wait_event_interruptible(dev->start_wait,
-			kthread_should_stop() ||
-			atomic_read(&dev->start_requested));
-		if (kthread_should_stop())
-			break;
-		if (!atomic_xchg(&dev->start_requested, 0))
-			continue;
-		cpu_accel_run(dev);
-	}
-
+	cpu_accel_run(&cpu_accel);
 	return 0;
 }
 
-static int cpu_accel_create_thread(struct cpu_accel_device *dev)
+static int cpu_accel_hotplug_thread(void *data)
 {
-	if (dev->thread)
-		return 0;
+	struct cpu_accel_device *dev = data;
+	int ret;
 
-	dev->thread = kthread_create_on_cpu(cpu_accel_thread, dev, dev->config.cpu,
-					   "cpu_accel");
-	if (IS_ERR(dev->thread)) {
-		int ret = PTR_ERR(dev->thread);
+	ret = remove_cpu(dev->config.cpu);
+	dev->hotplug_ret = ret;
+	atomic_set(&dev->enter_requested, 0);
+	if (ret) {
+		if (READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_READY)
+			WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_ERROR);
+		complete(&dev->enter_ready);
+	}
+	complete(&dev->hotplug_done);
+	module_put(THIS_MODULE);
+	return 0;
+}
 
-		dev->thread = NULL;
+static int cpu_accel_create_hotplug_thread(struct cpu_accel_device *dev)
+{
+	if (dev->hotplug_thread)
+		return -EBUSY;
+	if (!try_module_get(THIS_MODULE))
+		return -ENODEV;
+
+	dev->hotplug_thread = kthread_create(cpu_accel_hotplug_thread, dev,
+					    "cpu_accel_ctl");
+	if (IS_ERR(dev->hotplug_thread)) {
+		int ret = PTR_ERR(dev->hotplug_thread);
+
+		dev->hotplug_thread = NULL;
+		module_put(THIS_MODULE);
 		return ret;
 	}
 
-	wake_up_process(dev->thread);
+	kthread_bind(dev->hotplug_thread, dev->controller_cpu);
+	wake_up_process(dev->hotplug_thread);
 	return 0;
 }
 
-static void cpu_accel_destroy_thread(struct cpu_accel_device *dev)
+static void cpu_accel_destroy_hotplug_thread(struct cpu_accel_device *dev)
 {
-	if (!dev->thread)
+	if (!dev->hotplug_thread)
 		return;
 
-	kthread_stop(dev->thread);
-	dev->thread = NULL;
+	kthread_stop(dev->hotplug_thread);
+	dev->hotplug_thread = NULL;
+}
+
+static int cpu_accel_rejoin(struct cpu_accel_device *dev)
+{
+	bool online;
+	int ret;
+
+	if (dev->hotplug_thread) {
+		if (!wait_for_completion_timeout(&dev->hotplug_done,
+						msecs_to_jiffies(6000)))
+			return -ETIMEDOUT;
+
+		ret = dev->hotplug_ret;
+		cpu_accel_destroy_hotplug_thread(dev);
+		if (ret)
+			return ret;
+	}
+
+	cpus_read_lock();
+	online = cpu_online(dev->config.cpu);
+	cpus_read_unlock();
+	if (online)
+		return 0;
+
+	return add_cpu(dev->config.cpu);
 }
 
 static int cpu_accel_open(struct inode *inode, struct file *file)
@@ -180,17 +229,20 @@ static int cpu_accel_open(struct inode *inode, struct file *file)
 static int cpu_accel_release(struct inode *inode, struct file *file)
 {
 	struct cpu_accel_device *dev = file->private_data;
+	int ret;
 
 	mutex_lock(&dev->lock);
 	if (READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_READY ||
 	    READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_RUNNING) {
 		atomic_set(&dev->stop_requested, 1);
 		WRITE_ONCE(dev->shared->stop_requested, 1);
-		wake_up(&dev->start_wait);
-		wait_for_completion_timeout(&dev->run_done,
-					    msecs_to_jiffies(6000));
 	}
-	cpu_accel_destroy_thread(dev);
+	if (dev->hotplug_thread) {
+		ret = cpu_accel_rejoin(dev);
+		if (ret)
+			pr_err("unable to rejoin CPU %u after release: %d\n",
+			       dev->config.cpu, ret);
+	}
 	mutex_unlock(&dev->lock);
 
 	atomic_set(&dev->opened, 0);
@@ -204,8 +256,59 @@ static int cpu_accel_mmap(struct file *file, struct vm_area_struct *vma)
 	if (vma->vm_pgoff || vma->vm_end - vma->vm_start != CPU_ACCEL_MAP_SIZE)
 		return -EINVAL;
 
-	vm_flags_set(vma, VM_DONTEXPAND | VM_DONTDUMP);
 	return remap_vmalloc_range(vma, dev->shared, 0);
+}
+
+static int cpu_accel_start_locked(struct cpu_accel_device *dev)
+{
+	int current_cpu;
+	int ret;
+
+	if (!dev->configured || dev->hotplug_thread)
+		return -EINVAL;
+	if (READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_READY ||
+	    READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_RUNNING)
+		return -EBUSY;
+
+	current_cpu = get_cpu();
+	if (current_cpu == dev->config.cpu) {
+		put_cpu();
+		return -EBUSY;
+	}
+	dev->controller_cpu = current_cpu;
+	put_cpu();
+
+	cpus_read_lock();
+	ret = cpu_online(dev->config.cpu) ? 0 : -ENODEV;
+	cpus_read_unlock();
+	if (ret)
+		return ret;
+	if (!cpu_is_hotpluggable(dev->config.cpu))
+		return -EOPNOTSUPP;
+
+	dev->sequence++;
+	dev->shared->sequence = dev->sequence;
+	dev->shared->samples_produced = 0;
+	dev->shared->samples_valid = 0;
+	dev->shared->stop_requested = 0;
+	dev->shared->start_ns = 0;
+	dev->shared->end_ns = 0;
+	dev->shared->max_lateness_ns = 0;
+	dev->shared->min_lateness_ns = 0;
+	dev->shared->last_lateness_ns = 0;
+	reinit_completion(&dev->enter_ready);
+	reinit_completion(&dev->hotplug_done);
+	dev->hotplug_ret = -EINPROGRESS;
+	atomic_set(&dev->stop_requested, 0);
+	atomic_set(&dev->enter_requested, 1);
+	WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_READY);
+
+	ret = cpu_accel_create_hotplug_thread(dev);
+	if (ret) {
+		atomic_set(&dev->enter_requested, 0);
+		WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_ERROR);
+	}
+	return ret;
 }
 
 static long cpu_accel_ioctl(struct file *file, unsigned int command,
@@ -213,7 +316,6 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 {
 	struct cpu_accel_device *dev = file->private_data;
 	struct cpu_accel_config config;
-	int current_cpu;
 	int ret = 0;
 
 	if (_IOC_TYPE(command) != CPU_ACCEL_IOC_MAGIC)
@@ -228,7 +330,8 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 			break;
 		}
 		if (READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_RUNNING ||
-		    READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_READY) {
+		    READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_READY ||
+		    dev->hotplug_thread) {
 			ret = -EBUSY;
 			break;
 		}
@@ -248,54 +351,22 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 		cpus_read_unlock();
 		if (ret)
 			break;
+		if (!cpu_is_hotpluggable(config.cpu)) {
+			ret = -EOPNOTSUPP;
+			break;
+		}
 
-		cpu_accel_destroy_thread(dev);
 		dev->config = config;
 		dev->configured = true;
+		cpu_accel_reset_shared(dev);
 		dev->shared->cpu = config.cpu;
 		dev->shared->flags = config.flags;
 		dev->shared->duration_ns = config.duration_ns;
 		dev->shared->period_ns = config.period_ns;
-		WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_IDLE);
 		break;
 
 	case CPU_ACCEL_IOC_START:
-		if (!dev->configured ||
-		    READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_RUNNING ||
-		    READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_READY) {
-			ret = -EINVAL;
-			break;
-		}
-
-		current_cpu = get_cpu();
-		if (current_cpu == dev->config.cpu) {
-			put_cpu();
-			ret = -EBUSY;
-			break;
-		}
-		put_cpu();
-
-		cpus_read_lock();
-		if (!cpu_online(dev->config.cpu))
-			ret = -ENODEV;
-		cpus_read_unlock();
-		if (ret)
-			break;
-
-		ret = cpu_accel_create_thread(dev);
-		if (ret)
-			break;
-		dev->sequence++;
-		dev->shared->sequence = dev->sequence;
-		dev->shared->samples_produced = 0;
-		dev->shared->samples_valid = 0;
-		dev->shared->stop_requested = 0;
-		reinit_completion(&dev->run_done);
-		atomic_set(&dev->stop_requested, 0);
-		atomic_set(&dev->start_requested, 1);
-		WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_READY);
-		wake_up(&dev->start_wait);
-		wake_up_process(dev->thread);
+		ret = cpu_accel_start_locked(dev);
 		break;
 
 	case CPU_ACCEL_IOC_STOP:
@@ -306,17 +377,26 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 		}
 		atomic_set(&dev->stop_requested, 1);
 		WRITE_ONCE(dev->shared->stop_requested, 1);
-		wake_up(&dev->start_wait);
 		break;
 
-	case CPU_ACCEL_IOC_RESET:
+	case CPU_ACCEL_IOC_EXIT:
 		if (READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_RUNNING ||
 		    READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_READY) {
 			ret = -EBUSY;
 			break;
 		}
-		cpu_accel_destroy_thread(dev);
+		ret = cpu_accel_rejoin(dev);
+		break;
+
+	case CPU_ACCEL_IOC_RESET:
+		if (READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_RUNNING ||
+		    READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_READY ||
+		    dev->hotplug_thread) {
+			ret = -EBUSY;
+			break;
+		}
 		dev->configured = false;
+		dev->sequence = 0;
 		cpu_accel_reset_shared(dev);
 		break;
 
@@ -343,16 +423,26 @@ static int __init cpu_accel_init(void)
 	BUILD_BUG_ON(sizeof(struct cpu_accel_shared) > CPU_ACCEL_MAP_SIZE);
 
 	mutex_init(&cpu_accel.lock);
-	init_waitqueue_head(&cpu_accel.start_wait);
-	init_completion(&cpu_accel.run_done);
+	init_completion(&cpu_accel.enter_ready);
+	init_completion(&cpu_accel.hotplug_done);
 	atomic_set(&cpu_accel.opened, 0);
-	atomic_set(&cpu_accel.start_requested, 0);
+	atomic_set(&cpu_accel.enter_requested, 0);
 	atomic_set(&cpu_accel.stop_requested, 0);
 	atomic_set(&cpu_accel.running, 0);
+	cpu_accel.cpuhp_state = -1;
 	cpu_accel.shared = vmalloc_user(CPU_ACCEL_MAP_SIZE);
 	if (!cpu_accel.shared)
 		return -ENOMEM;
 	cpu_accel_reset_shared(&cpu_accel);
+
+	cpu_accel.cpuhp_state = cpuhp_setup_state_nocalls(
+		CPUHP_AP_ONLINE_DYN, "cpu_accel:online", NULL,
+		cpu_accel_cpu_down);
+	if (cpu_accel.cpuhp_state < 0) {
+		ret = cpu_accel.cpuhp_state;
+		vfree(cpu_accel.shared);
+		return ret;
+	}
 
 	cpu_accel.misc.minor = MISC_DYNAMIC_MINOR;
 	cpu_accel.misc.name = "cpu_accel";
@@ -360,32 +450,35 @@ static int __init cpu_accel_init(void)
 	cpu_accel.misc.mode = 0600;
 	ret = misc_register(&cpu_accel.misc);
 	if (ret) {
+		cpuhp_remove_state_nocalls(cpu_accel.cpuhp_state);
 		vfree(cpu_accel.shared);
 		return ret;
 	}
 
-	pr_info("single-CPU accelerator prototype loaded\n");
+	pr_info("single-CPU accelerator hotplug prototype loaded\n");
 	return 0;
 }
 
 static void __exit cpu_accel_exit(void)
 {
 	mutex_lock(&cpu_accel.lock);
-	if (cpu_accel.thread) {
+	if (READ_ONCE(cpu_accel.shared->state) == CPU_ACCEL_STATE_READY ||
+	    READ_ONCE(cpu_accel.shared->state) == CPU_ACCEL_STATE_RUNNING) {
 		atomic_set(&cpu_accel.stop_requested, 1);
-		wake_up(&cpu_accel.start_wait);
-		wait_for_completion_timeout(&cpu_accel.run_done,
-					    msecs_to_jiffies(6000));
-		cpu_accel_destroy_thread(&cpu_accel);
+		WRITE_ONCE(cpu_accel.shared->stop_requested, 1);
 	}
+	if (cpu_accel.hotplug_thread)
+		cpu_accel_rejoin(&cpu_accel);
+	mutex_unlock(&cpu_accel.lock);
+
 	misc_deregister(&cpu_accel.misc);
+	cpuhp_remove_state_nocalls(cpu_accel.cpuhp_state);
 	vfree(cpu_accel.shared);
 	cpu_accel.shared = NULL;
-	mutex_unlock(&cpu_accel.lock);
 }
 
 module_init(cpu_accel_init);
 module_exit(cpu_accel_exit);
 
-MODULE_DESCRIPTION("Single-CPU accelerator foundation prototype");
+MODULE_DESCRIPTION("Single-CPU accelerator hotplug foundation prototype");
 MODULE_LICENSE("GPL");

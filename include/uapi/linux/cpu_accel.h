@@ -36,6 +36,8 @@ enum cpu_accel_mode {
 #define CPU_ACCEL_FLAG_IRQS_OFF		(1U << 0)
 /* Keep the target owned until STOP or the configured watchdog fires. */
 #define CPU_ACCEL_FLAG_PERSISTENT	(1U << 1)
+/* Refuse entry when scheduler or softirq work is already pending. */
+#define CPU_ACCEL_FLAG_REQUIRE_QUIESCENT	(1U << 2)
 
 enum cpu_accel_backend {
 	CPU_ACCEL_BACKEND_GENERIC_SMP = 0,

@@ -62,7 +62,11 @@ plane, but does not yet claim that Linux has removed every scheduler,
 interrupt, RCU, workqueue, or TLB responsibility from the target CPU.
 
 The first ABI supports ``CPU_ACCEL_FLAG_IRQS_OFF`` and
-``CPU_ACCEL_FLAG_PERSISTENT``.  A watchdog termination is reported as
+``CPU_ACCEL_FLAG_PERSISTENT``.  ``CPU_ACCEL_FLAG_REQUIRE_QUIESCENT`` adds an
+entry admission check that rejects a target with a pending reschedule or
+softirq request and reports ``RECOVERY`` mode.  It is a precondition check,
+not a mechanism for draining or suppressing those sources.  A watchdog
+termination is reported as
 ``CPU_ACCEL_STATE_WATCHDOG``.
 
 The companion SDK in ``tools/cpu_accel`` wraps the device and

@@ -11,6 +11,11 @@ invalid_output=$(mktemp)
 load_pid=0
 repeats=${CPU_ACCEL_REPEATS:-1}
 load_cpus=${CPU_ACCEL_LOAD_CPUS:-}
+quiescent_arg=
+
+if [ "${CPU_ACCEL_REQUIRE_QUIESCENT:-0}" = 1 ]; then
+	quiescent_arg=--require-quiescent
+fi
 
 fail()
 {
@@ -43,7 +48,8 @@ fi
 
 run=1
 while [ "$run" -le "$repeats" ]; do
-	output=$($tool run --cpu "$target_cpu" --duration-ms 20 --period-us 1000)
+	output=$($tool run --cpu "$target_cpu" --duration-ms 20 --period-us 1000 \
+		$quiescent_arg)
 	echo "$output"
 	case "$output" in
 		state=3\ *) ;;
@@ -75,7 +81,7 @@ while [ "$run" -le "$repeats" ]; do
 done
 
 $tool run --cpu "$target_cpu" --duration-ms 5000 --period-us 1000 \
-	--persistent >"$stop_output" 2>&1 &
+	--persistent $quiescent_arg >"$stop_output" 2>&1 &
 run_pid=$!
 sleep 0.1
 [ "$(cat "$online_file")" = 1 ] || fail "target CPU went offline during accelerator run"
@@ -86,7 +92,7 @@ grep -q '^state=4 ' "$stop_output" || fail "STOP did not produce state=4"
 grep -q 'mode=0' "$stop_output" || fail "STOP did not return to Linux mode"
 
 output=$($tool run --cpu "$target_cpu" --duration-ms 100 \
-	--period-us 1000 --persistent)
+	--period-us 1000 --persistent $quiescent_arg)
 echo "$output"
 case "$output" in
 	state=6\ *) ;;

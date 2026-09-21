@@ -87,7 +87,7 @@ static void usage(FILE *stream, const char *program)
 	fprintf(stream,
 		"Usage:\n"
 		"  %s run [--cpu N] [--duration-ms N] [--period-us N]"
-		" [--persistent]\n"
+		" [--persistent] [--require-quiescent]\n"
 		"  %s exit\n"
 		"  %s status\n"
 		"  %s reset\n",
@@ -118,6 +118,7 @@ static int run_workload(const char *program, int argc, char **argv)
 	uint64_t value;
 	unsigned int timeout_ms;
 	int persistent = 0;
+	int require_quiescent = 0;
 	int ret;
 
 	sigemptyset(&action.sa_mask);
@@ -152,6 +153,8 @@ static int run_workload(const char *program, int argc, char **argv)
 			config.period_ns = value * 1000ULL;
 		} else if (!strcmp(argv[index], "--persistent")) {
 			persistent = 1;
+		} else if (!strcmp(argv[index], "--require-quiescent")) {
+			require_quiescent = 1;
 		} else {
 			usage(stderr, program);
 			return 2;
@@ -159,6 +162,8 @@ static int run_workload(const char *program, int argc, char **argv)
 	}
 	if (persistent)
 		config.flags |= CPU_ACCEL_FLAG_PERSISTENT;
+	if (require_quiescent)
+		config.flags |= CPU_ACCEL_FLAG_REQUIRE_QUIESCENT;
 
 	timeout_ms = (unsigned int)(config.duration_ns / 1000000ULL) + 1000;
 	if (pin_control_cpu() < 0) {

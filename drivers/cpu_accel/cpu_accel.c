@@ -424,11 +424,24 @@ static void cpu_accel_lifecycle_entry(void *data)
 	struct cpu_accel_device *dev = data;
 	struct cpu_accel_observation obs;
 	unsigned long irq_flags;
+	bool quiescent;
 
 	preempt_disable();
 	local_irq_save(irq_flags);
 	WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_ACCELERATOR);
 	cpu_accel_observation_begin(&obs);
+	quiescent = !obs.need_resched_entry &&
+		!obs.softirq_pending_entry;
+	if ((dev->config.flags & CPU_ACCEL_FLAG_REQUIRE_QUIESCENT) &&
+	    !quiescent) {
+		cpu_accel_observation_finish(dev, &obs);
+		smp_wmb();
+		WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_ERROR);
+		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_RECOVERY);
+		local_irq_restore(irq_flags);
+		preempt_enable();
+		return;
+	}
 	cpu_accel_run(dev, &obs);
 	WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_EXITING);
 	local_irq_restore(irq_flags);
@@ -462,7 +475,7 @@ static int cpu_accel_lifecycle_thread(void *data)
 		if (READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_READY ||
 		    READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_RUNNING)
 			WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_ERROR);
-	} else {
+	} else if (READ_ONCE(dev->shared->state) != CPU_ACCEL_STATE_ERROR) {
 		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_LINUX);
 	}
 	complete(&dev->lifecycle_done);
@@ -670,7 +683,8 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 			config.flags = CPU_ACCEL_FLAG_IRQS_OFF;
 		if (!(config.flags & CPU_ACCEL_FLAG_IRQS_OFF) ||
 		    config.flags & ~(CPU_ACCEL_FLAG_IRQS_OFF |
-				     CPU_ACCEL_FLAG_PERSISTENT) ||
+				     CPU_ACCEL_FLAG_PERSISTENT |
+				     CPU_ACCEL_FLAG_REQUIRE_QUIESCENT) ||
 		    !config.period_ns || !config.duration_ns ||
 		    config.duration_ns > CPU_ACCEL_MAX_DURATION_NS ||
 		    config.cpu >= nr_cpu_ids || config.cpu == 0) {

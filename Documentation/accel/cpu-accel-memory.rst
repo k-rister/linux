@@ -245,11 +245,15 @@ The implementation checkpoints are:
    and holds the active ``mmap_lock`` write side.
 4. [completed for x86 prototype] Add architecture-specific escape/recovery
    handling and document which failures remain unrecoverable without reboot.
-   The ABI 11 NMI escape path is a bounded recovery experiment for the
+   The ABI 12 NMI escape path is a bounded recovery experiment for the
    prevalidated ring-3 image; it is not a hard guarantee.
 5. [completed] Define the architecture-neutral recovery capability and result
    contract.  ABI 12 distinguishes successful escape from unsupported,
    timed-out, or failed attempts and exercises retry behavior with a debug-only
    dropped-NMI fixture.
-6. Add IOMMU-backed ``DMA`` regions and a userspace/NIC integration only after
-   the non-networked memory contract is stable.
+6. [completed for x86 prototype] Add a dedicated APIC entry vector for kernel
+   workloads.  ABI 13 removes the generic scheduler/function-call IPI handoff,
+   but it does not yet suppress other IPIs or TLB shootdowns.
+7. Define APIC ownership and address-space/TLB policy, then add IOMMU-backed
+   ``DMA`` regions and userspace/NIC integration only after the non-networked
+   memory contract is stable.

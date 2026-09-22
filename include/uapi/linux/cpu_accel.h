@@ -6,7 +6,7 @@
 #include <linux/types.h>
 
 /* The prototype uses separate fixed-size control and shared-data mappings. */
-#define CPU_ACCEL_ABI_VERSION		12
+#define CPU_ACCEL_ABI_VERSION		13
 #define CPU_ACCEL_MAP_SIZE		(64U * 1024U)
 #define CPU_ACCEL_SHARED_MAP_SIZE	(64U * 1024U)
 #define CPU_ACCEL_SHARED_MAP_OFFSET	CPU_ACCEL_MAP_SIZE
@@ -51,6 +51,7 @@ enum cpu_accel_backend {
 	CPU_ACCEL_BACKEND_GENERIC_SMP = 0,
 	CPU_ACCEL_BACKEND_X86_STAGED_IPI,
 	CPU_ACCEL_BACKEND_X86_RING3,
+	CPU_ACCEL_BACKEND_X86_DIRECT_APIC,
 };
 
 /* Capabilities reported by the selected backend for the configured workload. */

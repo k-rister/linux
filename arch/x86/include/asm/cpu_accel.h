@@ -1,0 +1,10 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+#ifndef _ASM_X86_CPU_ACCEL_H
+#define _ASM_X86_CPU_ACCEL_H
+
+typedef void (*x86_cpu_accel_entry_fn)(void *data);
+
+int x86_cpu_accel_direct_enter(unsigned int cpu,
+			       x86_cpu_accel_entry_fn entry, void *data);
+
+#endif

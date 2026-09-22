@@ -32,6 +32,7 @@
 
 #ifdef CONFIG_X86
 #include <asm/apic.h>
+#include <asm/cpu_accel.h>
 #include <asm/hardirq.h>
 #include <asm/irq_vectors.h>
 #include <asm/nmi.h>
@@ -70,26 +71,35 @@ static bool cpu_accel_user_workload(u32 workload)
 }
 
 #ifdef CONFIG_X86
-/*
- * Staged x86 handoff: one normal IPI enters the callback, after which the
- * callback owns execution until it returns. A future direct APIC handoff can
- * replace this function without changing the lifecycle or control ABI.
- */
 static int cpu_accel_arch_enter(unsigned int cpu, cpu_accel_entry_fn entry,
 				void *data)
 {
+#ifdef CONFIG_X86_LOCAL_APIC
+	return x86_cpu_accel_direct_enter(cpu, entry, data);
+#else
 	return smp_call_function_single(cpu, entry, data, 1);
+#endif
 }
 
 static u32 cpu_accel_backend_id(void)
 {
+#ifdef CONFIG_X86_LOCAL_APIC
+	return CPU_ACCEL_BACKEND_X86_DIRECT_APIC;
+#else
 	return CPU_ACCEL_BACKEND_X86_STAGED_IPI;
+#endif
 }
 
 static u32 cpu_accel_backend_id_for_workload(u32 workload)
 {
-	return cpu_accel_user_workload(workload) ?
-		CPU_ACCEL_BACKEND_X86_RING3 : CPU_ACCEL_BACKEND_X86_STAGED_IPI;
+	if (cpu_accel_user_workload(workload))
+		return CPU_ACCEL_BACKEND_X86_RING3;
+
+#ifdef CONFIG_X86_LOCAL_APIC
+	return CPU_ACCEL_BACKEND_X86_DIRECT_APIC;
+#else
+	return CPU_ACCEL_BACKEND_X86_STAGED_IPI;
+#endif
 }
 
 static u32 cpu_accel_backend_flags_for_workload(u32 workload)
@@ -1278,9 +1288,8 @@ static void cpu_accel_lifecycle_entry(void *data)
 }
 
 /*
- * Keep this dispatch in one place. Future architecture backends can replace
- * the staged SMP call with a direct accelerator entry/exit mechanism without
- * changing the control plane or workload implementation.
+ * Keep this dispatch in one place so architecture backends do not leak into
+ * the control plane or workload implementation.
  */
 static int cpu_accel_lifecycle_enter(struct cpu_accel_device *dev)
 {
@@ -1294,7 +1303,7 @@ static int cpu_accel_lifecycle_thread(void *data)
 	int irq_ret;
 	int ret;
 
-	/* Keep the target online while the staged entry owns its execution. */
+	/* Keep the target online while the direct entry owns its execution. */
 	cpus_read_lock();
 	ret = cpu_accel_lifecycle_enter(dev);
 	irq_ret = cpu_accel_restore_irq_quarantine(dev);

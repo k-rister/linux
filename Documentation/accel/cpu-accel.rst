@@ -15,9 +15,9 @@ function to the target CPU while a controller thread holds the CPU-hotplug
 read lock.  The target remains online, but preemption and local maskable
 interrupts are disabled until ``STOP``, completion, or the configured
 watchdog.  Returning from the entry function returns the CPU to normal Linux
-execution; no CPU offline/online transition is required.  The dispatch is
-currently implemented with ``smp_call_function_single()`` as a stepping stone
-for a future architecture-specific direct entry/exit backend.
+execution; no CPU offline/online transition is required.  On x86 with a local
+APIC, kernel workloads use a dedicated APIC vector for entry; other
+architectures retain the generic SMP fallback.
 
 It does not yet provide a memory-protection domain, explicit interrupt source
 ownership, TLB-shootdown suppression, or a hard latency bound.  NMIs, SMIs,
@@ -42,15 +42,18 @@ small ioctl interface:
 
 The control mapping contains the state, explicit Linux/accelerator transition
 mode, selected workload, run timestamps, aggregate lateness, and up to
-``CPU_ACCEL_MAX_SAMPLES`` timestamp samples.  ABI version 12 also
+``CPU_ACCEL_MAX_SAMPLES`` timestamp samples.  ABI version 13 also
 reports lifecycle entry/exit timestamps, interrupt and softirq deltas,
 timer, hrtimer, RCU, and scheduler softirq deltas, current-task
 context-switch deltas, CPU-entry/exit identity, migration detection, pending
 scheduler and softirq state, and preemption state.  On x86 it additionally
 reports architecture interrupt, IPI, and TLB counter deltas;
 ``arch_counters_valid`` identifies whether those counters are available.
-The x86 staged backend is reported as ``CPU_ACCEL_BACKEND_X86_STAGED_IPI``;
-it uses one normal IPI for entry and does not yet provide direct APIC entry.
+The x86 direct backend is reported as
+``CPU_ACCEL_BACKEND_X86_DIRECT_APIC``; it uses one dedicated APIC vector for
+entry and avoids the generic scheduler/function-call IPI path.  This is a
+direct-entry prototype, not yet APIC ownership: Linux can still generate
+other IPIs or TLB shootdowns for the target CPU.
 Workqueue queue and execution tracepoints report activity targeted at the
 accelerator CPU while it is running.
 These are observations made by the prototype, not suppression or admission
@@ -77,7 +80,7 @@ isolation while avoiding page faults and system calls in the accelerator
 interval.  The buffers are kernel-owned; this workload does not yet provide a
 protected user address space or a user-supplied accelerator binary.
 
-ABI version 12 retains the x86-only ``user-oslat`` workload.  The companion forks
+ABI version 13 retains the x86-only ``user-oslat`` workload.  The companion forks
 a worker so the accelerator task has a distinct ``mm_struct``, pins that task
 to the target CPU, and supplies page-aligned executable-image and private-stack
 ranges.  The kernel validates the VMAs, prefaults and pins their pages, holds
@@ -125,7 +128,7 @@ not an application contract.  The debug-only module parameter
 companion's ``--escape-retries`` option exercises the retry contract after a
 reported timeout.
 
-ABI version 12 retains the fixed-size shared-region mapping at
+ABI version 13 retains the fixed-size shared-region mapping at
 ``CPU_ACCEL_SHARED_MAP_OFFSET``.  It contains two bounded entries, each with
 an owner, epoch, length, and data area.  The ``shared-memmove`` workload uses
 one selected entry and copies between its two halves.  The companion
@@ -216,18 +219,19 @@ The watchdog is capped at five seconds and ``STOP`` is cooperative.
 the ring-3 workload, but it is bounded by a one-second controller wait and is
 not a hard guarantee.  A malfunctioning kernel implementation is not assumed
 to be recoverable without reverting to the known-good kernel.  This lifecycle
-is the first step toward that model, but the synchronous SMP dispatch still
-uses the normal IPI entry path and does not suppress Linux-generated IPIs
-while the target is running.  ABI version 12 makes the recovery capability
-and result contract explicit and adds a debug-only dropped-NMI fixture.  A
+is the first step toward that model, but the dedicated APIC entry vector does
+not suppress Linux-generated IPIs or TLB shootdowns while the target is
+running.  ABI version 13 makes the direct-entry backend explicit while
+retaining the ABI12 recovery capability and debug-only dropped-NMI fixture.  A
 controller may retry after ``TIMEOUT`` or ``FAILED``; it must not treat those
 states as a return to Linux.
 The proposed protected address-space and shared-memory contract is documented
 in :doc:`cpu-accel-memory`; the internal region/epoch model and the first
 prefaulted shared entry are now in place.  The x86 cooperative ring-3 image is
-the first protected-address-space proof, and the ABI 11 NMI escape is the
-first x86 recovery experiment.  The common recovery contract is now in place;
-the next implementation step is to add direct APIC ownership and then
-IOMMU-backed memory before networking.
+the first protected-address-space proof, and the ABI 12 NMI escape is the
+first x86 recovery experiment.  The common recovery contract and direct APIC
+entry prototype are now in place; the next implementation step is to define
+APIC ownership and address-space/TLB policy before adding IOMMU-backed memory
+and networking.
 A stronger latency claim must wait for those controls and for a defined
 recovery contract.

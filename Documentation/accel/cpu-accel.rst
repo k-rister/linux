@@ -41,8 +41,8 @@ small ioctl interface:
 * ``RESET`` returns the device to its initial state after a completed run.
 
 The shared mapping contains the state, explicit Linux/accelerator transition
-mode, run timestamps, aggregate lateness, and up to
-``CPU_ACCEL_MAX_SAMPLES`` timestamp samples.  ABI version 5 also
+mode, selected workload, run timestamps, aggregate lateness, and up to
+``CPU_ACCEL_MAX_SAMPLES`` timestamp samples.  ABI version 6 also
 reports lifecycle entry/exit timestamps, interrupt and softirq deltas,
 timer, hrtimer, RCU, and scheduler softirq deltas, current-task
 context-switch deltas, CPU-entry/exit identity, migration detection, pending
@@ -55,6 +55,14 @@ Workqueue queue and execution tracepoints report activity targeted at the
 accelerator CPU while it is running.
 These are observations made by the prototype, not suppression or admission
 controls for the corresponding activity.
+
+The initial workload selector supports ``timestamp`` and ``memmove``.  The
+memmove workload allocates and touches two bounded kernel buffers before the
+accelerator entry point, then copies between them once per timing period.  It
+is an oslat-like non-networked workload for measuring execution-source
+isolation while avoiding page faults and system calls in the accelerator
+interval.  The buffers are kernel-owned; this workload does not yet provide a
+protected user address space or a user-supplied accelerator binary.
 
 The mode reports ``LINUX``, ``ENTERING``, ``ACCELERATOR``, ``EXITING``, or
 ``RECOVERY``.  It makes the lifecycle transition explicit for the control
@@ -99,10 +107,13 @@ The companion SDK in ``tools/cpu_accel`` wraps the device and
   sudo tools/cpu_accel/cpu-accelctl run --cpu 1 --duration-ms 100 \
     --period-us 1000 --persistent
   sudo tools/cpu_accel/cpu-accelctl run --cpu 1 --duration-ms 100 \
+    --period-us 1000 --workload memmove --work-bytes 4096
+  sudo tools/cpu_accel/cpu-accelctl run --cpu 1 --duration-ms 100 \
     --period-us 1000 --quarantine-irqs
 
-The tool prints the shared result, including the maximum observed lateness
-and lifecycle telemetry.  The generic interrupt and context-switch deltas
+The tool prints the shared result, including the maximum observed lateness,
+selected workload, work size, completed work iterations, and lifecycle
+telemetry.  The generic interrupt and context-switch deltas
 are sampled around the target callback; the context-switch value is the
 current task's switch-counter delta.  x86 IPI/TLB counters are read from the
 per-CPU architecture interrupt statistics.  ``CPU_ACCEL_REPEATS`` repeats the
@@ -124,7 +135,8 @@ implementation is not assumed to be recoverable without reverting to the
 known-good kernel.  This lifecycle is the first step toward that model, but
 the synchronous SMP dispatch still uses the normal IPI entry path and does
 not suppress Linux-generated IPIs while the target is running.  The next
-phase should use the explicit mode transitions to implement target CPU
-quiescing and ownership transfer, then replace the staged x86 handoff with
-direct APIC ownership and explicit pending-IPI/TLB policy before attempting a
-stronger latency claim.
+phase should validate the bounded memmove workload under loaded conditions,
+then add a protected accelerator address-space model and explicit
+shared-memory ownership before replacing the staged x86 handoff with direct
+APIC ownership and explicit pending-IPI/TLB policy.  A stronger latency claim
+must wait for those controls and for a defined recovery contract.

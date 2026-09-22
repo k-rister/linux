@@ -17,7 +17,9 @@
 #include <linux/preempt.h>
 #include <linux/processor.h>
 #include <linux/sched.h>
+#include <linux/slab.h>
 #include <linux/smp.h>
+#include <linux/string.h>
 #include <linux/timekeeping.h>
 #include <linux/timer.h>
 #include <linux/uaccess.h>
@@ -160,6 +162,8 @@ struct cpu_accel_device {
 	atomic_t running;
 	atomic64_t workqueue_queued;
 	atomic64_t workqueue_executed;
+	void *work_buffer;
+	size_t work_buffer_size;
 	unsigned int sequence;
 	unsigned int controller_cpu;
 	unsigned int irq_quarantined;
@@ -189,6 +193,44 @@ static void cpu_accel_release_workqueue(struct cpu_accel_device *dev)
 		return;
 	workqueue_accel_cpu_release(dev->config.cpu);
 	dev->workqueue_reserved = false;
+}
+
+static void cpu_accel_free_workload(struct cpu_accel_device *dev)
+{
+	kfree(dev->work_buffer);
+	dev->work_buffer = NULL;
+	dev->work_buffer_size = 0;
+}
+
+static int cpu_accel_prepare_workload(struct cpu_accel_device *dev,
+					      const struct cpu_accel_config *config)
+{
+	void *buffer;
+	size_t bytes;
+	size_t size;
+
+	if (config->workload == CPU_ACCEL_WORKLOAD_TIMESTAMP) {
+		cpu_accel_free_workload(dev);
+		return 0;
+	}
+	if (config->workload != CPU_ACCEL_WORKLOAD_MEMMOVE ||
+	    config->work_bytes < 64 ||
+	    config->work_bytes > CPU_ACCEL_MAX_WORK_BYTES)
+		return -EINVAL;
+
+	bytes = (size_t)config->work_bytes;
+	size = bytes * 2;
+	buffer = kmalloc(size, GFP_KERNEL);
+	if (!buffer)
+		return -ENOMEM;
+
+	/* Touch both halves before the accelerator entry point runs. */
+	memset(buffer, 0xa5, bytes);
+	memset((char *)buffer + bytes, 0x5a, bytes);
+	cpu_accel_free_workload(dev);
+	dev->work_buffer = buffer;
+	dev->work_buffer_size = size;
+	return 0;
 }
 
 static bool cpu_accel_workqueue_target_active(struct cpu_accel_device *dev,
@@ -266,6 +308,7 @@ static void cpu_accel_reset_shared(struct cpu_accel_device *dev)
 	dev->shared->struct_size = sizeof(*dev->shared);
 	dev->shared->backend = cpu_accel_backend_id();
 	dev->shared->mode = CPU_ACCEL_MODE_LINUX;
+	dev->shared->workload = CPU_ACCEL_WORKLOAD_TIMESTAMP;
 	WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_IDLE);
 }
 
@@ -373,6 +416,7 @@ static void cpu_accel_run(struct cpu_accel_device *dev,
 	u64 samples = 0;
 	u64 max_lateness = 0;
 	u64 min_lateness = U64_MAX;
+	u64 work_iterations = 0;
 	u32 samples_valid = 0;
 	u32 final_state = CPU_ACCEL_STATE_COMPLETE;
 	bool persistent = dev->config.flags & CPU_ACCEL_FLAG_PERSISTENT;
@@ -407,6 +451,16 @@ static void cpu_accel_run(struct cpu_accel_device *dev,
 		samples++;
 		max_lateness = max(max_lateness, lateness);
 		min_lateness = min(min_lateness, lateness);
+		if (dev->config.workload == CPU_ACCEL_WORKLOAD_MEMMOVE) {
+			char *buffer = dev->work_buffer;
+			size_t bytes = (size_t)dev->config.work_bytes;
+
+			if (work_iterations & 1)
+				memcpy(buffer + bytes, buffer, bytes);
+			else
+				memcpy(buffer, buffer + bytes, bytes);
+			work_iterations++;
+		}
 
 		if (atomic_read(&dev->watchdog_fired)) {
 			final_state = CPU_ACCEL_STATE_WATCHDOG;
@@ -433,6 +487,7 @@ finish:
 	shared->end_ns = now;
 	shared->samples_produced = samples;
 	shared->samples_valid = samples_valid;
+	shared->work_iterations = work_iterations;
 	shared->max_lateness_ns = max_lateness;
 	shared->min_lateness_ns = samples ? min_lateness : 0;
 	shared->last_lateness_ns = samples_valid ?
@@ -674,6 +729,7 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 	dev->shared->sequence = dev->sequence;
 	dev->shared->samples_produced = 0;
 	dev->shared->samples_valid = 0;
+	dev->shared->work_iterations = 0;
 	dev->shared->stop_requested = 0;
 	dev->shared->start_ns = 0;
 	dev->shared->end_ns = 0;
@@ -773,6 +829,13 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 				     CPU_ACCEL_FLAG_PERSISTENT |
 				     CPU_ACCEL_FLAG_REQUIRE_QUIESCENT |
 				     CPU_ACCEL_FLAG_IRQ_QUARANTINE) ||
+		    config.reserved ||
+		    config.workload > CPU_ACCEL_WORKLOAD_MEMMOVE ||
+		    config.work_bytes > CPU_ACCEL_MAX_WORK_BYTES ||
+		    (config.workload == CPU_ACCEL_WORKLOAD_TIMESTAMP &&
+		     config.work_bytes) ||
+		    (config.workload == CPU_ACCEL_WORKLOAD_MEMMOVE &&
+		     config.work_bytes < 64) ||
 		    !config.period_ns || !config.duration_ns ||
 		    config.duration_ns > CPU_ACCEL_MAX_DURATION_NS ||
 		    config.cpu >= nr_cpu_ids || config.cpu == 0) {
@@ -787,11 +850,17 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 		if (ret)
 			break;
 
+		ret = cpu_accel_prepare_workload(dev, &config);
+		if (ret)
+			break;
+
 		dev->config = config;
 		dev->configured = true;
 		cpu_accel_reset_shared(dev);
 		dev->shared->cpu = config.cpu;
 		dev->shared->flags = config.flags;
+		dev->shared->workload = config.workload;
+		dev->shared->work_bytes = config.work_bytes;
 		dev->shared->duration_ns = config.duration_ns;
 		dev->shared->period_ns = config.period_ns;
 		break;
@@ -829,6 +898,7 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 		}
 		dev->configured = false;
 		dev->sequence = 0;
+		cpu_accel_free_workload(dev);
 		cpu_accel_reset_shared(dev);
 		break;
 
@@ -900,6 +970,7 @@ static void __exit cpu_accel_exit(void)
 	if (cpu_accel.lifecycle_thread)
 		cpu_accel_lifecycle_exit(&cpu_accel);
 	timer_delete_sync(&cpu_accel.watchdog_timer);
+	cpu_accel_free_workload(&cpu_accel);
 	mutex_unlock(&cpu_accel.lock);
 
 	misc_deregister(&cpu_accel.misc);

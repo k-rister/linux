@@ -38,7 +38,8 @@ static void print_status(const volatile struct cpu_accel_shared *shared)
 	printf("state=%u mode=%u sequence=%" PRIu64 " cpu=%u backend=%u samples=%" PRIu64
 	       " max_lateness_ns=%" PRIu64 " min_lateness_ns=%" PRIu64
 	       " last_lateness_ns=%" PRIu64 " duration_ns=%" PRIu64
-	       " period_ns=%" PRIu64 " lifecycle_entry_ns=%" PRIu64
+	       " period_ns=%" PRIu64 " workload=%u work_bytes=%" PRIu64
+	       " work_iterations=%" PRIu64 " lifecycle_entry_ns=%" PRIu64
 	       " lifecycle_exit_ns=%" PRIu64 " irq_count=%" PRIu64
 	       " irq_quarantined=%u irq_quarantine_blockers=%u"
 	       " softirq_count=%" PRIu64 " timer_softirq_count=%" PRIu64
@@ -60,6 +61,8 @@ static void print_status(const volatile struct cpu_accel_shared *shared)
 	       (uint64_t)shared->min_lateness_ns,
 	       (uint64_t)shared->last_lateness_ns,
 	       (uint64_t)shared->duration_ns, (uint64_t)shared->period_ns,
+	       shared->workload, (uint64_t)shared->work_bytes,
+	       (uint64_t)shared->work_iterations,
 	       (uint64_t)shared->lifecycle_entry_ns,
 	       (uint64_t)shared->lifecycle_exit_ns,
 	       (uint64_t)shared->irq_count,
@@ -88,8 +91,9 @@ static void usage(FILE *stream, const char *program)
 {
 	fprintf(stream,
 		"Usage:\n"
-		"  %s run [--cpu N] [--duration-ms N] [--period-us N]"
-		" [--persistent] [--require-quiescent] [--quarantine-irqs]\n"
+		"  %s run [--cpu N] [--duration-ms N] [--period-us N]\n"
+		"      [--workload timestamp|memmove] [--work-bytes N]\n"
+		"      [--persistent] [--require-quiescent] [--quarantine-irqs]\n"
 		"  %s exit\n"
 		"  %s status\n"
 		"  %s reset\n",
@@ -110,6 +114,7 @@ static int run_workload(const char *program, int argc, char **argv)
 	struct cpu_accel_config config = {
 		.cpu = 1,
 		.flags = CPU_ACCEL_FLAG_IRQS_OFF,
+		.workload = CPU_ACCEL_WORKLOAD_TIMESTAMP,
 		.duration_ns = CPU_ACCEL_DEFAULT_DURATION_NS,
 		.period_ns = CPU_ACCEL_DEFAULT_PERIOD_NS,
 	};
@@ -154,6 +159,26 @@ static int run_workload(const char *program, int argc, char **argv)
 				return 2;
 			}
 			config.period_ns = value * 1000ULL;
+		} else if (!strcmp(argv[index], "--workload") &&
+			   index + 1 < argc) {
+			const char *workload = argv[++index];
+
+			if (!strcmp(workload, "timestamp"))
+				config.workload = CPU_ACCEL_WORKLOAD_TIMESTAMP;
+			else if (!strcmp(workload, "memmove"))
+				config.workload = CPU_ACCEL_WORKLOAD_MEMMOVE;
+			else {
+				fprintf(stderr, "%s: invalid workload\n", program);
+				return 2;
+			}
+		} else if (!strcmp(argv[index], "--work-bytes") &&
+			   index + 1 < argc) {
+			if (parse_u64(argv[++index], &value) ||
+			    value > CPU_ACCEL_MAX_WORK_BYTES) {
+				fprintf(stderr, "%s: invalid work size\n", program);
+				return 2;
+			}
+			config.work_bytes = value;
 		} else if (!strcmp(argv[index], "--persistent")) {
 			persistent = 1;
 		} else if (!strcmp(argv[index], "--require-quiescent")) {

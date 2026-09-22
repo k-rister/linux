@@ -92,6 +92,27 @@ while [ "$run" -le "$repeats" ]; do
 	run=$((run + 1))
 done
 
+memmove_output=$($tool run --cpu "$target_cpu" --duration-ms 20 \
+	--period-us 1000 --workload memmove --work-bytes 4096 \
+	$quiescent_arg $quarantine_arg)
+echo "$memmove_output"
+case "$memmove_output" in
+	state=3\ *) ;;
+	*) fail "memmove run did not complete" ;;
+esac
+echo "$memmove_output" | grep -q 'mode=0' || \
+	fail "memmove run did not return to Linux mode"
+echo "$memmove_output" | grep -q 'workload=1' || \
+	fail "memmove workload was not selected"
+echo "$memmove_output" | grep -q 'work_bytes=4096' || \
+	fail "memmove workload size was not reported"
+echo "$memmove_output" | grep -q 'work_iterations=[1-9][0-9]*' || \
+	fail "memmove workload did not execute"
+echo "$memmove_output" | grep -q 'context_switches=0' || \
+	fail "memmove workload performed a context switch"
+echo "$memmove_output" | grep -q 'migration_detected=0' || \
+	fail "memmove workload migrated CPUs"
+
 $tool run --cpu "$target_cpu" --duration-ms 5000 --period-us 1000 \
 	--persistent $quiescent_arg $quarantine_arg >"$stop_output" 2>&1 &
 run_pid=$!

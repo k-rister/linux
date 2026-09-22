@@ -6,9 +6,10 @@
 #include <linux/types.h>
 
 /* The first prototype uses a fixed-size shared control and sample area. */
-#define CPU_ACCEL_ABI_VERSION		5
+#define CPU_ACCEL_ABI_VERSION		6
 #define CPU_ACCEL_MAP_SIZE		(64U * 1024U)
 #define CPU_ACCEL_MAX_SAMPLES		2048U
+#define CPU_ACCEL_MAX_WORK_BYTES	(64U * 1024U)
 
 #define CPU_ACCEL_DEFAULT_DURATION_NS	(100ULL * 1000ULL * 1000ULL)
 #define CPU_ACCEL_DEFAULT_PERIOD_NS	(1ULL * 1000ULL * 1000ULL)
@@ -46,9 +47,17 @@ enum cpu_accel_backend {
 	CPU_ACCEL_BACKEND_X86_STAGED_IPI,
 };
 
+enum cpu_accel_workload {
+	CPU_ACCEL_WORKLOAD_TIMESTAMP = 0,
+	CPU_ACCEL_WORKLOAD_MEMMOVE,
+};
+
 struct cpu_accel_config {
 	__u32 cpu;
 	__u32 flags;
+	__u32 workload;
+	__u32 reserved;
+	__u64 work_bytes;
 	__u64 duration_ns;
 	__u64 period_ns;
 };
@@ -74,6 +83,10 @@ struct cpu_accel_shared {
 	__u64 end_ns;
 	__u64 duration_ns;
 	__u64 period_ns;
+	__u32 workload;
+	__u32 reserved_workload;
+	__u64 work_bytes;
+	__u64 work_iterations;
 	__u64 samples_produced;
 	__u64 max_lateness_ns;
 	__u64 min_lateness_ns;

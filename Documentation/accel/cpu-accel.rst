@@ -42,7 +42,7 @@ small ioctl interface:
 
 The control mapping contains the state, explicit Linux/accelerator transition
 mode, selected workload, run timestamps, aggregate lateness, and up to
-``CPU_ACCEL_MAX_SAMPLES`` timestamp samples.  ABI version 7 also
+``CPU_ACCEL_MAX_SAMPLES`` timestamp samples.  ABI version 9 also
 reports lifecycle entry/exit timestamps, interrupt and softirq deltas,
 timer, hrtimer, RCU, and scheduler softirq deltas, current-task
 context-switch deltas, CPU-entry/exit identity, migration detection, pending
@@ -90,7 +90,7 @@ is a later phase.  The image and stack are pinned only for the active epoch,
 and the current prototype still does not provide an IOMMU domain or a formal
 hard-latency bound.
 
-ABI version 8 retains the fixed-size shared-region mapping at
+ABI version 9 retains the fixed-size shared-region mapping at
 ``CPU_ACCEL_SHARED_MAP_OFFSET``.  It contains two bounded entries, each with
 an owner, epoch, length, and data area.  The ``shared-memmove`` workload uses
 one selected entry and copies between its two halves.  The companion

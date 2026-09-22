@@ -398,7 +398,8 @@ static int run_user_oslat(const struct cpu_accel_config *requested,
 	if (handle.shared->state != CPU_ACCEL_STATE_COMPLETE ||
 	    handle.shared->mode != CPU_ACCEL_MODE_LINUX ||
 	    handle.shared->backend != CPU_ACCEL_BACKEND_X86_RING3 ||
-	    !handle.shared->samples_valid) {
+	    (!escape_after_ms && !handle.shared->samples_valid) ||
+	    (escape_after_ms && handle.shared->user_escape_count != 1)) {
 		fprintf(stderr, "user accelerator did not complete its ring-3 contract\n");
 		ret = -1;
 	}

@@ -44,7 +44,6 @@ enum cpu_accel_mode {
 enum cpu_accel_backend {
 	CPU_ACCEL_BACKEND_GENERIC_SMP = 0,
 	CPU_ACCEL_BACKEND_X86_STAGED_IPI,
-	CPU_ACCEL_BACKEND_CPU_HOTPLUG,
 };
 
 struct cpu_accel_config {

@@ -3,7 +3,6 @@
 #include <linux/atomic.h>
 #include <linux/completion.h>
 #include <linux/cpu.h>
-#include <linux/cpuhotplug.h>
 #include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
@@ -52,10 +51,36 @@ struct cpu_accel_observation {
 	u32 cpu;
 };
 
+typedef void (*cpu_accel_entry_fn)(void *data);
+
+#ifdef CONFIG_X86
+/*
+ * Staged x86 handoff: one normal IPI enters the callback, after which the
+ * callback owns execution until it returns. A future direct APIC handoff can
+ * replace this function without changing the lifecycle or control ABI.
+ */
+static int cpu_accel_arch_enter(unsigned int cpu, cpu_accel_entry_fn entry,
+				void *data)
+{
+	return smp_call_function_single(cpu, entry, data, 1);
+}
+
 static u32 cpu_accel_backend_id(void)
 {
-	return CPU_ACCEL_BACKEND_CPU_HOTPLUG;
+	return CPU_ACCEL_BACKEND_X86_STAGED_IPI;
 }
+#else
+static int cpu_accel_arch_enter(unsigned int cpu, cpu_accel_entry_fn entry,
+				void *data)
+{
+	return smp_call_function_single(cpu, entry, data, 1);
+}
+
+static u32 cpu_accel_backend_id(void)
+{
+	return CPU_ACCEL_BACKEND_GENERIC_SMP;
+}
+#endif
 
 #ifdef CONFIG_X86
 static u64 cpu_accel_arch_irq_count(unsigned int cpu)
@@ -452,42 +477,31 @@ static void cpu_accel_lifecycle_entry(void *data)
 }
 
 /*
- * CPU hotplug invokes this after scheduler teardown and before the CPU enters
- * its architecture-specific dead loop.  The callback owns the CPU until the
- * bounded workload completes or the control CPU requests STOP.
+ * Keep this dispatch in one place. Future architecture backends can replace
+ * the staged SMP call with a direct accelerator entry/exit mechanism without
+ * changing the control plane or workload implementation.
  */
-static int cpu_accel_hotplug_down(unsigned int cpu)
+static int cpu_accel_lifecycle_enter(struct cpu_accel_device *dev)
 {
-	struct cpu_accel_device *dev = &cpu_accel;
-
-	if (cpu != READ_ONCE(dev->config.cpu) ||
-	    !atomic_read(&dev->enter_requested))
-		return 0;
-
-	cpu_accel_lifecycle_entry(dev);
-	return 0;
+	return cpu_accel_arch_enter(dev->config.cpu,
+				   cpu_accel_lifecycle_entry, dev);
 }
 
-/*
- * The CPU-hotplug transition removes the target from Linux scheduling before
- * invoking cpu_accel_hotplug_down().  Once the callback returns, add_cpu()
- * brings the target back through the normal online path.
- */
 static int cpu_accel_lifecycle_thread(void *data)
 {
 	struct cpu_accel_device *dev = data;
 	int irq_ret;
 	int ret;
 
-	/* The hotplug teardown removes the target from Linux scheduling. */
-	ret = remove_cpu(dev->config.cpu);
-	if (!ret)
-		ret = add_cpu(dev->config.cpu);
+	/* Keep the target online while the staged entry owns its execution. */
+	cpus_read_lock();
+	ret = cpu_accel_lifecycle_enter(dev);
 	irq_ret = cpu_accel_restore_irq_quarantine(dev);
 	if (!ret && irq_ret)
 		ret = irq_ret;
 	if (!irq_ret)
 		cpu_accel_release_workqueue(dev);
+	cpus_read_unlock();
 	dev->lifecycle_ret = ret;
 	atomic_set(&dev->enter_requested, 0);
 	if (ret) {
@@ -850,20 +864,12 @@ static int __init cpu_accel_init(void)
 	atomic64_set(&cpu_accel.workqueue_queued, 0);
 	atomic64_set(&cpu_accel.workqueue_executed, 0);
 	timer_setup(&cpu_accel.watchdog_timer, cpu_accel_watchdog, 0);
-	ret = cpuhp_setup_state_nocalls(CPUHP_AP_ACCELERATOR,
-					"cpu_accel:accelerator", NULL,
-					cpu_accel_hotplug_down);
-	if (ret)
-		return ret;
 	cpu_accel.shared = vmalloc_user(CPU_ACCEL_MAP_SIZE);
-	if (!cpu_accel.shared) {
-		cpuhp_remove_state_nocalls(CPUHP_AP_ACCELERATOR);
+	if (!cpu_accel.shared)
 		return -ENOMEM;
-	}
 	cpu_accel_reset_shared(&cpu_accel);
 	ret = cpu_accel_register_workqueue_tracepoints();
 	if (ret) {
-		cpuhp_remove_state_nocalls(CPUHP_AP_ACCELERATOR);
 		vfree(cpu_accel.shared);
 		return ret;
 	}
@@ -874,7 +880,6 @@ static int __init cpu_accel_init(void)
 	cpu_accel.misc.mode = 0600;
 	ret = misc_register(&cpu_accel.misc);
 	if (ret) {
-		cpuhp_remove_state_nocalls(CPUHP_AP_ACCELERATOR);
 		cpu_accel_unregister_workqueue_tracepoints();
 		vfree(cpu_accel.shared);
 		return ret;
@@ -897,7 +902,6 @@ static void __exit cpu_accel_exit(void)
 	timer_delete_sync(&cpu_accel.watchdog_timer);
 	mutex_unlock(&cpu_accel.lock);
 
-	cpuhp_remove_state_nocalls(CPUHP_AP_ACCELERATOR);
 	misc_deregister(&cpu_accel.misc);
 	cpu_accel_unregister_workqueue_tracepoints();
 	vfree(cpu_accel.shared);

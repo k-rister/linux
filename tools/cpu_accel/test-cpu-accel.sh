@@ -142,30 +142,36 @@ echo "$shared_output" | grep -q 'migration_detected=0' || \
 
 case "$(uname -m)" in
 x86_64)
-	user_output=$($tool run --cpu "$target_cpu" --duration-ms 20 \
-		--period-us 1000 --workload user-oslat \
-		$quiescent_arg $quarantine_arg)
-	echo "$user_output"
-	case "$user_output" in
-		state=3\ *) ;;
-		*) fail "user-oslat run did not complete" ;;
-	esac
-	echo "$user_output" | grep -q 'mode=0' || \
-		fail "user-oslat run did not return to Linux mode"
-	echo "$user_output" | grep -q 'backend=2' || \
-		fail "x86 ring-3 backend was not selected"
-	echo "$user_output" | grep -q 'workload=3' || \
-		fail "user-oslat workload was not selected"
-	echo "$user_output" | grep -q 'samples=[1-9][0-9]*' || \
-		fail "user-oslat workload did not produce samples"
-	echo "$user_output" | grep -q 'user_active_start_ns=[1-9][0-9]*' || \
-		fail "user-oslat active start timestamp was not recorded"
-	echo "$user_output" | grep -q 'user_active_end_ns=[1-9][0-9]*' || \
-		fail "user-oslat active end timestamp was not recorded"
-	echo "$user_output" | grep -q 'context_switches=0' || \
-		fail "user-oslat workload performed a context switch"
-	echo "$user_output" | grep -q 'migration_detected=0' || \
-		fail "user-oslat workload migrated CPUs"
+	user_run=1
+	while [ "$user_run" -le "$repeats" ]; do
+		user_output=$($tool run --cpu "$target_cpu" --duration-ms 20 \
+			--period-us 1000 --workload user-oslat \
+			$quiescent_arg $quarantine_arg)
+		echo "$user_output"
+		case "$user_output" in
+			state=3\ *) ;;
+			*) fail "user-oslat run did not complete" ;;
+		esac
+		echo "$user_output" | grep -q 'mode=0' || \
+			fail "user-oslat run did not return to Linux mode"
+		echo "$user_output" | grep -q 'backend=2' || \
+			fail "x86 ring-3 backend was not selected"
+		echo "$user_output" | grep -q 'workload=3' || \
+			fail "user-oslat workload was not selected"
+		echo "$user_output" | grep -q 'samples=[1-9][0-9]*' || \
+			fail "user-oslat workload did not produce samples"
+		echo "$user_output" | grep -q 'user_active_start_ns=[1-9][0-9]*' || \
+			fail "user-oslat active start timestamp was not recorded"
+		echo "$user_output" | grep -q 'user_active_end_ns=[1-9][0-9]*' || \
+			fail "user-oslat active end timestamp was not recorded"
+		echo "$user_output" | grep -q 'user_active_ns=[1-9][0-9]*' || \
+			fail "user-oslat active interval was not recorded"
+		echo "$user_output" | grep -q 'context_switches=0' || \
+			fail "user-oslat workload performed a context switch"
+		echo "$user_output" | grep -q 'migration_detected=0' || \
+			fail "user-oslat workload migrated CPUs"
+		user_run=$((user_run + 1))
+	done
 	;;
 esac
 

@@ -174,6 +174,10 @@ static int parse_u64(const char *text, uint64_t *value)
 
 static void print_status(const volatile struct cpu_accel_shared *shared)
 {
+	uint64_t user_active_ns =
+		shared->user_active_end_ns > shared->user_active_start_ns ?
+		shared->user_active_end_ns - shared->user_active_start_ns : 0;
+
 	printf("state=%u mode=%u sequence=%" PRIu64 " cpu=%u backend=%u samples=%" PRIu64
 	       " max_lateness_ns=%" PRIu64 " min_lateness_ns=%" PRIu64
 	       " last_lateness_ns=%" PRIu64 " duration_ns=%" PRIu64
@@ -181,7 +185,7 @@ static void print_status(const volatile struct cpu_accel_shared *shared)
 	       " work_iterations=%" PRIu64 " shared_entry=%u shared_owner=%u shared_epoch=%" PRIu64
 	       " lifecycle_entry_ns=%" PRIu64 " lifecycle_exit_ns=%" PRIu64
 	       " user_active_start_ns=%" PRIu64
-	       " user_active_end_ns=%" PRIu64
+	       " user_active_end_ns=%" PRIu64 " user_active_ns=%" PRIu64
 	       " irq_count=%" PRIu64
 	       " irq_quarantined=%u irq_quarantine_blockers=%u"
 	       " softirq_count=%" PRIu64 " timer_softirq_count=%" PRIu64
@@ -211,6 +215,7 @@ static void print_status(const volatile struct cpu_accel_shared *shared)
 	       (uint64_t)shared->lifecycle_exit_ns,
 	       (uint64_t)shared->user_active_start_ns,
 	       (uint64_t)shared->user_active_end_ns,
+	       user_active_ns,
 	       (uint64_t)shared->irq_count,
 	       shared->irq_quarantined, shared->irq_quarantine_blockers,
 	       (uint64_t)shared->softirq_count,

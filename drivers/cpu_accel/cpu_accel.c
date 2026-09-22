@@ -305,7 +305,7 @@ static void cpu_accel_region_end(struct cpu_accel_device *dev, u32 state)
 }
 
 static int cpu_accel_shared_reclaim(struct cpu_accel_device *dev,
-					   u32 entry_index, bool force)
+					   u32 entry_index)
 {
 	u32 owner;
 
@@ -318,8 +318,6 @@ static int cpu_accel_shared_reclaim(struct cpu_accel_device *dev,
 	owner = READ_ONCE(dev->work_region.owner);
 	if (owner == CPU_ACCEL_REGION_LINUX)
 		return -EALREADY;
-	if (owner == CPU_ACCEL_REGION_COMPLETE && !force)
-		return -EACCES;
 	if (owner != CPU_ACCEL_REGION_READY &&
 	    owner != CPU_ACCEL_REGION_COMPLETE &&
 	    owner != CPU_ACCEL_REGION_ERROR)
@@ -367,7 +365,7 @@ static int cpu_accel_free_workload(struct cpu_accel_device *dev)
 
 	if (dev->work_region_shared &&
 	    READ_ONCE(dev->work_region.owner) != CPU_ACCEL_REGION_LINUX) {
-		ret = cpu_accel_shared_reclaim(dev, dev->config.shared_entry, true);
+		ret = cpu_accel_shared_reclaim(dev, dev->config.shared_entry);
 		if (ret)
 			return ret;
 	}
@@ -1144,7 +1142,7 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 			ret = -EFAULT;
 			break;
 		}
-		ret = cpu_accel_shared_reclaim(dev, shared_entry, false);
+		ret = cpu_accel_shared_reclaim(dev, shared_entry);
 		break;
 
 	case CPU_ACCEL_IOC_RESET:
@@ -1247,7 +1245,7 @@ static void __exit cpu_accel_exit(void)
 	timer_delete_sync(&cpu_accel.watchdog_timer);
 	if (cpu_accel.work_region_shared)
 		cpu_accel_shared_reclaim(&cpu_accel,
-					cpu_accel.config.shared_entry, true);
+					cpu_accel.config.shared_entry);
 	cpu_accel_free_workload(&cpu_accel);
 	mutex_unlock(&cpu_accel.lock);
 

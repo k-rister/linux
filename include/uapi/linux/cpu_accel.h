@@ -6,7 +6,7 @@
 #include <linux/types.h>
 
 /* The prototype uses separate fixed-size control and shared-data mappings. */
-#define CPU_ACCEL_ABI_VERSION		11
+#define CPU_ACCEL_ABI_VERSION		12
 #define CPU_ACCEL_MAP_SIZE		(64U * 1024U)
 #define CPU_ACCEL_SHARED_MAP_SIZE	(64U * 1024U)
 #define CPU_ACCEL_SHARED_MAP_OFFSET	CPU_ACCEL_MAP_SIZE
@@ -51,6 +51,18 @@ enum cpu_accel_backend {
 	CPU_ACCEL_BACKEND_GENERIC_SMP = 0,
 	CPU_ACCEL_BACKEND_X86_STAGED_IPI,
 	CPU_ACCEL_BACKEND_X86_RING3,
+};
+
+/* Capabilities reported by the selected backend for the configured workload. */
+#define CPU_ACCEL_BACKEND_FLAG_USER_ESCAPE	(1U << 0)
+
+enum cpu_accel_recovery_state {
+	CPU_ACCEL_RECOVERY_NONE = 0,
+	CPU_ACCEL_RECOVERY_REQUESTED,
+	CPU_ACCEL_RECOVERY_SUCCEEDED,
+	CPU_ACCEL_RECOVERY_UNSUPPORTED,
+	CPU_ACCEL_RECOVERY_TIMEOUT,
+	CPU_ACCEL_RECOVERY_FAILED,
 };
 
 enum cpu_accel_workload {
@@ -103,6 +115,12 @@ struct cpu_accel_shared {
 	__u32 flags;
 	__u32 backend;
 	__u32 backend_flags;
+	__u32 recovery_state;
+	__s32 recovery_error;
+	__u64 recovery_requested_ns;
+	__u64 recovery_completed_ns;
+	__u32 recovery_attempts;
+	__u32 reserved_recovery;
 	__u32 stop_requested;
 	__u32 samples_valid;
 	__u32 mode;

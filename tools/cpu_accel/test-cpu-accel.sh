@@ -13,6 +13,7 @@ repeats=${CPU_ACCEL_REPEATS:-1}
 load_cpus=${CPU_ACCEL_LOAD_CPUS:-}
 quiescent_arg=
 quarantine_arg=
+escape_retries=${CPU_ACCEL_ESCAPE_RETRIES:-1}
 
 if [ "${CPU_ACCEL_REQUIRE_QUIESCENT:-0}" = 1 ]; then
 	quiescent_arg=--require-quiescent
@@ -173,7 +174,8 @@ x86_64)
 		user_run=$((user_run + 1))
 	done
 	escape_output=$($tool run --cpu "$target_cpu" --duration-ms 5000 \
-		--period-us 1000 --workload user-oslat --escape-after-ms 20 \
+		--period-us 1000 --workload user-oslat --escape-after-ms 500 \
+		--escape-retries "$escape_retries" \
 		$quiescent_arg $quarantine_arg)
 	echo "$escape_output"
 	case "$escape_output" in
@@ -186,6 +188,10 @@ x86_64)
 		fail "user-oslat escape selected the wrong backend"
 	echo "$escape_output" | grep -q 'user_escape_count=1' || \
 		fail "user-oslat escape was not observed exactly once"
+	echo "$escape_output" | grep -q 'recovery_state=2' || \
+		fail "user-oslat escape did not report successful recovery"
+	echo "$escape_output" | grep -q 'recovery_attempts=[1-9][0-9]*' || \
+		fail "user-oslat escape attempts were not reported"
 	echo "$escape_output" | grep -q 'user_active_ns=[1-9][0-9]*' || \
 		fail "user-oslat escape did not report an active interval"
 	echo "$escape_output" | grep -q 'context_switches=0' || \
@@ -193,7 +199,8 @@ x86_64)
 	echo "$escape_output" | grep -q 'migration_detected=0' || \
 		fail "user-oslat escape migrated CPUs"
 	hang_output=$($tool run --cpu "$target_cpu" --duration-ms 5000 \
-		--period-us 1000 --workload user-hang --escape-after-ms 20 \
+		--period-us 1000 --workload user-hang --escape-after-ms 500 \
+		--escape-retries "$escape_retries" \
 		$quiescent_arg $quarantine_arg)
 	echo "$hang_output"
 	case "$hang_output" in
@@ -208,6 +215,10 @@ x86_64)
 		fail "user-hang workload was not selected"
 	echo "$hang_output" | grep -q 'user_escape_count=1' || \
 		fail "user-hang escape was not observed exactly once"
+	echo "$hang_output" | grep -q 'recovery_state=2' || \
+		fail "user-hang escape did not report successful recovery"
+	echo "$hang_output" | grep -q 'recovery_attempts=[1-9][0-9]*' || \
+		fail "user-hang escape attempts were not reported"
 	echo "$hang_output" | grep -q 'context_switches=0' || \
 		fail "user-hang escape performed a context switch"
 	echo "$hang_output" | grep -q 'migration_detected=0' || \
@@ -220,7 +231,7 @@ $tool run --cpu "$target_cpu" --duration-ms 5000 --period-us 1000 \
 run_pid=$!
 sleep 0.1
 [ "$(cat "$online_file")" = 1 ] || fail "target CPU went offline during accelerator run"
-kill -TERM "$run_pid"
+kill -TERM "$run_pid" 2>/dev/null || true
 wait "$run_pid"
 cat "$stop_output"
 grep -q '^state=4 ' "$stop_output" || fail "STOP did not produce state=4"

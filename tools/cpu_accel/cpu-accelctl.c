@@ -206,7 +206,10 @@ static void print_status(const volatile struct cpu_accel_shared *shared)
 		shared->user_active_end_ns > shared->user_active_start_ns ?
 		shared->user_active_end_ns - shared->user_active_start_ns : 0;
 
-	printf("state=%u mode=%u sequence=%" PRIu64 " cpu=%u backend=%u samples=%" PRIu64
+	printf("state=%u mode=%u sequence=%" PRIu64 " cpu=%u backend=%u backend_flags=%u"
+	       " recovery_state=%u recovery_error=%d recovery_attempts=%u"
+	       " recovery_requested_ns=%" PRIu64
+	       " recovery_completed_ns=%" PRIu64 " samples=%" PRIu64
 	       " max_lateness_ns=%" PRIu64 " min_lateness_ns=%" PRIu64
 	       " last_lateness_ns=%" PRIu64 " duration_ns=%" PRIu64
 	       " period_ns=%" PRIu64 " workload=%u work_bytes=%" PRIu64
@@ -231,6 +234,12 @@ static void print_status(const volatile struct cpu_accel_shared *shared)
 	       shared->state, shared->mode, (uint64_t)shared->sequence,
 	       shared->cpu,
 	       shared->backend,
+	       shared->backend_flags,
+	       shared->recovery_state,
+	       shared->recovery_error,
+	       shared->recovery_attempts,
+	       (uint64_t)shared->recovery_requested_ns,
+	       (uint64_t)shared->recovery_completed_ns,
 	       (uint64_t)shared->samples_produced,
 	       (uint64_t)shared->max_lateness_ns,
 	       (uint64_t)shared->min_lateness_ns,
@@ -275,7 +284,7 @@ static void usage(FILE *stream, const char *program)
 		"  %s run [--cpu N] [--duration-ms N] [--period-us N]\n"
 		"      [--workload timestamp|memmove|shared-memmove|user-oslat|user-hang]\n"
 		"      [--work-bytes N] [--shared-entry N]\n"
-		"      [--escape-after-ms N]\n"
+		"      [--escape-after-ms N] [--escape-retries N]\n"
 		"      [--persistent] [--require-quiescent] [--quarantine-irqs]\n"
 		"  %s exit\n"
 		"  %s status\n"
@@ -302,7 +311,8 @@ static int pin_cpu(unsigned int cpu)
 }
 
 static int run_user_workload(const struct cpu_accel_config *requested,
-			     uint64_t escape_after_ms)
+			     uint64_t escape_after_ms,
+			     uint64_t escape_attempts)
 {
 	struct cpu_accel_config config = *requested;
 	struct cpu_accel_handle handle;
@@ -401,9 +411,15 @@ static int run_user_workload(const struct cpu_accel_config *requested,
 		if (nanosleep(&delay, NULL) < 0 && errno != EINTR) {
 			perror("delay before user escape");
 			escape_ret = -1;
-		} else if (cpu_accel_user_escape(&handle) < 0) {
-			perror("user escape");
-			escape_ret = -1;
+		} else {
+			for (uint64_t attempt = 0; attempt < escape_attempts;
+			     attempt++) {
+				escape_ret = cpu_accel_user_escape(&handle);
+				if (!escape_ret)
+					break;
+			}
+			if (escape_ret)
+				perror("user escape");
 		}
 	}
 	if (waitpid(child, &status, 0) < 0) {
@@ -422,6 +438,8 @@ static int run_user_workload(const struct cpu_accel_config *requested,
 	    (!escape_after_ms && handle.shared->state != CPU_ACCEL_STATE_COMPLETE) ||
 	    handle.shared->mode != CPU_ACCEL_MODE_LINUX ||
 	    handle.shared->backend != CPU_ACCEL_BACKEND_X86_RING3 ||
+	    (escape_after_ms && handle.shared->recovery_state !=
+	     CPU_ACCEL_RECOVERY_SUCCEEDED) ||
 	    (!escape_after_ms && !handle.shared->samples_valid) ||
 	    (escape_after_ms && handle.shared->user_escape_count != 1)) {
 		fprintf(stderr, "user accelerator did not complete its ring-3 contract\n");
@@ -452,6 +470,7 @@ static int run_workload(const char *program, int argc, char **argv)
 	struct cpu_accel_handle handle;
 	uint64_t value;
 	uint64_t escape_after_ms = 0;
+	uint64_t escape_attempts = 1;
 	unsigned int timeout_ms;
 	int persistent = 0;
 	int require_quiescent = 0;
@@ -528,6 +547,13 @@ static int run_workload(const char *program, int argc, char **argv)
 				fprintf(stderr, "%s: invalid escape delay\n", program);
 				return 2;
 			}
+		} else if (!strcmp(argv[index], "--escape-retries") &&
+			   index + 1 < argc) {
+			if (parse_u64(argv[++index], &escape_attempts) ||
+			    !escape_attempts || escape_attempts > 16) {
+				fprintf(stderr, "%s: invalid escape retry count\n", program);
+				return 2;
+			}
 		} else if (!strcmp(argv[index], "--persistent")) {
 			persistent = 1;
 		} else if (!strcmp(argv[index], "--require-quiescent")) {
@@ -553,7 +579,7 @@ static int run_workload(const char *program, int argc, char **argv)
 	}
 	if (config.workload == CPU_ACCEL_WORKLOAD_USER_OSLAT ||
 	    config.workload == CPU_ACCEL_WORKLOAD_USER_HANG)
-		return run_user_workload(&config, escape_after_ms);
+		return run_user_workload(&config, escape_after_ms, escape_attempts);
 
 	timeout_ms = (unsigned int)(config.duration_ns / 1000000ULL) + 1000;
 	if (pin_control_cpu() < 0) {

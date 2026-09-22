@@ -91,6 +91,17 @@ static u32 cpu_accel_backend_id_for_workload(u32 workload)
 	return cpu_accel_user_workload(workload) ?
 		CPU_ACCEL_BACKEND_X86_RING3 : CPU_ACCEL_BACKEND_X86_STAGED_IPI;
 }
+
+static u32 cpu_accel_backend_flags_for_workload(u32 workload)
+{
+#ifdef CONFIG_X86_LOCAL_APIC
+	if (cpu_accel_user_workload(workload))
+		return CPU_ACCEL_BACKEND_FLAG_USER_ESCAPE;
+#else
+	(void)workload;
+#endif
+	return 0;
+}
 #else
 static int cpu_accel_arch_enter(unsigned int cpu, cpu_accel_entry_fn entry,
 				void *data)
@@ -107,6 +118,12 @@ static u32 cpu_accel_backend_id_for_workload(u32 workload)
 {
 	(void)workload;
 	return CPU_ACCEL_BACKEND_GENERIC_SMP;
+}
+
+static u32 cpu_accel_backend_flags_for_workload(u32 workload)
+{
+	(void)workload;
+	return 0;
 }
 #endif
 
@@ -244,6 +261,14 @@ struct cpu_accel_device {
 static struct cpu_accel_device cpu_accel;
 
 #ifdef CONFIG_X86
+static unsigned int cpu_accel_user_escape_drop_count;
+module_param_named(user_escape_drop_count, cpu_accel_user_escape_drop_count,
+			   uint, 0644);
+MODULE_PARM_DESC(user_escape_drop_count,
+			 "drop this many x86 user escape NMIs for fault-injection testing");
+#endif
+
+#ifdef CONFIG_X86
 static int cpu_accel_arch_send_user_escape(unsigned int cpu)
 {
 #ifdef CONFIG_X86_LOCAL_APIC
@@ -271,6 +296,13 @@ static int cpu_accel_user_nmi(unsigned int type, struct pt_regs *regs)
 	    raw_smp_processor_id() != READ_ONCE(dev->config.cpu) ||
 	    !user_mode(regs))
 		return NMI_DONE;
+	if (READ_ONCE(cpu_accel_user_escape_drop_count)) {
+		unsigned int drops = READ_ONCE(cpu_accel_user_escape_drop_count);
+
+		if (cmpxchg(&cpu_accel_user_escape_drop_count, drops,
+			     drops - 1) == drops)
+			return NMI_DONE;
+	}
 
 	/* The image and stack were admitted and pinned before this NMI. */
 	regs->ip = image->escape_ip;
@@ -279,6 +311,8 @@ static int cpu_accel_user_nmi(unsigned int type, struct pt_regs *regs)
 	regs->flags = (regs->flags & ~X86_EFLAGS_TF) | X86_EFLAGS_FIXED;
 	atomic64_inc(&dev->user_escape_count);
 	atomic_set(&dev->user_escape_seen, 1);
+	WRITE_ONCE(dev->shared->recovery_state,
+		   CPU_ACCEL_RECOVERY_SUCCEEDED);
 	WRITE_ONCE(dev->shared->stop_requested, 1);
 	return NMI_HANDLED;
 }
@@ -310,9 +344,27 @@ static int cpu_accel_user_escape(struct cpu_accel_device *dev)
 		mutex_unlock(&dev->lock);
 		return -EINVAL;
 	}
+	if (!(READ_ONCE(dev->shared->backend_flags) &
+	      CPU_ACCEL_BACKEND_FLAG_USER_ESCAPE)) {
+		WRITE_ONCE(dev->shared->recovery_state,
+			   CPU_ACCEL_RECOVERY_UNSUPPORTED);
+		WRITE_ONCE(dev->shared->recovery_error, -EOPNOTSUPP);
+		WRITE_ONCE(dev->shared->recovery_completed_ns,
+			   ktime_get_mono_fast_ns());
+		mutex_unlock(&dev->lock);
+		return -EOPNOTSUPP;
+	}
 	cpu = dev->config.cpu;
 	atomic_set(&dev->user_escape_requested, 1);
 	atomic_set(&dev->user_escape_seen, 0);
+	WRITE_ONCE(dev->shared->recovery_state,
+		   CPU_ACCEL_RECOVERY_REQUESTED);
+	WRITE_ONCE(dev->shared->recovery_error, 0);
+	WRITE_ONCE(dev->shared->recovery_requested_ns,
+		   ktime_get_mono_fast_ns());
+	WRITE_ONCE(dev->shared->recovery_completed_ns, 0);
+	WRITE_ONCE(dev->shared->recovery_attempts,
+		   READ_ONCE(dev->shared->recovery_attempts) + 1);
 	WRITE_ONCE(dev->shared->stop_requested, 1);
 	mutex_unlock(&dev->lock);
 
@@ -322,6 +374,12 @@ static int cpu_accel_user_escape(struct cpu_accel_device *dev)
 	if (ret) {
 		mutex_lock(&dev->lock);
 		atomic_set(&dev->user_escape_requested, 0);
+		WRITE_ONCE(dev->shared->recovery_state,
+			   ret == -EOPNOTSUPP ? CPU_ACCEL_RECOVERY_UNSUPPORTED :
+			   CPU_ACCEL_RECOVERY_FAILED);
+		WRITE_ONCE(dev->shared->recovery_error, ret);
+		WRITE_ONCE(dev->shared->recovery_completed_ns,
+			   ktime_get_mono_fast_ns());
 		mutex_unlock(&dev->lock);
 		return ret;
 	}
@@ -329,15 +387,28 @@ static int cpu_accel_user_escape(struct cpu_accel_device *dev)
 	deadline = jiffies + HZ;
 	while (time_before(jiffies, deadline)) {
 		if (cpu_accel_user_terminal(dev))
-			return atomic_read(&dev->user_escape_seen) ? 0 : -EALREADY;
+			break;
 		cpu_relax();
 	}
 
 	mutex_lock(&dev->lock);
-	if (cpu_accel_user_terminal(dev))
+	if (cpu_accel_user_terminal(dev)) {
 		ret = atomic_read(&dev->user_escape_seen) ? 0 : -EALREADY;
-	else
+		if (ret) {
+			WRITE_ONCE(dev->shared->recovery_state,
+				   CPU_ACCEL_RECOVERY_FAILED);
+			WRITE_ONCE(dev->shared->recovery_error, ret);
+			WRITE_ONCE(dev->shared->recovery_completed_ns,
+				   ktime_get_mono_fast_ns());
+		}
+	} else {
 		ret = -ETIMEDOUT;
+		WRITE_ONCE(dev->shared->recovery_state,
+			   CPU_ACCEL_RECOVERY_TIMEOUT);
+		WRITE_ONCE(dev->shared->recovery_error, ret);
+		WRITE_ONCE(dev->shared->recovery_completed_ns,
+			   ktime_get_mono_fast_ns());
+	}
 	atomic_set(&dev->user_escape_requested, 0);
 	mutex_unlock(&dev->lock);
 	return ret;
@@ -545,9 +616,8 @@ static int cpu_accel_prepare_workload(struct cpu_accel_device *dev,
 	size_t bytes;
 	size_t size;
 
-	if (config->workload == CPU_ACCEL_WORKLOAD_TIMESTAMP) {
+	if (config->workload == CPU_ACCEL_WORKLOAD_TIMESTAMP)
 		return cpu_accel_free_workload(dev);
-	}
 	if (cpu_accel_user_workload(config->workload))
 		return cpu_accel_free_workload(dev);
 	if (config->workload == CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE) {
@@ -663,6 +733,8 @@ static void cpu_accel_reset_shared(struct cpu_accel_device *dev)
 	dev->shared->abi_version = CPU_ACCEL_ABI_VERSION;
 	dev->shared->struct_size = sizeof(*dev->shared);
 	dev->shared->backend = cpu_accel_backend_id();
+	dev->shared->backend_flags = 0;
+	dev->shared->recovery_state = CPU_ACCEL_RECOVERY_NONE;
 	dev->shared->mode = CPU_ACCEL_MODE_LINUX;
 	dev->shared->workload = CPU_ACCEL_WORKLOAD_TIMESTAMP;
 	dev->shared->shared_owner = CPU_ACCEL_REGION_LINUX;
@@ -956,15 +1028,14 @@ static void cpu_accel_arch_user_exit(const struct pt_regs *return_regs)
 {
 	struct pt_regs *regs = current_pt_regs();
 
-	regs->ip = return_regs->ip;
-	regs->sp = return_regs->sp;
-	regs->csx = return_regs->csx;
-	regs->ssx = return_regs->ssx;
+	/*
+	 * Restore every user register; the compiler may keep the handle in any
+	 * callee-saved register across the USER_EXIT ioctl.
+	 */
+	*regs = *return_regs;
 	regs->flags = return_regs->flags |
 		X86_EFLAGS_IF | X86_EFLAGS_FIXED;
 	regs->ax = 0;
-	regs->cx = return_regs->cx;
-	regs->r11 = return_regs->r11;
 }
 #else
 static int cpu_accel_user_image_prepare(struct cpu_accel_device *dev)
@@ -999,16 +1070,26 @@ static int cpu_accel_user_exit_locked(struct cpu_accel_device *dev)
 	WRITE_ONCE(dev->shared->user_active_end_ns,
 		   ktime_get_mono_fast_ns());
 	WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_EXITING);
+	/*
+	 * The protected user interval ends at the terminal syscall boundary;
+	 * exclude all following Linux-owned cleanup from activity telemetry.
+	 */
+	atomic_set(&dev->running, 0);
 	dev->shared->end_ns = ktime_get_mono_fast_ns();
 	dev->shared->stop_requested = 0;
-	/* Exclude terminal syscall cleanup from workqueue accounting. */
-	atomic_set(&dev->running, 0);
 	cpu_accel_observation_finish(dev, &dev->user_observation);
 	dev->shared->end_ns = dev->shared->lifecycle_exit_ns;
 	dev->shared->samples_produced = dev->shared->samples_valid;
 	dev->shared->work_iterations = dev->shared->samples_produced;
 	dev->shared->user_escape_count =
 		atomic64_read(&dev->user_escape_count);
+	if (escaped) {
+		WRITE_ONCE(dev->shared->recovery_state,
+			   CPU_ACCEL_RECOVERY_SUCCEEDED);
+		WRITE_ONCE(dev->shared->recovery_error, 0);
+		WRITE_ONCE(dev->shared->recovery_completed_ns,
+			   READ_ONCE(dev->shared->user_active_end_ns));
+	}
 	dev->shared->min_lateness_ns = dev->shared->samples_produced ?
 		dev->shared->min_lateness_ns : 0;
 	dev->user_image.active = false;
@@ -1025,6 +1106,12 @@ static int cpu_accel_user_exit_locked(struct cpu_accel_device *dev)
 		cpu_accel_release_workqueue(dev);
 	dev->lifecycle_ret = irq_ret;
 	if (irq_ret) {
+		/* NMI escape succeeded, but Linux ownership was not fully restored. */
+		WRITE_ONCE(dev->shared->recovery_state,
+			   CPU_ACCEL_RECOVERY_FAILED);
+		WRITE_ONCE(dev->shared->recovery_error, irq_ret);
+		WRITE_ONCE(dev->shared->recovery_completed_ns,
+			   ktime_get_mono_fast_ns());
 		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_RECOVERY);
 		WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_ERROR);
 	} else {
@@ -1034,6 +1121,13 @@ static int cpu_accel_user_exit_locked(struct cpu_accel_device *dev)
 	}
 	/* Publish terminal telemetry before restoring the saved user frame. */
 	smp_wmb();
+	local_irq_disable();
+	/*
+	 * Module code cannot use preempt_enable_no_resched(); keep this decrement
+	 * non-scheduling while interrupts remain disabled.
+	 */
+	barrier();
+	preempt_count_dec();
 	cpu_accel_arch_user_exit(&return_regs);
 	return irq_ret;
 #else
@@ -1169,6 +1263,7 @@ static void cpu_accel_lifecycle_entry(void *data)
 	    !quiescent) {
 		cpu_accel_observation_finish(dev, &obs);
 		cpu_accel_region_end(dev, CPU_ACCEL_STATE_ERROR);
+		/* Publish the failed admission before restoring execution. */
 		smp_wmb();
 		WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_ERROR);
 		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_RECOVERY);
@@ -1417,6 +1512,12 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 	dev->shared->user_active_start_ns = 0;
 	dev->shared->user_active_end_ns = 0;
 	dev->shared->user_escape_count = 0;
+	dev->shared->recovery_state = CPU_ACCEL_RECOVERY_NONE;
+	dev->shared->recovery_error = 0;
+	dev->shared->recovery_requested_ns = 0;
+	dev->shared->recovery_completed_ns = 0;
+	dev->shared->recovery_attempts = 0;
+	dev->shared->reserved_recovery = 0;
 	dev->shared->irq_count = 0;
 	dev->shared->irq_quarantined = irq_quarantined;
 	dev->shared->irq_quarantine_blockers = irq_quarantine_blockers;
@@ -1466,6 +1567,8 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 		WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_RUNNING);
 		local_irq_disable();
 		ret = cpu_accel_arch_user_enter(dev);
+		if (!ret)
+			preempt_disable();
 		local_irq_enable();
 		if (!ret && dev->config.flags & CPU_ACCEL_FLAG_PERSISTENT) {
 			unsigned long watchdog_jiffies;
@@ -1572,6 +1675,9 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 			 (config.shared_entry >= CPU_ACCEL_SHARED_ENTRY_COUNT ||
 			  config.work_bytes < 64 ||
 			  config.work_bytes > CPU_ACCEL_SHARED_ENTRY_BYTES / 2)) ||
+			(config.workload == CPU_ACCEL_WORKLOAD_USER_HANG &&
+			 !(cpu_accel_backend_flags_for_workload(config.workload) &
+			   CPU_ACCEL_BACKEND_FLAG_USER_ESCAPE)) ||
 			(cpu_accel_user_workload(config.workload) &&
 			 (config.shared_entry || config.work_bytes ||
 			  config.user_entry_ip == 0 || config.user_stack_top == 0 ||
@@ -1609,6 +1715,8 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 		dev->shared->workload = config.workload;
 		dev->shared->backend =
 			cpu_accel_backend_id_for_workload(config.workload);
+		dev->shared->backend_flags =
+			cpu_accel_backend_flags_for_workload(config.workload);
 		dev->shared->shared_entry = config.shared_entry;
 		dev->shared->shared_owner = dev->work_region.owner;
 		dev->shared->shared_epoch = dev->work_region.epoch;

@@ -214,7 +214,7 @@ handler, a failed or disabled local APIC, a host/hypervisor fault, or a
 corrupted/self-modifying image.  It is therefore a recovery experiment and
 not evidence of a formal packet-latency bound.
 
-ABI 11 adds a deliberately noncooperative ``user-hang`` fixture that never
+ABI 12 adds a deliberately noncooperative ``user-hang`` fixture that never
 polls the control mapping.  Its only supported termination path is the x86
 escape operation, and successful recovery is reported as
 ``CPU_ACCEL_STATE_ESCAPED``.  This makes the recovery test distinguishable
@@ -247,5 +247,9 @@ The implementation checkpoints are:
    handling and document which failures remain unrecoverable without reboot.
    The ABI 11 NMI escape path is a bounded recovery experiment for the
    prevalidated ring-3 image; it is not a hard guarantee.
-5. Add IOMMU-backed ``DMA`` regions and a userspace/NIC integration only after
+5. [completed] Define the architecture-neutral recovery capability and result
+   contract.  ABI 12 distinguishes successful escape from unsupported,
+   timed-out, or failed attempts and exercises retry behavior with a debug-only
+   dropped-NMI fixture.
+6. Add IOMMU-backed ``DMA`` regions and a userspace/NIC integration only after
    the non-networked memory contract is stable.

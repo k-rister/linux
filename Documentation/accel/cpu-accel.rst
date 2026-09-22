@@ -42,7 +42,7 @@ small ioctl interface:
 
 The control mapping contains the state, explicit Linux/accelerator transition
 mode, selected workload, run timestamps, aggregate lateness, and up to
-``CPU_ACCEL_MAX_SAMPLES`` timestamp samples.  ABI version 11 also
+``CPU_ACCEL_MAX_SAMPLES`` timestamp samples.  ABI version 12 also
 reports lifecycle entry/exit timestamps, interrupt and softirq deltas,
 timer, hrtimer, RCU, and scheduler softirq deltas, current-task
 context-switch deltas, CPU-entry/exit identity, migration detection, pending
@@ -56,6 +56,19 @@ accelerator CPU while it is running.
 These are observations made by the prototype, not suppression or admission
 controls for the corresponding activity.
 
+``backend_flags`` reports backend/workload capabilities.  The
+``CPU_ACCEL_BACKEND_FLAG_USER_ESCAPE`` bit means that the configured workload
+has a supported recovery operation.  ``recovery_state``,
+``recovery_error``, ``recovery_attempts``, and the recovery timestamps form a
+common result contract independent of how an architecture performs the
+escape.  A request is reported as ``REQUESTED`` while in flight,
+``SUCCEEDED`` after the protected image reaches its terminal exit,
+``UNSUPPORTED`` when the backend cannot provide the operation, and
+``TIMEOUT`` or ``FAILED`` when the attempt did not complete.  A failed or
+timed-out attempt does not pretend that the CPU has returned to Linux; the
+shared ``mode`` and ``state`` remain nonterminal until a later recovery or
+cooperative exit succeeds.
+
 The initial workload selector supports ``timestamp`` and ``memmove``.  The
 memmove workload allocates and touches two bounded kernel buffers before the
 accelerator entry point, then copies between them once per timing period.  It
@@ -64,7 +77,7 @@ isolation while avoiding page faults and system calls in the accelerator
 interval.  The buffers are kernel-owned; this workload does not yet provide a
 protected user address space or a user-supplied accelerator binary.
 
-ABI version 11 adds the x86-only ``user-oslat`` workload.  The companion forks
+ABI version 12 retains the x86-only ``user-oslat`` workload.  The companion forks
 a worker so the accelerator task has a distinct ``mm_struct``, pins that task
 to the target CPU, and supplies page-aligned executable-image and private-stack
 ranges.  The kernel validates the VMAs, prefaults and pins their pages, holds
@@ -102,14 +115,17 @@ The image and stack are pinned only for the active epoch, and the current
 prototype still does not provide an IOMMU domain or a formal hard-latency
 bound.
 
-The same ABI adds the x86-only ``user-hang`` workload for recovery testing.
+ABI version 12 adds the x86-only ``user-hang`` workload for recovery testing.
 It deliberately spins in ring 3 without polling the control mapping and must
 be started with the companion's ``--escape-after-ms`` option.  A successful
 forced escape terminates with ``CPU_ACCEL_STATE_ESCAPED`` rather than
 ``CPU_ACCEL_STATE_COMPLETE``.  This workload is a fault-injection fixture,
-not an application contract.
+not an application contract.  The debug-only module parameter
+``user_escape_drop_count=N`` drops the next ``N`` x86 escape NMIs; the
+companion's ``--escape-retries`` option exercises the retry contract after a
+reported timeout.
 
-ABI version 11 retains the fixed-size shared-region mapping at
+ABI version 12 retains the fixed-size shared-region mapping at
 ``CPU_ACCEL_SHARED_MAP_OFFSET``.  It contains two bounded entries, each with
 an owner, epoch, length, and data area.  The ``shared-memmove`` workload uses
 one selected entry and copies between its two halves.  The companion
@@ -202,15 +218,16 @@ not a hard guarantee.  A malfunctioning kernel implementation is not assumed
 to be recoverable without reverting to the known-good kernel.  This lifecycle
 is the first step toward that model, but the synchronous SMP dispatch still
 uses the normal IPI entry path and does not suppress Linux-generated IPIs
-while the target is running.  The next phase should add fault-injection
-coverage for escape failure modes and then measure the architecture-neutral
-recovery result contract.
+while the target is running.  ABI version 12 makes the recovery capability
+and result contract explicit and adds a debug-only dropped-NMI fixture.  A
+controller may retry after ``TIMEOUT`` or ``FAILED``; it must not treat those
+states as a return to Linux.
 The proposed protected address-space and shared-memory contract is documented
 in :doc:`cpu-accel-memory`; the internal region/epoch model and the first
 prefaulted shared entry are now in place.  The x86 cooperative ring-3 image is
-the first protected-address-space proof, and the ABI 10 NMI escape is the
-first x86 recovery experiment.  The next implementation steps are to define
-an architecture-neutral escape/recovery contract and only then add direct
-APIC ownership or IOMMU-backed networking.
+the first protected-address-space proof, and the ABI 11 NMI escape is the
+first x86 recovery experiment.  The common recovery contract is now in place;
+the next implementation step is to add direct APIC ownership and then
+IOMMU-backed memory before networking.
 A stronger latency claim must wait for those controls and for a defined
 recovery contract.

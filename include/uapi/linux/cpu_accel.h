@@ -6,7 +6,7 @@
 #include <linux/types.h>
 
 /* The prototype uses separate fixed-size control and shared-data mappings. */
-#define CPU_ACCEL_ABI_VERSION		10
+#define CPU_ACCEL_ABI_VERSION		11
 #define CPU_ACCEL_MAP_SIZE		(64U * 1024U)
 #define CPU_ACCEL_SHARED_MAP_SIZE	(64U * 1024U)
 #define CPU_ACCEL_SHARED_MAP_OFFSET	CPU_ACCEL_MAP_SIZE
@@ -27,6 +27,7 @@ enum cpu_accel_state {
 	CPU_ACCEL_STATE_STOPPED,
 	CPU_ACCEL_STATE_ERROR,
 	CPU_ACCEL_STATE_WATCHDOG,
+	CPU_ACCEL_STATE_ESCAPED,
 };
 
 enum cpu_accel_mode {
@@ -57,6 +58,8 @@ enum cpu_accel_workload {
 	CPU_ACCEL_WORKLOAD_MEMMOVE,
 	CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE,
 	CPU_ACCEL_WORKLOAD_USER_OSLAT,
+	/* Noncooperative ring-3 fault-injection workload; requires USER_ESCAPE. */
+	CPU_ACCEL_WORKLOAD_USER_HANG,
 };
 
 enum cpu_accel_shared_owner {
@@ -77,7 +80,7 @@ struct cpu_accel_config {
 	__u64 work_bytes;
 	__u64 duration_ns;
 	__u64 period_ns;
-	/* USER_OSLAT image metadata; zero for kernel-backed workloads. */
+	/* User image metadata; zero for kernel-backed workloads. */
 	__u64 user_entry_ip;
 	__u64 user_stack_top;
 	__u64 user_stack_bytes;
@@ -121,7 +124,7 @@ struct cpu_accel_shared {
 	__u64 last_lateness_ns;
 	__u64 lifecycle_entry_ns;
 	__u64 lifecycle_exit_ns;
-	/* USER_OSLAT interval: ring-3 entry through terminal USER_EXIT. */
+	/* User image interval: ring-3 entry through terminal USER_EXIT. */
 	__u64 user_active_start_ns;
 	__u64 user_active_end_ns;
 	__u64 user_escape_count;

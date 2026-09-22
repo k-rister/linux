@@ -63,6 +63,12 @@ struct cpu_accel_observation {
 
 typedef void (*cpu_accel_entry_fn)(void *data);
 
+static bool cpu_accel_user_workload(u32 workload)
+{
+	return workload == CPU_ACCEL_WORKLOAD_USER_OSLAT ||
+		workload == CPU_ACCEL_WORKLOAD_USER_HANG;
+}
+
 #ifdef CONFIG_X86
 /*
  * Staged x86 handoff: one normal IPI enters the callback, after which the
@@ -82,7 +88,7 @@ static u32 cpu_accel_backend_id(void)
 
 static u32 cpu_accel_backend_id_for_workload(u32 workload)
 {
-	return workload == CPU_ACCEL_WORKLOAD_USER_OSLAT ?
+	return cpu_accel_user_workload(workload) ?
 		CPU_ACCEL_BACKEND_X86_RING3 : CPU_ACCEL_BACKEND_X86_STAGED_IPI;
 }
 #else
@@ -286,7 +292,8 @@ static bool cpu_accel_user_terminal(struct cpu_accel_device *dev)
 	return state == CPU_ACCEL_STATE_COMPLETE ||
 		state == CPU_ACCEL_STATE_STOPPED ||
 		state == CPU_ACCEL_STATE_ERROR ||
-		state == CPU_ACCEL_STATE_WATCHDOG;
+		state == CPU_ACCEL_STATE_WATCHDOG ||
+		state == CPU_ACCEL_STATE_ESCAPED;
 }
 
 static int cpu_accel_user_escape(struct cpu_accel_device *dev)
@@ -298,7 +305,7 @@ static int cpu_accel_user_escape(struct cpu_accel_device *dev)
 
 	mutex_lock(&dev->lock);
 	if (!dev->user_image.active ||
-	    dev->config.workload != CPU_ACCEL_WORKLOAD_USER_OSLAT ||
+	    !cpu_accel_user_workload(dev->config.workload) ||
 	    !cpu_online(dev->config.cpu)) {
 		mutex_unlock(&dev->lock);
 		return -EINVAL;
@@ -541,7 +548,7 @@ static int cpu_accel_prepare_workload(struct cpu_accel_device *dev,
 	if (config->workload == CPU_ACCEL_WORKLOAD_TIMESTAMP) {
 		return cpu_accel_free_workload(dev);
 	}
-	if (config->workload == CPU_ACCEL_WORKLOAD_USER_OSLAT)
+	if (cpu_accel_user_workload(config->workload))
 		return cpu_accel_free_workload(dev);
 	if (config->workload == CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE) {
 		if (config->shared_entry >= CPU_ACCEL_SHARED_ENTRY_COUNT ||
@@ -982,6 +989,7 @@ static int cpu_accel_user_exit_locked(struct cpu_accel_device *dev)
 {
 #ifdef CONFIG_X86
 	struct pt_regs return_regs = dev->user_image.return_regs;
+	bool escaped = atomic_read(&dev->user_escape_seen);
 	int irq_ret;
 
 	if (!dev->user_image.active || dev->user_image.task != current ||
@@ -1021,7 +1029,8 @@ static int cpu_accel_user_exit_locked(struct cpu_accel_device *dev)
 		WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_ERROR);
 	} else {
 		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_LINUX);
-		WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_COMPLETE);
+		WRITE_ONCE(dev->shared->state, escaped ?
+			CPU_ACCEL_STATE_ESCAPED : CPU_ACCEL_STATE_COMPLETE);
 	}
 	/* Publish terminal telemetry before restoring the saved user frame. */
 	smp_wmb();
@@ -1318,7 +1327,7 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 {
 	unsigned int irq_quarantined = 0;
 	unsigned int irq_quarantine_blockers = 0;
-	bool user_oslat = dev->config.workload == CPU_ACCEL_WORKLOAD_USER_OSLAT;
+	bool user_workload = cpu_accel_user_workload(dev->config.workload);
 	int current_cpu;
 	int ret;
 
@@ -1332,7 +1341,7 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 		return ret;
 	cpu_accel_release_workqueue(dev);
 
-	if (user_oslat) {
+	if (user_workload) {
 		current_cpu = raw_smp_processor_id();
 		if (current_cpu != dev->config.cpu ||
 		    cpumask_weight(current->cpus_ptr) != 1 ||
@@ -1446,7 +1455,7 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 	WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_ENTERING);
 	WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_READY);
 
-	if (user_oslat) {
+	if (user_workload) {
 		ret = cpu_accel_user_image_prepare(dev);
 		if (ret)
 			goto user_start_fail;
@@ -1551,7 +1560,7 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 				     CPU_ACCEL_FLAG_REQUIRE_QUIESCENT |
 				     CPU_ACCEL_FLAG_IRQ_QUARANTINE) ||
 		    config.reserved || config.reserved2 ||
-			config.workload > CPU_ACCEL_WORKLOAD_USER_OSLAT ||
+			config.workload > CPU_ACCEL_WORKLOAD_USER_HANG ||
 		    config.work_bytes > CPU_ACCEL_MAX_WORK_BYTES ||
 		    (config.workload != CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE &&
 		     config.shared_entry) ||
@@ -1563,13 +1572,13 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 			 (config.shared_entry >= CPU_ACCEL_SHARED_ENTRY_COUNT ||
 			  config.work_bytes < 64 ||
 			  config.work_bytes > CPU_ACCEL_SHARED_ENTRY_BYTES / 2)) ||
-			(config.workload == CPU_ACCEL_WORKLOAD_USER_OSLAT &&
+			(cpu_accel_user_workload(config.workload) &&
 			 (config.shared_entry || config.work_bytes ||
 			  config.user_entry_ip == 0 || config.user_stack_top == 0 ||
 			  config.user_stack_bytes == 0 || config.user_image_start == 0 ||
 			  config.user_image_bytes == 0 || config.user_arg == 0 ||
 			  config.user_escape_ip == 0)) ||
-			(config.workload != CPU_ACCEL_WORKLOAD_USER_OSLAT &&
+			(!cpu_accel_user_workload(config.workload) &&
 			 (config.user_entry_ip || config.user_stack_top ||
 			  config.user_stack_bytes || config.user_image_start ||
 			  config.user_image_bytes || config.user_arg ||

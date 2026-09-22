@@ -145,6 +145,19 @@ static void cpu_accel_user_oslat(void *argument)
 	__builtin_unreachable();
 }
 
+/* Deliberately ignores the control mapping; recovery must be used to exit. */
+CPU_ACCEL_USER_IMAGE
+static void cpu_accel_user_hang(void *argument)
+{
+	struct cpu_accel_user_context *context = argument;
+	uint64_t value = context->cycles_per_ns;
+
+	for (;;) {
+		value ^= cpu_accel_read_tsc();
+		__asm__ volatile("pause" : "+r"(value) :: "memory");
+	}
+}
+
 static uint64_t cpu_accel_calibrate_cycles_per_ns(void)
 {
 	struct timespec start, end, delay = {
@@ -260,7 +273,7 @@ static void usage(FILE *stream, const char *program)
 	fprintf(stream,
 		"Usage:\n"
 		"  %s run [--cpu N] [--duration-ms N] [--period-us N]\n"
-		"      [--workload timestamp|memmove|shared-memmove|user-oslat]\n"
+		"      [--workload timestamp|memmove|shared-memmove|user-oslat|user-hang]\n"
 		"      [--work-bytes N] [--shared-entry N]\n"
 		"      [--escape-after-ms N]\n"
 		"      [--persistent] [--require-quiescent] [--quarantine-irqs]\n"
@@ -288,12 +301,13 @@ static int pin_cpu(unsigned int cpu)
 	return sched_setaffinity(0, sizeof(set), &set);
 }
 
-static int run_user_oslat(const struct cpu_accel_config *requested,
-			  uint64_t escape_after_ms)
+static int run_user_workload(const struct cpu_accel_config *requested,
+			     uint64_t escape_after_ms)
 {
 	struct cpu_accel_config config = *requested;
 	struct cpu_accel_handle handle;
 	struct cpu_accel_user_context *context;
+	uintptr_t entry_ip;
 	void *stack;
 	long page_size;
 	pid_t child;
@@ -301,6 +315,7 @@ static int run_user_oslat(const struct cpu_accel_config *requested,
 	uintptr_t escape_page;
 	uintptr_t image_end;
 	int status;
+	int user_hang = requested->workload == CPU_ACCEL_WORKLOAD_USER_HANG;
 	int escape_ret = 0;
 	int ret;
 
@@ -326,12 +341,14 @@ static int run_user_oslat(const struct cpu_accel_config *requested,
 	context->shared = (struct cpu_accel_shared *)(uintptr_t)handle.shared;
 	context->fd = handle.fd;
 	context->cycles_per_ns = cpu_accel_calibrate_cycles_per_ns();
+	entry_ip = user_hang ? (uintptr_t)cpu_accel_user_hang :
+		(uintptr_t)cpu_accel_user_oslat;
 	config.flags |= CPU_ACCEL_FLAG_PERSISTENT;
-	config.user_entry_ip = (uintptr_t)cpu_accel_user_oslat;
+	config.user_entry_ip = entry_ip;
 	config.user_escape_ip = (uintptr_t)cpu_accel_user_escape_image;
 	config.user_stack_top = (uintptr_t)stack + (size_t)page_size * 16;
 	config.user_stack_bytes = (size_t)page_size * 16;
-	entry_page = (uintptr_t)cpu_accel_user_oslat &
+	entry_page = entry_ip &
 		~((uintptr_t)page_size - 1);
 	escape_page = (uintptr_t)cpu_accel_user_escape_image &
 		~((uintptr_t)page_size - 1);
@@ -341,6 +358,12 @@ static int run_user_oslat(const struct cpu_accel_config *requested,
 	config.user_image_bytes = image_end - config.user_image_start +
 		(size_t)page_size;
 	config.user_arg = (uintptr_t)context;
+	if (user_hang && !escape_after_ms) {
+		fprintf(stderr, "user-hang requires --escape-after-ms\n");
+		cpu_accel_close(&handle);
+		munmap(stack, (size_t)page_size * 16);
+		return 2;
+	}
 
 	child = fork();
 	if (child < 0) {
@@ -395,7 +418,8 @@ static int run_user_oslat(const struct cpu_accel_config *requested,
 	if (escape_ret)
 		ret = -1;
 	print_status(handle.shared);
-	if (handle.shared->state != CPU_ACCEL_STATE_COMPLETE ||
+	if ((escape_after_ms && handle.shared->state != CPU_ACCEL_STATE_ESCAPED) ||
+	    (!escape_after_ms && handle.shared->state != CPU_ACCEL_STATE_COMPLETE) ||
 	    handle.shared->mode != CPU_ACCEL_MODE_LINUX ||
 	    handle.shared->backend != CPU_ACCEL_BACKEND_X86_RING3 ||
 	    (!escape_after_ms && !handle.shared->samples_valid) ||
@@ -476,6 +500,8 @@ static int run_workload(const char *program, int argc, char **argv)
 				config.workload = CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE;
 			else if (!strcmp(workload, "user-oslat"))
 				config.workload = CPU_ACCEL_WORKLOAD_USER_OSLAT;
+			else if (!strcmp(workload, "user-hang"))
+				config.workload = CPU_ACCEL_WORKLOAD_USER_HANG;
 			else {
 				fprintf(stderr, "%s: invalid workload\n", program);
 				return 2;
@@ -519,12 +545,15 @@ static int run_workload(const char *program, int argc, char **argv)
 		config.flags |= CPU_ACCEL_FLAG_REQUIRE_QUIESCENT;
 	if (quarantine_irqs)
 		config.flags |= CPU_ACCEL_FLAG_IRQ_QUARANTINE;
-	if (escape_after_ms && config.workload != CPU_ACCEL_WORKLOAD_USER_OSLAT) {
-		fprintf(stderr, "%s: --escape-after-ms requires user-oslat\n", program);
+	if (escape_after_ms && config.workload != CPU_ACCEL_WORKLOAD_USER_OSLAT &&
+	    config.workload != CPU_ACCEL_WORKLOAD_USER_HANG) {
+		fprintf(stderr, "%s: --escape-after-ms requires a user workload\n",
+			program);
 		return 2;
 	}
-	if (config.workload == CPU_ACCEL_WORKLOAD_USER_OSLAT)
-		return run_user_oslat(&config, escape_after_ms);
+	if (config.workload == CPU_ACCEL_WORKLOAD_USER_OSLAT ||
+	    config.workload == CPU_ACCEL_WORKLOAD_USER_HANG)
+		return run_user_workload(&config, escape_after_ms);
 
 	timeout_ms = (unsigned int)(config.duration_ns / 1000000ULL) + 1000;
 	if (pin_control_cpu() < 0) {

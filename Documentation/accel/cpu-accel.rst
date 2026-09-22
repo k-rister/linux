@@ -42,7 +42,7 @@ small ioctl interface:
 
 The control mapping contains the state, explicit Linux/accelerator transition
 mode, selected workload, run timestamps, aggregate lateness, and up to
-``CPU_ACCEL_MAX_SAMPLES`` timestamp samples.  ABI version 10 also
+``CPU_ACCEL_MAX_SAMPLES`` timestamp samples.  ABI version 11 also
 reports lifecycle entry/exit timestamps, interrupt and softirq deltas,
 timer, hrtimer, RCU, and scheduler softirq deltas, current-task
 context-switch deltas, CPU-entry/exit identity, migration detection, pending
@@ -64,7 +64,7 @@ isolation while avoiding page faults and system calls in the accelerator
 interval.  The buffers are kernel-owned; this workload does not yet provide a
 protected user address space or a user-supplied accelerator binary.
 
-ABI version 10 adds the x86-only ``user-oslat`` workload.  The companion forks
+ABI version 11 adds the x86-only ``user-oslat`` workload.  The companion forks
 a worker so the accelerator task has a distinct ``mm_struct``, pins that task
 to the target CPU, and supplies page-aligned executable-image and private-stack
 ranges.  The kernel validates the VMAs, prefaults and pins their pages, holds
@@ -102,7 +102,14 @@ The image and stack are pinned only for the active epoch, and the current
 prototype still does not provide an IOMMU domain or a formal hard-latency
 bound.
 
-ABI version 10 retains the fixed-size shared-region mapping at
+The same ABI adds the x86-only ``user-hang`` workload for recovery testing.
+It deliberately spins in ring 3 without polling the control mapping and must
+be started with the companion's ``--escape-after-ms`` option.  A successful
+forced escape terminates with ``CPU_ACCEL_STATE_ESCAPED`` rather than
+``CPU_ACCEL_STATE_COMPLETE``.  This workload is a fault-injection fixture,
+not an application contract.
+
+ABI version 11 retains the fixed-size shared-region mapping at
 ``CPU_ACCEL_SHARED_MAP_OFFSET``.  It contains two bounded entries, each with
 an owner, epoch, length, and data area.  The ``shared-memmove`` workload uses
 one selected entry and copies between its two halves.  The companion
@@ -146,6 +153,9 @@ softirq request and reports ``RECOVERY`` mode.  It is a precondition check,
 not a mechanism for draining or suppressing those sources.  A watchdog
 termination is reported as
 ``CPU_ACCEL_STATE_WATCHDOG``.
+Successful forced ring-3 recovery is reported as
+``CPU_ACCEL_STATE_ESCAPED``; this distinguishes recovery from cooperative
+completion.
 
 The companion SDK in ``tools/cpu_accel`` wraps the device and
 ``cpu-accelctl`` provides a minimal command-line exerciser::
@@ -163,6 +173,8 @@ The companion SDK in ``tools/cpu_accel`` wraps the device and
     --period-us 1000 --workload shared-memmove --work-bytes 4096
   sudo tools/cpu_accel/cpu-accelctl run --cpu 1 --duration-ms 100 \
     --period-us 1000 --workload user-oslat
+  sudo tools/cpu_accel/cpu-accelctl run --cpu 1 --duration-ms 5000 \
+    --period-us 1000 --workload user-hang --escape-after-ms 20
   sudo tools/cpu_accel/cpu-accelctl run --cpu 1 --duration-ms 100 \
     --period-us 1000 --quarantine-irqs
 

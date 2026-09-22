@@ -162,6 +162,7 @@ int cpu_accel_wait(struct cpu_accel_handle *handle, unsigned int timeout_ms)
 		case CPU_ACCEL_STATE_COMPLETE:
 		case CPU_ACCEL_STATE_STOPPED:
 		case CPU_ACCEL_STATE_WATCHDOG:
+		case CPU_ACCEL_STATE_ESCAPED:
 			return 0;
 		case CPU_ACCEL_STATE_ERROR:
 			errno = EIO;

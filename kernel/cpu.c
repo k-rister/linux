@@ -2140,6 +2140,10 @@ static struct cpuhp_step cpuhp_hp_states[] = {
 		.name			= "ap:offline",
 		.cant_stop		= true,
 	},
+	/* Reserved CPU handoff after scheduler teardown and before play-dead. */
+	[CPUHP_AP_ACCELERATOR] = {
+		.name			= "cpu:accelerator",
+	},
 	/* First state is scheduler control. Interrupts are disabled */
 	[CPUHP_AP_SCHED_STARTING] = {
 		.name			= "sched:starting",

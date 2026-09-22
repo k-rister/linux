@@ -85,8 +85,8 @@ while [ "$run" -le "$repeats" ]; do
 		echo "$output" | grep -q 'irq_quarantine_blockers=0' || \
 			fail "IRQ quarantine reported blockers"
 	fi
-	echo "$output" | grep -q 'backend=1' || \
-		fail "x86 staged backend was not selected"
+	echo "$output" | grep -q 'backend=2' || \
+		fail "CPU-hotplug backend was not selected"
 	echo "$output" | grep -q 'arch_counters_valid=1' || \
 		fail "architecture counters were not reported on x86"
 	run=$((run + 1))

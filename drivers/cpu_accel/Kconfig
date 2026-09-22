@@ -4,14 +4,15 @@ config CPU_ACCEL
 	tristate "Single CPU accelerator prototype"
 	depends on SMP
 	depends on MMU
+	depends on HOTPLUG_CPU
 	depends on GENERIC_IRQ_MIGRATION
 	help
 	  Build the first experimental single-CPU accelerator control plane and
-	  lifecycle backend.
+	  CPU-hotplug-backed lifecycle backend.
 
 	  The prototype exposes /dev/cpu_accel. A control process selects one
 	  online CPU, maps a shared control and sample area, and starts a bounded
-	  timestamp workload. During the workload the CPU remains online but has
-	  preemption and local interrupts disabled. This is a development
-	  experiment, not a production isolation mechanism or a hard latency
-	  guarantee.
+	  timestamp workload. During the workload the CPU is removed from Linux
+	  scheduling through CPU hotplug and runs at a dedicated hotplug handoff
+	  state. This is a development experiment, not a production isolation
+	  mechanism or a hard latency guarantee.

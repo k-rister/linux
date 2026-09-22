@@ -9,6 +9,7 @@ Compute Accelerators
 
    introduction
    cpu-accel
+   cpu-accel-memory
    amdxdna/index
    qaic/index
    rocket/index

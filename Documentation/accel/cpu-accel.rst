@@ -135,8 +135,9 @@ implementation is not assumed to be recoverable without reverting to the
 known-good kernel.  This lifecycle is the first step toward that model, but
 the synchronous SMP dispatch still uses the normal IPI entry path and does
 not suppress Linux-generated IPIs while the target is running.  The next
-phase should validate the bounded memmove workload under loaded conditions,
-then add a protected accelerator address-space model and explicit
-shared-memory ownership before replacing the staged x86 handoff with direct
-APIC ownership and explicit pending-IPI/TLB policy.  A stronger latency claim
-must wait for those controls and for a defined recovery contract.
+phase should validate the bounded memmove workload under loaded conditions.
+The proposed protected address-space and shared-memory contract is documented
+in :doc:`cpu-accel-memory`; implementation should begin with an internal
+region/epoch model and a prefaulted shared region before adding a ring-3
+image, direct APIC ownership, or IOMMU-backed networking.  A stronger latency
+claim must wait for those controls and for a defined recovery contract.

@@ -11,6 +11,11 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/mman.h>
+#include <sys/syscall.h>
+#include <sys/wait.h>
+#include <time.h>
+#include <unistd.h>
 
 static volatile sig_atomic_t interrupted;
 
@@ -18,6 +23,140 @@ static void handle_signal(int signal_number)
 {
 	(void)signal_number;
 	interrupted = 1;
+}
+
+struct cpu_accel_user_context {
+	struct cpu_accel_shared *shared;
+	int fd;
+	uint64_t cycles_per_ns;
+};
+
+static inline uint64_t cpu_accel_read_tsc(void)
+{
+	uint32_t low;
+	uint32_t high;
+
+	__asm__ volatile("rdtsc" : "=a"(low), "=d"(high));
+	return ((uint64_t)high << 32) | low;
+}
+
+static long cpu_accel_user_exit_syscall(int fd)
+{
+	long ret;
+
+	__asm__ volatile("syscall"
+		     : "=a"(ret)
+		     : "a"(SYS_ioctl), "D"(fd),
+		       "S"((unsigned long)CPU_ACCEL_IOC_USER_EXIT), "d"(0UL)
+		     : "rcx", "r11", "memory");
+	return ret;
+}
+
+/* This function is the complete first ring-3 accelerator image. */
+#define CPU_ACCEL_USER_IMAGE __attribute__((aligned(4096)))
+
+CPU_ACCEL_USER_IMAGE
+static void cpu_accel_user_oslat(void *argument)
+{
+	struct cpu_accel_user_context *context = argument;
+	struct cpu_accel_shared *shared = context->shared;
+	uint64_t cycles_per_ns = context->cycles_per_ns;
+	uint64_t start_tsc = cpu_accel_read_tsc();
+	uint64_t period_ns = __atomic_load_n(&shared->period_ns,
+						    __ATOMIC_RELAXED);
+	uint64_t duration_ns = __atomic_load_n(&shared->duration_ns,
+						     __ATOMIC_RELAXED);
+	uint64_t period_cycles = period_ns * cycles_per_ns;
+	uint64_t duration_cycles = duration_ns * cycles_per_ns;
+	uint64_t deadline = start_tsc + period_cycles;
+	uint64_t samples = 0;
+	uint64_t max_lateness = 0;
+	uint64_t min_lateness = UINT64_MAX;
+	uint64_t last_lateness = 0;
+	uint32_t samples_valid = 0;
+
+	if (!cycles_per_ns)
+		cycles_per_ns = 1;
+	if (!period_cycles)
+		period_cycles = 1;
+	if (!duration_cycles)
+		duration_cycles = period_cycles;
+
+	for (;;) {
+		uint64_t now = cpu_accel_read_tsc();
+		uint64_t lateness_cycles;
+		uint64_t lateness_ns;
+		uint64_t timestamp_ns;
+
+		if (now < deadline) {
+			__asm__ volatile("pause" ::: "memory");
+			continue;
+		}
+		lateness_cycles = now - deadline;
+		lateness_ns = lateness_cycles / cycles_per_ns;
+		timestamp_ns = __atomic_load_n(&shared->start_ns,
+					       __ATOMIC_RELAXED) +
+			(now - start_tsc) / cycles_per_ns;
+		if (samples_valid < CPU_ACCEL_MAX_SAMPLES) {
+			shared->samples[samples_valid].timestamp_ns = timestamp_ns;
+			shared->samples[samples_valid].lateness_ns = lateness_ns;
+			samples_valid++;
+		}
+		samples++;
+		if (lateness_ns > max_lateness)
+			max_lateness = lateness_ns;
+		if (lateness_ns < min_lateness)
+			min_lateness = lateness_ns;
+		last_lateness = lateness_ns;
+		if (__atomic_load_n(&shared->stop_requested, __ATOMIC_RELAXED) ||
+		    now - start_tsc >= duration_cycles)
+			break;
+		if (deadline > UINT64_MAX - period_cycles)
+			break;
+		deadline += period_cycles;
+	}
+
+	__atomic_store_n(&shared->samples_produced, samples, __ATOMIC_RELAXED);
+	__atomic_store_n(&shared->samples_valid, samples_valid, __ATOMIC_RELAXED);
+	__atomic_store_n(&shared->max_lateness_ns, max_lateness,
+				__ATOMIC_RELAXED);
+	__atomic_store_n(&shared->min_lateness_ns,
+				samples ? min_lateness : 0, __ATOMIC_RELAXED);
+	__atomic_store_n(&shared->last_lateness_ns, last_lateness,
+				__ATOMIC_RELAXED);
+	__atomic_store_n(&shared->work_iterations, samples, __ATOMIC_RELAXED);
+	__atomic_thread_fence(__ATOMIC_RELEASE);
+	(void)cpu_accel_user_exit_syscall(context->fd);
+	__builtin_unreachable();
+}
+
+static uint64_t cpu_accel_calibrate_cycles_per_ns(void)
+{
+	struct timespec start, end, delay = {
+		.tv_sec = 0,
+		.tv_nsec = 10000000,
+	};
+	uint64_t start_tsc;
+	uint64_t end_tsc;
+	uint64_t start_ns;
+	uint64_t end_ns;
+	uint64_t elapsed_ns;
+	uint64_t cycles;
+
+	if (clock_gettime(CLOCK_MONOTONIC, &start) < 0)
+		return 1;
+	start_tsc = cpu_accel_read_tsc();
+	nanosleep(&delay, NULL);
+	end_tsc = cpu_accel_read_tsc();
+	if (clock_gettime(CLOCK_MONOTONIC, &end) < 0)
+		return 1;
+	start_ns = (uint64_t)start.tv_sec * 1000000000ULL + start.tv_nsec;
+	end_ns = (uint64_t)end.tv_sec * 1000000000ULL + end.tv_nsec;
+	elapsed_ns = end_ns - start_ns;
+	cycles = end_tsc - start_tsc;
+	if (!elapsed_ns || cycles / elapsed_ns == 0)
+		return 1;
+	return cycles / elapsed_ns;
 }
 
 static int parse_u64(const char *text, uint64_t *value)
@@ -95,7 +234,7 @@ static void usage(FILE *stream, const char *program)
 	fprintf(stream,
 		"Usage:\n"
 		"  %s run [--cpu N] [--duration-ms N] [--period-us N]\n"
-		"      [--workload timestamp|memmove|shared-memmove]\n"
+		"      [--workload timestamp|memmove|shared-memmove|user-oslat]\n"
 		"      [--work-bytes N] [--shared-entry N]\n"
 		"      [--persistent] [--require-quiescent] [--quarantine-irqs]\n"
 		"  %s exit\n"
@@ -111,6 +250,110 @@ static int pin_control_cpu(void)
 	CPU_ZERO(&set);
 	CPU_SET(0, &set);
 	return sched_setaffinity(0, sizeof(set), &set);
+}
+
+static int pin_cpu(unsigned int cpu)
+{
+	cpu_set_t set;
+
+	CPU_ZERO(&set);
+	CPU_SET(cpu, &set);
+	return sched_setaffinity(0, sizeof(set), &set);
+}
+
+static int run_user_oslat(const struct cpu_accel_config *requested)
+{
+	struct cpu_accel_config config = *requested;
+	struct cpu_accel_handle handle;
+	struct cpu_accel_user_context *context;
+	void *stack;
+	long page_size;
+	pid_t child;
+	int status;
+	int ret;
+
+	page_size = sysconf(_SC_PAGESIZE);
+	if (page_size <= 0 || (size_t)page_size > SIZE_MAX / 16) {
+		fprintf(stderr, "invalid page size\n");
+		return 1;
+	}
+	stack = mmap(NULL, (size_t)page_size * 16,
+		    PROT_READ | PROT_WRITE,
+		    MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
+	if (stack == MAP_FAILED) {
+		perror("mmap user accelerator stack");
+		return 1;
+	}
+	if (cpu_accel_open(&handle) < 0) {
+		perror("open /dev/cpu_accel");
+		munmap(stack, (size_t)page_size * 16);
+		return 1;
+	}
+
+	context = stack;
+	context->shared = (struct cpu_accel_shared *)(uintptr_t)handle.shared;
+	context->fd = handle.fd;
+	context->cycles_per_ns = cpu_accel_calibrate_cycles_per_ns();
+	config.flags |= CPU_ACCEL_FLAG_PERSISTENT;
+	config.user_entry_ip = (uintptr_t)cpu_accel_user_oslat;
+	config.user_stack_top = (uintptr_t)stack + (size_t)page_size * 16;
+	config.user_stack_bytes = (size_t)page_size * 16;
+	config.user_image_start = (uintptr_t)cpu_accel_user_oslat &
+		~((uintptr_t)page_size - 1);
+	config.user_image_bytes = page_size;
+	config.user_arg = (uintptr_t)context;
+
+	child = fork();
+	if (child < 0) {
+		perror("fork user accelerator");
+		cpu_accel_close(&handle);
+		munmap(stack, (size_t)page_size * 16);
+		return 1;
+	}
+	if (!child) {
+		if (pin_cpu(config.cpu) < 0) {
+			perror("pin user accelerator");
+			_exit(1);
+		}
+		ret = cpu_accel_configure(&handle, &config);
+		if (ret < 0) {
+			perror("configure user accelerator");
+			_exit(1);
+		}
+		ret = cpu_accel_start(&handle);
+		if (ret < 0) {
+			perror("start user accelerator");
+			_exit(1);
+		}
+		cpu_accel_close(&handle);
+		munmap(stack, (size_t)page_size * 16);
+		_exit(0);
+	}
+
+	if (waitpid(child, &status, 0) < 0) {
+		perror("wait for user accelerator");
+		ret = -1;
+	} else if (!WIFEXITED(status) || WEXITSTATUS(status)) {
+		fprintf(stderr, "user accelerator child failed\n");
+		ret = -1;
+	} else {
+		ret = 0;
+	}
+	print_status(handle.shared);
+	if (handle.shared->state != CPU_ACCEL_STATE_COMPLETE ||
+	    handle.shared->mode != CPU_ACCEL_MODE_LINUX ||
+	    handle.shared->backend != CPU_ACCEL_BACKEND_X86_RING3 ||
+	    !handle.shared->samples_valid) {
+		fprintf(stderr, "user accelerator did not complete its ring-3 contract\n");
+		ret = -1;
+	}
+	if (cpu_accel_exit(&handle) < 0) {
+		perror("exit user accelerator");
+		ret = -1;
+	}
+	cpu_accel_close(&handle);
+	munmap(stack, (size_t)page_size * 16);
+	return ret < 0 ? 1 : 0;
 }
 
 static int run_workload(const char *program, int argc, char **argv)
@@ -174,6 +417,8 @@ static int run_workload(const char *program, int argc, char **argv)
 				config.workload = CPU_ACCEL_WORKLOAD_MEMMOVE;
 			else if (!strcmp(workload, "shared-memmove"))
 				config.workload = CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE;
+			else if (!strcmp(workload, "user-oslat"))
+				config.workload = CPU_ACCEL_WORKLOAD_USER_OSLAT;
 			else {
 				fprintf(stderr, "%s: invalid workload\n", program);
 				return 2;
@@ -210,6 +455,8 @@ static int run_workload(const char *program, int argc, char **argv)
 		config.flags |= CPU_ACCEL_FLAG_REQUIRE_QUIESCENT;
 	if (quarantine_irqs)
 		config.flags |= CPU_ACCEL_FLAG_IRQ_QUARANTINE;
+	if (config.workload == CPU_ACCEL_WORKLOAD_USER_OSLAT)
+		return run_user_oslat(&config);
 
 	timeout_ms = (unsigned int)(config.duration_ns / 1000000ULL) + 1000;
 	if (pin_control_cpu() < 0) {

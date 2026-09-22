@@ -16,6 +16,7 @@
 #include <linux/mutex.h>
 #include <linux/preempt.h>
 #include <linux/processor.h>
+#include <linux/ptrace.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/smp.h>
@@ -30,6 +31,9 @@
 
 #ifdef CONFIG_X86
 #include <asm/hardirq.h>
+#include <asm/processor-flags.h>
+#include <asm/ptrace.h>
+#include <asm/segment.h>
 #endif
 
 #include <trace/events/workqueue.h>
@@ -71,6 +75,12 @@ static u32 cpu_accel_backend_id(void)
 {
 	return CPU_ACCEL_BACKEND_X86_STAGED_IPI;
 }
+
+static u32 cpu_accel_backend_id_for_workload(u32 workload)
+{
+	return workload == CPU_ACCEL_WORKLOAD_USER_OSLAT ?
+		CPU_ACCEL_BACKEND_X86_RING3 : CPU_ACCEL_BACKEND_X86_STAGED_IPI;
+}
 #else
 static int cpu_accel_arch_enter(unsigned int cpu, cpu_accel_entry_fn entry,
 				void *data)
@@ -80,6 +90,12 @@ static int cpu_accel_arch_enter(unsigned int cpu, cpu_accel_entry_fn entry,
 
 static u32 cpu_accel_backend_id(void)
 {
+	return CPU_ACCEL_BACKEND_GENERIC_SMP;
+}
+
+static u32 cpu_accel_backend_id_for_workload(u32 workload)
+{
+	(void)workload;
 	return CPU_ACCEL_BACKEND_GENERIC_SMP;
 }
 #endif
@@ -160,6 +176,25 @@ struct cpu_accel_region {
 	u32 owner;
 };
 
+struct cpu_accel_user_image {
+	struct task_struct *task;
+	struct mm_struct *mm;
+	struct page **pages;
+	unsigned int nr_pages;
+	unsigned int pinned_pages;
+	unsigned long entry_ip;
+	unsigned long stack_top;
+	unsigned long stack_bytes;
+	unsigned long image_start;
+	unsigned long image_bytes;
+	unsigned long arg;
+#ifdef CONFIG_X86
+	struct pt_regs return_regs;
+#endif
+	bool mm_locked;
+	bool active;
+};
+
 struct cpu_accel_device {
 	struct miscdevice misc;
 	/* Serializes control-plane state transitions. */
@@ -188,6 +223,8 @@ struct cpu_accel_device {
 	bool workqueue_reserved;
 	bool work_region_allocated;
 	bool work_region_shared;
+	struct cpu_accel_user_image user_image;
+	struct cpu_accel_observation user_observation;
 };
 
 static struct cpu_accel_device cpu_accel;
@@ -393,6 +430,8 @@ static int cpu_accel_prepare_workload(struct cpu_accel_device *dev,
 	if (config->workload == CPU_ACCEL_WORKLOAD_TIMESTAMP) {
 		return cpu_accel_free_workload(dev);
 	}
+	if (config->workload == CPU_ACCEL_WORKLOAD_USER_OSLAT)
+		return cpu_accel_free_workload(dev);
 	if (config->workload == CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE) {
 		if (config->shared_entry >= CPU_ACCEL_SHARED_ENTRY_COUNT ||
 		    config->work_bytes < 64 ||
@@ -600,6 +639,270 @@ static void cpu_accel_observation_finish(struct cpu_accel_device *dev,
 	shared->lifecycle_cpu_entry = obs->cpu;
 	shared->lifecycle_cpu_exit = exit_cpu;
 	shared->migration_detected = obs->cpu != exit_cpu;
+}
+
+#ifdef CONFIG_X86
+#define CPU_ACCEL_MAX_USER_IMAGE_BYTES	(4UL * 1024UL * 1024UL)
+#define CPU_ACCEL_MAX_USER_STACK_BYTES	(1UL * 1024UL * 1024UL)
+
+static int cpu_accel_validate_user_range(struct mm_struct *mm,
+					unsigned long start, unsigned long bytes,
+					unsigned long required_flags)
+{
+	unsigned long addr = start;
+	unsigned long end;
+
+	if (!bytes || bytes > ULONG_MAX - start ||
+	    !access_ok((void __user *)start, bytes))
+		return -EINVAL;
+	end = start + bytes;
+	while (addr < end) {
+		struct vm_area_struct *vma = vma_lookup(mm, addr);
+		unsigned long next;
+
+		if (!vma || addr < vma->vm_start ||
+		    (vma->vm_flags & required_flags) != required_flags ||
+		    (required_flags & VM_EXEC && vma->vm_flags & VM_WRITE))
+			return -EACCES;
+		next = min(end, vma->vm_end);
+		if (next <= addr)
+			return -EFAULT;
+		addr = next;
+	}
+	return 0;
+}
+
+static void cpu_accel_user_image_release(struct cpu_accel_device *dev)
+{
+	struct cpu_accel_user_image *image = &dev->user_image;
+
+	if (image->mm_locked) {
+		mmap_write_unlock(image->mm);
+		image->mm_locked = false;
+	}
+	if (image->pages) {
+		unpin_user_pages(image->pages, image->pinned_pages);
+		kvfree(image->pages);
+	}
+	if (image->mm)
+		mmput(image->mm);
+	if (image->task)
+		put_task_struct(image->task);
+	memset(image, 0, sizeof(*image));
+}
+
+static int cpu_accel_user_image_prepare(struct cpu_accel_device *dev)
+{
+	struct cpu_accel_user_image *image = &dev->user_image;
+	struct mm_struct *mm = current->mm;
+	unsigned long stack_start;
+	unsigned int image_pages;
+	unsigned int stack_pages;
+	long pinned;
+	int ret;
+
+	if (!mm || atomic_read(&mm->mm_users) != 1 ||
+	    get_nr_threads(current) != 1)
+		return -EBUSY;
+	if (!PAGE_ALIGNED(dev->config.user_image_start) ||
+	    !PAGE_ALIGNED(dev->config.user_image_bytes) ||
+	    !PAGE_ALIGNED(dev->config.user_stack_top) ||
+	    !PAGE_ALIGNED(dev->config.user_stack_bytes) ||
+	    !dev->config.user_image_bytes || !dev->config.user_stack_bytes ||
+	    dev->config.user_image_bytes > CPU_ACCEL_MAX_USER_IMAGE_BYTES ||
+	    dev->config.user_stack_bytes > CPU_ACCEL_MAX_USER_STACK_BYTES ||
+	    dev->config.user_stack_top < dev->config.user_stack_bytes)
+		return -EINVAL;
+	stack_start = dev->config.user_stack_top -
+		dev->config.user_stack_bytes;
+	if (dev->config.user_image_start + dev->config.user_image_bytes <
+		dev->config.user_image_start ||
+		dev->config.user_stack_top < stack_start)
+		return -EINVAL;
+	if (dev->config.user_entry_ip < dev->config.user_image_start ||
+	    dev->config.user_entry_ip >= dev->config.user_image_start +
+		dev->config.user_image_bytes ||
+	    dev->config.user_arg < stack_start ||
+	    dev->config.user_arg >= dev->config.user_stack_top)
+		return -EINVAL;
+	if (dev->config.user_image_start + dev->config.user_image_bytes >
+		stack_start && dev->config.user_image_start <
+		dev->config.user_stack_top)
+		return -EINVAL;
+
+	image_pages = dev->config.user_image_bytes >> PAGE_SHIFT;
+	stack_pages = dev->config.user_stack_bytes >> PAGE_SHIFT;
+	image->pages = kvmalloc_array(image_pages + stack_pages,
+				      sizeof(*image->pages), GFP_KERNEL);
+	if (!image->pages)
+		return -ENOMEM;
+	image->nr_pages = image_pages + stack_pages;
+
+	image->mm = get_task_mm(current);
+	if (!image->mm) {
+		ret = -ESRCH;
+		goto fail;
+	}
+	mmap_read_lock(image->mm);
+	ret = cpu_accel_validate_user_range(image->mm,
+					    dev->config.user_image_start,
+					    dev->config.user_image_bytes,
+					    VM_READ | VM_EXEC);
+	if (!ret)
+		ret = cpu_accel_validate_user_range(image->mm, stack_start,
+						    dev->config.user_stack_bytes,
+						    VM_READ | VM_WRITE);
+	mmap_read_unlock(image->mm);
+	if (ret)
+		goto fail;
+
+	pinned = pin_user_pages_fast(dev->config.user_image_start,
+				     image_pages, 0, image->pages);
+	if (pinned != image_pages) {
+		image->pinned_pages = pinned > 0 ? pinned : 0;
+		ret = pinned < 0 ? (int)pinned : -EFAULT;
+		goto fail;
+	}
+	image->pinned_pages = image_pages;
+	pinned = pin_user_pages_fast(stack_start, stack_pages, FOLL_WRITE,
+				     image->pages + image_pages);
+	if (pinned != stack_pages) {
+		if (pinned > 0) {
+			unpin_user_pages(image->pages + image_pages, pinned);
+			image->pinned_pages = image_pages;
+		} else {
+			image->pinned_pages = image_pages;
+		}
+		ret = pinned < 0 ? (int)pinned : -EFAULT;
+		goto fail;
+	}
+	image->pinned_pages = image->nr_pages;
+	mmap_write_lock(image->mm);
+	image->mm_locked = true;
+	ret = cpu_accel_validate_user_range(image->mm,
+					    dev->config.user_image_start,
+					    dev->config.user_image_bytes,
+					    VM_READ | VM_EXEC);
+	if (!ret)
+		ret = cpu_accel_validate_user_range(image->mm, stack_start,
+						    dev->config.user_stack_bytes,
+						    VM_READ | VM_WRITE);
+	if (ret)
+		goto fail;
+
+	get_task_struct(current);
+	image->task = current;
+	image->entry_ip = dev->config.user_entry_ip;
+	image->stack_top = dev->config.user_stack_top;
+	image->stack_bytes = dev->config.user_stack_bytes;
+	image->image_start = dev->config.user_image_start;
+	image->image_bytes = dev->config.user_image_bytes;
+	image->arg = dev->config.user_arg;
+	return 0;
+
+fail:
+	cpu_accel_user_image_release(dev);
+	return ret;
+}
+
+static int cpu_accel_arch_user_enter(struct cpu_accel_device *dev)
+{
+	struct cpu_accel_user_image *image = &dev->user_image;
+	struct pt_regs *regs = current_pt_regs();
+
+	image->return_regs = *regs;
+	regs->ip = image->entry_ip;
+	regs->sp = image->stack_top;
+	regs->csx = __USER_CS;
+	regs->ssx = __USER_DS;
+	regs->di = image->arg;
+	/* Force the syscall exit path to use IRET and enter with IF cleared. */
+	regs->flags = X86_EFLAGS_FIXED;
+	regs->cx = ~regs->ip;
+	regs->r11 = ~regs->flags;
+	return 0;
+}
+
+static void cpu_accel_arch_user_exit(const struct pt_regs *return_regs)
+{
+	struct pt_regs *regs = current_pt_regs();
+
+	regs->ip = return_regs->ip;
+	regs->sp = return_regs->sp;
+	regs->csx = return_regs->csx;
+	regs->ssx = return_regs->ssx;
+	regs->flags = return_regs->flags |
+		X86_EFLAGS_IF | X86_EFLAGS_FIXED;
+	regs->ax = 0;
+	regs->cx = return_regs->cx;
+	regs->r11 = return_regs->r11;
+}
+#else
+static int cpu_accel_user_image_prepare(struct cpu_accel_device *dev)
+{
+	(void)dev;
+	return -EOPNOTSUPP;
+}
+
+static void cpu_accel_user_image_release(struct cpu_accel_device *dev)
+{
+	(void)dev;
+}
+
+static int cpu_accel_arch_user_enter(struct cpu_accel_device *dev)
+{
+	(void)dev;
+	return -EOPNOTSUPP;
+}
+#endif
+
+static int cpu_accel_user_exit_locked(struct cpu_accel_device *dev)
+{
+#ifdef CONFIG_X86
+	struct pt_regs return_regs = dev->user_image.return_regs;
+	int irq_ret;
+
+	if (!dev->user_image.active || dev->user_image.task != current ||
+	    dev->user_image.mm != current->mm)
+		return -EPERM;
+
+	WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_EXITING);
+	dev->shared->end_ns = ktime_get_mono_fast_ns();
+	dev->shared->stop_requested = 0;
+	cpu_accel_observation_finish(dev, &dev->user_observation);
+	dev->shared->end_ns = dev->shared->lifecycle_exit_ns;
+	dev->shared->samples_produced = dev->shared->samples_valid;
+	dev->shared->work_iterations = dev->shared->samples_produced;
+	dev->shared->min_lateness_ns = dev->shared->samples_produced ?
+		dev->shared->min_lateness_ns : 0;
+	dev->user_image.active = false;
+	atomic_set(&dev->running, 0);
+	atomic_set(&dev->enter_requested, 0);
+	atomic_set(&dev->stop_requested, 0);
+	atomic_set(&dev->watchdog_fired, 0);
+
+	/* The user interval is over before Linux-owned cleanup resumes. */
+	cpu_accel_user_image_release(dev);
+	local_irq_enable();
+	irq_ret = cpu_accel_restore_irq_quarantine(dev);
+	if (!irq_ret)
+		cpu_accel_release_workqueue(dev);
+	dev->lifecycle_ret = irq_ret;
+	if (irq_ret) {
+		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_RECOVERY);
+		WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_ERROR);
+	} else {
+		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_LINUX);
+		WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_COMPLETE);
+	}
+	/* Publish terminal telemetry before restoring the saved user frame. */
+	smp_wmb();
+	cpu_accel_arch_user_exit(&return_regs);
+	return irq_ret;
+#else
+	(void)dev;
+	return -EOPNOTSUPP;
+#endif
 }
 
 /*
@@ -844,7 +1147,7 @@ static int cpu_accel_release(struct inode *inode, struct file *file)
 	int ret;
 
 	mutex_lock(&dev->lock);
-	if (!dev->lifecycle_thread) {
+	if (!dev->lifecycle_thread && !dev->user_image.active) {
 		ret = cpu_accel_restore_irq_quarantine(dev);
 		if (ret)
 			pr_err("unable to restore accelerator IRQ quarantine for CPU %u: %d\n",
@@ -887,6 +1190,7 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 {
 	unsigned int irq_quarantined = 0;
 	unsigned int irq_quarantine_blockers = 0;
+	bool user_oslat = dev->config.workload == CPU_ACCEL_WORKLOAD_USER_OSLAT;
 	int current_cpu;
 	int ret;
 
@@ -900,13 +1204,22 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 		return ret;
 	cpu_accel_release_workqueue(dev);
 
-	current_cpu = get_cpu();
-	if (current_cpu == dev->config.cpu) {
+	if (user_oslat) {
+		current_cpu = raw_smp_processor_id();
+		if (current_cpu != dev->config.cpu ||
+		    cpumask_weight(current->cpus_ptr) != 1 ||
+		    !cpumask_test_cpu(dev->config.cpu, current->cpus_ptr))
+			return -EXDEV;
+	} else {
+		current_cpu = get_cpu();
+		if (current_cpu == dev->config.cpu) {
+			put_cpu();
+			return -EBUSY;
+		}
+		dev->controller_cpu = current_cpu;
 		put_cpu();
-		return -EBUSY;
 	}
 	dev->controller_cpu = current_cpu;
-	put_cpu();
 
 	cpus_read_lock();
 	ret = cpu_online(dev->config.cpu) ? 0 : -ENODEV;
@@ -999,6 +1312,53 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 	WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_ENTERING);
 	WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_READY);
 
+	if (user_oslat) {
+		ret = cpu_accel_user_image_prepare(dev);
+		if (ret)
+			goto user_start_fail;
+		cpu_accel_observation_begin(&dev->user_observation);
+		dev->shared->start_ns = dev->user_observation.lifecycle_entry_ns;
+		dev->shared->lifecycle_entry_ns =
+			dev->user_observation.lifecycle_entry_ns;
+		dev->user_image.active = true;
+		atomic_set(&dev->running, 1);
+		dev->lifecycle_ret = 0;
+		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_ACCELERATOR);
+		WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_RUNNING);
+		local_irq_disable();
+		ret = cpu_accel_arch_user_enter(dev);
+		local_irq_enable();
+		if (!ret && dev->config.flags & CPU_ACCEL_FLAG_PERSISTENT) {
+			unsigned long watchdog_jiffies;
+
+			watchdog_jiffies = max_t(unsigned long, 1,
+						 nsecs_to_jiffies(dev->config.duration_ns));
+			mod_timer(&dev->watchdog_timer,
+				  jiffies + watchdog_jiffies);
+		}
+		if (!ret)
+			return 0;
+		dev->user_image.active = false;
+		cpu_accel_user_image_release(dev);
+
+user_start_fail:
+		if (dev->irq_quarantine) {
+			int irq_ret;
+
+			irq_ret = cpu_accel_restore_irq_quarantine(dev);
+			if (irq_ret)
+				pr_err("cpu_accel: user image cleanup failed for CPU %u: %d\n",
+				       dev->config.cpu, irq_ret);
+		}
+		if (!dev->irq_quarantine)
+			cpu_accel_release_workqueue(dev);
+		atomic_set(&dev->running, 0);
+		atomic_set(&dev->enter_requested, 0);
+		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_RECOVERY);
+		WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_ERROR);
+		return ret;
+	}
+
 	ret = cpu_accel_create_lifecycle_thread(dev);
 	if (ret) {
 		if (dev->irq_quarantine) {
@@ -1047,7 +1407,7 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 		}
 		if (READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_RUNNING ||
 		    READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_READY ||
-		    dev->lifecycle_thread) {
+		    dev->lifecycle_thread || dev->user_image.active) {
 			ret = -EBUSY;
 			break;
 		}
@@ -1059,7 +1419,7 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 				     CPU_ACCEL_FLAG_REQUIRE_QUIESCENT |
 				     CPU_ACCEL_FLAG_IRQ_QUARANTINE) ||
 		    config.reserved || config.reserved2 ||
-		    config.workload > CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE ||
+			config.workload > CPU_ACCEL_WORKLOAD_USER_OSLAT ||
 		    config.work_bytes > CPU_ACCEL_MAX_WORK_BYTES ||
 		    (config.workload != CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE &&
 		     config.shared_entry) ||
@@ -1067,10 +1427,19 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 		     config.work_bytes) ||
 		    (config.workload == CPU_ACCEL_WORKLOAD_MEMMOVE &&
 		     config.work_bytes < 64) ||
-		    (config.workload == CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE &&
-		     (config.shared_entry >= CPU_ACCEL_SHARED_ENTRY_COUNT ||
-		      config.work_bytes < 64 ||
-		      config.work_bytes > CPU_ACCEL_SHARED_ENTRY_BYTES / 2)) ||
+			(config.workload == CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE &&
+			 (config.shared_entry >= CPU_ACCEL_SHARED_ENTRY_COUNT ||
+			  config.work_bytes < 64 ||
+			  config.work_bytes > CPU_ACCEL_SHARED_ENTRY_BYTES / 2)) ||
+			(config.workload == CPU_ACCEL_WORKLOAD_USER_OSLAT &&
+			 (config.shared_entry || config.work_bytes ||
+			  config.user_entry_ip == 0 || config.user_stack_top == 0 ||
+			  config.user_stack_bytes == 0 || config.user_image_start == 0 ||
+			  config.user_image_bytes == 0 || config.user_arg == 0)) ||
+			(config.workload != CPU_ACCEL_WORKLOAD_USER_OSLAT &&
+			 (config.user_entry_ip || config.user_stack_top ||
+			  config.user_stack_bytes || config.user_image_start ||
+			  config.user_image_bytes || config.user_arg)) ||
 		    !config.period_ns || !config.duration_ns ||
 		    config.duration_ns > CPU_ACCEL_MAX_DURATION_NS ||
 		    config.cpu >= nr_cpu_ids || config.cpu == 0) {
@@ -1095,6 +1464,8 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 		dev->shared->cpu = config.cpu;
 		dev->shared->flags = config.flags;
 		dev->shared->workload = config.workload;
+		dev->shared->backend =
+			cpu_accel_backend_id_for_workload(config.workload);
 		dev->shared->shared_entry = config.shared_entry;
 		dev->shared->shared_owner = dev->work_region.owner;
 		dev->shared->shared_epoch = dev->work_region.epoch;
@@ -1127,6 +1498,10 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 		ret = cpu_accel_lifecycle_exit(dev);
 		break;
 
+	case CPU_ACCEL_IOC_USER_EXIT:
+		ret = cpu_accel_user_exit_locked(dev);
+		break;
+
 	case CPU_ACCEL_IOC_SHARED_READY:
 		if (copy_from_user(&handoff, (void __user *)argument,
 				   sizeof(handoff))) {
@@ -1148,7 +1523,7 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 	case CPU_ACCEL_IOC_RESET:
 		if (READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_RUNNING ||
 		    READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_READY ||
-		    dev->lifecycle_thread) {
+		    dev->lifecycle_thread || dev->user_image.active) {
 			ret = -EBUSY;
 			break;
 		}

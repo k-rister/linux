@@ -2,7 +2,7 @@
 
 CC ?= gcc
 CFLAGS ?= -O2 -g
-CFLAGS += -Wall -Wextra -std=c11
+CFLAGS += -Wall -Wextra -std=c11 -fno-stack-protector
 CPPFLAGS += -D_GNU_SOURCE -Wno-cpp -I../../include/uapi -I../../usr/include
 
 all: cpu-accelctl

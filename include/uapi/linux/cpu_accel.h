@@ -6,7 +6,7 @@
 #include <linux/types.h>
 
 /* The prototype uses separate fixed-size control and shared-data mappings. */
-#define CPU_ACCEL_ABI_VERSION		7
+#define CPU_ACCEL_ABI_VERSION		8
 #define CPU_ACCEL_MAP_SIZE		(64U * 1024U)
 #define CPU_ACCEL_SHARED_MAP_SIZE	(64U * 1024U)
 #define CPU_ACCEL_SHARED_MAP_OFFSET	CPU_ACCEL_MAP_SIZE
@@ -49,12 +49,14 @@ enum cpu_accel_mode {
 enum cpu_accel_backend {
 	CPU_ACCEL_BACKEND_GENERIC_SMP = 0,
 	CPU_ACCEL_BACKEND_X86_STAGED_IPI,
+	CPU_ACCEL_BACKEND_X86_RING3,
 };
 
 enum cpu_accel_workload {
 	CPU_ACCEL_WORKLOAD_TIMESTAMP = 0,
 	CPU_ACCEL_WORKLOAD_MEMMOVE,
 	CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE,
+	CPU_ACCEL_WORKLOAD_USER_OSLAT,
 };
 
 enum cpu_accel_shared_owner {
@@ -75,6 +77,13 @@ struct cpu_accel_config {
 	__u64 work_bytes;
 	__u64 duration_ns;
 	__u64 period_ns;
+	/* USER_OSLAT image metadata; zero for kernel-backed workloads. */
+	__u64 user_entry_ip;
+	__u64 user_stack_top;
+	__u64 user_stack_bytes;
+	__u64 user_image_start;
+	__u64 user_image_bytes;
+	__u64 user_arg;
 };
 
 struct cpu_accel_sample {
@@ -173,5 +182,6 @@ struct cpu_accel_shared_handoff {
 					struct cpu_accel_shared_handoff)
 #define CPU_ACCEL_IOC_SHARED_RECLAIM	_IOW(CPU_ACCEL_IOC_MAGIC, 0x06, \
 					__u32)
+#define CPU_ACCEL_IOC_USER_EXIT	_IO(CPU_ACCEL_IOC_MAGIC, 0x07)
 
 #endif /* _UAPI_LINUX_CPU_ACCEL_H */

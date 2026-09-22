@@ -64,7 +64,26 @@ isolation while avoiding page faults and system calls in the accelerator
 interval.  The buffers are kernel-owned; this workload does not yet provide a
 protected user address space or a user-supplied accelerator binary.
 
-ABI version 7 adds a fixed-size shared-region mapping at
+ABI version 8 adds the x86-only ``user-oslat`` workload.  The companion forks
+a worker so the accelerator task has a distinct ``mm_struct``, pins that task
+to the target CPU, and supplies page-aligned executable-image and private-stack
+ranges.  The kernel validates the VMAs, prefaults and pins their pages, holds
+the worker address space's write-side mapping lock for the active epoch, and
+returns the worker to ring 3 with the saved user register frame and IF clear.
+The image polls the existing control mapping, records TSC-derived samples, and
+uses ``CPU_ACCEL_IOC_USER_EXIT`` as its only terminal system call.  The kernel
+restores the original ``START`` return frame, releases the address-space
+admission lock, and then restores Linux-owned IRQ/workqueue state.
+
+This is a cooperative ring-3 proof, not a general user-program ABI.  The
+image must not fault, make ordinary system calls, return normally, create
+threads, or modify its address space while active.  A non-cooperating image
+can still strand the CPU; an architecture-specific escape/recovery mechanism
+is a later phase.  The image and stack are pinned only for the active epoch,
+and the current prototype still does not provide an IOMMU domain or a formal
+hard-latency bound.
+
+ABI version 8 retains the fixed-size shared-region mapping at
 ``CPU_ACCEL_SHARED_MAP_OFFSET``.  It contains two bounded entries, each with
 an owner, epoch, length, and data area.  The ``shared-memmove`` workload uses
 one selected entry and copies between its two halves.  The companion
@@ -124,6 +143,8 @@ The companion SDK in ``tools/cpu_accel`` wraps the device and
   sudo tools/cpu_accel/cpu-accelctl run --cpu 1 --duration-ms 100 \
     --period-us 1000 --workload shared-memmove --work-bytes 4096
   sudo tools/cpu_accel/cpu-accelctl run --cpu 1 --duration-ms 100 \
+    --period-us 1000 --workload user-oslat
+  sudo tools/cpu_accel/cpu-accelctl run --cpu 1 --duration-ms 100 \
     --period-us 1000 --quarantine-irqs
 
 The tool prints the shared result, including the maximum observed lateness,
@@ -153,7 +174,9 @@ not suppress Linux-generated IPIs while the target is running.  The next
 phase should validate the bounded memmove workload under loaded conditions.
 The proposed protected address-space and shared-memory contract is documented
 in :doc:`cpu-accel-memory`; the internal region/epoch model and the first
-prefaulted shared entry are now in place.  The next implementation step is a
-protected ring-3 image in a dedicated address space before adding direct APIC
-ownership or IOMMU-backed networking.  A stronger latency claim must wait for
-those controls and for a defined recovery contract.
+prefaulted shared entry are now in place.  The x86 cooperative ring-3 image is
+the first protected-address-space proof.  The next implementation steps are
+to measure its entry/exit and active-mm behavior, define an escape/recovery
+contract, and only then add direct APIC ownership or IOMMU-backed networking.
+A stronger latency claim must wait for those controls and for a defined
+recovery contract.

@@ -131,7 +131,7 @@ required for correctness. A region may have one producer and one consumer
 initially. Multi-producer or multi-consumer ownership should be added only
 after the ordering and cache-coherency costs are measured.
 
-The current ABI 7 proof uses a fixed 64 KiB shared-data mapping containing two
+The current ABI 8 proof uses a fixed 64 KiB shared-data mapping containing two
 8 KiB entries. The kernel validates the selected entry and length, prefaults
 the backing allocation at module initialization, and exposes only bounded
 entry data through the mapping. ``CPU_ACCEL_IOC_SHARED_READY`` transfers a
@@ -222,8 +222,10 @@ The implementation checkpoints are:
    with explicit ownership transitions. Verify that concurrent misuse is
    rejected and that the accelerator never accesses the region outside its
    active epoch.
-3. Add a protected, prevalidated ring-3 oslat-like image in a dedicated
-   address space. Measure entry/exit and active-interval TLB behavior.
+3. [in progress] Add the x86 cooperative, prevalidated ring-3 oslat-like
+   image in a forked task's dedicated address space. Measure entry/exit and
+   active-interval TLB behavior; this first slice now pins the image and stack
+   and holds the active ``mmap_lock`` write side.
 4. Add architecture-specific escape/recovery handling and document which
    failures remain unrecoverable without reboot.
 5. Add IOMMU-backed ``DMA`` regions and a userspace/NIC integration only after

@@ -180,6 +180,8 @@ static void print_status(const volatile struct cpu_accel_shared *shared)
 	       " period_ns=%" PRIu64 " workload=%u work_bytes=%" PRIu64
 	       " work_iterations=%" PRIu64 " shared_entry=%u shared_owner=%u shared_epoch=%" PRIu64
 	       " lifecycle_entry_ns=%" PRIu64 " lifecycle_exit_ns=%" PRIu64
+	       " user_active_start_ns=%" PRIu64
+	       " user_active_end_ns=%" PRIu64
 	       " irq_count=%" PRIu64
 	       " irq_quarantined=%u irq_quarantine_blockers=%u"
 	       " softirq_count=%" PRIu64 " timer_softirq_count=%" PRIu64
@@ -207,6 +209,8 @@ static void print_status(const volatile struct cpu_accel_shared *shared)
 	       (uint64_t)shared->shared_epoch,
 	       (uint64_t)shared->lifecycle_entry_ns,
 	       (uint64_t)shared->lifecycle_exit_ns,
+	       (uint64_t)shared->user_active_start_ns,
+	       (uint64_t)shared->user_active_end_ns,
 	       (uint64_t)shared->irq_count,
 	       shared->irq_quarantined, shared->irq_quarantine_blockers,
 	       (uint64_t)shared->softirq_count,

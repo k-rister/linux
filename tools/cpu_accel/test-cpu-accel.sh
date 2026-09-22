@@ -158,6 +158,10 @@ x86_64)
 		fail "user-oslat workload was not selected"
 	echo "$user_output" | grep -q 'samples=[1-9][0-9]*' || \
 		fail "user-oslat workload did not produce samples"
+	echo "$user_output" | grep -q 'user_active_start_ns=[1-9][0-9]*' || \
+		fail "user-oslat active start timestamp was not recorded"
+	echo "$user_output" | grep -q 'user_active_end_ns=[1-9][0-9]*' || \
+		fail "user-oslat active end timestamp was not recorded"
 	echo "$user_output" | grep -q 'context_switches=0' || \
 		fail "user-oslat workload performed a context switch"
 	echo "$user_output" | grep -q 'migration_detected=0' || \

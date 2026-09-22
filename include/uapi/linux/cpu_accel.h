@@ -6,7 +6,7 @@
 #include <linux/types.h>
 
 /* The prototype uses separate fixed-size control and shared-data mappings. */
-#define CPU_ACCEL_ABI_VERSION		8
+#define CPU_ACCEL_ABI_VERSION		9
 #define CPU_ACCEL_MAP_SIZE		(64U * 1024U)
 #define CPU_ACCEL_SHARED_MAP_SIZE	(64U * 1024U)
 #define CPU_ACCEL_SHARED_MAP_OFFSET	CPU_ACCEL_MAP_SIZE
@@ -120,6 +120,9 @@ struct cpu_accel_shared {
 	__u64 last_lateness_ns;
 	__u64 lifecycle_entry_ns;
 	__u64 lifecycle_exit_ns;
+	/* USER_OSLAT interval: ring-3 entry through terminal USER_EXIT. */
+	__u64 user_active_start_ns;
+	__u64 user_active_end_ns;
 	__u64 irq_count;
 	__u32 irq_quarantined;
 	__u32 irq_quarantine_blockers;

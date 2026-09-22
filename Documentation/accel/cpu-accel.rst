@@ -64,7 +64,7 @@ isolation while avoiding page faults and system calls in the accelerator
 interval.  The buffers are kernel-owned; this workload does not yet provide a
 protected user address space or a user-supplied accelerator binary.
 
-ABI version 8 adds the x86-only ``user-oslat`` workload.  The companion forks
+ABI version 9 adds the x86-only ``user-oslat`` workload.  The companion forks
 a worker so the accelerator task has a distinct ``mm_struct``, pins that task
 to the target CPU, and supplies page-aligned executable-image and private-stack
 ranges.  The kernel validates the VMAs, prefaults and pins their pages, holds
@@ -74,6 +74,13 @@ The image polls the existing control mapping, records TSC-derived samples, and
 uses ``CPU_ACCEL_IOC_USER_EXIT`` as its only terminal system call.  The kernel
 restores the original ``START`` return frame, releases the address-space
 admission lock, and then restores Linux-owned IRQ/workqueue state.
+
+The shared result now reports ``user_active_start_ns`` and
+``user_active_end_ns``.  These bound the interval beginning at ring-3 image
+entry and ending at entry to the terminal ``USER_EXIT`` syscall.  The generic
+``lifecycle_entry_ns``/``lifecycle_exit_ns`` counters include kernel handoff
+and post-exit cleanup, so they must not be used as a direct measurement of the
+protected user interval.
 
 This is a cooperative ring-3 proof, not a general user-program ABI.  The
 image must not fault, make ordinary system calls, return normally, create

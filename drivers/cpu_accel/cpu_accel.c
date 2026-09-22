@@ -810,6 +810,8 @@ static int cpu_accel_arch_user_enter(struct cpu_accel_device *dev)
 	struct cpu_accel_user_image *image = &dev->user_image;
 	struct pt_regs *regs = current_pt_regs();
 
+	WRITE_ONCE(dev->shared->user_active_start_ns,
+		   ktime_get_mono_fast_ns());
 	image->return_regs = *regs;
 	regs->ip = image->entry_ip;
 	regs->sp = image->stack_top;
@@ -866,6 +868,8 @@ static int cpu_accel_user_exit_locked(struct cpu_accel_device *dev)
 	    dev->user_image.mm != current->mm)
 		return -EPERM;
 
+	WRITE_ONCE(dev->shared->user_active_end_ns,
+		   ktime_get_mono_fast_ns());
 	WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_EXITING);
 	dev->shared->end_ns = ktime_get_mono_fast_ns();
 	dev->shared->stop_requested = 0;
@@ -1277,6 +1281,8 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 	dev->shared->last_lateness_ns = 0;
 	dev->shared->lifecycle_entry_ns = 0;
 	dev->shared->lifecycle_exit_ns = 0;
+	dev->shared->user_active_start_ns = 0;
+	dev->shared->user_active_end_ns = 0;
 	dev->shared->irq_count = 0;
 	dev->shared->irq_quarantined = irq_quarantined;
 	dev->shared->irq_quarantine_blockers = irq_quarantine_blockers;

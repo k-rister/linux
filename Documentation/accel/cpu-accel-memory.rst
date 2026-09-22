@@ -14,6 +14,13 @@ control/telemetry mapping. In particular, the current ``memmove`` workload
 does not execute user code and does not provide a protected accelerator
 address space.
 
+The kernel prototype now tracks an internal owner and generation epoch for
+the kernel-owned workload region. Normal completion returns the region to
+Linux ownership; stop, watchdog, and execution errors quarantine it until
+the lifecycle exit/recovery path has completed. This is lifecycle
+bookkeeping, not yet protection against an untrusted accelerator or a device
+DMA engine.
+
 The model is intended to support a non-networked protected workload first and
 then a NIC-backed dataplane. It must preserve the single-OS model: Linux,
 the companion process, and one or more accelerator CPUs remain in the same
@@ -195,11 +202,11 @@ and recovery behavior are specified for the target architecture.
 Implementation sequence
 =======================
 
-The next implementation checkpoints are:
+The implementation checkpoints are:
 
-1. Add an internal region/epoch model without exposing physical addresses or
-   allowing user code to run. Exercise it with the existing kernel-owned
-   memmove workload.
+1. [completed] Add an internal region/epoch model without exposing physical
+   addresses or allowing user code to run. Exercise it with the existing
+   kernel-owned memmove workload.
 2. Add a prefaulted ``SHARED`` region and a companion SDK ring with explicit
    ownership transitions. Verify that concurrent misuse is rejected and that
    the accelerator never accesses the region outside its active epoch.

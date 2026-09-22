@@ -137,7 +137,8 @@ the synchronous SMP dispatch still uses the normal IPI entry path and does
 not suppress Linux-generated IPIs while the target is running.  The next
 phase should validate the bounded memmove workload under loaded conditions.
 The proposed protected address-space and shared-memory contract is documented
-in :doc:`cpu-accel-memory`; implementation should begin with an internal
-region/epoch model and a prefaulted shared region before adding a ring-3
-image, direct APIC ownership, or IOMMU-backed networking.  A stronger latency
-claim must wait for those controls and for a defined recovery contract.
+in :doc:`cpu-accel-memory`; the internal region/epoch model is now in place.
+The next implementation step is a prefaulted shared region and companion SDK
+ring before adding a ring-3 image, direct APIC ownership, or IOMMU-backed
+networking.  A stronger latency claim must wait for those controls and for a
+defined recovery contract.

@@ -810,8 +810,13 @@ static int cpu_accel_arch_user_enter(struct cpu_accel_device *dev)
 	struct cpu_accel_user_image *image = &dev->user_image;
 	struct pt_regs *regs = current_pt_regs();
 
+	cpu_accel_observation_begin(&dev->user_observation);
+	WRITE_ONCE(dev->shared->start_ns,
+		   dev->user_observation.lifecycle_entry_ns);
+	WRITE_ONCE(dev->shared->lifecycle_entry_ns,
+		   dev->user_observation.lifecycle_entry_ns);
 	WRITE_ONCE(dev->shared->user_active_start_ns,
-		   ktime_get_mono_fast_ns());
+		   dev->user_observation.lifecycle_entry_ns);
 	image->return_regs = *regs;
 	regs->ip = image->entry_ip;
 	regs->sp = image->stack_top;
@@ -873,6 +878,8 @@ static int cpu_accel_user_exit_locked(struct cpu_accel_device *dev)
 	WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_EXITING);
 	dev->shared->end_ns = ktime_get_mono_fast_ns();
 	dev->shared->stop_requested = 0;
+	/* Exclude terminal syscall cleanup from workqueue accounting. */
+	atomic_set(&dev->running, 0);
 	cpu_accel_observation_finish(dev, &dev->user_observation);
 	dev->shared->end_ns = dev->shared->lifecycle_exit_ns;
 	dev->shared->samples_produced = dev->shared->samples_valid;
@@ -880,7 +887,6 @@ static int cpu_accel_user_exit_locked(struct cpu_accel_device *dev)
 	dev->shared->min_lateness_ns = dev->shared->samples_produced ?
 		dev->shared->min_lateness_ns : 0;
 	dev->user_image.active = false;
-	atomic_set(&dev->running, 0);
 	atomic_set(&dev->enter_requested, 0);
 	atomic_set(&dev->stop_requested, 0);
 	atomic_set(&dev->watchdog_fired, 0);
@@ -1322,10 +1328,6 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 		ret = cpu_accel_user_image_prepare(dev);
 		if (ret)
 			goto user_start_fail;
-		cpu_accel_observation_begin(&dev->user_observation);
-		dev->shared->start_ns = dev->user_observation.lifecycle_entry_ns;
-		dev->shared->lifecycle_entry_ns =
-			dev->user_observation.lifecycle_entry_ns;
 		dev->user_image.active = true;
 		atomic_set(&dev->running, 1);
 		dev->lifecycle_ret = 0;

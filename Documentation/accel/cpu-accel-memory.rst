@@ -228,15 +228,17 @@ The implementation checkpoints are:
 1. [completed] Add an internal region/epoch model without exposing physical
    addresses or allowing user code to run. Exercise it with the existing
    kernel-owned memmove workload.
-2. [in progress] Add a prefaulted ``SHARED`` region and a companion SDK ring
+2. [completed] Add a prefaulted ``SHARED`` region and a companion SDK ring
    with explicit ownership transitions. Verify that concurrent misuse is
    rejected and that the accelerator never accesses the region outside its
    active epoch.
-3. [in progress] Add the x86 cooperative, prevalidated ring-3 oslat-like
+3. [completed] Add the x86 cooperative, prevalidated ring-3 oslat-like
    image in a forked task's dedicated address space. Measure entry/exit and
    active-interval TLB behavior; this first slice now pins the image and stack
    and holds the active ``mmap_lock`` write side.
-4. Add architecture-specific escape/recovery handling and document which
-   failures remain unrecoverable without reboot.
+4. [completed for x86 prototype] Add architecture-specific escape/recovery
+   handling and document which failures remain unrecoverable without reboot.
+   The ABI 10 NMI escape path is a bounded recovery experiment for the
+   prevalidated ring-3 image; it is not a hard guarantee.
 5. Add IOMMU-backed ``DMA`` regions and a userspace/NIC integration only after
    the non-networked memory contract is stable.

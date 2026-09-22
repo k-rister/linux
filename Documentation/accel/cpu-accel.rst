@@ -190,14 +190,15 @@ not a hard guarantee.  A malfunctioning kernel implementation is not assumed
 to be recoverable without reverting to the known-good kernel.  This lifecycle
 is the first step toward that model, but the synchronous SMP dispatch still
 uses the normal IPI entry path and does not suppress Linux-generated IPIs
-while the target is running.  The next phase should validate the bounded
-memmove workload under loaded conditions and then measure successful and
-failed ring-3 escape cases.
+while the target is running.  The next phase should add fault-injection
+coverage for escape failure modes and then measure the architecture-neutral
+recovery result contract.
 The proposed protected address-space and shared-memory contract is documented
 in :doc:`cpu-accel-memory`; the internal region/epoch model and the first
 prefaulted shared entry are now in place.  The x86 cooperative ring-3 image is
-the first protected-address-space proof.  The next implementation steps are
-to measure its entry/exit and active-mm behavior, define an escape/recovery
-contract, and only then add direct APIC ownership or IOMMU-backed networking.
+the first protected-address-space proof, and the ABI 10 NMI escape is the
+first x86 recovery experiment.  The next implementation steps are to define
+an architecture-neutral escape/recovery contract and only then add direct
+APIC ownership or IOMMU-backed networking.
 A stronger latency claim must wait for those controls and for a defined
 recovery contract.

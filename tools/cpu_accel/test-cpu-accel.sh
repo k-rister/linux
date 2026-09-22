@@ -172,6 +172,26 @@ x86_64)
 			fail "user-oslat workload migrated CPUs"
 		user_run=$((user_run + 1))
 	done
+	escape_output=$($tool run --cpu "$target_cpu" --duration-ms 5000 \
+		--period-us 1000 --workload user-oslat --escape-after-ms 20 \
+		$quiescent_arg $quarantine_arg)
+	echo "$escape_output"
+	case "$escape_output" in
+		state=3\ *) ;;
+		*) fail "user-oslat escape run did not complete" ;;
+	esac
+	echo "$escape_output" | grep -q 'mode=0' || \
+		fail "user-oslat escape did not return to Linux mode"
+	echo "$escape_output" | grep -q 'backend=2' || \
+		fail "user-oslat escape selected the wrong backend"
+	echo "$escape_output" | grep -q 'user_escape_count=1' || \
+		fail "user-oslat escape was not observed exactly once"
+	echo "$escape_output" | grep -q 'user_active_ns=[1-9][0-9]*' || \
+		fail "user-oslat escape did not report an active interval"
+	echo "$escape_output" | grep -q 'context_switches=0' || \
+		fail "user-oslat escape performed a context switch"
+	echo "$escape_output" | grep -q 'migration_detected=0' || \
+		fail "user-oslat escape migrated CPUs"
 	;;
 esac
 

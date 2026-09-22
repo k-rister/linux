@@ -42,7 +42,7 @@ small ioctl interface:
 
 The control mapping contains the state, explicit Linux/accelerator transition
 mode, selected workload, run timestamps, aggregate lateness, and up to
-``CPU_ACCEL_MAX_SAMPLES`` timestamp samples.  ABI version 9 also
+``CPU_ACCEL_MAX_SAMPLES`` timestamp samples.  ABI version 10 also
 reports lifecycle entry/exit timestamps, interrupt and softirq deltas,
 timer, hrtimer, RCU, and scheduler softirq deltas, current-task
 context-switch deltas, CPU-entry/exit identity, migration detection, pending
@@ -64,7 +64,7 @@ isolation while avoiding page faults and system calls in the accelerator
 interval.  The buffers are kernel-owned; this workload does not yet provide a
 protected user address space or a user-supplied accelerator binary.
 
-ABI version 9 adds the x86-only ``user-oslat`` workload.  The companion forks
+ABI version 10 adds the x86-only ``user-oslat`` workload.  The companion forks
 a worker so the accelerator task has a distinct ``mm_struct``, pins that task
 to the target CPU, and supplies page-aligned executable-image and private-stack
 ranges.  The kernel validates the VMAs, prefaults and pins their pages, holds
@@ -75,22 +75,34 @@ uses ``CPU_ACCEL_IOC_USER_EXIT`` as its only terminal system call.  The kernel
 restores the original ``START`` return frame, releases the address-space
 admission lock, and then restores Linux-owned IRQ/workqueue state.
 
-The shared result now reports ``user_active_start_ns`` and
-``user_active_end_ns``.  These bound the interval beginning at ring-3 image
-entry and ending at entry to the terminal ``USER_EXIT`` syscall.  The generic
+The shared result now reports ``user_active_start_ns``,
+``user_active_end_ns``, and ``user_escape_count``.  On x86, the companion may
+issue ``CPU_ACCEL_IOC_USER_ESCAPE`` while this image is active.  The kernel
+sends a local-APIC NMI to the target CPU; the registered NMI handler redirects
+only a user-mode frame for the active, prevalidated image to its prevalidated
+escape entry and stack.  That entry performs the existing terminal
+``CPU_ACCEL_IOC_USER_EXIT`` syscall.  This is an experimental recovery path
+for the prototype, not a general interrupt-safe user ABI.  The image and
+stack remain pinned and the address-space mapping lock remains held while the
+escape is possible.
+
+These timestamps bound the interval beginning at ring-3 image entry and
+ending at entry to the terminal ``USER_EXIT`` syscall.  The generic
 ``lifecycle_entry_ns``/``lifecycle_exit_ns`` counters include kernel handoff
 and post-exit cleanup, so they must not be used as a direct measurement of the
 protected user interval.
 
 This is a cooperative ring-3 proof, not a general user-program ABI.  The
 image must not fault, make ordinary system calls, return normally, create
-threads, or modify its address space while active.  A non-cooperating image
-can still strand the CPU; an architecture-specific escape/recovery mechanism
-is a later phase.  The image and stack are pinned only for the active epoch,
-and the current prototype still does not provide an IOMMU domain or a formal
-hard-latency bound.
+threads, or modify its address space while active.  The x86 escape path only
+handles a user-mode frame on a live local APIC; it does not recover a CPU
+stuck in kernel mode, an NMI/SMI/machine-check path, a disabled or failed
+local APIC, a host or hypervisor fault, or a corrupted/self-modifying image.
+The image and stack are pinned only for the active epoch, and the current
+prototype still does not provide an IOMMU domain or a formal hard-latency
+bound.
 
-ABI version 9 retains the fixed-size shared-region mapping at
+ABI version 10 retains the fixed-size shared-region mapping at
 ``CPU_ACCEL_SHARED_MAP_OFFSET``.  It contains two bounded entries, each with
 an owner, epoch, length, and data area.  The ``shared-memmove`` workload uses
 one selected entry and copies between its two halves.  The companion
@@ -171,14 +183,16 @@ control-plane work by this prototype and is rejected as a target.
 Lifecycle and next steps
 ========================
 
-The watchdog is capped at five seconds and ``STOP`` is cooperative.  It can
-recover this prototype's timestamp loop, but it cannot rescue arbitrary code
-that fails to observe the shared stop state.  A malfunctioning kernel
-implementation is not assumed to be recoverable without reverting to the
-known-good kernel.  This lifecycle is the first step toward that model, but
-the synchronous SMP dispatch still uses the normal IPI entry path and does
-not suppress Linux-generated IPIs while the target is running.  The next
-phase should validate the bounded memmove workload under loaded conditions.
+The watchdog is capped at five seconds and ``STOP`` is cooperative.
+``CPU_ACCEL_IOC_USER_ESCAPE`` provides a separate x86 recovery experiment for
+the ring-3 workload, but it is bounded by a one-second controller wait and is
+not a hard guarantee.  A malfunctioning kernel implementation is not assumed
+to be recoverable without reverting to the known-good kernel.  This lifecycle
+is the first step toward that model, but the synchronous SMP dispatch still
+uses the normal IPI entry path and does not suppress Linux-generated IPIs
+while the target is running.  The next phase should validate the bounded
+memmove workload under loaded conditions and then measure successful and
+failed ring-3 escape cases.
 The proposed protected address-space and shared-memory contract is documented
 in :doc:`cpu-accel-memory`; the internal region/epoch model and the first
 prefaulted shared entry are now in place.  The x86 cooperative ring-3 image is

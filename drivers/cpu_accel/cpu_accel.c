@@ -8,6 +8,7 @@
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/kernel_stat.h>
+#include <linux/kprobes.h>
 #include <linux/kthread.h>
 #include <linux/kernel.h>
 #include <linux/miscdevice.h>
@@ -30,7 +31,10 @@
 #include <uapi/linux/cpu_accel.h>
 
 #ifdef CONFIG_X86
+#include <asm/apic.h>
 #include <asm/hardirq.h>
+#include <asm/irq_vectors.h>
+#include <asm/nmi.h>
 #include <asm/processor-flags.h>
 #include <asm/ptrace.h>
 #include <asm/segment.h>
@@ -188,6 +192,7 @@ struct cpu_accel_user_image {
 	unsigned long image_start;
 	unsigned long image_bytes;
 	unsigned long arg;
+	unsigned long escape_ip;
 #ifdef CONFIG_X86
 	struct pt_regs return_regs;
 #endif
@@ -210,9 +215,12 @@ struct cpu_accel_device {
 	atomic_t enter_requested;
 	atomic_t stop_requested;
 	atomic_t watchdog_fired;
+	atomic_t user_escape_requested;
+	atomic_t user_escape_seen;
 	atomic_t running;
 	atomic64_t workqueue_queued;
 	atomic64_t workqueue_executed;
+	atomic64_t user_escape_count;
 	struct cpu_accel_region work_region;
 	unsigned int sequence;
 	unsigned int controller_cpu;
@@ -228,6 +236,109 @@ struct cpu_accel_device {
 };
 
 static struct cpu_accel_device cpu_accel;
+
+#ifdef CONFIG_X86
+static int cpu_accel_arch_send_user_escape(unsigned int cpu)
+{
+#ifdef CONFIG_X86_LOCAL_APIC
+	cpumask_t mask;
+
+	cpumask_clear(&mask);
+	cpumask_set_cpu(cpu, &mask);
+	__apic_send_IPI_mask(&mask, NMI_VECTOR);
+	return 0;
+#else
+	(void)cpu;
+	return -EOPNOTSUPP;
+#endif
+}
+
+static int cpu_accel_user_nmi(unsigned int type, struct pt_regs *regs)
+{
+	struct cpu_accel_device *dev = &cpu_accel;
+	struct cpu_accel_user_image *image = &dev->user_image;
+
+	(void)type;
+
+	if (!atomic_read(&dev->user_escape_requested) ||
+	    !READ_ONCE(image->active) ||
+	    raw_smp_processor_id() != READ_ONCE(dev->config.cpu) ||
+	    !user_mode(regs))
+		return NMI_DONE;
+
+	/* The image and stack were admitted and pinned before this NMI. */
+	regs->ip = image->escape_ip;
+	regs->sp = image->stack_top;
+	regs->di = image->arg;
+	regs->flags = (regs->flags & ~X86_EFLAGS_TF) | X86_EFLAGS_FIXED;
+	atomic64_inc(&dev->user_escape_count);
+	atomic_set(&dev->user_escape_seen, 1);
+	WRITE_ONCE(dev->shared->stop_requested, 1);
+	return NMI_HANDLED;
+}
+NOKPROBE_SYMBOL(cpu_accel_user_nmi);
+#endif
+
+static bool cpu_accel_user_terminal(struct cpu_accel_device *dev)
+{
+	u32 state = READ_ONCE(dev->shared->state);
+
+	return state == CPU_ACCEL_STATE_COMPLETE ||
+		state == CPU_ACCEL_STATE_STOPPED ||
+		state == CPU_ACCEL_STATE_ERROR ||
+		state == CPU_ACCEL_STATE_WATCHDOG;
+}
+
+static int cpu_accel_user_escape(struct cpu_accel_device *dev)
+{
+#ifdef CONFIG_X86
+	unsigned long deadline;
+	unsigned int cpu;
+	int ret;
+
+	mutex_lock(&dev->lock);
+	if (!dev->user_image.active ||
+	    dev->config.workload != CPU_ACCEL_WORKLOAD_USER_OSLAT ||
+	    !cpu_online(dev->config.cpu)) {
+		mutex_unlock(&dev->lock);
+		return -EINVAL;
+	}
+	cpu = dev->config.cpu;
+	atomic_set(&dev->user_escape_requested, 1);
+	atomic_set(&dev->user_escape_seen, 0);
+	WRITE_ONCE(dev->shared->stop_requested, 1);
+	mutex_unlock(&dev->lock);
+
+	/* Publish the escape request before raising the target CPU's NMI. */
+	smp_wmb();
+	ret = cpu_accel_arch_send_user_escape(cpu);
+	if (ret) {
+		mutex_lock(&dev->lock);
+		atomic_set(&dev->user_escape_requested, 0);
+		mutex_unlock(&dev->lock);
+		return ret;
+	}
+
+	deadline = jiffies + HZ;
+	while (time_before(jiffies, deadline)) {
+		if (cpu_accel_user_terminal(dev))
+			return atomic_read(&dev->user_escape_seen) ? 0 : -EALREADY;
+		cpu_relax();
+	}
+
+	mutex_lock(&dev->lock);
+	if (cpu_accel_user_terminal(dev))
+		ret = atomic_read(&dev->user_escape_seen) ? 0 : -EALREADY;
+	else
+		ret = -ETIMEDOUT;
+	atomic_set(&dev->user_escape_requested, 0);
+	mutex_unlock(&dev->lock);
+	return ret;
+#else
+	(void)dev;
+	return -EOPNOTSUPP;
+#endif
+}
 
 static int cpu_accel_restore_irq_quarantine(struct cpu_accel_device *dev)
 {
@@ -722,6 +833,9 @@ static int cpu_accel_user_image_prepare(struct cpu_accel_device *dev)
 	if (dev->config.user_entry_ip < dev->config.user_image_start ||
 	    dev->config.user_entry_ip >= dev->config.user_image_start +
 		dev->config.user_image_bytes ||
+	    dev->config.user_escape_ip < dev->config.user_image_start ||
+	    dev->config.user_escape_ip >= dev->config.user_image_start +
+		dev->config.user_image_bytes ||
 	    dev->config.user_arg < stack_start ||
 	    dev->config.user_arg >= dev->config.user_stack_top)
 		return -EINVAL;
@@ -798,6 +912,7 @@ static int cpu_accel_user_image_prepare(struct cpu_accel_device *dev)
 	image->image_start = dev->config.user_image_start;
 	image->image_bytes = dev->config.user_image_bytes;
 	image->arg = dev->config.user_arg;
+	image->escape_ip = dev->config.user_escape_ip;
 	return 0;
 
 fail:
@@ -884,12 +999,15 @@ static int cpu_accel_user_exit_locked(struct cpu_accel_device *dev)
 	dev->shared->end_ns = dev->shared->lifecycle_exit_ns;
 	dev->shared->samples_produced = dev->shared->samples_valid;
 	dev->shared->work_iterations = dev->shared->samples_produced;
+	dev->shared->user_escape_count =
+		atomic64_read(&dev->user_escape_count);
 	dev->shared->min_lateness_ns = dev->shared->samples_produced ?
 		dev->shared->min_lateness_ns : 0;
 	dev->user_image.active = false;
 	atomic_set(&dev->enter_requested, 0);
 	atomic_set(&dev->stop_requested, 0);
 	atomic_set(&dev->watchdog_fired, 0);
+	atomic_set(&dev->user_escape_requested, 0);
 
 	/* The user interval is over before Linux-owned cleanup resumes. */
 	cpu_accel_user_image_release(dev);
@@ -1289,6 +1407,7 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 	dev->shared->lifecycle_exit_ns = 0;
 	dev->shared->user_active_start_ns = 0;
 	dev->shared->user_active_end_ns = 0;
+	dev->shared->user_escape_count = 0;
 	dev->shared->irq_count = 0;
 	dev->shared->irq_quarantined = irq_quarantined;
 	dev->shared->irq_quarantine_blockers = irq_quarantine_blockers;
@@ -1316,6 +1435,9 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 	dev->shared->migration_detected = 0;
 	atomic64_set(&dev->workqueue_queued, 0);
 	atomic64_set(&dev->workqueue_executed, 0);
+	atomic64_set(&dev->user_escape_count, 0);
+	atomic_set(&dev->user_escape_requested, 0);
+	atomic_set(&dev->user_escape_seen, 0);
 	reinit_completion(&dev->lifecycle_done);
 	dev->lifecycle_ret = -EINPROGRESS;
 	atomic_set(&dev->stop_requested, 0);
@@ -1404,6 +1526,8 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 
 	if (_IOC_TYPE(command) != CPU_ACCEL_IOC_MAGIC)
 		return -ENOTTY;
+	if (command == CPU_ACCEL_IOC_USER_ESCAPE)
+		return cpu_accel_user_escape(dev);
 
 	mutex_lock(&dev->lock);
 	switch (command) {
@@ -1443,11 +1567,13 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 			 (config.shared_entry || config.work_bytes ||
 			  config.user_entry_ip == 0 || config.user_stack_top == 0 ||
 			  config.user_stack_bytes == 0 || config.user_image_start == 0 ||
-			  config.user_image_bytes == 0 || config.user_arg == 0)) ||
+			  config.user_image_bytes == 0 || config.user_arg == 0 ||
+			  config.user_escape_ip == 0)) ||
 			(config.workload != CPU_ACCEL_WORKLOAD_USER_OSLAT &&
 			 (config.user_entry_ip || config.user_stack_top ||
 			  config.user_stack_bytes || config.user_image_start ||
-			  config.user_image_bytes || config.user_arg)) ||
+			  config.user_image_bytes || config.user_arg ||
+			  config.user_escape_ip)) ||
 		    !config.period_ns || !config.duration_ns ||
 		    config.duration_ns > CPU_ACCEL_MAX_DURATION_NS ||
 		    config.cpu >= nr_cpu_ids || config.cpu == 0) {
@@ -1573,9 +1699,12 @@ static int __init cpu_accel_init(void)
 	atomic_set(&cpu_accel.enter_requested, 0);
 	atomic_set(&cpu_accel.stop_requested, 0);
 	atomic_set(&cpu_accel.watchdog_fired, 0);
+	atomic_set(&cpu_accel.user_escape_requested, 0);
+	atomic_set(&cpu_accel.user_escape_seen, 0);
 	atomic_set(&cpu_accel.running, 0);
 	atomic64_set(&cpu_accel.workqueue_queued, 0);
 	atomic64_set(&cpu_accel.workqueue_executed, 0);
+	atomic64_set(&cpu_accel.user_escape_count, 0);
 	timer_setup(&cpu_accel.watchdog_timer, cpu_accel_watchdog, 0);
 	cpu_accel.shared = vmalloc_user(CPU_ACCEL_MAP_SIZE);
 	if (!cpu_accel.shared)
@@ -1592,8 +1721,20 @@ static int __init cpu_accel_init(void)
 	cpu_accel.shared_region->entry_count = CPU_ACCEL_SHARED_ENTRY_COUNT;
 	cpu_accel.shared_region->entry_size = sizeof(struct cpu_accel_shared_entry);
 	cpu_accel_reset_shared(&cpu_accel);
+#ifdef CONFIG_X86_LOCAL_APIC
+	ret = register_nmi_handler(NMI_LOCAL, cpu_accel_user_nmi,
+				   NMI_FLAG_FIRST, "cpu_accel");
+	if (ret) {
+		vfree(cpu_accel.shared_region);
+		vfree(cpu_accel.shared);
+		return ret;
+	}
+#endif
 	ret = cpu_accel_register_workqueue_tracepoints();
 	if (ret) {
+#ifdef CONFIG_X86_LOCAL_APIC
+		unregister_nmi_handler(NMI_LOCAL, "cpu_accel");
+#endif
 		vfree(cpu_accel.shared_region);
 		vfree(cpu_accel.shared);
 		return ret;
@@ -1606,6 +1747,9 @@ static int __init cpu_accel_init(void)
 	ret = misc_register(&cpu_accel.misc);
 	if (ret) {
 		cpu_accel_unregister_workqueue_tracepoints();
+#ifdef CONFIG_X86_LOCAL_APIC
+		unregister_nmi_handler(NMI_LOCAL, "cpu_accel");
+#endif
 		vfree(cpu_accel.shared_region);
 		vfree(cpu_accel.shared);
 		return ret;
@@ -1633,6 +1777,9 @@ static void __exit cpu_accel_exit(void)
 	mutex_unlock(&cpu_accel.lock);
 
 	misc_deregister(&cpu_accel.misc);
+#ifdef CONFIG_X86_LOCAL_APIC
+	unregister_nmi_handler(NMI_LOCAL, "cpu_accel");
+#endif
 	cpu_accel_unregister_workqueue_tracepoints();
 	vfree(cpu_accel.shared_region);
 	cpu_accel.shared_region = NULL;

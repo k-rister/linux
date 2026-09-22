@@ -56,6 +56,21 @@ static long cpu_accel_user_exit_syscall(int fd)
 #define CPU_ACCEL_USER_IMAGE __attribute__((aligned(4096)))
 
 CPU_ACCEL_USER_IMAGE
+static void cpu_accel_user_escape_image(void *argument)
+{
+	struct cpu_accel_user_context *context = argument;
+	long ret;
+
+	__asm__ volatile("syscall"
+		     : "=a"(ret)
+		     : "a"(SYS_ioctl), "D"(context->fd),
+		       "S"((unsigned long)CPU_ACCEL_IOC_USER_EXIT), "d"(0UL)
+		     : "rcx", "r11", "memory");
+	(void)ret;
+	__builtin_unreachable();
+}
+
+CPU_ACCEL_USER_IMAGE
 static void cpu_accel_user_oslat(void *argument)
 {
 	struct cpu_accel_user_context *context = argument;
@@ -186,6 +201,7 @@ static void print_status(const volatile struct cpu_accel_shared *shared)
 	       " lifecycle_entry_ns=%" PRIu64 " lifecycle_exit_ns=%" PRIu64
 	       " user_active_start_ns=%" PRIu64
 	       " user_active_end_ns=%" PRIu64 " user_active_ns=%" PRIu64
+	       " user_escape_count=%" PRIu64
 	       " irq_count=%" PRIu64
 	       " irq_quarantined=%u irq_quarantine_blockers=%u"
 	       " softirq_count=%" PRIu64 " timer_softirq_count=%" PRIu64
@@ -216,6 +232,7 @@ static void print_status(const volatile struct cpu_accel_shared *shared)
 	       (uint64_t)shared->user_active_start_ns,
 	       (uint64_t)shared->user_active_end_ns,
 	       user_active_ns,
+	       (uint64_t)shared->user_escape_count,
 	       (uint64_t)shared->irq_count,
 	       shared->irq_quarantined, shared->irq_quarantine_blockers,
 	       (uint64_t)shared->softirq_count,
@@ -245,6 +262,7 @@ static void usage(FILE *stream, const char *program)
 		"  %s run [--cpu N] [--duration-ms N] [--period-us N]\n"
 		"      [--workload timestamp|memmove|shared-memmove|user-oslat]\n"
 		"      [--work-bytes N] [--shared-entry N]\n"
+		"      [--escape-after-ms N]\n"
 		"      [--persistent] [--require-quiescent] [--quarantine-irqs]\n"
 		"  %s exit\n"
 		"  %s status\n"
@@ -270,7 +288,8 @@ static int pin_cpu(unsigned int cpu)
 	return sched_setaffinity(0, sizeof(set), &set);
 }
 
-static int run_user_oslat(const struct cpu_accel_config *requested)
+static int run_user_oslat(const struct cpu_accel_config *requested,
+			  uint64_t escape_after_ms)
 {
 	struct cpu_accel_config config = *requested;
 	struct cpu_accel_handle handle;
@@ -278,7 +297,11 @@ static int run_user_oslat(const struct cpu_accel_config *requested)
 	void *stack;
 	long page_size;
 	pid_t child;
+	uintptr_t entry_page;
+	uintptr_t escape_page;
+	uintptr_t image_end;
 	int status;
+	int escape_ret = 0;
 	int ret;
 
 	page_size = sysconf(_SC_PAGESIZE);
@@ -305,11 +328,18 @@ static int run_user_oslat(const struct cpu_accel_config *requested)
 	context->cycles_per_ns = cpu_accel_calibrate_cycles_per_ns();
 	config.flags |= CPU_ACCEL_FLAG_PERSISTENT;
 	config.user_entry_ip = (uintptr_t)cpu_accel_user_oslat;
+	config.user_escape_ip = (uintptr_t)cpu_accel_user_escape_image;
 	config.user_stack_top = (uintptr_t)stack + (size_t)page_size * 16;
 	config.user_stack_bytes = (size_t)page_size * 16;
-	config.user_image_start = (uintptr_t)cpu_accel_user_oslat &
+	entry_page = (uintptr_t)cpu_accel_user_oslat &
 		~((uintptr_t)page_size - 1);
-	config.user_image_bytes = page_size;
+	escape_page = (uintptr_t)cpu_accel_user_escape_image &
+		~((uintptr_t)page_size - 1);
+	config.user_image_start = entry_page < escape_page ?
+		entry_page : escape_page;
+	image_end = entry_page > escape_page ? entry_page : escape_page;
+	config.user_image_bytes = image_end - config.user_image_start +
+		(size_t)page_size;
 	config.user_arg = (uintptr_t)context;
 
 	child = fork();
@@ -339,6 +369,20 @@ static int run_user_oslat(const struct cpu_accel_config *requested)
 		_exit(0);
 	}
 
+	if (escape_after_ms) {
+		struct timespec delay = {
+			.tv_sec = escape_after_ms / 1000,
+			.tv_nsec = (escape_after_ms % 1000) * 1000000ULL,
+		};
+
+		if (nanosleep(&delay, NULL) < 0 && errno != EINTR) {
+			perror("delay before user escape");
+			escape_ret = -1;
+		} else if (cpu_accel_user_escape(&handle) < 0) {
+			perror("user escape");
+			escape_ret = -1;
+		}
+	}
 	if (waitpid(child, &status, 0) < 0) {
 		perror("wait for user accelerator");
 		ret = -1;
@@ -348,6 +392,8 @@ static int run_user_oslat(const struct cpu_accel_config *requested)
 	} else {
 		ret = 0;
 	}
+	if (escape_ret)
+		ret = -1;
 	print_status(handle.shared);
 	if (handle.shared->state != CPU_ACCEL_STATE_COMPLETE ||
 	    handle.shared->mode != CPU_ACCEL_MODE_LINUX ||
@@ -380,6 +426,7 @@ static int run_workload(const char *program, int argc, char **argv)
 	};
 	struct cpu_accel_handle handle;
 	uint64_t value;
+	uint64_t escape_after_ms = 0;
 	unsigned int timeout_ms;
 	int persistent = 0;
 	int require_quiescent = 0;
@@ -447,6 +494,13 @@ static int run_workload(const char *program, int argc, char **argv)
 				return 2;
 			}
 			config.shared_entry = value;
+		} else if (!strcmp(argv[index], "--escape-after-ms") &&
+			   index + 1 < argc) {
+			if (parse_u64(argv[++index], &escape_after_ms) ||
+			    escape_after_ms > CPU_ACCEL_MAX_DURATION_NS / 1000000ULL) {
+				fprintf(stderr, "%s: invalid escape delay\n", program);
+				return 2;
+			}
 		} else if (!strcmp(argv[index], "--persistent")) {
 			persistent = 1;
 		} else if (!strcmp(argv[index], "--require-quiescent")) {
@@ -464,8 +518,12 @@ static int run_workload(const char *program, int argc, char **argv)
 		config.flags |= CPU_ACCEL_FLAG_REQUIRE_QUIESCENT;
 	if (quarantine_irqs)
 		config.flags |= CPU_ACCEL_FLAG_IRQ_QUARANTINE;
+	if (escape_after_ms && config.workload != CPU_ACCEL_WORKLOAD_USER_OSLAT) {
+		fprintf(stderr, "%s: --escape-after-ms requires user-oslat\n", program);
+		return 2;
+	}
 	if (config.workload == CPU_ACCEL_WORKLOAD_USER_OSLAT)
-		return run_user_oslat(&config);
+		return run_user_oslat(&config, escape_after_ms);
 
 	timeout_ms = (unsigned int)(config.duration_ns / 1000000ULL) + 1000;
 	if (pin_control_cpu() < 0) {

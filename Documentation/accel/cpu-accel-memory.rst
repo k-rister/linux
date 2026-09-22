@@ -204,6 +204,16 @@ therefore separate:
 * machine-level failures such as NMI, SMI, machine check, or firmware
   activity, which remain outside a formal Linux-only bound.
 
+The current x86 prototype exercises the second case with
+``CPU_ACCEL_IOC_USER_ESCAPE``.  The controller requests a local-APIC NMI, and
+the NMI handler redirects only a user-mode frame belonging to the active
+prevalidated image to a pinned escape trampoline.  The trampoline performs the
+terminal ``CPU_ACCEL_IOC_USER_EXIT`` operation.  This mechanism is deliberately
+limited: it does not recover kernel-mode execution, an NMI/SMI/machine-check
+handler, a failed or disabled local APIC, a host/hypervisor fault, or a
+corrupted/self-modifying image.  It is therefore a recovery experiment and
+not evidence of a formal packet-latency bound.
+
 The first protected prototype should make a bounded, cooperative image and
 its fault behavior measurable before attempting arbitrary user code. A hard
 packet round-trip bound can be claimed only after the active-mm freeze,

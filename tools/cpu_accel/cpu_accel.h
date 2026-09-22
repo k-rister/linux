@@ -19,6 +19,7 @@ int cpu_accel_configure(struct cpu_accel_handle *handle,
 int cpu_accel_start(struct cpu_accel_handle *handle);
 int cpu_accel_stop(struct cpu_accel_handle *handle);
 int cpu_accel_exit(struct cpu_accel_handle *handle);
+int cpu_accel_user_escape(struct cpu_accel_handle *handle);
 int cpu_accel_reset(struct cpu_accel_handle *handle);
 int cpu_accel_shared_ready(struct cpu_accel_handle *handle,
 				   uint32_t entry, uint64_t bytes);

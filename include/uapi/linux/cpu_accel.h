@@ -6,7 +6,7 @@
 #include <linux/types.h>
 
 /* The prototype uses separate fixed-size control and shared-data mappings. */
-#define CPU_ACCEL_ABI_VERSION		9
+#define CPU_ACCEL_ABI_VERSION		10
 #define CPU_ACCEL_MAP_SIZE		(64U * 1024U)
 #define CPU_ACCEL_SHARED_MAP_SIZE	(64U * 1024U)
 #define CPU_ACCEL_SHARED_MAP_OFFSET	CPU_ACCEL_MAP_SIZE
@@ -84,6 +84,7 @@ struct cpu_accel_config {
 	__u64 user_image_start;
 	__u64 user_image_bytes;
 	__u64 user_arg;
+	__u64 user_escape_ip;
 };
 
 struct cpu_accel_sample {
@@ -123,6 +124,7 @@ struct cpu_accel_shared {
 	/* USER_OSLAT interval: ring-3 entry through terminal USER_EXIT. */
 	__u64 user_active_start_ns;
 	__u64 user_active_end_ns;
+	__u64 user_escape_count;
 	__u64 irq_count;
 	__u32 irq_quarantined;
 	__u32 irq_quarantine_blockers;
@@ -186,5 +188,6 @@ struct cpu_accel_shared_handoff {
 #define CPU_ACCEL_IOC_SHARED_RECLAIM	_IOW(CPU_ACCEL_IOC_MAGIC, 0x06, \
 					__u32)
 #define CPU_ACCEL_IOC_USER_EXIT	_IO(CPU_ACCEL_IOC_MAGIC, 0x07)
+#define CPU_ACCEL_IOC_USER_ESCAPE	_IO(CPU_ACCEL_IOC_MAGIC, 0x08)
 
 #endif /* _UAPI_LINUX_CPU_ACCEL_H */

@@ -111,6 +111,11 @@ int cpu_accel_exit(struct cpu_accel_handle *handle)
 	return cpu_accel_ioctl(handle->fd, CPU_ACCEL_IOC_EXIT, NULL);
 }
 
+int cpu_accel_user_escape(struct cpu_accel_handle *handle)
+{
+	return cpu_accel_ioctl(handle->fd, CPU_ACCEL_IOC_USER_ESCAPE, NULL);
+}
+
 int cpu_accel_reset(struct cpu_accel_handle *handle)
 {
 	return cpu_accel_ioctl(handle->fd, CPU_ACCEL_IOC_RESET, NULL);

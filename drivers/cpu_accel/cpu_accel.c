@@ -145,6 +145,19 @@ static u64 cpu_accel_counter_delta(u64 end, u64 start)
 	return end >= start ? end - start : 0;
 }
 
+enum cpu_accel_region_owner {
+	CPU_ACCEL_REGION_LINUX = 0,
+	CPU_ACCEL_REGION_ACCELERATOR,
+	CPU_ACCEL_REGION_ERROR,
+};
+
+struct cpu_accel_region {
+	void *address;
+	size_t bytes;
+	u64 epoch;
+	u32 owner;
+};
+
 struct cpu_accel_device {
 	struct miscdevice misc;
 	/* Serializes control-plane state transitions. */
@@ -162,8 +175,7 @@ struct cpu_accel_device {
 	atomic_t running;
 	atomic64_t workqueue_queued;
 	atomic64_t workqueue_executed;
-	void *work_buffer;
-	size_t work_buffer_size;
+	struct cpu_accel_region work_region;
 	unsigned int sequence;
 	unsigned int controller_cpu;
 	unsigned int irq_quarantined;
@@ -195,11 +207,62 @@ static void cpu_accel_release_workqueue(struct cpu_accel_device *dev)
 	dev->workqueue_reserved = false;
 }
 
-static void cpu_accel_free_workload(struct cpu_accel_device *dev)
+static int cpu_accel_region_recover(struct cpu_accel_device *dev)
 {
-	kfree(dev->work_buffer);
-	dev->work_buffer = NULL;
-	dev->work_buffer_size = 0;
+	u32 owner = READ_ONCE(dev->work_region.owner);
+
+	if (owner == CPU_ACCEL_REGION_LINUX)
+		return 0;
+	if (owner != CPU_ACCEL_REGION_ERROR)
+		return -EBUSY;
+	/* Publish recovery writes before making the region reusable. */
+	smp_wmb();
+	WRITE_ONCE(dev->work_region.owner, CPU_ACCEL_REGION_LINUX);
+	return 0;
+}
+
+static int cpu_accel_region_begin(struct cpu_accel_device *dev)
+{
+	if (dev->config.workload != CPU_ACCEL_WORKLOAD_MEMMOVE)
+		return 0;
+	if (READ_ONCE(dev->work_region.owner) != CPU_ACCEL_REGION_LINUX)
+		return -EBUSY;
+	dev->work_region.epoch++;
+	if (!dev->work_region.epoch)
+		dev->work_region.epoch++;
+	/* Publish the epoch before the target can observe accelerator ownership. */
+	smp_wmb();
+	WRITE_ONCE(dev->work_region.owner, CPU_ACCEL_REGION_ACCELERATOR);
+	return 0;
+}
+
+static void cpu_accel_region_end(struct cpu_accel_device *dev, u32 state)
+{
+	u32 owner;
+
+	if (dev->config.workload != CPU_ACCEL_WORKLOAD_MEMMOVE)
+		return;
+	if (state == CPU_ACCEL_STATE_COMPLETE)
+		owner = CPU_ACCEL_REGION_LINUX;
+	else
+		owner = CPU_ACCEL_REGION_ERROR;
+	/* Publish workload writes before transferring region ownership. */
+	smp_wmb();
+	WRITE_ONCE(dev->work_region.owner, owner);
+}
+
+static int cpu_accel_free_workload(struct cpu_accel_device *dev)
+{
+	int ret;
+
+	ret = cpu_accel_region_recover(dev);
+	if (ret)
+		return ret;
+	kfree(dev->work_region.address);
+	dev->work_region.address = NULL;
+	dev->work_region.bytes = 0;
+	dev->work_region.owner = CPU_ACCEL_REGION_LINUX;
+	return 0;
 }
 
 static int cpu_accel_prepare_workload(struct cpu_accel_device *dev,
@@ -210,8 +273,7 @@ static int cpu_accel_prepare_workload(struct cpu_accel_device *dev,
 	size_t size;
 
 	if (config->workload == CPU_ACCEL_WORKLOAD_TIMESTAMP) {
-		cpu_accel_free_workload(dev);
-		return 0;
+		return cpu_accel_free_workload(dev);
 	}
 	if (config->workload != CPU_ACCEL_WORKLOAD_MEMMOVE ||
 	    config->work_bytes < 64 ||
@@ -227,9 +289,12 @@ static int cpu_accel_prepare_workload(struct cpu_accel_device *dev,
 	/* Touch both halves before the accelerator entry point runs. */
 	memset(buffer, 0xa5, bytes);
 	memset((char *)buffer + bytes, 0x5a, bytes);
-	cpu_accel_free_workload(dev);
-	dev->work_buffer = buffer;
-	dev->work_buffer_size = size;
+	if (cpu_accel_free_workload(dev)) {
+		kfree(buffer);
+		return -EBUSY;
+	}
+	dev->work_region.address = buffer;
+	dev->work_region.bytes = size;
 	return 0;
 }
 
@@ -417,6 +482,7 @@ static void cpu_accel_run(struct cpu_accel_device *dev,
 	u64 max_lateness = 0;
 	u64 min_lateness = U64_MAX;
 	u64 work_iterations = 0;
+	u64 work_epoch = READ_ONCE(dev->work_region.epoch);
 	u32 samples_valid = 0;
 	u32 final_state = CPU_ACCEL_STATE_COMPLETE;
 	bool persistent = dev->config.flags & CPU_ACCEL_FLAG_PERSISTENT;
@@ -452,8 +518,16 @@ static void cpu_accel_run(struct cpu_accel_device *dev,
 		max_lateness = max(max_lateness, lateness);
 		min_lateness = min(min_lateness, lateness);
 		if (dev->config.workload == CPU_ACCEL_WORKLOAD_MEMMOVE) {
-			char *buffer = dev->work_buffer;
-			size_t bytes = (size_t)dev->config.work_bytes;
+			char *buffer = dev->work_region.address;
+			size_t bytes = dev->work_region.bytes / 2;
+
+			if (READ_ONCE(dev->work_region.owner) !=
+				CPU_ACCEL_REGION_ACCELERATOR ||
+			    READ_ONCE(dev->work_region.epoch) != work_epoch ||
+			    bytes != (size_t)dev->config.work_bytes) {
+				final_state = CPU_ACCEL_STATE_ERROR;
+				break;
+			}
 
 			if (work_iterations & 1)
 				memcpy(buffer + bytes, buffer, bytes);
@@ -493,6 +567,7 @@ finish:
 	shared->last_lateness_ns = samples_valid ?
 		shared->samples[samples_valid - 1].lateness_ns : 0;
 	shared->stop_requested = 0;
+	cpu_accel_region_end(dev, final_state);
 	atomic_set(&dev->stop_requested, 0);
 	atomic_set(&dev->watchdog_fired, 0);
 	atomic_set(&dev->running, 0);
@@ -613,7 +688,7 @@ static int cpu_accel_lifecycle_exit(struct cpu_accel_device *dev)
 		timer_delete_sync(&dev->watchdog_timer);
 		cpu_accel_destroy_lifecycle_thread(dev);
 	}
-
+	cpu_accel_region_recover(dev);
 	return dev->lifecycle_ret;
 }
 
@@ -724,6 +799,16 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 	}
 	dev->irq_quarantined = irq_quarantined;
 	dev->irq_quarantine_blockers = irq_quarantine_blockers;
+	ret = cpu_accel_region_begin(dev);
+	if (ret) {
+		int irq_ret = cpu_accel_restore_irq_quarantine(dev);
+
+		if (irq_ret)
+			pr_err("cpu_accel: region admission cleanup failed for CPU %u: %d\n",
+			       dev->config.cpu, irq_ret);
+		cpu_accel_release_workqueue(dev);
+		return ret;
+	}
 
 	dev->sequence++;
 	dev->shared->sequence = dev->sequence;
@@ -785,6 +870,7 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 		}
 		if (!dev->irq_quarantine)
 			cpu_accel_release_workqueue(dev);
+		cpu_accel_region_recover(dev);
 		atomic_set(&dev->enter_requested, 0);
 		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_RECOVERY);
 		WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_ERROR);
@@ -898,7 +984,9 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 		}
 		dev->configured = false;
 		dev->sequence = 0;
-		cpu_accel_free_workload(dev);
+		ret = cpu_accel_free_workload(dev);
+		if (ret)
+			break;
 		cpu_accel_reset_shared(dev);
 		break;
 

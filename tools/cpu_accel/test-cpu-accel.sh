@@ -88,10 +88,12 @@ while [ "$run" -le "$repeats" ]; do
 	fi
 	echo "$output" | grep -q 'backend=3' || \
 		fail "x86 direct-APIC backend was not selected"
-	echo "$output" | grep -q 'backend_flags=2' || \
+	echo "$output" | grep -q 'backend_flags=6' || \
 		fail "reschedule-defer capability was not reported"
 	echo "$output" | grep -q 'arch_reschedule_deferred=' || \
 		fail "deferred reschedule telemetry was not reported"
+	echo "$output" | grep -q 'arch_call_function_deferred=' || \
+		fail "deferred call-function telemetry was not reported"
 	echo "$output" | grep -q 'arch_counters_valid=1' || \
 		fail "architecture counters were not reported on x86"
 	run=$((run + 1))
@@ -161,7 +163,7 @@ x86_64)
 			fail "user-oslat run did not return to Linux mode"
 		echo "$user_output" | grep -q 'backend=2' || \
 			fail "x86 ring-3 backend was not selected"
-		echo "$user_output" | grep -q 'backend_flags=3' || \
+		echo "$user_output" | grep -q 'backend_flags=7' || \
 			fail "user workload backend capabilities were not reported"
 		echo "$user_output" | grep -q 'workload=3' || \
 			fail "user-oslat workload was not selected"
@@ -192,7 +194,7 @@ x86_64)
 		fail "user-oslat escape did not return to Linux mode"
 	echo "$escape_output" | grep -q 'backend=2' || \
 		fail "user-oslat escape selected the wrong backend"
-	echo "$escape_output" | grep -q 'backend_flags=3' || \
+	echo "$escape_output" | grep -q 'backend_flags=7' || \
 		fail "user-oslat escape backend capabilities were not reported"
 	echo "$escape_output" | grep -q 'user_escape_count=1' || \
 		fail "user-oslat escape was not observed exactly once"
@@ -219,7 +221,7 @@ x86_64)
 		fail "user-hang escape did not return to Linux mode"
 	echo "$hang_output" | grep -q 'backend=2' || \
 		fail "user-hang selected the wrong backend"
-	echo "$hang_output" | grep -q 'backend_flags=3' || \
+	echo "$hang_output" | grep -q 'backend_flags=7' || \
 		fail "user-hang backend capabilities were not reported"
 	echo "$hang_output" | grep -q 'workload=4' || \
 		fail "user-hang workload was not selected"

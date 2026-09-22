@@ -42,20 +42,21 @@ small ioctl interface:
 
 The control mapping contains the state, explicit Linux/accelerator transition
 mode, selected workload, run timestamps, aggregate lateness, and up to
-``CPU_ACCEL_MAX_SAMPLES`` timestamp samples.  ABI version 14 also
+``CPU_ACCEL_MAX_SAMPLES`` timestamp samples.  ABI version 15 also
 reports lifecycle entry/exit timestamps, interrupt and softirq deltas,
 timer, hrtimer, RCU, and scheduler softirq deltas, current-task
 context-switch deltas, CPU-entry/exit identity, migration detection, pending
 scheduler and softirq state, and preemption state.  On x86 it additionally
-reports architecture interrupt, IPI, TLB, and deferred-reschedule counter
-deltas;
+reports architecture interrupt, IPI, TLB, deferred-reschedule, and
+deferred-call-function counter deltas;
 ``arch_counters_valid`` identifies whether those counters are available.
 The x86 direct backend is reported as
 ``CPU_ACCEL_BACKEND_X86_DIRECT_APIC``; it uses one dedicated APIC vector for
 entry and avoids the generic scheduler/function-call IPI path.  This is a
 direct-entry prototype, not full APIC ownership: the backend defers remote
-reschedule IPIs while it owns the target and replays one after exit, but Linux
-can still generate other IPIs or TLB shootdowns for the target CPU.
+reschedule and call-function IPIs while it owns the target and replays them
+after exit, but Linux can still generate other IPIs or TLB shootdowns for the
+target CPU.
 Workqueue queue and execution tracepoints report activity targeted at the
 accelerator CPU while it is running.
 These are observations made by the prototype, not suppression or admission
@@ -79,7 +80,11 @@ backend defers remote scheduler reschedule IPIs during the accelerator
 interval.  ``arch_reschedule_deferred`` reports how many such requests were
 deferred during the run.  This is intentionally selective: function-call
 IPIs, TLB shootdowns, local timer interrupts, NMIs, and other interrupt paths
-are not covered by this capability yet.
+are covered independently.  The
+``CPU_ACCEL_BACKEND_FLAG_CALL_FUNCTION_DEFER`` bit means that call-function
+IPIs are deferred and replayed after exit; ``arch_call_function_deferred``
+reports how many were deferred.  TLB shootdowns and other interrupt paths are
+not covered by either capability yet.
 
 The initial workload selector supports ``timestamp`` and ``memmove``.  The
 memmove workload allocates and touches two bounded kernel buffers before the
@@ -228,10 +233,10 @@ The watchdog is capped at five seconds and ``STOP`` is cooperative.
 the ring-3 workload, but it is bounded by a one-second controller wait and is
 not a hard guarantee.  A malfunctioning kernel implementation is not assumed
 to be recoverable without reverting to the known-good kernel.  This lifecycle
-is the first step toward that model.  ABI version 14 adds selective
-reschedule-IPI deferral and replay while retaining the ABI12 recovery
-capability and debug-only dropped-NMI fixture; it does not yet suppress
-function-call IPIs or TLB shootdowns.  A controller may retry after
+is the first step toward that model.  ABI version 15 adds selective
+reschedule- and call-function-IPI deferral and replay while retaining the
+ABI12 recovery capability and debug-only dropped-NMI fixture; it does not yet
+suppress TLB shootdowns.  A controller may retry after
 ``TIMEOUT`` or ``FAILED``; it must not treat those states as a return to Linux.
 The proposed protected address-space and shared-memory contract is documented
 in :doc:`cpu-accel-memory`; the internal region/epoch model and the first

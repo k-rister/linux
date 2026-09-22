@@ -257,8 +257,12 @@ The implementation checkpoints are:
 7. [completed for x86 prototype] Add ABI 14 selective reschedule-IPI
    ownership.  Remote scheduler reschedule requests are deferred and counted
    while the direct backend owns the CPU, then one request is replayed after
-   exit.  Function-call IPIs, TLB shootdowns, and other interrupt sources
-   remain outside this checkpoint.
-8. Define the remaining APIC ownership and address-space/TLB policy, then add
+   exit.
+8. [completed for x86 prototype] Add ABI 15 selective call-function-IPI
+   ownership.  Remote call-function requests remain queued, are deferred and
+   counted while the direct backend owns the CPU, then are replayed after
+   exit.  TLB shootdowns and other interrupt sources remain outside these
+   checkpoints.
+9. Define the remaining APIC ownership and address-space/TLB policy, then add
    IOMMU-backed ``DMA`` regions and userspace/NIC integration only after the
    non-networked memory contract is stable.

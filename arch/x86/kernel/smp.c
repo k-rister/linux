@@ -28,6 +28,7 @@
 #include <asm/mmu_context.h>
 #include <asm/proto.h>
 #include <asm/apic.h>
+#include <asm/cpu_accel.h>
 #include <asm/cpu.h>
 #include <asm/idtentry.h>
 #include <asm/nmi.h>
@@ -257,19 +258,27 @@ DEFINE_IDTENTRY_SYSVEC_SIMPLE(sysvec_reschedule_ipi)
 
 DEFINE_IDTENTRY_SYSVEC(sysvec_call_function)
 {
+	bool deferred;
+
 	apic_eoi();
 	trace_call_function_entry(CALL_FUNCTION_VECTOR);
 	inc_irq_stat(CALL_FUNCTION);
-	generic_smp_call_function_interrupt();
+	deferred = x86_cpu_accel_defer_call_function(raw_smp_processor_id());
+	if (!deferred)
+		generic_smp_call_function_interrupt();
 	trace_call_function_exit(CALL_FUNCTION_VECTOR);
 }
 
 DEFINE_IDTENTRY_SYSVEC(sysvec_call_function_single)
 {
+	bool deferred;
+
 	apic_eoi();
 	trace_call_function_single_entry(CALL_FUNCTION_SINGLE_VECTOR);
 	inc_irq_stat(CALL_FUNCTION);
-	generic_smp_call_function_single_interrupt();
+	deferred = x86_cpu_accel_defer_call_function(raw_smp_processor_id());
+	if (!deferred)
+		generic_smp_call_function_single_interrupt();
 	trace_call_function_single_exit(CALL_FUNCTION_SINGLE_VECTOR);
 }
 

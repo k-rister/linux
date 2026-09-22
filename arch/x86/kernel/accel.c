@@ -6,6 +6,7 @@
 #include <linux/types.h>
 #include <linux/percpu.h>
 #include <linux/smp.h>
+#include <linux/spinlock.h>
 
 #include <asm/apic.h>
 #include <asm/cpu_accel.h>
@@ -14,32 +15,41 @@
 #include <asm/smp.h>
 
 struct x86_cpu_accel_request {
+	raw_spinlock_t lock;
 	x86_cpu_accel_entry_fn entry;
 	void *data;
 	atomic_t active;
 	atomic_t done;
 	atomic_t reschedule_pending;
 	atomic64_t reschedule_deferred;
+	atomic_t call_function_pending;
+	atomic64_t call_function_deferred;
 };
 
-static DEFINE_PER_CPU(struct x86_cpu_accel_request, x86_cpu_accel_request);
+static DEFINE_PER_CPU(struct x86_cpu_accel_request, x86_cpu_accel_request) = {
+	.lock = __RAW_SPIN_LOCK_UNLOCKED(x86_cpu_accel_request.lock),
+};
 
 int x86_cpu_accel_direct_enter(unsigned int cpu,
 			       x86_cpu_accel_entry_fn entry, void *data)
 {
 	struct x86_cpu_accel_request *request;
+	unsigned long flags;
 
 	if (!entry || cpu >= nr_cpu_ids || !cpu_online(cpu) ||
 	    cpu == raw_smp_processor_id())
 		return -EINVAL;
 
 	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
-	if (atomic_read(&request->active))
+	raw_spin_lock_irqsave(&request->lock, flags);
+	if (atomic_read(&request->active)) {
+		raw_spin_unlock_irqrestore(&request->lock, flags);
 		return -EBUSY;
+	}
 	atomic_set(&request->reschedule_pending, 0);
-	atomic64_set(&request->reschedule_deferred, 0);
-	if (atomic_cmpxchg(&request->active, 0, 1))
-		return -EBUSY;
+	atomic_set(&request->call_function_pending, 0);
+	atomic_set(&request->active, 1);
+	raw_spin_unlock_irqrestore(&request->lock, flags);
 
 	atomic_set(&request->done, 0);
 	WRITE_ONCE(request->data, data);
@@ -51,9 +61,13 @@ int x86_cpu_accel_direct_enter(unsigned int cpu,
 	while (!atomic_read_acquire(&request->done))
 		cpu_relax();
 
+	raw_spin_lock_irqsave(&request->lock, flags);
 	atomic_set(&request->active, 0);
+	if (atomic_xchg(&request->call_function_pending, 0))
+		__apic_send_IPI(cpu, CALL_FUNCTION_SINGLE_VECTOR);
 	if (atomic_xchg(&request->reschedule_pending, 0))
-		native_smp_send_reschedule(cpu);
+		__apic_send_IPI(cpu, RESCHEDULE_VECTOR);
+	raw_spin_unlock_irqrestore(&request->lock, flags);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_direct_enter);
@@ -61,15 +75,22 @@ EXPORT_SYMBOL_GPL(x86_cpu_accel_direct_enter);
 bool x86_cpu_accel_defer_reschedule(unsigned int cpu)
 {
 	struct x86_cpu_accel_request *request;
+	unsigned long flags;
 
 	if (cpu >= nr_cpu_ids)
 		return false;
 	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
+	raw_spin_lock_irqsave(&request->lock, flags);
 	if (!atomic_read(&request->active))
-		return false;
+		goto out;
 	atomic64_inc(&request->reschedule_deferred);
 	atomic_set(&request->reschedule_pending, 1);
+	raw_spin_unlock_irqrestore(&request->lock, flags);
 	return true;
+
+out:
+	raw_spin_unlock_irqrestore(&request->lock, flags);
+	return false;
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_defer_reschedule);
 
@@ -81,6 +102,37 @@ u64 x86_cpu_accel_reschedule_deferred(unsigned int cpu)
 					     cpu).reschedule_deferred);
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_reschedule_deferred);
+
+bool x86_cpu_accel_defer_call_function(unsigned int cpu)
+{
+	struct x86_cpu_accel_request *request;
+	unsigned long flags;
+
+	if (cpu >= nr_cpu_ids)
+		return false;
+	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
+	raw_spin_lock_irqsave(&request->lock, flags);
+	if (!atomic_read(&request->active))
+		goto out;
+	atomic64_inc(&request->call_function_deferred);
+	atomic_set(&request->call_function_pending, 1);
+	raw_spin_unlock_irqrestore(&request->lock, flags);
+	return true;
+
+out:
+	raw_spin_unlock_irqrestore(&request->lock, flags);
+	return false;
+}
+EXPORT_SYMBOL_GPL(x86_cpu_accel_defer_call_function);
+
+u64 x86_cpu_accel_call_function_deferred(unsigned int cpu)
+{
+	if (cpu >= nr_cpu_ids)
+		return 0;
+	return atomic64_read(&per_cpu(x86_cpu_accel_request,
+					     cpu).call_function_deferred);
+}
+EXPORT_SYMBOL_GPL(x86_cpu_accel_call_function_deferred);
 
 DEFINE_IDTENTRY_SYSVEC(sysvec_cpu_accel)
 {

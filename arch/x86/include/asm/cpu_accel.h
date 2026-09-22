@@ -6,5 +6,7 @@ typedef void (*x86_cpu_accel_entry_fn)(void *data);
 
 int x86_cpu_accel_direct_enter(unsigned int cpu,
 			       x86_cpu_accel_entry_fn entry, void *data);
+bool x86_cpu_accel_defer_reschedule(unsigned int cpu);
+u64 x86_cpu_accel_reschedule_deferred(unsigned int cpu);
 
 #endif

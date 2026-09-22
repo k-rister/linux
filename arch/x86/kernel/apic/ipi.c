@@ -6,6 +6,7 @@
 #include <linux/string_choices.h>
 
 #include <asm/io_apic.h>
+#include <asm/cpu_accel.h>
 
 #include "local.h"
 
@@ -71,6 +72,8 @@ void native_smp_send_reschedule(int cpu)
 		WARN(1, "sched: Unexpected reschedule of offline CPU#%d!\n", cpu);
 		return;
 	}
+	if (x86_cpu_accel_defer_reschedule(cpu))
+		return;
 	__apic_send_IPI(cpu, RESCHEDULE_VECTOR);
 }
 

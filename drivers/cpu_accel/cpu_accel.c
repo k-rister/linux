@@ -55,6 +55,7 @@ struct cpu_accel_observation {
 	u64 arch_irq_entry;
 	u64 arch_ipi_entry;
 	u64 arch_tlb_entry;
+	u64 arch_reschedule_deferred_entry;
 	u64 need_resched_samples;
 	u32 need_resched_entry;
 	u32 softirq_pending_entry;
@@ -105,8 +106,11 @@ static u32 cpu_accel_backend_id_for_workload(u32 workload)
 static u32 cpu_accel_backend_flags_for_workload(u32 workload)
 {
 #ifdef CONFIG_X86_LOCAL_APIC
+	u32 flags = CPU_ACCEL_BACKEND_FLAG_RESCHEDULE_DEFER;
+
 	if (cpu_accel_user_workload(workload))
-		return CPU_ACCEL_BACKEND_FLAG_USER_ESCAPE;
+		flags |= CPU_ACCEL_BACKEND_FLAG_USER_ESCAPE;
+	return flags;
 #else
 	(void)workload;
 #endif
@@ -164,6 +168,11 @@ static u64 cpu_accel_arch_tlb_count(unsigned int cpu)
 	return READ_ONCE(stats->counts[IRQ_COUNT_TLB]);
 }
 
+static u64 cpu_accel_arch_reschedule_deferred(unsigned int cpu)
+{
+	return x86_cpu_accel_reschedule_deferred(cpu);
+}
+
 static bool cpu_accel_arch_counters_valid(void)
 {
 	return true;
@@ -185,6 +194,12 @@ static u64 cpu_accel_arch_tlb_count(unsigned int cpu)
 {
 	(void)cpu;
 	return U64_MAX;
+}
+
+static u64 cpu_accel_arch_reschedule_deferred(unsigned int cpu)
+{
+	(void)cpu;
+	return 0;
 }
 
 static bool cpu_accel_arch_counters_valid(void)
@@ -766,6 +781,8 @@ static void cpu_accel_observation_begin(struct cpu_accel_observation *obs)
 	obs->arch_irq_entry = cpu_accel_arch_irq_count(obs->cpu);
 	obs->arch_ipi_entry = cpu_accel_arch_ipi_count(obs->cpu);
 	obs->arch_tlb_entry = cpu_accel_arch_tlb_count(obs->cpu);
+	obs->arch_reschedule_deferred_entry =
+		cpu_accel_arch_reschedule_deferred(obs->cpu);
 	obs->need_resched_entry = need_resched();
 	obs->softirq_pending_entry = local_softirq_pending();
 	obs->preempt_count_entry = preempt_count();
@@ -791,6 +808,8 @@ static void cpu_accel_observation_finish(struct cpu_accel_device *dev,
 	u64 arch_irq_count = cpu_accel_arch_irq_count(obs->cpu);
 	u64 arch_ipi_count = cpu_accel_arch_ipi_count(obs->cpu);
 	u64 arch_tlb_count = cpu_accel_arch_tlb_count(obs->cpu);
+	u64 arch_reschedule_deferred =
+		cpu_accel_arch_reschedule_deferred(obs->cpu);
 	u64 irq_delta = cpu_accel_counter_delta(irq_count, obs->irq_entry);
 	u64 softirq_delta = cpu_accel_counter_delta(softirq_count,
 		obs->softirq_entry);
@@ -802,6 +821,9 @@ static void cpu_accel_observation_finish(struct cpu_accel_device *dev,
 		obs->arch_ipi_entry);
 	u64 arch_tlb_delta = cpu_accel_counter_delta(arch_tlb_count,
 		obs->arch_tlb_entry);
+	u64 arch_reschedule_deferred_delta =
+		cpu_accel_counter_delta(arch_reschedule_deferred,
+					obs->arch_reschedule_deferred_entry);
 	u64 timer_softirq_delta = cpu_accel_counter_delta(timer_softirq_count,
 		obs->timer_softirq_entry);
 	u64 hrtimer_softirq_delta = cpu_accel_counter_delta(hrtimer_softirq_count,
@@ -829,6 +851,7 @@ static void cpu_accel_observation_finish(struct cpu_accel_device *dev,
 	shared->arch_irq_count = arch_irq_delta;
 	shared->arch_ipi_count = arch_ipi_delta;
 	shared->arch_tlb_count = arch_tlb_delta;
+	shared->arch_reschedule_deferred = arch_reschedule_deferred_delta;
 	shared->need_resched_entry = obs->need_resched_entry;
 	shared->need_resched_exit = need_resched();
 	shared->softirq_pending_entry = obs->softirq_pending_entry;

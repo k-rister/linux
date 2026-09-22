@@ -42,18 +42,20 @@ small ioctl interface:
 
 The control mapping contains the state, explicit Linux/accelerator transition
 mode, selected workload, run timestamps, aggregate lateness, and up to
-``CPU_ACCEL_MAX_SAMPLES`` timestamp samples.  ABI version 13 also
+``CPU_ACCEL_MAX_SAMPLES`` timestamp samples.  ABI version 14 also
 reports lifecycle entry/exit timestamps, interrupt and softirq deltas,
 timer, hrtimer, RCU, and scheduler softirq deltas, current-task
 context-switch deltas, CPU-entry/exit identity, migration detection, pending
 scheduler and softirq state, and preemption state.  On x86 it additionally
-reports architecture interrupt, IPI, and TLB counter deltas;
+reports architecture interrupt, IPI, TLB, and deferred-reschedule counter
+deltas;
 ``arch_counters_valid`` identifies whether those counters are available.
 The x86 direct backend is reported as
 ``CPU_ACCEL_BACKEND_X86_DIRECT_APIC``; it uses one dedicated APIC vector for
 entry and avoids the generic scheduler/function-call IPI path.  This is a
-direct-entry prototype, not yet APIC ownership: Linux can still generate
-other IPIs or TLB shootdowns for the target CPU.
+direct-entry prototype, not full APIC ownership: the backend defers remote
+reschedule IPIs while it owns the target and replays one after exit, but Linux
+can still generate other IPIs or TLB shootdowns for the target CPU.
 Workqueue queue and execution tracepoints report activity targeted at the
 accelerator CPU while it is running.
 These are observations made by the prototype, not suppression or admission
@@ -71,6 +73,13 @@ escape.  A request is reported as ``REQUESTED`` while in flight,
 timed-out attempt does not pretend that the CPU has returned to Linux; the
 shared ``mode`` and ``state`` remain nonterminal until a later recovery or
 cooperative exit succeeds.
+
+The ``CPU_ACCEL_BACKEND_FLAG_RESCHEDULE_DEFER`` bit means that the x86 direct
+backend defers remote scheduler reschedule IPIs during the accelerator
+interval.  ``arch_reschedule_deferred`` reports how many such requests were
+deferred during the run.  This is intentionally selective: function-call
+IPIs, TLB shootdowns, local timer interrupts, NMIs, and other interrupt paths
+are not covered by this capability yet.
 
 The initial workload selector supports ``timestamp`` and ``memmove``.  The
 memmove workload allocates and touches two bounded kernel buffers before the
@@ -219,19 +228,18 @@ The watchdog is capped at five seconds and ``STOP`` is cooperative.
 the ring-3 workload, but it is bounded by a one-second controller wait and is
 not a hard guarantee.  A malfunctioning kernel implementation is not assumed
 to be recoverable without reverting to the known-good kernel.  This lifecycle
-is the first step toward that model, but the dedicated APIC entry vector does
-not suppress Linux-generated IPIs or TLB shootdowns while the target is
-running.  ABI version 13 makes the direct-entry backend explicit while
-retaining the ABI12 recovery capability and debug-only dropped-NMI fixture.  A
-controller may retry after ``TIMEOUT`` or ``FAILED``; it must not treat those
-states as a return to Linux.
+is the first step toward that model.  ABI version 14 adds selective
+reschedule-IPI deferral and replay while retaining the ABI12 recovery
+capability and debug-only dropped-NMI fixture; it does not yet suppress
+function-call IPIs or TLB shootdowns.  A controller may retry after
+``TIMEOUT`` or ``FAILED``; it must not treat those states as a return to Linux.
 The proposed protected address-space and shared-memory contract is documented
 in :doc:`cpu-accel-memory`; the internal region/epoch model and the first
 prefaulted shared entry are now in place.  The x86 cooperative ring-3 image is
 the first protected-address-space proof, and the ABI 12 NMI escape is the
 first x86 recovery experiment.  The common recovery contract and direct APIC
 entry prototype are now in place; the next implementation step is to define
-APIC ownership and address-space/TLB policy before adding IOMMU-backed memory
-and networking.
+the remaining APIC ownership and address-space/TLB policy before adding
+IOMMU-backed memory and networking.
 A stronger latency claim must wait for those controls and for a defined
 recovery contract.

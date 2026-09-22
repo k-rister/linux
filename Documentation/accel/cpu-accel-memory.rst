@@ -254,6 +254,11 @@ The implementation checkpoints are:
 6. [completed for x86 prototype] Add a dedicated APIC entry vector for kernel
    workloads.  ABI 13 removes the generic scheduler/function-call IPI handoff,
    but it does not yet suppress other IPIs or TLB shootdowns.
-7. Define APIC ownership and address-space/TLB policy, then add IOMMU-backed
-   ``DMA`` regions and userspace/NIC integration only after the non-networked
-   memory contract is stable.
+7. [completed for x86 prototype] Add ABI 14 selective reschedule-IPI
+   ownership.  Remote scheduler reschedule requests are deferred and counted
+   while the direct backend owns the CPU, then one request is replayed after
+   exit.  Function-call IPIs, TLB shootdowns, and other interrupt sources
+   remain outside this checkpoint.
+8. Define the remaining APIC ownership and address-space/TLB policy, then add
+   IOMMU-backed ``DMA`` regions and userspace/NIC integration only after the
+   non-networked memory contract is stable.

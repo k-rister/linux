@@ -6,7 +6,7 @@
 #include <linux/types.h>
 
 /* The prototype uses separate fixed-size control and shared-data mappings. */
-#define CPU_ACCEL_ABI_VERSION		13
+#define CPU_ACCEL_ABI_VERSION		14
 #define CPU_ACCEL_MAP_SIZE		(64U * 1024U)
 #define CPU_ACCEL_SHARED_MAP_SIZE	(64U * 1024U)
 #define CPU_ACCEL_SHARED_MAP_OFFSET	CPU_ACCEL_MAP_SIZE
@@ -56,6 +56,8 @@ enum cpu_accel_backend {
 
 /* Capabilities reported by the selected backend for the configured workload. */
 #define CPU_ACCEL_BACKEND_FLAG_USER_ESCAPE	(1U << 0)
+/* Remote reschedule IPIs are deferred while the x86 direct backend owns a CPU. */
+#define CPU_ACCEL_BACKEND_FLAG_RESCHEDULE_DEFER	(1U << 1)
 
 enum cpu_accel_recovery_state {
 	CPU_ACCEL_RECOVERY_NONE = 0,
@@ -162,6 +164,7 @@ struct cpu_accel_shared {
 	__u64 arch_irq_count;
 	__u64 arch_ipi_count;
 	__u64 arch_tlb_count;
+	__u64 arch_reschedule_deferred;
 	__u32 need_resched_entry;
 	__u32 need_resched_exit;
 	__u32 softirq_pending_entry;

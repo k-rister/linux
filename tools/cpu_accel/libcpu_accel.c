@@ -28,6 +28,7 @@ int cpu_accel_open(struct cpu_accel_handle *handle)
 {
 	int fd;
 	void *mapping;
+	void *shared_mapping;
 
 	memset(handle, 0, sizeof(*handle));
 	handle->fd = -1;
@@ -44,11 +45,29 @@ int cpu_accel_open(struct cpu_accel_handle *handle)
 		errno = saved_errno;
 		return -1;
 	}
+	shared_mapping = mmap(NULL, CPU_ACCEL_SHARED_MAP_SIZE,
+				      PROT_READ | PROT_WRITE, MAP_SHARED, fd,
+				      CPU_ACCEL_SHARED_MAP_OFFSET);
+	if (shared_mapping == MAP_FAILED) {
+		int saved_errno = errno;
+
+		munmap(mapping, CPU_ACCEL_MAP_SIZE);
+		close(fd);
+		errno = saved_errno;
+		return -1;
+	}
 
 	handle->fd = fd;
 	handle->shared = mapping;
+	handle->shared_region = shared_mapping;
 	if (handle->shared->abi_version != CPU_ACCEL_ABI_VERSION ||
-	    handle->shared->struct_size < sizeof(struct cpu_accel_shared)) {
+	    handle->shared->struct_size < sizeof(struct cpu_accel_shared) ||
+	    handle->shared_region->abi_version != CPU_ACCEL_ABI_VERSION ||
+	    handle->shared_region->struct_size <
+		    sizeof(struct cpu_accel_shared_region) ||
+	    handle->shared_region->entry_count != CPU_ACCEL_SHARED_ENTRY_COUNT ||
+	    handle->shared_region->entry_size !=
+		    sizeof(struct cpu_accel_shared_entry)) {
 		cpu_accel_close(handle);
 		errno = EPROTO;
 		return -1;
@@ -61,9 +80,12 @@ void cpu_accel_close(struct cpu_accel_handle *handle)
 {
 	if (handle->shared && handle->shared != MAP_FAILED)
 		munmap((void *)handle->shared, CPU_ACCEL_MAP_SIZE);
+	if (handle->shared_region && handle->shared_region != MAP_FAILED)
+		munmap((void *)handle->shared_region, CPU_ACCEL_SHARED_MAP_SIZE);
 	if (handle->fd >= 0)
 		close(handle->fd);
 	handle->shared = NULL;
+	handle->shared_region = NULL;
 	handle->fd = -1;
 }
 
@@ -92,6 +114,25 @@ int cpu_accel_exit(struct cpu_accel_handle *handle)
 int cpu_accel_reset(struct cpu_accel_handle *handle)
 {
 	return cpu_accel_ioctl(handle->fd, CPU_ACCEL_IOC_RESET, NULL);
+}
+
+int cpu_accel_shared_ready(struct cpu_accel_handle *handle,
+				   uint32_t entry, uint64_t bytes)
+{
+	struct cpu_accel_shared_handoff handoff = {
+		.entry = entry,
+		.bytes = bytes,
+	};
+
+	return cpu_accel_ioctl(handle->fd, CPU_ACCEL_IOC_SHARED_READY,
+			       &handoff);
+}
+
+int cpu_accel_shared_reclaim(struct cpu_accel_handle *handle,
+				     uint32_t entry)
+{
+	return cpu_accel_ioctl(handle->fd, CPU_ACCEL_IOC_SHARED_RECLAIM,
+			       &entry);
 }
 
 static uint64_t cpu_accel_now_ns(void)

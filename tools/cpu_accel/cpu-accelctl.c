@@ -39,8 +39,9 @@ static void print_status(const volatile struct cpu_accel_shared *shared)
 	       " max_lateness_ns=%" PRIu64 " min_lateness_ns=%" PRIu64
 	       " last_lateness_ns=%" PRIu64 " duration_ns=%" PRIu64
 	       " period_ns=%" PRIu64 " workload=%u work_bytes=%" PRIu64
-	       " work_iterations=%" PRIu64 " lifecycle_entry_ns=%" PRIu64
-	       " lifecycle_exit_ns=%" PRIu64 " irq_count=%" PRIu64
+	       " work_iterations=%" PRIu64 " shared_entry=%u shared_owner=%u shared_epoch=%" PRIu64
+	       " lifecycle_entry_ns=%" PRIu64 " lifecycle_exit_ns=%" PRIu64
+	       " irq_count=%" PRIu64
 	       " irq_quarantined=%u irq_quarantine_blockers=%u"
 	       " softirq_count=%" PRIu64 " timer_softirq_count=%" PRIu64
 	       " hrtimer_softirq_count=%" PRIu64 " rcu_softirq_count=%" PRIu64
@@ -63,6 +64,8 @@ static void print_status(const volatile struct cpu_accel_shared *shared)
 	       (uint64_t)shared->duration_ns, (uint64_t)shared->period_ns,
 	       shared->workload, (uint64_t)shared->work_bytes,
 	       (uint64_t)shared->work_iterations,
+	       shared->shared_entry, shared->shared_owner,
+	       (uint64_t)shared->shared_epoch,
 	       (uint64_t)shared->lifecycle_entry_ns,
 	       (uint64_t)shared->lifecycle_exit_ns,
 	       (uint64_t)shared->irq_count,
@@ -92,7 +95,8 @@ static void usage(FILE *stream, const char *program)
 	fprintf(stream,
 		"Usage:\n"
 		"  %s run [--cpu N] [--duration-ms N] [--period-us N]\n"
-		"      [--workload timestamp|memmove] [--work-bytes N]\n"
+		"      [--workload timestamp|memmove|shared-memmove]\n"
+		"      [--work-bytes N] [--shared-entry N]\n"
 		"      [--persistent] [--require-quiescent] [--quarantine-irqs]\n"
 		"  %s exit\n"
 		"  %s status\n"
@@ -115,6 +119,7 @@ static int run_workload(const char *program, int argc, char **argv)
 		.cpu = 1,
 		.flags = CPU_ACCEL_FLAG_IRQS_OFF,
 		.workload = CPU_ACCEL_WORKLOAD_TIMESTAMP,
+		.shared_entry = 0,
 		.duration_ns = CPU_ACCEL_DEFAULT_DURATION_NS,
 		.period_ns = CPU_ACCEL_DEFAULT_PERIOD_NS,
 	};
@@ -167,6 +172,8 @@ static int run_workload(const char *program, int argc, char **argv)
 				config.workload = CPU_ACCEL_WORKLOAD_TIMESTAMP;
 			else if (!strcmp(workload, "memmove"))
 				config.workload = CPU_ACCEL_WORKLOAD_MEMMOVE;
+			else if (!strcmp(workload, "shared-memmove"))
+				config.workload = CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE;
 			else {
 				fprintf(stderr, "%s: invalid workload\n", program);
 				return 2;
@@ -179,6 +186,13 @@ static int run_workload(const char *program, int argc, char **argv)
 				return 2;
 			}
 			config.work_bytes = value;
+		} else if (!strcmp(argv[index], "--shared-entry") &&
+			   index + 1 < argc) {
+			if (parse_u64(argv[++index], &value) || value > UINT_MAX) {
+				fprintf(stderr, "%s: invalid shared entry\n", program);
+				return 2;
+			}
+			config.shared_entry = value;
 		} else if (!strcmp(argv[index], "--persistent")) {
 			persistent = 1;
 		} else if (!strcmp(argv[index], "--require-quiescent")) {
@@ -212,6 +226,21 @@ static int run_workload(const char *program, int argc, char **argv)
 		cpu_accel_close(&handle);
 		return 1;
 	}
+	if (config.workload == CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE) {
+		struct cpu_accel_shared_entry *entry =
+			&handle.shared_region->entries[config.shared_entry];
+		void *data = (void *)entry->data;
+
+		memset(data, 0xa5, config.work_bytes);
+		memset((char *)data + config.work_bytes, 0x5a,
+		       config.work_bytes);
+		if (cpu_accel_shared_ready(&handle, config.shared_entry,
+					   config.work_bytes) < 0) {
+			perror("shared ready");
+			cpu_accel_close(&handle);
+			return 1;
+		}
+	}
 	ret = cpu_accel_start(&handle);
 	if (ret < 0) {
 		perror("start");
@@ -233,6 +262,19 @@ static int run_workload(const char *program, int argc, char **argv)
 	if (ret < 0 && !interrupted)
 		perror("wait");
 	print_status(handle.shared);
+	if (config.workload == CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE &&
+	    handle.shared->work_iterations &&
+	    memcmp(handle.shared_region->entries[config.shared_entry].data,
+		   handle.shared_region->entries[config.shared_entry].data +
+		   config.work_bytes, config.work_bytes)) {
+		fprintf(stderr, "shared memmove data validation failed\n");
+		ret = -1;
+	}
+	if (config.workload == CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE &&
+	    cpu_accel_shared_reclaim(&handle, config.shared_entry) < 0) {
+		perror("shared reclaim");
+		ret = -1;
+	}
 	cpu_accel_close(&handle);
 	return ret < 0 && !interrupted ? 1 : 0;
 }

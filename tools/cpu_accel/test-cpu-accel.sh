@@ -113,6 +113,33 @@ echo "$memmove_output" | grep -q 'context_switches=0' || \
 echo "$memmove_output" | grep -q 'migration_detected=0' || \
 	fail "memmove workload migrated CPUs"
 
+shared_output=$($tool run --cpu "$target_cpu" --duration-ms 20 \
+	--period-us 1000 --workload shared-memmove --work-bytes 4096 \
+	$quiescent_arg $quarantine_arg)
+echo "$shared_output"
+case "$shared_output" in
+	state=3\ *) ;;
+	*) fail "shared memmove run did not complete" ;;
+esac
+echo "$shared_output" | grep -q 'mode=0' || \
+	fail "shared memmove run did not return to Linux mode"
+echo "$shared_output" | grep -q 'workload=2' || \
+	fail "shared memmove workload was not selected"
+echo "$shared_output" | grep -q 'work_bytes=4096' || \
+	fail "shared memmove workload size was not reported"
+echo "$shared_output" | grep -q 'work_iterations=[1-9][0-9]*' || \
+	fail "shared memmove workload did not execute"
+echo "$shared_output" | grep -q 'shared_entry=0' || \
+	fail "shared memmove entry was not reported"
+echo "$shared_output" | grep -q 'shared_owner=3' || \
+	fail "shared memmove did not retain COMPLETE ownership"
+echo "$shared_output" | grep -q 'shared_epoch=[1-9][0-9]*' || \
+	fail "shared memmove epoch was not reported"
+echo "$shared_output" | grep -q 'context_switches=0' || \
+	fail "shared memmove workload performed a context switch"
+echo "$shared_output" | grep -q 'migration_detected=0' || \
+	fail "shared memmove workload migrated CPUs"
+
 $tool run --cpu "$target_cpu" --duration-ms 5000 --period-us 1000 \
 	--persistent $quiescent_arg $quarantine_arg >"$stop_output" 2>&1 &
 run_pid=$!

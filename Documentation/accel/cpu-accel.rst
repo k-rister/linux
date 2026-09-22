@@ -40,9 +40,9 @@ small ioctl interface:
   function and completes the transition back to Linux.
 * ``RESET`` returns the device to its initial state after a completed run.
 
-The shared mapping contains the state, explicit Linux/accelerator transition
+The control mapping contains the state, explicit Linux/accelerator transition
 mode, selected workload, run timestamps, aggregate lateness, and up to
-``CPU_ACCEL_MAX_SAMPLES`` timestamp samples.  ABI version 6 also
+``CPU_ACCEL_MAX_SAMPLES`` timestamp samples.  ABI version 7 also
 reports lifecycle entry/exit timestamps, interrupt and softirq deltas,
 timer, hrtimer, RCU, and scheduler softirq deltas, current-task
 context-switch deltas, CPU-entry/exit identity, migration detection, pending
@@ -63,6 +63,19 @@ is an oslat-like non-networked workload for measuring execution-source
 isolation while avoiding page faults and system calls in the accelerator
 interval.  The buffers are kernel-owned; this workload does not yet provide a
 protected user address space or a user-supplied accelerator binary.
+
+ABI version 7 adds a fixed-size shared-region mapping at
+``CPU_ACCEL_SHARED_MAP_OFFSET``.  It contains two bounded entries, each with
+an owner, epoch, length, and data area.  The ``shared-memmove`` workload uses
+one selected entry and copies between its two halves.  The companion
+initializes the entry and issues ``CPU_ACCEL_IOC_SHARED_READY`` before
+``START``.  The kernel publishes ``ACCELERATOR`` while the workload owns the
+entry, then retains ``COMPLETE`` or ``ERROR`` ownership after the lifecycle
+returns.  The companion must issue ``CPU_ACCEL_IOC_SHARED_RECLAIM`` after
+observing the terminal result before reusing the entry.  The kernel rejects
+stale epochs, wrong lengths, active-entry reuse, and ownership races.
+This is a prefaulted, kernel-backed shared-memory proof of the ownership
+protocol; it is not yet an IOMMU-protected user mapping.
 
 The mode reports ``LINUX``, ``ENTERING``, ``ACCELERATOR``, ``EXITING``, or
 ``RECOVERY``.  It makes the lifecycle transition explicit for the control
@@ -109,6 +122,8 @@ The companion SDK in ``tools/cpu_accel`` wraps the device and
   sudo tools/cpu_accel/cpu-accelctl run --cpu 1 --duration-ms 100 \
     --period-us 1000 --workload memmove --work-bytes 4096
   sudo tools/cpu_accel/cpu-accelctl run --cpu 1 --duration-ms 100 \
+    --period-us 1000 --workload shared-memmove --work-bytes 4096
+  sudo tools/cpu_accel/cpu-accelctl run --cpu 1 --duration-ms 100 \
     --period-us 1000 --quarantine-irqs
 
 The tool prints the shared result, including the maximum observed lateness,
@@ -137,8 +152,8 @@ the synchronous SMP dispatch still uses the normal IPI entry path and does
 not suppress Linux-generated IPIs while the target is running.  The next
 phase should validate the bounded memmove workload under loaded conditions.
 The proposed protected address-space and shared-memory contract is documented
-in :doc:`cpu-accel-memory`; the internal region/epoch model is now in place.
-The next implementation step is a prefaulted shared region and companion SDK
-ring before adding a ring-3 image, direct APIC ownership, or IOMMU-backed
-networking.  A stronger latency claim must wait for those controls and for a
-defined recovery contract.
+in :doc:`cpu-accel-memory`; the internal region/epoch model and the first
+prefaulted shared entry are now in place.  The next implementation step is a
+protected ring-3 image in a dedicated address space before adding direct APIC
+ownership or IOMMU-backed networking.  A stronger latency claim must wait for
+those controls and for a defined recovery contract.

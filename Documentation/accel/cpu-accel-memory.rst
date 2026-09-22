@@ -15,9 +15,9 @@ does not execute user code and does not provide a protected accelerator
 address space.
 
 The kernel prototype now tracks an internal owner and generation epoch for
-the kernel-owned workload region. Normal completion returns the region to
-Linux ownership; stop, watchdog, and execution errors quarantine it until
-the lifecycle exit/recovery path has completed. This is lifecycle
+the workload region. Private kernel-owned buffers return to Linux ownership
+after lifecycle exit. Shared entries remain in ``COMPLETE`` or ``ERROR``
+ownership until the companion explicitly reclaims them. This is lifecycle
 bookkeeping, not yet protection against an untrusted accelerator or a device
 DMA engine.
 
@@ -131,10 +131,21 @@ required for correctness. A region may have one producer and one consumer
 initially. Multi-producer or multi-consumer ownership should be added only
 after the ordering and cache-coherency costs are measured.
 
+The current ABI 7 proof uses a fixed 64 KiB shared-data mapping containing two
+8 KiB entries. The kernel validates the selected entry and length, prefaults
+the backing allocation at module initialization, and exposes only bounded
+entry data through the mapping. ``CPU_ACCEL_IOC_SHARED_READY`` transfers a
+Linux-prepared entry to the accelerator with its current epoch;
+``CPU_ACCEL_IOC_SHARED_RECLAIM`` returns a terminal entry to Linux. The
+mapping is intentionally small and fixed so it can be audited and is page
+size compatible with common 4 KiB, 16 KiB, and 64 KiB Linux targets. It does
+not yet establish a protected ring-3 mapping or IOMMU domain.
+
 The kernel must reject a start if a shared region is still owned by Linux or
-has an incomplete handoff. On stop or error, the kernel changes the active
-epoch to ``ERROR`` before making any page reusable. This prevents a late
-accelerator store from corrupting a buffer that Linux has already recycled.
+has an incomplete handoff. On orderly completion, stop, or watchdog, the
+kernel retains ``COMPLETE`` ownership until reclaim. On execution error, it
+retains ``ERROR`` ownership until recovery. This prevents a late accelerator
+store from corrupting a buffer that Linux has already recycled.
 
 Proposed control-plane objects
 ==============================
@@ -207,9 +218,10 @@ The implementation checkpoints are:
 1. [completed] Add an internal region/epoch model without exposing physical
    addresses or allowing user code to run. Exercise it with the existing
    kernel-owned memmove workload.
-2. Add a prefaulted ``SHARED`` region and a companion SDK ring with explicit
-   ownership transitions. Verify that concurrent misuse is rejected and that
-   the accelerator never accesses the region outside its active epoch.
+2. [in progress] Add a prefaulted ``SHARED`` region and a companion SDK ring
+   with explicit ownership transitions. Verify that concurrent misuse is
+   rejected and that the accelerator never accesses the region outside its
+   active epoch.
 3. Add a protected, prevalidated ring-3 oslat-like image in a dedicated
    address space. Measure entry/exit and active-interval TLB behavior.
 4. Add architecture-specific escape/recovery handling and document which

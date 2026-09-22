@@ -5,9 +5,13 @@
 #include <linux/ioctl.h>
 #include <linux/types.h>
 
-/* The first prototype uses a fixed-size shared control and sample area. */
-#define CPU_ACCEL_ABI_VERSION		6
+/* The prototype uses separate fixed-size control and shared-data mappings. */
+#define CPU_ACCEL_ABI_VERSION		7
 #define CPU_ACCEL_MAP_SIZE		(64U * 1024U)
+#define CPU_ACCEL_SHARED_MAP_SIZE	(64U * 1024U)
+#define CPU_ACCEL_SHARED_MAP_OFFSET	CPU_ACCEL_MAP_SIZE
+#define CPU_ACCEL_SHARED_ENTRY_COUNT	2U
+#define CPU_ACCEL_SHARED_ENTRY_BYTES	(8U * 1024U)
 #define CPU_ACCEL_MAX_SAMPLES		2048U
 #define CPU_ACCEL_MAX_WORK_BYTES	(64U * 1024U)
 
@@ -50,13 +54,24 @@ enum cpu_accel_backend {
 enum cpu_accel_workload {
 	CPU_ACCEL_WORKLOAD_TIMESTAMP = 0,
 	CPU_ACCEL_WORKLOAD_MEMMOVE,
+	CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE,
+};
+
+enum cpu_accel_shared_owner {
+	CPU_ACCEL_SHARED_OWNER_LINUX = 0,
+	CPU_ACCEL_SHARED_OWNER_READY,
+	CPU_ACCEL_SHARED_OWNER_ACCELERATOR,
+	CPU_ACCEL_SHARED_OWNER_COMPLETE,
+	CPU_ACCEL_SHARED_OWNER_ERROR,
 };
 
 struct cpu_accel_config {
 	__u32 cpu;
 	__u32 flags;
 	__u32 workload;
+	__u32 shared_entry;
 	__u32 reserved;
+	__u32 reserved2;
 	__u64 work_bytes;
 	__u64 duration_ns;
 	__u64 period_ns;
@@ -87,6 +102,9 @@ struct cpu_accel_shared {
 	__u32 reserved_workload;
 	__u64 work_bytes;
 	__u64 work_iterations;
+	__u32 shared_entry;
+	__u32 shared_owner;
+	__u64 shared_epoch;
 	__u64 samples_produced;
 	__u64 max_lateness_ns;
 	__u64 min_lateness_ns;
@@ -122,6 +140,28 @@ struct cpu_accel_shared {
 	struct cpu_accel_sample samples[CPU_ACCEL_MAX_SAMPLES];
 };
 
+struct cpu_accel_shared_entry {
+	__u32 owner;
+	__u32 reserved;
+	__u64 epoch;
+	__u64 bytes;
+	__u8 data[CPU_ACCEL_SHARED_ENTRY_BYTES];
+};
+
+struct cpu_accel_shared_region {
+	__u32 abi_version;
+	__u32 struct_size;
+	__u32 entry_count;
+	__u32 entry_size;
+	struct cpu_accel_shared_entry entries[CPU_ACCEL_SHARED_ENTRY_COUNT];
+};
+
+struct cpu_accel_shared_handoff {
+	__u32 entry;
+	__u32 reserved;
+	__u64 bytes;
+};
+
 #define CPU_ACCEL_IOC_MAGIC	'C'
 #define CPU_ACCEL_IOC_CONFIG	_IOW(CPU_ACCEL_IOC_MAGIC, 0x00, \
 					struct cpu_accel_config)
@@ -129,5 +169,9 @@ struct cpu_accel_shared {
 #define CPU_ACCEL_IOC_STOP	_IO(CPU_ACCEL_IOC_MAGIC, 0x02)
 #define CPU_ACCEL_IOC_RESET	_IO(CPU_ACCEL_IOC_MAGIC, 0x03)
 #define CPU_ACCEL_IOC_EXIT	_IO(CPU_ACCEL_IOC_MAGIC, 0x04)
+#define CPU_ACCEL_IOC_SHARED_READY	_IOW(CPU_ACCEL_IOC_MAGIC, 0x05, \
+					struct cpu_accel_shared_handoff)
+#define CPU_ACCEL_IOC_SHARED_RECLAIM	_IOW(CPU_ACCEL_IOC_MAGIC, 0x06, \
+					__u32)
 
 #endif /* _UAPI_LINUX_CPU_ACCEL_H */

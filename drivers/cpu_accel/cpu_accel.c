@@ -284,6 +284,8 @@ struct cpu_accel_device {
 	struct irq_accel_quarantine *irq_quarantine;
 	struct cpu_accel_shared *shared;
 	struct cpu_accel_shared_region *shared_region;
+	/* mm of the process that opened the device as the control companion. */
+	struct mm_struct *companion_mm;
 	struct cpu_accel_config config;
 	atomic_t opened;
 	atomic_t enter_requested;
@@ -978,8 +980,11 @@ static int cpu_accel_user_image_prepare(struct cpu_accel_device *dev)
 	long pinned;
 	int ret;
 
-	if (!mm || atomic_read(&mm->mm_users) != 1 ||
-	    get_nr_threads(current) != 1)
+	if (!mm)
+		return -EINVAL;
+	if (mm == dev->companion_mm)
+		return -EXDEV;
+	if (atomic_read(&mm->mm_users) != 1 || get_nr_threads(current) != 1)
 		return -EBUSY;
 	if (!PAGE_ALIGNED(dev->config.user_image_start) ||
 	    !PAGE_ALIGNED(dev->config.user_image_bytes) ||
@@ -1478,11 +1483,20 @@ static int cpu_accel_lifecycle_exit(struct cpu_accel_device *dev)
 
 static int cpu_accel_open(struct inode *inode, struct file *file)
 {
-	if (atomic_cmpxchg(&cpu_accel.opened, 0, 1))
-		return -EBUSY;
+	struct mm_struct *mm = get_task_mm(current);
 
+	if (!mm)
+		return -EINVAL;
+	if (atomic_cmpxchg(&cpu_accel.opened, 0, 1))
+		goto busy;
+
+	cpu_accel.companion_mm = mm;
 	file->private_data = &cpu_accel;
 	return 0;
+
+busy:
+	mmput(mm);
+	return -EBUSY;
 }
 
 static int cpu_accel_release(struct inode *inode, struct file *file)
@@ -1511,6 +1525,10 @@ static int cpu_accel_release(struct inode *inode, struct file *file)
 			       dev->config.cpu, ret);
 	}
 	mutex_unlock(&dev->lock);
+	if (dev->companion_mm) {
+		mmput(dev->companion_mm);
+		dev->companion_mm = NULL;
+	}
 
 	atomic_set(&dev->opened, 0);
 	return 0;
@@ -1766,6 +1784,11 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 		    READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_READY ||
 		    dev->lifecycle_thread || dev->user_image.active) {
 			ret = -EBUSY;
+			break;
+		}
+		if (cpu_accel_user_workload(config.workload) &&
+		    current->mm == dev->companion_mm) {
+			ret = -EXDEV;
 			break;
 		}
 		if (!config.flags)

@@ -115,6 +115,8 @@ to the target CPU, and supplies page-aligned executable-image and private-stack
 ranges.  The kernel validates the VMAs, prefaults and pins their pages, holds
 the worker address space's write-side mapping lock for the active epoch, and
 returns the worker to ring 3 with the saved user register frame and IF clear.
+The driver retains the opener's ``mm_struct`` as the companion identity and
+rejects admission if the worker still shares that address space.
 The image polls the existing control mapping, records TSC-derived samples, and
 uses ``CPU_ACCEL_IOC_USER_EXIT`` as its only terminal system call.  The kernel
 restores the original ``START`` return frame, releases the address-space

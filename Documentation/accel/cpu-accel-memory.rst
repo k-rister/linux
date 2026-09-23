@@ -102,12 +102,16 @@ Address-space and TLB ownership policy
 =======================================
 
 The current x86 ring-3 workload is an admission prototype, not yet the final
-address-space ownership model. It requires a single-threaded worker with a
-distinct ``mm`` from its companion, pins the image and stack, and holds that
-``mm``'s ``mmap_lock`` for write during the active epoch. This blocks ordinary
-VMA changes to that worker address space. The worker still uses its process
-``mm``; it is not a driver-created sealed accelerator ``mm`` with only the
-registered image and region mappings.
+address-space ownership model. On device open, the driver retains the opener's
+``mm`` as the companion address space. User-workload admission rejects that
+same ``mm`` during configuration and start, and requires a single-threaded
+worker with a distinct ``mm``. The companion opens and maps the control
+interface, then forks a worker that inherits the device file and control
+mapping. The driver pins the worker's image and stack and holds that ``mm``'s
+``mmap_lock`` for write during the active epoch. This blocks ordinary VMA
+changes to that worker address space. The worker still uses its process ``mm``;
+it is not a driver-created sealed accelerator ``mm`` with only the registered
+image and region mappings, and unrelated worker VMAs may still be present.
 
 ABI 15 defers and replays call-function IPIs while the native x86 direct
 backend owns a CPU. Native x86 remote TLB flushes use call-function work, so

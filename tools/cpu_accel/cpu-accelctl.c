@@ -381,6 +381,20 @@ static int run_user_workload(const struct cpu_accel_config *requested,
 		return 2;
 	}
 
+	/* The device opener is the companion, not a valid accelerator worker. */
+	errno = 0;
+	ret = cpu_accel_configure(&handle, &config);
+	if (ret != -1 || errno != EXDEV) {
+		int configure_errno = errno;
+
+		fprintf(stderr,
+			"same-mm user admission returned %d/errno %d, expected EXDEV\n",
+			ret, configure_errno);
+		cpu_accel_close(&handle);
+		munmap(stack, (size_t)page_size * 16);
+		return 1;
+	}
+
 	child = fork();
 	if (child < 0) {
 		perror("fork user accelerator");

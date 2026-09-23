@@ -115,10 +115,14 @@ their callbacks remain queued until the ownership interval ends. A synchronous
 flush sender can therefore wait for the accelerator to exit. This is an
 incidental consequence of call-function deferral. ABI 16 reports
 ``arch_tlb_shootdown_targets`` for x86 flush batches that target the CPU while
-direct ownership is active, including the native IPI and INVLPGB paths. It
-does not track pending generations or callback completion, and paravirtual
-TLB paths may differ. Do not infer TLB isolation or a latency bound from a
-zero target count or TLB counter delta.
+accelerator ownership is active, including the native IPI and INVLPGB paths.
+The ring-3 process-mm window uses the same per-CPU ownership state as the
+direct backend. After unlocking the image mm, the owner snapshots this count
+and flushes the local TLB if a batch targeted the CPU, before releasing the
+pinned image pages. Remote callback completion remains governed by the native
+flush path. This does not track pending generations, and paravirtual TLB paths
+may differ. Do not infer TLB isolation or a latency bound from a zero target
+count or TLB counter delta.
 
 The policy for a protected accelerator address space is:
 

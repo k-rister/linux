@@ -166,7 +166,7 @@ struct cpu_accel_shared {
 	__u64 arch_irq_count;
 	__u64 arch_ipi_count;
 	__u64 arch_tlb_count;
-	/* Native x86 flush batches targeting this CPU while directly owned. */
+	/* Native x86 flush batches targeting this CPU while accelerator-owned. */
 	__u64 arch_tlb_shootdown_targets;
 	__u64 arch_reschedule_deferred;
 	__u64 arch_call_function_deferred;

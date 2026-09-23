@@ -271,6 +271,7 @@ struct cpu_accel_user_image {
 #endif
 	bool mm_locked;
 	bool active;
+	bool owner_active;
 };
 
 struct cpu_accel_device {
@@ -945,6 +946,17 @@ static void cpu_accel_user_image_release(struct cpu_accel_device *dev)
 		mmap_write_unlock(image->mm);
 		image->mm_locked = false;
 	}
+#ifdef CONFIG_X86_LOCAL_APIC
+	if (image->owner_active) {
+		u64 targets = x86_cpu_accel_user_exit(dev->config.cpu,
+			dev->user_observation.arch_tlb_shootdown_targets_entry);
+
+		dev->shared->arch_tlb_shootdown_targets =
+			cpu_accel_counter_delta(targets, dev->user_observation.
+				arch_tlb_shootdown_targets_entry);
+		image->owner_active = false;
+	}
+#endif
 	if (image->pages) {
 		unpin_user_pages(image->pages, image->pinned_pages);
 		kvfree(image->pages);
@@ -1078,8 +1090,23 @@ static int cpu_accel_arch_user_enter(struct cpu_accel_device *dev)
 {
 	struct cpu_accel_user_image *image = &dev->user_image;
 	struct pt_regs *regs = current_pt_regs();
+#ifdef CONFIG_X86_LOCAL_APIC
+	u64 tlb_targets_entry;
+	int ret;
+#endif
 
+#ifdef CONFIG_X86_LOCAL_APIC
+	ret = x86_cpu_accel_user_enter(raw_smp_processor_id(),
+				       &tlb_targets_entry);
+	if (ret)
+		return ret;
+	image->owner_active = true;
+#endif
 	cpu_accel_observation_begin(&dev->user_observation);
+#ifdef CONFIG_X86_LOCAL_APIC
+	dev->user_observation.arch_tlb_shootdown_targets_entry =
+		tlb_targets_entry;
+#endif
 	WRITE_ONCE(dev->shared->start_ns,
 		   dev->user_observation.lifecycle_entry_ns);
 	WRITE_ONCE(dev->shared->lifecycle_entry_ns,

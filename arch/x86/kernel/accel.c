@@ -2,6 +2,7 @@
 
 #include <linux/atomic.h>
 #include <linux/cpu.h>
+#include <linux/errno.h>
 #include <linux/export.h>
 #include <linux/types.h>
 #include <linux/percpu.h>
@@ -13,6 +14,7 @@
 #include <asm/idtentry.h>
 #include <asm/irq_vectors.h>
 #include <asm/smp.h>
+#include <asm/tlbflush.h>
 
 struct x86_cpu_accel_request {
 	raw_spinlock_t lock;
@@ -32,14 +34,12 @@ static DEFINE_PER_CPU(struct x86_cpu_accel_request, x86_cpu_accel_request) = {
 };
 static atomic_t x86_cpu_accel_active_count = ATOMIC_INIT(0);
 
-int x86_cpu_accel_direct_enter(unsigned int cpu,
-			       x86_cpu_accel_entry_fn entry, void *data)
+static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets)
 {
 	struct x86_cpu_accel_request *request;
 	unsigned long flags;
 
-	if (!entry || cpu >= nr_cpu_ids || !cpu_online(cpu) ||
-	    cpu == raw_smp_processor_id())
+	if (cpu >= nr_cpu_ids || !cpu_online(cpu))
 		return -EINVAL;
 
 	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
@@ -52,7 +52,65 @@ int x86_cpu_accel_direct_enter(unsigned int cpu,
 	atomic_set(&request->call_function_pending, 0);
 	atomic_inc(&x86_cpu_accel_active_count);
 	atomic_set(&request->active, 1);
+	if (tlb_targets)
+		*tlb_targets = atomic64_read(&request->tlb_shootdown_targets);
 	raw_spin_unlock_irqrestore(&request->lock, flags);
+	return 0;
+}
+
+static u64 x86_cpu_accel_owner_exit(unsigned int cpu)
+{
+	struct x86_cpu_accel_request *request;
+	unsigned long flags;
+	u64 targets;
+
+	if (cpu >= nr_cpu_ids)
+		return 0;
+	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
+	raw_spin_lock_irqsave(&request->lock, flags);
+	if (atomic_xchg(&request->active, 0)) {
+		atomic_dec(&x86_cpu_accel_active_count);
+		if (atomic_xchg(&request->call_function_pending, 0))
+			__apic_send_IPI(cpu, CALL_FUNCTION_SINGLE_VECTOR);
+		if (atomic_xchg(&request->reschedule_pending, 0))
+			__apic_send_IPI(cpu, RESCHEDULE_VECTOR);
+	}
+	targets = atomic64_read(&request->tlb_shootdown_targets);
+	raw_spin_unlock_irqrestore(&request->lock, flags);
+	return targets;
+}
+
+int x86_cpu_accel_user_enter(unsigned int cpu, u64 *tlb_targets)
+{
+	if (cpu != raw_smp_processor_id())
+		return -EXDEV;
+	return x86_cpu_accel_owner_enter(cpu, tlb_targets);
+}
+EXPORT_SYMBOL_GPL(x86_cpu_accel_user_enter);
+
+u64 x86_cpu_accel_user_exit(unsigned int cpu, u64 tlb_targets_entry)
+{
+	u64 targets = x86_cpu_accel_owner_exit(cpu);
+
+	/* Reconcile this CPU before the pinned user pages are released. */
+	if (cpu == raw_smp_processor_id() && targets != tlb_targets_entry)
+		__flush_tlb_all();
+	return targets;
+}
+EXPORT_SYMBOL_GPL(x86_cpu_accel_user_exit);
+
+int x86_cpu_accel_direct_enter(unsigned int cpu,
+			       x86_cpu_accel_entry_fn entry, void *data)
+{
+	struct x86_cpu_accel_request *request;
+	int ret;
+
+	if (!entry || cpu == raw_smp_processor_id())
+		return -EINVAL;
+	ret = x86_cpu_accel_owner_enter(cpu, NULL);
+	if (ret)
+		return ret;
+	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
 
 	atomic_set(&request->done, 0);
 	WRITE_ONCE(request->data, data);
@@ -64,14 +122,7 @@ int x86_cpu_accel_direct_enter(unsigned int cpu,
 	while (!atomic_read_acquire(&request->done))
 		cpu_relax();
 
-	raw_spin_lock_irqsave(&request->lock, flags);
-	atomic_set(&request->active, 0);
-	atomic_dec(&x86_cpu_accel_active_count);
-	if (atomic_xchg(&request->call_function_pending, 0))
-		__apic_send_IPI(cpu, CALL_FUNCTION_SINGLE_VECTOR);
-	if (atomic_xchg(&request->reschedule_pending, 0))
-		__apic_send_IPI(cpu, RESCHEDULE_VECTOR);
-	raw_spin_unlock_irqrestore(&request->lock, flags);
+	x86_cpu_accel_owner_exit(cpu);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_direct_enter);

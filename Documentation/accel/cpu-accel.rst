@@ -49,7 +49,8 @@ context-switch deltas, CPU-entry/exit identity, migration detection, pending
 scheduler and softirq state, and preemption state.  On x86 it additionally
 reports architecture interrupt, IPI, TLB, deferred-reschedule, and
 deferred-call-function counter deltas, plus native x86 TLB flush target
-batches directed at the CPU during direct ownership;
+batches directed at the CPU during accelerator ownership, including the
+ring-3 process-mm window;
 ``arch_counters_valid`` identifies whether those counters are available.
 The x86 direct backend is reported as
 ``CPU_ACCEL_BACKEND_X86_DIRECT_APIC``; it uses one dedicated APIC vector for
@@ -90,9 +91,12 @@ path, remote TLB flush callbacks use call-function work, so this generic
 deferral also delays those callbacks until after exit; synchronous flush
 senders can wait for the accelerator to return.  ABI 16's
 ``arch_tlb_shootdown_targets`` counts native x86 flush batches that targeted
-the CPU while direct ownership was active.  It does not measure callback
-completion or provide a protection guarantee, and paravirtual TLB-flush paths
-may use different mechanisms.
+the CPU while accelerator ownership was active, including the ring-3
+process-mm window through image unlock. Before releasing pinned image pages,
+the x86 owner flushes the local TLB when the target count changed. Remote
+callback completion remains governed by the native flush path. The counter
+does not provide an isolation or latency guarantee, and paravirtual TLB-flush
+paths may use different mechanisms.
 
 The initial workload selector supports ``timestamp`` and ``memmove``.  The
 memmove workload allocates and touches two bounded kernel buffers before the

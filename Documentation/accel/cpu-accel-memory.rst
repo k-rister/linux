@@ -98,6 +98,52 @@ on the accelerator CPU for ordinary unmap, mprotect, COW, migration, or
 reclaim activity. Enter and exit may pay the architecture-specific address
 space transition and TLB costs; the dataplane interval may not.
 
+Address-space and TLB ownership policy
+=======================================
+
+The current x86 ring-3 workload is an admission prototype, not yet the final
+address-space ownership model. It requires a single-threaded worker with a
+distinct ``mm`` from its companion, pins the image and stack, and holds that
+``mm``'s ``mmap_lock`` for write during the active epoch. This blocks ordinary
+VMA changes to that worker address space. The worker still uses its process
+``mm``; it is not a driver-created sealed accelerator ``mm`` with only the
+registered image and region mappings.
+
+ABI 15 defers and replays call-function IPIs while the native x86 direct
+backend owns a CPU. Native x86 remote TLB flushes use call-function work, so
+their callbacks remain queued until the ownership interval ends. A synchronous
+flush sender can therefore wait for the accelerator to exit. This is an
+incidental consequence of call-function deferral. ABI 16 reports
+``arch_tlb_shootdown_targets`` for x86 flush batches that target the CPU while
+direct ownership is active, including the native IPI and INVLPGB paths. It
+does not track pending generations or callback completion, and paravirtual
+TLB paths may differ. Do not infer TLB isolation or a latency bound from a
+zero target count or TLB counter delta.
+
+The policy for a protected accelerator address space is:
+
+* The accelerator runs only in its sealed ``mm``. Before entry, the CPU must
+  leave any Linux task ``mm`` and be removed from that ``mm``'s active CPU set
+  using the architecture's normal address-space-switch rules.
+* Mappings and page-table pages in the active accelerator ``mm`` are
+  prefaulted, pinned, and immutable until exit, except for explicitly owned
+  shared regions whose mappings remain fixed. Mapping changes, reclaim,
+  migration, COW, and unmap must wait for ownership to end.
+* A TLB invalidation targeting an owned CPU is not complete until that CPU has
+  performed the required invalidation. Deferring the interrupt must not let
+  the caller free or reuse a page before acknowledgement. Pending address
+  space generations must be reconciled before Linux can run on the CPU again.
+* Entry and exit perform the required address-space switch and local
+  invalidations. Kernel-global mapping changes need a separate policy because
+  they are not limited to the accelerator ``mm``; they must either quiesce the
+  owner before acknowledgement or be proven irrelevant to all code executed
+  during the active interval and its recovery path.
+
+Until these rules are implemented for an architecture, call-function replay
+is only a mechanism detail. The direct APIC prototype must not advertise
+complete APIC ownership, TLB-shootdown suppression, or protected address-space
+isolation.
+
 Shared-region ownership
 =======================
 
@@ -261,8 +307,14 @@ The implementation checkpoints are:
 8. [completed for x86 prototype] Add ABI 15 selective call-function-IPI
    ownership.  Remote call-function requests remain queued, are deferred and
    counted while the direct backend owns the CPU, then are replayed after
-   exit.  TLB shootdowns and other interrupt sources remain outside these
-   checkpoints.
-9. Define the remaining APIC ownership and address-space/TLB policy, then add
-   IOMMU-backed ``DMA`` regions and userspace/NIC integration only after the
-   non-networked memory contract is stable.
+   exit. On native x86 this also delays TLB flush callbacks carried by
+   call-function work, but does not define TLB ownership or cover other
+   interrupt sources.
+9. [completed for x86 prototype] Add ABI 16 accounting for TLB flush target
+   batches that overlap direct CPU ownership across the x86 IPI and INVLPGB
+   paths. This is target telemetry; it does not track pending generations or
+   prove that invalidations completed.
+10. Implement the address-space/TLB ownership policy above, including sealed
+   ``mm`` admission, pending invalidation completion, and kernel-global
+   mapping behavior. Add IOMMU-backed ``DMA`` regions and userspace/NIC
+   integration only after this non-networked memory contract is stable.

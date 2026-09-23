@@ -226,6 +226,7 @@ static void print_status(const volatile struct cpu_accel_shared *shared)
 	       " workqueue_executed=%" PRIu64 " context_switches=%" PRIu64
 	       " need_resched_samples=%" PRIu64 " arch_irq_count=%" PRIu64
 	       " arch_ipi_count=%" PRIu64 " arch_tlb_count=%" PRIu64
+	       " arch_tlb_shootdown_targets=%" PRIu64
 	       " arch_reschedule_deferred=%" PRIu64
 	       " arch_call_function_deferred=%" PRIu64
 	       " need_resched_entry=%u need_resched_exit=%u"
@@ -271,6 +272,7 @@ static void print_status(const volatile struct cpu_accel_shared *shared)
 	       (uint64_t)shared->arch_irq_count,
 	       (uint64_t)shared->arch_ipi_count,
 	       (uint64_t)shared->arch_tlb_count,
+	       (uint64_t)shared->arch_tlb_shootdown_targets,
 	       (uint64_t)shared->arch_reschedule_deferred,
 	       (uint64_t)shared->arch_call_function_deferred,
 	       shared->need_resched_entry, shared->need_resched_exit,

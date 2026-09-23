@@ -10,5 +10,27 @@ bool x86_cpu_accel_defer_reschedule(unsigned int cpu);
 u64 x86_cpu_accel_reschedule_deferred(unsigned int cpu);
 bool x86_cpu_accel_defer_call_function(unsigned int cpu);
 u64 x86_cpu_accel_call_function_deferred(unsigned int cpu);
+#ifdef CONFIG_X86_LOCAL_APIC
+bool x86_cpu_accel_any_active(void);
+bool x86_cpu_accel_note_tlb_shootdown(unsigned int cpu);
+u64 x86_cpu_accel_tlb_shootdown_targets(unsigned int cpu);
+#else
+static inline bool x86_cpu_accel_any_active(void)
+{
+	return false;
+}
+
+static inline bool x86_cpu_accel_note_tlb_shootdown(unsigned int cpu)
+{
+	(void)cpu;
+	return false;
+}
+
+static inline u64 x86_cpu_accel_tlb_shootdown_targets(unsigned int cpu)
+{
+	(void)cpu;
+	return 0;
+}
+#endif
 
 #endif

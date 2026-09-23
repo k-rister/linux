@@ -6,7 +6,7 @@
 #include <linux/types.h>
 
 /* The prototype uses separate fixed-size control and shared-data mappings. */
-#define CPU_ACCEL_ABI_VERSION		15
+#define CPU_ACCEL_ABI_VERSION		16
 #define CPU_ACCEL_MAP_SIZE		(64U * 1024U)
 #define CPU_ACCEL_SHARED_MAP_SIZE	(64U * 1024U)
 #define CPU_ACCEL_SHARED_MAP_OFFSET	CPU_ACCEL_MAP_SIZE
@@ -166,6 +166,8 @@ struct cpu_accel_shared {
 	__u64 arch_irq_count;
 	__u64 arch_ipi_count;
 	__u64 arch_tlb_count;
+	/* Native x86 flush batches targeting this CPU while directly owned. */
+	__u64 arch_tlb_shootdown_targets;
 	__u64 arch_reschedule_deferred;
 	__u64 arch_call_function_deferred;
 	__u32 need_resched_entry;

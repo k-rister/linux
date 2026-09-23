@@ -20,11 +20,22 @@
 #include <asm/cache.h>
 #include <asm/cacheflush.h>
 #include <asm/apic.h>
+#include <asm/cpu_accel.h>
 #include <asm/msr.h>
 #include <asm/perf_event.h>
 #include <asm/tlb.h>
 
 #include "mm_internal.h"
+
+static void note_tlb_shootdown_targets(const struct cpumask *mask)
+{
+	int cpu;
+
+	if (!x86_cpu_accel_any_active())
+		return;
+	for_each_cpu(cpu, mask)
+		x86_cpu_accel_note_tlb_shootdown(cpu);
+}
 
 #ifdef CONFIG_PARAVIRT
 # define STATIC_NOPV
@@ -504,6 +515,9 @@ static void broadcast_tlb_flush(struct flush_tlb_info *info)
 	bool pmd = info->stride_shift == PMD_SHIFT;
 	unsigned long asid = mm_global_asid(info->mm);
 	unsigned long addr = info->start;
+
+	/* INVLPGB broadcasts to CPUs beyond the active mm's CPU mask. */
+	note_tlb_shootdown_targets(cpu_online_mask);
 
 	/*
 	 * TLB flushes with INVLPGB are kicked off asynchronously.
@@ -1291,24 +1305,28 @@ static bool should_flush_tlb(int cpu, void *data)
 
 	/* No mm means kernel memory flush. */
 	if (!info->mm)
-		return true;
+		goto flush;
 
 	/*
 	 * While switching, the remote CPU could have state from
 	 * either the prev or next mm. Assume the worst and flush.
 	 */
 	if (loaded_mm == LOADED_MM_SWITCHING)
-		return true;
+		goto flush;
 
 	/* The target mm is loaded, and the CPU is not lazy. */
 	if (loaded_mm == info->mm)
-		return true;
+		goto flush;
 
 	/* In cpumask, but not the loaded mm? Periodically remove by flushing. */
 	if (info->trim_cpumask)
-		return true;
+		goto flush;
 
 	return false;
+
+flush:
+	x86_cpu_accel_note_tlb_shootdown(cpu);
+	return true;
 }
 
 static bool should_trim_cpumask(struct mm_struct *mm)
@@ -1348,11 +1366,13 @@ STATIC_NOPV void native_flush_tlb_multi(const struct cpumask *cpumask,
 	 * up on the new contents of what used to be page tables, while
 	 * doing a speculative memory access.
 	 */
-	if (info->freed_tables || mm_in_asid_transition(info->mm))
+	if (info->freed_tables || mm_in_asid_transition(info->mm)) {
+		note_tlb_shootdown_targets(cpumask);
 		on_each_cpu_mask(cpumask, flush_tlb_func, (void *)info, true);
-	else
+	} else {
 		on_each_cpu_cond_mask(should_flush_tlb, flush_tlb_func,
 				(void *)info, 1, cpumask);
+	}
 }
 
 void flush_tlb_multi(const struct cpumask *cpumask,
@@ -1448,6 +1468,7 @@ static void do_flush_tlb_all(void *info)
 void flush_tlb_all(void)
 {
 	count_vm_tlb_event(NR_TLB_REMOTE_FLUSH);
+	note_tlb_shootdown_targets(cpu_online_mask);
 
 	/* First try (faster) hardware-assisted TLB invalidation. */
 	if (cpu_feature_enabled(X86_FEATURE_INVLPGB))
@@ -1462,6 +1483,7 @@ static void invlpgb_kernel_range_flush(struct flush_tlb_info *info)
 {
 	unsigned long addr, nr;
 
+	note_tlb_shootdown_targets(cpu_online_mask);
 	for (addr = info->start; addr < info->end; addr += nr << PAGE_SHIFT) {
 		nr = (info->end - addr) >> PAGE_SHIFT;
 
@@ -1488,6 +1510,7 @@ static void do_kernel_range_flush(void *info)
 
 static void kernel_tlb_flush_all(struct flush_tlb_info *info)
 {
+	note_tlb_shootdown_targets(cpu_online_mask);
 	if (cpu_feature_enabled(X86_FEATURE_INVLPGB))
 		invlpgb_flush_all();
 	else
@@ -1498,8 +1521,10 @@ static void kernel_tlb_flush_range(struct flush_tlb_info *info)
 {
 	if (cpu_feature_enabled(X86_FEATURE_INVLPGB))
 		invlpgb_kernel_range_flush(info);
-	else
+	else {
+		note_tlb_shootdown_targets(cpu_online_mask);
 		on_each_cpu(do_kernel_range_flush, info, 1);
+	}
 }
 
 void flush_tlb_kernel_range(unsigned long start, unsigned long end)
@@ -1693,6 +1718,7 @@ void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
 	 * flush_tlb_func_local() directly in this case.
 	 */
 	if (cpu_feature_enabled(X86_FEATURE_INVLPGB) && batch->unmapped_pages) {
+		note_tlb_shootdown_targets(cpu_online_mask);
 		invlpgb_flush_all_nonglobals();
 		batch->unmapped_pages = false;
 	} else if (cpumask_any_but(&batch->cpumask, cpu) < nr_cpu_ids) {

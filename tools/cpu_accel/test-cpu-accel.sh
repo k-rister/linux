@@ -9,6 +9,7 @@ online_file=/sys/devices/system/cpu/cpu${target_cpu}/online
 stop_output=$(mktemp)
 invalid_output=$(mktemp)
 load_pid=0
+run_pid=0
 repeats=${CPU_ACCEL_REPEATS:-1}
 load_cpus=${CPU_ACCEL_LOAD_CPUS:-}
 quiescent_arg=
@@ -30,6 +31,10 @@ fail()
 
 cleanup()
 {
+	if [ "$run_pid" -ne 0 ]; then
+		kill -TERM "$run_pid" 2>/dev/null || true
+		wait "$run_pid" 2>/dev/null || true
+	fi
 	if [ "$load_pid" -ne 0 ]; then
 		kill "$load_pid" 2>/dev/null || true
 	fi
@@ -94,6 +99,8 @@ while [ "$run" -le "$repeats" ]; do
 		fail "deferred reschedule telemetry was not reported"
 	echo "$output" | grep -q 'arch_call_function_deferred=' || \
 		fail "deferred call-function telemetry was not reported"
+	echo "$output" | grep -q 'arch_tlb_shootdown_targets=' || \
+		fail "TLB shootdown-target telemetry was not reported"
 	echo "$output" | grep -q 'arch_counters_valid=1' || \
 		fail "architecture counters were not reported on x86"
 	run=$((run + 1))
@@ -241,10 +248,21 @@ esac
 $tool run --cpu "$target_cpu" --duration-ms 5000 --period-us 1000 \
 	--persistent $quiescent_arg $quarantine_arg >"$stop_output" 2>&1 &
 run_pid=$!
-sleep 0.1
+start_checks=0
+while [ "$start_checks" -lt 200 ]; do
+	run_wchan=$(cat "/proc/$run_pid/wchan" 2>/dev/null || true)
+	case "$run_wchan" in
+		*nanosleep*) break ;;
+	esac
+	sleep 0.01
+	start_checks=$((start_checks + 1))
+done
+[ "$start_checks" -lt 200 ] || \
+	fail "persistent run did not reach its interruptible wait loop"
 [ "$(cat "$online_file")" = 1 ] || fail "target CPU went offline during accelerator run"
 kill -TERM "$run_pid" 2>/dev/null || true
 wait "$run_pid"
+run_pid=0
 cat "$stop_output"
 grep -q '^state=4 ' "$stop_output" || fail "STOP did not produce state=4"
 grep -q 'mode=0' "$stop_output" || fail "STOP did not return to Linux mode"

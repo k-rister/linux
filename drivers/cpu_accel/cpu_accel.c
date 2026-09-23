@@ -55,6 +55,7 @@ struct cpu_accel_observation {
 	u64 arch_irq_entry;
 	u64 arch_ipi_entry;
 	u64 arch_tlb_entry;
+	u64 arch_tlb_shootdown_targets_entry;
 	u64 arch_reschedule_deferred_entry;
 	u64 arch_call_function_deferred_entry;
 	u64 need_resched_samples;
@@ -170,6 +171,11 @@ static u64 cpu_accel_arch_tlb_count(unsigned int cpu)
 	return READ_ONCE(stats->counts[IRQ_COUNT_TLB]);
 }
 
+static u64 cpu_accel_arch_tlb_shootdown_targets(unsigned int cpu)
+{
+	return x86_cpu_accel_tlb_shootdown_targets(cpu);
+}
+
 static u64 cpu_accel_arch_reschedule_deferred(unsigned int cpu)
 {
 	return x86_cpu_accel_reschedule_deferred(cpu);
@@ -201,6 +207,12 @@ static u64 cpu_accel_arch_tlb_count(unsigned int cpu)
 {
 	(void)cpu;
 	return U64_MAX;
+}
+
+static u64 cpu_accel_arch_tlb_shootdown_targets(unsigned int cpu)
+{
+	(void)cpu;
+	return 0;
 }
 
 static u64 cpu_accel_arch_reschedule_deferred(unsigned int cpu)
@@ -794,6 +806,8 @@ static void cpu_accel_observation_begin(struct cpu_accel_observation *obs)
 	obs->arch_irq_entry = cpu_accel_arch_irq_count(obs->cpu);
 	obs->arch_ipi_entry = cpu_accel_arch_ipi_count(obs->cpu);
 	obs->arch_tlb_entry = cpu_accel_arch_tlb_count(obs->cpu);
+	obs->arch_tlb_shootdown_targets_entry =
+		cpu_accel_arch_tlb_shootdown_targets(obs->cpu);
 	obs->arch_reschedule_deferred_entry =
 		cpu_accel_arch_reschedule_deferred(obs->cpu);
 	obs->arch_call_function_deferred_entry =
@@ -823,6 +837,8 @@ static void cpu_accel_observation_finish(struct cpu_accel_device *dev,
 	u64 arch_irq_count = cpu_accel_arch_irq_count(obs->cpu);
 	u64 arch_ipi_count = cpu_accel_arch_ipi_count(obs->cpu);
 	u64 arch_tlb_count = cpu_accel_arch_tlb_count(obs->cpu);
+	u64 arch_tlb_shootdown_targets =
+		cpu_accel_arch_tlb_shootdown_targets(obs->cpu);
 	u64 arch_reschedule_deferred =
 		cpu_accel_arch_reschedule_deferred(obs->cpu);
 	u64 arch_call_function_deferred =
@@ -838,6 +854,9 @@ static void cpu_accel_observation_finish(struct cpu_accel_device *dev,
 		obs->arch_ipi_entry);
 	u64 arch_tlb_delta = cpu_accel_counter_delta(arch_tlb_count,
 		obs->arch_tlb_entry);
+	u64 arch_tlb_shootdown_targets_delta = cpu_accel_counter_delta(
+		arch_tlb_shootdown_targets,
+		obs->arch_tlb_shootdown_targets_entry);
 	u64 arch_reschedule_deferred_delta =
 		cpu_accel_counter_delta(arch_reschedule_deferred,
 					obs->arch_reschedule_deferred_entry);
@@ -871,6 +890,8 @@ static void cpu_accel_observation_finish(struct cpu_accel_device *dev,
 	shared->arch_irq_count = arch_irq_delta;
 	shared->arch_ipi_count = arch_ipi_delta;
 	shared->arch_tlb_count = arch_tlb_delta;
+	shared->arch_tlb_shootdown_targets =
+		arch_tlb_shootdown_targets_delta;
 	shared->arch_reschedule_deferred = arch_reschedule_deferred_delta;
 	shared->arch_call_function_deferred = arch_call_function_deferred_delta;
 	shared->need_resched_entry = obs->need_resched_entry;
@@ -1337,8 +1358,19 @@ static void cpu_accel_lifecycle_entry(void *data)
  */
 static int cpu_accel_lifecycle_enter(struct cpu_accel_device *dev)
 {
-	return cpu_accel_arch_enter(dev->config.cpu,
+	u64 targets_entry =
+		cpu_accel_arch_tlb_shootdown_targets(dev->config.cpu);
+	int ret;
+
+	ret = cpu_accel_arch_enter(dev->config.cpu,
 				   cpu_accel_lifecycle_entry, dev);
+	if (!ret)
+		dev->shared->arch_tlb_shootdown_targets =
+			cpu_accel_counter_delta(
+				cpu_accel_arch_tlb_shootdown_targets(
+					dev->config.cpu), targets_entry);
+
+	return ret;
 }
 
 static int cpu_accel_lifecycle_thread(void *data)
@@ -1586,6 +1618,7 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 	dev->shared->arch_irq_count = 0;
 	dev->shared->arch_ipi_count = 0;
 	dev->shared->arch_tlb_count = 0;
+	dev->shared->arch_tlb_shootdown_targets = 0;
 	dev->shared->need_resched_entry = 0;
 	dev->shared->need_resched_exit = 0;
 	dev->shared->softirq_pending_entry = 0;

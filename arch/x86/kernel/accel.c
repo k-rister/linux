@@ -24,11 +24,13 @@ struct x86_cpu_accel_request {
 	atomic64_t reschedule_deferred;
 	atomic_t call_function_pending;
 	atomic64_t call_function_deferred;
+	atomic64_t tlb_shootdown_targets;
 };
 
 static DEFINE_PER_CPU(struct x86_cpu_accel_request, x86_cpu_accel_request) = {
 	.lock = __RAW_SPIN_LOCK_UNLOCKED(x86_cpu_accel_request.lock),
 };
+static atomic_t x86_cpu_accel_active_count = ATOMIC_INIT(0);
 
 int x86_cpu_accel_direct_enter(unsigned int cpu,
 			       x86_cpu_accel_entry_fn entry, void *data)
@@ -48,6 +50,7 @@ int x86_cpu_accel_direct_enter(unsigned int cpu,
 	}
 	atomic_set(&request->reschedule_pending, 0);
 	atomic_set(&request->call_function_pending, 0);
+	atomic_inc(&x86_cpu_accel_active_count);
 	atomic_set(&request->active, 1);
 	raw_spin_unlock_irqrestore(&request->lock, flags);
 
@@ -63,6 +66,7 @@ int x86_cpu_accel_direct_enter(unsigned int cpu,
 
 	raw_spin_lock_irqsave(&request->lock, flags);
 	atomic_set(&request->active, 0);
+	atomic_dec(&x86_cpu_accel_active_count);
 	if (atomic_xchg(&request->call_function_pending, 0))
 		__apic_send_IPI(cpu, CALL_FUNCTION_SINGLE_VECTOR);
 	if (atomic_xchg(&request->reschedule_pending, 0))
@@ -133,6 +137,40 @@ u64 x86_cpu_accel_call_function_deferred(unsigned int cpu)
 					     cpu).call_function_deferred);
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_call_function_deferred);
+
+bool x86_cpu_accel_note_tlb_shootdown(unsigned int cpu)
+{
+	struct x86_cpu_accel_request *request;
+	unsigned long flags;
+	bool active;
+
+	if (cpu >= nr_cpu_ids || !x86_cpu_accel_any_active())
+		return false;
+	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
+	raw_spin_lock_irqsave(&request->lock, flags);
+	active = atomic_read(&request->active);
+	if (active)
+		atomic64_inc(&request->tlb_shootdown_targets);
+	raw_spin_unlock_irqrestore(&request->lock, flags);
+
+	return active;
+}
+EXPORT_SYMBOL_GPL(x86_cpu_accel_note_tlb_shootdown);
+
+bool x86_cpu_accel_any_active(void)
+{
+	return atomic_read(&x86_cpu_accel_active_count) != 0;
+}
+EXPORT_SYMBOL_GPL(x86_cpu_accel_any_active);
+
+u64 x86_cpu_accel_tlb_shootdown_targets(unsigned int cpu)
+{
+	if (cpu >= nr_cpu_ids)
+		return 0;
+	return atomic64_read(&per_cpu(x86_cpu_accel_request,
+					     cpu).tlb_shootdown_targets);
+}
+EXPORT_SYMBOL_GPL(x86_cpu_accel_tlb_shootdown_targets);
 
 DEFINE_IDTENTRY_SYSVEC(sysvec_cpu_accel)
 {

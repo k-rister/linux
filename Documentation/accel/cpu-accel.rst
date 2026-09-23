@@ -42,13 +42,14 @@ small ioctl interface:
 
 The control mapping contains the state, explicit Linux/accelerator transition
 mode, selected workload, run timestamps, aggregate lateness, and up to
-``CPU_ACCEL_MAX_SAMPLES`` timestamp samples.  ABI version 15 also
+``CPU_ACCEL_MAX_SAMPLES`` timestamp samples.  ABI version 16 also
 reports lifecycle entry/exit timestamps, interrupt and softirq deltas,
 timer, hrtimer, RCU, and scheduler softirq deltas, current-task
 context-switch deltas, CPU-entry/exit identity, migration detection, pending
 scheduler and softirq state, and preemption state.  On x86 it additionally
 reports architecture interrupt, IPI, TLB, deferred-reschedule, and
-deferred-call-function counter deltas;
+deferred-call-function counter deltas, plus native x86 TLB flush target
+batches directed at the CPU during direct ownership;
 ``arch_counters_valid`` identifies whether those counters are available.
 The x86 direct backend is reported as
 ``CPU_ACCEL_BACKEND_X86_DIRECT_APIC``; it uses one dedicated APIC vector for
@@ -84,7 +85,14 @@ are covered independently.  The
 ``CPU_ACCEL_BACKEND_FLAG_CALL_FUNCTION_DEFER`` bit means that call-function
 IPIs are deferred and replayed after exit; ``arch_call_function_deferred``
 reports how many were deferred.  TLB shootdowns and other interrupt paths are
-not covered by either capability yet.
+not covered by either capability as an explicit policy.  On the native x86
+path, remote TLB flush callbacks use call-function work, so this generic
+deferral also delays those callbacks until after exit; synchronous flush
+senders can wait for the accelerator to return.  ABI 16's
+``arch_tlb_shootdown_targets`` counts native x86 flush batches that targeted
+the CPU while direct ownership was active.  It does not measure callback
+completion or provide a protection guarantee, and paravirtual TLB-flush paths
+may use different mechanisms.
 
 The initial workload selector supports ``timestamp`` and ``memmove``.  The
 memmove workload allocates and touches two bounded kernel buffers before the
@@ -233,18 +241,19 @@ The watchdog is capped at five seconds and ``STOP`` is cooperative.
 the ring-3 workload, but it is bounded by a one-second controller wait and is
 not a hard guarantee.  A malfunctioning kernel implementation is not assumed
 to be recoverable without reverting to the known-good kernel.  This lifecycle
-is the first step toward that model.  ABI version 15 adds selective
+is the first step toward that model.  ABI version 15 added selective
 reschedule- and call-function-IPI deferral and replay while retaining the
-ABI12 recovery capability and debug-only dropped-NMI fixture; it does not yet
-suppress TLB shootdowns.  A controller may retry after
+ABI12 recovery capability and debug-only dropped-NMI fixture. ABI 16 adds TLB
+flush target telemetry, but neither ABI defines complete TLB ownership or
+suppression. A controller may retry after
 ``TIMEOUT`` or ``FAILED``; it must not treat those states as a return to Linux.
 The proposed protected address-space and shared-memory contract is documented
 in :doc:`cpu-accel-memory`; the internal region/epoch model and the first
 prefaulted shared entry are now in place.  The x86 cooperative ring-3 image is
 the first protected-address-space proof, and the ABI 12 NMI escape is the
 first x86 recovery experiment.  The common recovery contract and direct APIC
-entry prototype are now in place; the next implementation step is to define
-the remaining APIC ownership and address-space/TLB policy before adding
-IOMMU-backed memory and networking.
+entry prototype are now in place; the next implementation step is to implement
+the address-space/TLB ownership policy specified in :doc:`cpu-accel-memory`
+before adding IOMMU-backed memory and networking.
 A stronger latency claim must wait for those controls and for a defined
 recovery contract.

@@ -117,12 +117,17 @@ incidental consequence of call-function deferral. ABI 16 reports
 ``arch_tlb_shootdown_targets`` for x86 flush batches that target the CPU while
 accelerator ownership is active, including the native IPI and INVLPGB paths.
 The ring-3 process-mm window uses the same per-CPU ownership state as the
-direct backend. After unlocking the image mm, the owner snapshots this count
-and flushes the local TLB if a batch targeted the CPU, before releasing the
-pinned image pages. Remote callback completion remains governed by the native
-flush path. This does not track pending generations, and paravirtual TLB paths
-may differ. Do not infer TLB isolation or a latency bound from a zero target
-count or TLB counter delta.
+direct backend. Native x86 flush hooks track the highest TLB generation that
+targets the owned ``mm``, separately from a pending address-space-unscoped
+flush such as a kernel/global flush. The owner retires ownership and snapshots
+that state while the image mm remains write-locked, then flushes the local TLB
+if either kind of invalidation is pending. Only then does the driver unlock the
+mm and release the pinned image pages. Remote callback completion remains
+governed by the native flush path; there is no separate remote acknowledgment
+queue. The worker still uses its process ``mm``, and paravirtual TLB paths may
+differ.
+Do not infer TLB isolation or a latency bound from a zero target count or TLB
+counter delta.
 
 The policy for a protected accelerator address space is:
 

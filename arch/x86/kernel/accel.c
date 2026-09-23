@@ -6,6 +6,7 @@
 #include <linux/export.h>
 #include <linux/types.h>
 #include <linux/percpu.h>
+#include <linux/sched.h>
 #include <linux/smp.h>
 #include <linux/spinlock.h>
 
@@ -27,6 +28,11 @@ struct x86_cpu_accel_request {
 	atomic_t call_function_pending;
 	atomic64_t call_function_deferred;
 	atomic64_t tlb_shootdown_targets;
+	struct mm_struct *owner_mm;
+	/* Highest native TLB generation targeting owner_mm during ownership. */
+	u64 pending_tlb_gen;
+	/* Flushes with no single address-space owner (e.g. kernel/global). */
+	bool pending_unscoped_tlb_flush;
 };
 
 static DEFINE_PER_CPU(struct x86_cpu_accel_request, x86_cpu_accel_request) = {
@@ -34,7 +40,8 @@ static DEFINE_PER_CPU(struct x86_cpu_accel_request, x86_cpu_accel_request) = {
 };
 static atomic_t x86_cpu_accel_active_count = ATOMIC_INIT(0);
 
-static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets)
+static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets,
+				     struct mm_struct *owner_mm)
 {
 	struct x86_cpu_accel_request *request;
 	unsigned long flags;
@@ -50,6 +57,9 @@ static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets)
 	}
 	atomic_set(&request->reschedule_pending, 0);
 	atomic_set(&request->call_function_pending, 0);
+	request->owner_mm = owner_mm;
+	request->pending_tlb_gen = 0;
+	request->pending_unscoped_tlb_flush = false;
 	atomic_inc(&x86_cpu_accel_active_count);
 	atomic_set(&request->active, 1);
 	if (tlb_targets)
@@ -58,18 +68,27 @@ static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets)
 	return 0;
 }
 
-static u64 x86_cpu_accel_owner_exit(unsigned int cpu)
+static u64 x86_cpu_accel_owner_exit(unsigned int cpu,
+				    bool *local_tlb_flush)
 {
 	struct x86_cpu_accel_request *request;
 	unsigned long flags;
 	u64 targets;
 
+	if (local_tlb_flush)
+		*local_tlb_flush = false;
 	if (cpu >= nr_cpu_ids)
 		return 0;
 	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
 	raw_spin_lock_irqsave(&request->lock, flags);
 	if (atomic_xchg(&request->active, 0)) {
 		atomic_dec(&x86_cpu_accel_active_count);
+		if (local_tlb_flush)
+			*local_tlb_flush = request->pending_unscoped_tlb_flush ||
+				request->pending_tlb_gen != 0;
+		request->owner_mm = NULL;
+		request->pending_tlb_gen = 0;
+		request->pending_unscoped_tlb_flush = false;
 		if (atomic_xchg(&request->call_function_pending, 0))
 			__apic_send_IPI(cpu, CALL_FUNCTION_SINGLE_VECTOR);
 		if (atomic_xchg(&request->reschedule_pending, 0))
@@ -80,20 +99,26 @@ static u64 x86_cpu_accel_owner_exit(unsigned int cpu)
 	return targets;
 }
 
-int x86_cpu_accel_user_enter(unsigned int cpu, u64 *tlb_targets)
+int x86_cpu_accel_user_enter(unsigned int cpu, struct mm_struct *mm,
+			     u64 *tlb_targets)
 {
+	if (!mm)
+		return -EINVAL;
 	if (cpu != raw_smp_processor_id())
 		return -EXDEV;
-	return x86_cpu_accel_owner_enter(cpu, tlb_targets);
+	if (mm != current->mm)
+		return -EXDEV;
+	return x86_cpu_accel_owner_enter(cpu, tlb_targets, mm);
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_user_enter);
 
-u64 x86_cpu_accel_user_exit(unsigned int cpu, u64 tlb_targets_entry)
+u64 x86_cpu_accel_user_exit(unsigned int cpu)
 {
-	u64 targets = x86_cpu_accel_owner_exit(cpu);
+	bool local_tlb_flush;
+	u64 targets = x86_cpu_accel_owner_exit(cpu, &local_tlb_flush);
 
-	/* Reconcile this CPU before the pinned user pages are released. */
-	if (cpu == raw_smp_processor_id() && targets != tlb_targets_entry)
+	/* Reconcile relevant local TLB state before pinned pages are released. */
+	if (cpu == raw_smp_processor_id() && local_tlb_flush)
 		__flush_tlb_all();
 	return targets;
 }
@@ -107,7 +132,7 @@ int x86_cpu_accel_direct_enter(unsigned int cpu,
 
 	if (!entry || cpu == raw_smp_processor_id())
 		return -EINVAL;
-	ret = x86_cpu_accel_owner_enter(cpu, NULL);
+	ret = x86_cpu_accel_owner_enter(cpu, NULL, NULL);
 	if (ret)
 		return ret;
 	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
@@ -122,7 +147,7 @@ int x86_cpu_accel_direct_enter(unsigned int cpu,
 	while (!atomic_read_acquire(&request->done))
 		cpu_relax();
 
-	x86_cpu_accel_owner_exit(cpu);
+	x86_cpu_accel_owner_exit(cpu, NULL);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_direct_enter);
@@ -189,7 +214,9 @@ u64 x86_cpu_accel_call_function_deferred(unsigned int cpu)
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_call_function_deferred);
 
-bool x86_cpu_accel_note_tlb_shootdown(unsigned int cpu)
+bool x86_cpu_accel_note_tlb_shootdown(unsigned int cpu,
+				      const struct mm_struct *mm,
+				      u64 tlb_gen)
 {
 	struct x86_cpu_accel_request *request;
 	unsigned long flags;
@@ -200,8 +227,15 @@ bool x86_cpu_accel_note_tlb_shootdown(unsigned int cpu)
 	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
 	raw_spin_lock_irqsave(&request->lock, flags);
 	active = atomic_read(&request->active);
-	if (active)
+	if (active) {
 		atomic64_inc(&request->tlb_shootdown_targets);
+		/* A NULL mm denotes an address-space-unscoped invalidation. */
+		if (!mm)
+			request->pending_unscoped_tlb_flush = true;
+		else if (request->owner_mm == mm &&
+			 tlb_gen > request->pending_tlb_gen)
+			request->pending_tlb_gen = tlb_gen;
+	}
 	raw_spin_unlock_irqrestore(&request->lock, flags);
 
 	return active;

@@ -92,11 +92,14 @@ deferral also delays those callbacks until after exit; synchronous flush
 senders can wait for the accelerator to return.  ABI 16's
 ``arch_tlb_shootdown_targets`` counts native x86 flush batches that targeted
 the CPU while accelerator ownership was active, including the ring-3
-process-mm window through image unlock. Before releasing pinned image pages,
-the x86 owner flushes the local TLB when the target count changed. Remote
-callback completion remains governed by the native flush path. The counter
-does not provide an isolation or latency guarantee, and paravirtual TLB-flush
-paths may use different mechanisms.
+process-mm window through image unlock. For that worker, native x86 hooks also
+record the highest generation targeting its ``mm`` and whether an
+address-space-unscoped flush, such as a kernel/global flush, is pending. The
+owner retires ownership and locally reconciles pending TLB state while the
+image mm remains write-locked, before releasing pinned image pages. Remote
+callback completion remains governed by the native flush path. The target
+counter does not measure completion or provide an isolation or latency
+guarantee, and paravirtual TLB-flush paths may use different mechanisms.
 
 The initial workload selector supports ``timestamp`` and ``memmove``.  The
 memmove workload allocates and touches two bounded kernel buffers before the

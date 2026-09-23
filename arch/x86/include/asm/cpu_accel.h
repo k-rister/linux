@@ -4,6 +4,8 @@
 
 typedef void (*x86_cpu_accel_entry_fn)(void *data);
 
+struct mm_struct;
+
 int x86_cpu_accel_direct_enter(unsigned int cpu,
 			       x86_cpu_accel_entry_fn entry, void *data);
 bool x86_cpu_accel_defer_reschedule(unsigned int cpu);
@@ -11,25 +13,28 @@ u64 x86_cpu_accel_reschedule_deferred(unsigned int cpu);
 bool x86_cpu_accel_defer_call_function(unsigned int cpu);
 u64 x86_cpu_accel_call_function_deferred(unsigned int cpu);
 #ifdef CONFIG_X86_LOCAL_APIC
-int x86_cpu_accel_user_enter(unsigned int cpu, u64 *tlb_targets);
-u64 x86_cpu_accel_user_exit(unsigned int cpu, u64 tlb_targets_entry);
+int x86_cpu_accel_user_enter(unsigned int cpu, struct mm_struct *mm,
+			     u64 *tlb_targets);
+u64 x86_cpu_accel_user_exit(unsigned int cpu);
 bool x86_cpu_accel_any_active(void);
-bool x86_cpu_accel_note_tlb_shootdown(unsigned int cpu);
+bool x86_cpu_accel_note_tlb_shootdown(unsigned int cpu,
+				      const struct mm_struct *mm, u64 tlb_gen);
 u64 x86_cpu_accel_tlb_shootdown_targets(unsigned int cpu);
 #else
-static inline int x86_cpu_accel_user_enter(unsigned int cpu, u64 *tlb_targets)
+static inline int x86_cpu_accel_user_enter(unsigned int cpu,
+					   struct mm_struct *mm,
+					   u64 *tlb_targets)
 {
 	(void)cpu;
+	(void)mm;
 	if (tlb_targets)
 		*tlb_targets = 0;
 	return 0;
 }
 
-static inline u64 x86_cpu_accel_user_exit(unsigned int cpu,
-						 u64 tlb_targets_entry)
+static inline u64 x86_cpu_accel_user_exit(unsigned int cpu)
 {
 	(void)cpu;
-	(void)tlb_targets_entry;
 	return 0;
 }
 
@@ -38,9 +43,13 @@ static inline bool x86_cpu_accel_any_active(void)
 	return false;
 }
 
-static inline bool x86_cpu_accel_note_tlb_shootdown(unsigned int cpu)
+static inline bool x86_cpu_accel_note_tlb_shootdown(unsigned int cpu,
+						    const struct mm_struct *mm,
+						    u64 tlb_gen)
 {
 	(void)cpu;
+	(void)mm;
+	(void)tlb_gen;
 	return false;
 }
 

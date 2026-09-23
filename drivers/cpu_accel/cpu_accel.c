@@ -942,14 +942,10 @@ static void cpu_accel_user_image_release(struct cpu_accel_device *dev)
 {
 	struct cpu_accel_user_image *image = &dev->user_image;
 
-	if (image->mm_locked) {
-		mmap_write_unlock(image->mm);
-		image->mm_locked = false;
-	}
+	/* Keep mm writers out until CPU ownership and TLB state are reconciled. */
 #ifdef CONFIG_X86_LOCAL_APIC
 	if (image->owner_active) {
-		u64 targets = x86_cpu_accel_user_exit(dev->config.cpu,
-			dev->user_observation.arch_tlb_shootdown_targets_entry);
+		u64 targets = x86_cpu_accel_user_exit(dev->config.cpu);
 
 		dev->shared->arch_tlb_shootdown_targets =
 			cpu_accel_counter_delta(targets, dev->user_observation.
@@ -957,6 +953,10 @@ static void cpu_accel_user_image_release(struct cpu_accel_device *dev)
 		image->owner_active = false;
 	}
 #endif
+	if (image->mm_locked) {
+		mmap_write_unlock(image->mm);
+		image->mm_locked = false;
+	}
 	if (image->pages) {
 		unpin_user_pages(image->pages, image->pinned_pages);
 		kvfree(image->pages);
@@ -1096,7 +1096,7 @@ static int cpu_accel_arch_user_enter(struct cpu_accel_device *dev)
 #endif
 
 #ifdef CONFIG_X86_LOCAL_APIC
-	ret = x86_cpu_accel_user_enter(raw_smp_processor_id(),
+	ret = x86_cpu_accel_user_enter(raw_smp_processor_id(), image->mm,
 				       &tlb_targets_entry);
 	if (ret)
 		return ret;

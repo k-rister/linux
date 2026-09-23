@@ -27,14 +27,15 @@
 
 #include "mm_internal.h"
 
-static void note_tlb_shootdown_targets(const struct cpumask *mask)
+static void note_tlb_shootdown_targets(const struct cpumask *mask,
+				       struct mm_struct *mm, u64 tlb_gen)
 {
 	int cpu;
 
 	if (!x86_cpu_accel_any_active())
 		return;
 	for_each_cpu(cpu, mask)
-		x86_cpu_accel_note_tlb_shootdown(cpu);
+		x86_cpu_accel_note_tlb_shootdown(cpu, mm, tlb_gen);
 }
 
 #ifdef CONFIG_PARAVIRT
@@ -517,7 +518,8 @@ static void broadcast_tlb_flush(struct flush_tlb_info *info)
 	unsigned long addr = info->start;
 
 	/* INVLPGB broadcasts to CPUs beyond the active mm's CPU mask. */
-	note_tlb_shootdown_targets(cpu_online_mask);
+	note_tlb_shootdown_targets(cpu_online_mask, info->mm,
+				   info->new_tlb_gen);
 
 	/*
 	 * TLB flushes with INVLPGB are kicked off asynchronously.
@@ -1325,7 +1327,8 @@ static bool should_flush_tlb(int cpu, void *data)
 	return false;
 
 flush:
-	x86_cpu_accel_note_tlb_shootdown(cpu);
+	x86_cpu_accel_note_tlb_shootdown(cpu, info->mm,
+					 info->new_tlb_gen);
 	return true;
 }
 
@@ -1367,7 +1370,8 @@ STATIC_NOPV void native_flush_tlb_multi(const struct cpumask *cpumask,
 	 * doing a speculative memory access.
 	 */
 	if (info->freed_tables || mm_in_asid_transition(info->mm)) {
-		note_tlb_shootdown_targets(cpumask);
+		note_tlb_shootdown_targets(cpumask, info->mm,
+					   info->new_tlb_gen);
 		on_each_cpu_mask(cpumask, flush_tlb_func, (void *)info, true);
 	} else {
 		on_each_cpu_cond_mask(should_flush_tlb, flush_tlb_func,
@@ -1468,7 +1472,8 @@ static void do_flush_tlb_all(void *info)
 void flush_tlb_all(void)
 {
 	count_vm_tlb_event(NR_TLB_REMOTE_FLUSH);
-	note_tlb_shootdown_targets(cpu_online_mask);
+	note_tlb_shootdown_targets(cpu_online_mask, NULL,
+				   TLB_GENERATION_INVALID);
 
 	/* First try (faster) hardware-assisted TLB invalidation. */
 	if (cpu_feature_enabled(X86_FEATURE_INVLPGB))
@@ -1483,7 +1488,8 @@ static void invlpgb_kernel_range_flush(struct flush_tlb_info *info)
 {
 	unsigned long addr, nr;
 
-	note_tlb_shootdown_targets(cpu_online_mask);
+	note_tlb_shootdown_targets(cpu_online_mask, info->mm,
+				   info->new_tlb_gen);
 	for (addr = info->start; addr < info->end; addr += nr << PAGE_SHIFT) {
 		nr = (info->end - addr) >> PAGE_SHIFT;
 
@@ -1510,7 +1516,8 @@ static void do_kernel_range_flush(void *info)
 
 static void kernel_tlb_flush_all(struct flush_tlb_info *info)
 {
-	note_tlb_shootdown_targets(cpu_online_mask);
+	note_tlb_shootdown_targets(cpu_online_mask, info->mm,
+				   info->new_tlb_gen);
 	if (cpu_feature_enabled(X86_FEATURE_INVLPGB))
 		invlpgb_flush_all();
 	else
@@ -1522,7 +1529,8 @@ static void kernel_tlb_flush_range(struct flush_tlb_info *info)
 	if (cpu_feature_enabled(X86_FEATURE_INVLPGB))
 		invlpgb_kernel_range_flush(info);
 	else {
-		note_tlb_shootdown_targets(cpu_online_mask);
+		note_tlb_shootdown_targets(cpu_online_mask, info->mm,
+					   info->new_tlb_gen);
 		on_each_cpu(do_kernel_range_flush, info, 1);
 	}
 }
@@ -1718,7 +1726,8 @@ void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
 	 * flush_tlb_func_local() directly in this case.
 	 */
 	if (cpu_feature_enabled(X86_FEATURE_INVLPGB) && batch->unmapped_pages) {
-		note_tlb_shootdown_targets(cpu_online_mask);
+		note_tlb_shootdown_targets(cpu_online_mask, NULL,
+					   TLB_GENERATION_INVALID);
 		invlpgb_flush_all_nonglobals();
 		batch->unmapped_pages = false;
 	} else if (cpumask_any_but(&batch->cpumask, cpu) < nr_cpu_ids) {

@@ -197,10 +197,25 @@ space switch rather than a task ``mm`` lifecycle API. Helpers such as
 own a complete address space or arrange for user execution to run as a task
 whose ``current->mm`` is that address space.
 
-Therefore, the prototype must continue to describe its current process ``mm``
-accurately. A sealed accelerator ``mm`` needs a narrow MM-core interface and a
-task lifecycle that make address-space construction, user execution, and
-teardown one operation. That interface must provide at least:
+This does not mean the first sealed ``mm`` requires a new MM-core allocator.
+The normal ``execve()`` path creates a fresh ``mm`` for a worker task, and the
+current CLI already forks and execs a worker so it does not share the
+companion's ``mm``. That is a supported task/``mm`` pairing. The current worker
+is not sealed, though: its process image and runtime may leave additional
+VMAs beyond the admitted code, stack, and device mappings.
+
+The first sealed prototype can build on the exec-created worker if its image
+is purpose-built and admission verifies the complete VMA set: only the
+prevalidated image, private stack/data, and explicitly registered control and
+shared mappings may remain. The driver can then pin those pages and hold the
+worker ``mm`` write-locked for the active epoch, preserving the existing
+``current->mm`` and loaded-address-space relationship. This path avoids
+changing the task's ``mm`` during execution.
+
+If the design instead requires the driver to assemble a new ``mm`` from
+registered pages, that needs a narrow MM-core interface and a task lifecycle
+that make construction, user execution, and teardown one operation. The
+interface must provide at least:
 
 * creation of an otherwise empty ``mm`` with normal architecture and MM
   accounting initialized;
@@ -213,11 +228,12 @@ teardown one operation. That interface must provide at least:
 * teardown only after accelerator ownership ends, required local and remote
   TLB invalidations complete, and mapped pages can safely be released.
 
-The x86 ownership record must then identify the address space actually loaded
-for accelerator execution, independently of the task that submitted the
-request. The existing process-``mm`` backend relies on those identities being
-the same. Do not work around the missing MM lifecycle by assigning a CR3
-directly or by relabeling the worker's ordinary process ``mm`` as sealed.
+For that driver-assembled path, the x86 ownership record must identify the
+address space actually loaded for accelerator execution, independently of the
+task that submitted the request. The existing process-``mm`` backend relies
+on those identities being the same. Do not work around the missing MM
+lifecycle by assigning a CR3 directly or by relabeling the worker's ordinary
+process ``mm`` as sealed.
 
 Shared-region ownership
 =======================
@@ -396,9 +412,9 @@ The implementation checkpoints are:
     targets reserved against new ownership. Kernel-address-range flushes use
     INVLPGB plus system-wide completion when available without evicting user
     translations; full and all-nonglobal flushes still wait for owners. The
-    remaining work is an MM-core creation/task-lifecycle interface for sealed
-    ``mm`` admission and a safe maintenance policy for full-flush fallback and
-    kernel code/exception mapping updates. The current module interfaces do
-    not support creating a correctly initialized populated user ``mm``. Add
-    IOMMU-backed ``DMA`` regions and userspace/NIC integration only after this
-    non-networked memory contract is stable.
+    remaining work is sealed ``mm`` admission, starting with a purpose-built
+    exec-created worker and a complete VMA allowlist, plus a safe maintenance
+    policy for full-flush fallback and kernel code/exception mapping updates.
+    A driver-assembled ``mm`` would additionally require MM-core construction
+    and task-lifecycle APIs. Add IOMMU-backed ``DMA`` regions and userspace/NIC
+    integration only after this non-networked memory contract is stable.

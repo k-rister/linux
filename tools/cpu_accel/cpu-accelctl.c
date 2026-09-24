@@ -9,6 +9,7 @@
 #include <limits.h>
 #include <signal.h>
 #include <sched.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -18,6 +19,12 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
+
+#if defined(__x86_64__)
+/* Optional glibc exports describing this thread's registered rseq area. */
+extern const ptrdiff_t __rseq_offset __attribute__((weak));
+extern const unsigned int __rseq_size __attribute__((weak));
+#endif
 
 /* Keep the bounded ring-3 code in one page-aligned linker section. */
 #define CPU_ACCEL_USER_IMAGE \
@@ -317,13 +324,49 @@ static void cpu_accel_sort_keep_ranges(struct cpu_accel_user_keep_range *ranges,
 	}
 }
 
+static int cpu_accel_get_rseq_keep_range(unsigned long page_size,
+					 unsigned long *start,
+					 unsigned long *end)
+{
+	*start = 0;
+	*end = 0;
+#if defined(__x86_64__)
+	uintptr_t thread_pointer;
+	uintptr_t rseq_start;
+	uintptr_t rseq_end;
+	intptr_t signed_start;
+
+	if (!&__rseq_offset || !&__rseq_size || !__rseq_size)
+		return 0;
+	if (!page_size || (page_size & (page_size - 1)) ||
+	    __rseq_size > page_size)
+		return -E2BIG;
+	thread_pointer = (uintptr_t)__builtin_thread_pointer();
+	if (__builtin_add_overflow((intptr_t)thread_pointer, __rseq_offset,
+				   &signed_start) || signed_start <= 0)
+		return -EINVAL;
+	rseq_start = (uintptr_t)signed_start;
+	if (rseq_start > UINTPTR_MAX - __rseq_size)
+		return -EINVAL;
+	rseq_end = rseq_start + __rseq_size;
+	if (rseq_end > UINTPTR_MAX - (page_size - 1))
+		return -EINVAL;
+	*start = rseq_start & ~((uintptr_t)page_size - 1);
+	*end = (rseq_end + page_size - 1) & ~((uintptr_t)page_size - 1);
+#else
+	(void)page_size;
+#endif
+	return 0;
+}
+
 static int cpu_accel_collect_unmap_ranges(
 	struct cpu_accel_handle *handle, struct cpu_accel_user_context *context,
 	unsigned long image_start, unsigned long image_end,
 	unsigned long stack_start, unsigned long stack_end,
+	unsigned long rseq_start, unsigned long rseq_end,
 	unsigned long page_size)
 {
-	struct cpu_accel_user_keep_range keep[] = {
+	struct cpu_accel_user_keep_range keep[5] = {
 		{ .start = image_start, .end = image_end },
 		{ .start = stack_start, .end = stack_end },
 		{ .start = (uintptr_t)handle->shared,
@@ -331,6 +374,7 @@ static int cpu_accel_collect_unmap_ranges(
 		{ .start = (uintptr_t)handle->shared_region,
 		  .end = (uintptr_t)handle->shared_region +
 			CPU_ACCEL_SHARED_MAP_SIZE },
+		{ .start = rseq_start, .end = rseq_end },
 	};
 	FILE *maps;
 	char *line = NULL;
@@ -532,6 +576,8 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 	uintptr_t image_start;
 	uintptr_t stack_start;
 	uintptr_t stack_end;
+	unsigned long rseq_start;
+	unsigned long rseq_end;
 	size_t unmap_offset;
 	void *stack;
 	long page_size;
@@ -581,6 +627,13 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 	config->user_arg = (uintptr_t)context;
 	stack_start = (uintptr_t)stack;
 	stack_end = (uintptr_t)stack + (size_t)page_size * 16;
+	ret = cpu_accel_get_rseq_keep_range((unsigned long)page_size,
+					    &rseq_start, &rseq_end);
+	if (ret) {
+		errno = -ret;
+		perror("locate registered rseq area");
+		goto out_stack;
+	}
 	unmap_offset = (sizeof(*context) +
 			_Alignof(struct cpu_accel_user_unmap_range) - 1) &
 		~((size_t)_Alignof(struct cpu_accel_user_unmap_range) - 1);
@@ -588,6 +641,7 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 	context->nr_unmap_ranges = 0;
 	ret = cpu_accel_collect_unmap_ranges(handle, context, image_start,
 					     image_end, stack_start, stack_end,
+					     rseq_start, rseq_end,
 					     (unsigned long)page_size);
 	if (ret) {
 		errno = -ret;

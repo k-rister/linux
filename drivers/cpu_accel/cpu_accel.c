@@ -954,7 +954,9 @@ static int cpu_accel_validate_user_vma_set(struct cpu_accel_device *dev,
 					  unsigned long image_start,
 					  unsigned long image_end,
 					  unsigned long stack_start,
-					  unsigned long stack_end)
+					  unsigned long stack_end,
+					  unsigned long rseq_start,
+					  unsigned long rseq_end)
 {
 	struct vm_area_struct *vma;
 	VMA_ITERATOR(vmi, mm, 0);
@@ -962,9 +964,20 @@ static int cpu_accel_validate_user_vma_set(struct cpu_accel_device *dev,
 	bool stack_found = false;
 	bool control_found = false;
 	bool shared_found = false;
+	bool rseq_found = !rseq_start;
 
 	for_each_vma(vmi, vma) {
 		unsigned long size = vma->vm_end - vma->vm_start;
+		bool contains_rseq = rseq_start &&
+			vma->vm_start <= rseq_start && vma->vm_end >= rseq_end;
+
+		if (contains_rseq) {
+			if (!cpu_accel_vma_has_permissions(vma,
+							 VM_READ | VM_WRITE,
+							 VM_EXEC | VM_SHARED))
+				return -EACCES;
+			rseq_found = true;
+		}
 
 		/* This fixed architecture mapping cannot be removed by munmap(). */
 		if (vma->vm_start == VSYSCALL_ADDR &&
@@ -1009,12 +1022,20 @@ static int cpu_accel_validate_user_vma_set(struct cpu_accel_device *dev,
 				continue;
 			}
 		}
+		if (rseq_start && vma->vm_start == rseq_start &&
+		    vma->vm_end == rseq_end &&
+		    cpu_accel_vma_has_permissions(vma, VM_READ | VM_WRITE,
+						 VM_EXEC | VM_SHARED)) {
+			/* The user-return RSEQ slowpath may update this page. */
+			rseq_found = true;
+			continue;
+		}
 
 		return -EACCES;
 	}
 
-	return image_found && stack_found && control_found && shared_found ?
-		0 : -EACCES;
+	return image_found && stack_found && control_found && shared_found &&
+		rseq_found ? 0 : -EACCES;
 }
 
 static void cpu_accel_user_image_release(struct cpu_accel_device *dev)
@@ -1052,6 +1073,8 @@ static int cpu_accel_user_image_prepare(struct cpu_accel_device *dev)
 	struct cpu_accel_user_image *image = &dev->user_image;
 	struct mm_struct *mm = current->mm;
 	unsigned long stack_start;
+	unsigned long rseq_start = 0;
+	unsigned long rseq_end = 0;
 	unsigned int image_pages;
 	unsigned int stack_pages;
 	long pinned;
@@ -1074,6 +1097,25 @@ static int cpu_accel_user_image_prepare(struct cpu_accel_device *dev)
 		return -EINVAL;
 	stack_start = dev->config.user_stack_top -
 		dev->config.user_stack_bytes;
+#ifdef CONFIG_RSEQ
+	if (current->rseq.usrptr) {
+		unsigned long rseq_addr =
+			(unsigned long)current->rseq.usrptr;
+		unsigned long rseq_bytes = current->rseq.len;
+		unsigned long rseq_limit;
+
+		if (!rseq_bytes || rseq_bytes > PAGE_SIZE ||
+		    rseq_addr > ULONG_MAX - rseq_bytes)
+			return -EINVAL;
+		rseq_limit = rseq_addr + rseq_bytes;
+		if (rseq_limit > ULONG_MAX - (PAGE_SIZE - 1))
+			return -EINVAL;
+		rseq_start = rseq_addr & PAGE_MASK;
+		rseq_end = PAGE_ALIGN(rseq_limit);
+		if (rseq_end <= rseq_start)
+			return -EINVAL;
+	}
+#endif
 	if (dev->config.user_image_start + dev->config.user_image_bytes <
 		dev->config.user_image_start ||
 		dev->config.user_stack_top < stack_start)
@@ -1155,7 +1197,8 @@ static int cpu_accel_user_image_prepare(struct cpu_accel_device *dev)
 						       dev->config.user_image_start +
 						       dev->config.user_image_bytes,
 						       stack_start,
-						       dev->config.user_stack_top);
+						       dev->config.user_stack_top,
+						       rseq_start, rseq_end);
 	if (ret)
 		goto fail;
 

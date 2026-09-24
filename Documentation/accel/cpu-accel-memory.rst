@@ -112,10 +112,14 @@ file descriptors are closed. The new process maps its own control pages, so it
 does not retain the companion's copy-on-write mappings.
 
 Before START, the worker switches to its admitted stack and unmaps every
-removable VMA except the executable image, private stack, control mapping, and
-shared-data mapping. The legacy x86 ``[vsyscall]`` VMA is fixed at
-``VSYSCALL_ADDR`` and rejects ``munmap``; the worker leaves it mapped, and the
-driver accepts only that exact executable-only architecture mapping. The
+removable VMA except the executable image, private stack, control mapping,
+shared-data mapping, and the page containing the worker's registered RSEQ
+area, when present. The kernel may update that area on the user-return
+slowpath after a deferred reschedule, so removing it would turn normal
+accelerator exit into a SIGSEGV. The driver validates the RSEQ page as private,
+readable, writable, and non-executable. The legacy x86 ``[vsyscall]`` VMA is
+fixed at ``VSYSCALL_ADDR`` and rejects ``munmap``; the worker leaves it mapped,
+and the driver accepts only that exact executable-only architecture mapping. The
 image must be file-backed private RX, the stack anonymous private RW without
 execute permission, and the device maps RW shared at their exact offsets and
 sizes (including a single VMA if the adjacent maps are coalesced). The driver
@@ -424,9 +428,15 @@ The implementation checkpoints are:
     translations. Full and all-nonglobal flushes also wait for owners. The
     current prototype seals an exec-created worker ``mm`` with a complete VMA
     allowlist, including the fixed x86 ``[vsyscall]`` exception. Remaining
-    work includes safe handling of full-flush waits and semantic safety for
-    kernel code/exception mapping updates. INVLPGB completion protects TLB
-    translation lifetime but does not make active kernel code patching safe.
+    work includes testing physical-page reuse, safe handling of full-flush
+    waits, and semantic safety for kernel code/exception mapping updates. A
+    focused VM test now unmaps a touched 2 MiB mapping from another ``mm``
+    while the target CPU is ring-3 owned: PTE teardown returns before owner
+    exit, and the unmapped address faults after re-entry. This shows the
+    deferred TLB generation is reconciled before the old ``mm`` can use that
+    address again; the test does not force or observe reuse of the freed
+    physical pages. INVLPGB completion protects TLB translation lifetime but
+    does not make active kernel code patching safe.
     Global-ASID INVLPGB broadcasts reserve all online CPUs through ``TLBSYNC``
     so no new owner can enter during the invalidation.
     A driver-assembled ``mm`` would additionally

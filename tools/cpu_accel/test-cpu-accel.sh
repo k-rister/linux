@@ -188,6 +188,18 @@ x86_64)
 			fail "user-oslat workload migrated CPUs"
 		user_run=$((user_run + 1))
 	done
+	deferred_user_output=$($tool run --cpu "$target_cpu" --duration-ms 500 \
+		--period-us 1000 --workload user-oslat)
+	echo "$deferred_user_output"
+	case "$deferred_user_output" in
+		state=3\ *) ;;
+		*) fail "500 ms user-oslat run did not complete" ;;
+	esac
+	echo "$deferred_user_output" | grep -q 'mode=0' || \
+		fail "500 ms user-oslat run did not return to Linux mode"
+	tlb_generation_output=$(./test-tlb-generation "$target_cpu" "$tool" \
+		$quarantine_arg)
+	echo "$tlb_generation_output"
 	escape_output=$($tool run --cpu "$target_cpu" --duration-ms 5000 \
 		--period-us 1000 --workload user-oslat --escape-after-ms 500 \
 		--escape-retries "$escape_retries" \

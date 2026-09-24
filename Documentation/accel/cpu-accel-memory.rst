@@ -157,12 +157,14 @@ if either kind of invalidation is pending. Only then does the driver unlock the
 mm and release the pinned image pages. Remote callback completion remains
 governed by the native flush path; there is no separate remote acknowledgment
 queue. A kernel-address-range flush on x86 uses INVLPGB and its system-wide
-completion barrier when available, even while an accelerator CPU is owned;
-this invalidates kernel virtual addresses without evicting user translations.
-Full and all-nonglobal flushes retain the synchronous IPI path during ownership
-because they would evict active accelerator user translations. That fallback
-waits for the owner to exit. New ownership is barred on the selected target
-CPUs until each flush completes, so it cannot race a new owner after choosing
+completion barrier when available and no accelerator CPU is owned. During
+ownership it uses the synchronous kernel-only IPI path and waits for the owner
+to exit; this preserves user translations while keeping stale kernel
+translations from outliving the flush. Full and all-nonglobal flushes also
+retain the synchronous IPI path during ownership because they would evict
+active accelerator user translations. That fallback waits for the owner to
+exit. New ownership is barred on the selected target CPUs until each flush
+completes, so it cannot race a new owner after choosing
 its target mask. Global-ASID INVLPGB broadcasts reserve all online CPUs through
 ``TLBSYNC`` for the same reason. An attempted entry on a reserved target CPU
 returns ``-EBUSY``. The worker still uses its process ``mm``. Kernel mapping
@@ -417,13 +419,16 @@ The implementation checkpoints are:
     generations, reconciles the local TLB before releasing pinned image pages,
     filters mm-scoped flushes for the active ring-3 owner, and keeps flush
     targets reserved against new ownership. Kernel-address-range flushes use
-    INVLPGB plus system-wide completion when available without evicting user
-    translations; full and all-nonglobal flushes still wait for owners. The
+    INVLPGB plus system-wide completion when available with no active owner;
+    when an owner is active, kernel-only IPIs wait for exit and preserve user
+    translations. Full and all-nonglobal flushes also wait for owners. The
     current prototype seals an exec-created worker ``mm`` with a complete VMA
     allowlist, including the fixed x86 ``[vsyscall]`` exception. Remaining
-    work includes policy for full-flush fallback and kernel code/exception
-    mapping updates. Global-ASID INVLPGB broadcasts reserve all online CPUs
-    through ``TLBSYNC`` so no new owner can enter during the invalidation.
+    work includes safe handling of full-flush waits and semantic safety for
+    kernel code/exception mapping updates. INVLPGB completion protects TLB
+    translation lifetime but does not make active kernel code patching safe.
+    Global-ASID INVLPGB broadcasts reserve all online CPUs through ``TLBSYNC``
+    so no new owner can enter during the invalidation.
     A driver-assembled ``mm`` would additionally
     require MM-core construction and task-lifecycle APIs. Add IOMMU-backed
     ``DMA`` regions and userspace/NIC integration only after this non-networked

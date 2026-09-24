@@ -1633,13 +1633,16 @@ static void kernel_tlb_flush_all(struct flush_tlb_info *info)
 static void kernel_tlb_flush_range(struct flush_tlb_info *info)
 {
 	struct x86_cpu_accel_tlb_flush accel_flush;
+	bool use_broadcast;
 
 	x86_cpu_accel_tlb_flush_begin(&accel_flush, cpu_online_mask);
+	use_broadcast = accel_flush.no_owners;
 
 	/* Only kernel addresses are invalidated, preserving user TLB entries. */
-	if (cpu_feature_enabled(X86_FEATURE_INVLPGB)) {
+	if (cpu_feature_enabled(X86_FEATURE_INVLPGB) && use_broadcast) {
 		invlpgb_kernel_range_flush(info);
 	} else {
+		/* Keep old kernel translations alive until owners have exited. */
 		note_tlb_shootdown_targets(cpu_online_mask, info->mm,
 					   info->new_tlb_gen);
 		on_each_cpu(do_kernel_range_flush, info, 1);

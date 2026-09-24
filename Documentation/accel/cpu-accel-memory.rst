@@ -198,6 +198,73 @@ The policy for a protected accelerator address space is:
   owner before acknowledgement or be proven irrelevant to all code executed
   during the active interval and its recovery path.
 
+Flush completion and kernel maintenance
+---------------------------------------
+
+The current x86 fallback keeps ``arch_tlbbatch_flush()`` synchronous. When it
+returns, every target CPU has completed the invalidation, so generic MM may
+release the unmapped data and page-table pages. Returning after only recording
+an unscoped pending flush is unsafe: those pages can be freed and reused
+before the owner processes the request. The synchronous IPI path therefore
+waits for an active owner to exit. That wait has no bound if the owner does not
+exit, so the prototype does not promise progress for full-system maintenance
+or a hard dataplane bound across such maintenance.
+
+A nonblocking full-flush path needs an MM-core reclamation mechanism as well
+as an owner acknowledgement. At minimum, it must:
+
+* retain every affected data and page-table page until each CPU that could
+  still use or speculatively walk the old tables has invalidated them or been
+  quiesced;
+* carry enough address-space, generation, and target information to associate
+  each acknowledgement with the pages it protects; and
+* preserve outstanding acknowledgements across owner exit, CPU offlining, and
+  recovery, with bounded storage or explicit backpressure.
+
+The current x86 ``arch_tlbflush_unmap_batch`` stores only a CPU mask and an
+``unmapped_pages`` flag. The affected data-page and page-table lists remain in
+the stack-owned ``mmu_gather``; ``tlb_flush_mmu_free()`` releases data pages
+after the flush and hands page-table batches to their configured table-free
+path. An asynchronous architecture hook alone therefore cannot retain the
+memory safely. MM core would need to transfer those lists into a
+completion-managed reclaim object and retire that object only after the owner
+acknowledgements arrive.
+
+A per-CPU pending bit alone cannot meet this contract. The driver's current
+NMI escape is also unsuitable as a generic MM mechanism: it is a controller
+request that terminates this prototype's run, not an acknowledgement that
+arbitrary MM callers can request and await. Until MM can retain pages through
+completion, keep full flushes synchronous.
+
+Kernel mapping invalidation and kernel code maintenance have separate
+requirements:
+
+* Kernel virtual mapping changes may use the synchronous kernel-address-only
+  flush path while an owner is active. It preserves the owner's user TLB
+  entries and keeps the old kernel translation valid until the target CPU
+  handles the flush. It may wait for owner exit.
+* Kernel text updates, including jump-label/static-key, ftrace, kprobe,
+  livepatch, BPF JIT, and module text changes, must retain their existing
+  text-patching rendezvous requirements. TLB invalidation alone does not make
+  an instruction patch safe. Any rendezvous must include the owned CPUs and
+  complete before the patcher reports success or releases old code; if it
+  waits through deferred IPIs, it can wait for owner exit.
+  The x86 SMP text-poke batch uses an INT3 transition and synchronous
+  ``smp_text_poke_sync_each_cpu()`` rendezvous. That path may wait for an active
+  owner, but it is not a global guard for code-update paths that do not use the
+  same rendezvous.
+* Changes to mappings or code used by exception entry, NMI, fault handling, or
+  recovery must either quiesce the owner before retiring the old path or keep
+  both the transition path and its backing pages valid for every active owner.
+  A successful TLB flush by itself does not establish this semantic safety.
+
+The prototype does not yet enforce a global interlock for all of these kernel
+maintenance mechanisms. Until that exists, classify each operation as allowed,
+routed to housekeeping, deferred, rejected, or requiring controlled owner
+termination. Operations that cannot prove they include the owned CPU in their
+execution and mapping rendezvous are unsupported while accelerator ownership
+is active.
+
 Until these rules are implemented for an architecture, call-function replay
 is only a mechanism detail. The direct APIC prototype must not advertise
 complete APIC ownership, TLB-shootdown suppression, or protected address-space

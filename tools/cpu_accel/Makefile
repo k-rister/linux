@@ -13,6 +13,7 @@ test: cpu-accelctl
 cpu-accelctl: cpu-accelctl.o libcpu_accel.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
+cpu-accelctl.o: cpu_accel_user_image.h
 cpu-accelctl.o libcpu_accel.o: cpu_accel.h ../../include/uapi/linux/cpu_accel.h
 
 clean:

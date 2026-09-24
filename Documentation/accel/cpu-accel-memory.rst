@@ -112,6 +112,11 @@ descriptors are closed. The new process maps its own control pages, so it does
 not retain the companion's copy-on-write mappings. The driver pins the worker's
 image and stack and holds that ``mm``'s ``mmap_lock`` for write during the
 active epoch. This blocks ordinary VMA changes to that worker address space.
+The user fixtures, exit syscall helper, and escape trampoline are emitted into
+one page-aligned executable section, and the CLI passes that section's
+page-rounded bounds as the admitted image. This avoids deriving the image from
+the distance between two functions whose placement can change with linker
+layout.
 The worker still uses its process ``mm``; it is not a driver-created sealed
 accelerator ``mm`` with only the registered image and region mappings, and its
 own executable/runtime VMAs may still be present.

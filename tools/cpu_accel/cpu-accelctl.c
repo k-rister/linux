@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
 #include "cpu_accel.h"
+#include "cpu_accel_user_image.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -17,6 +18,10 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
+
+/* Keep the bounded ring-3 code in one page-aligned linker section. */
+#define CPU_ACCEL_USER_IMAGE \
+	__attribute__((section("cpu_accel_user_image"), aligned(4096)))
 
 static volatile sig_atomic_t interrupted;
 
@@ -41,6 +46,7 @@ static inline uint64_t cpu_accel_read_tsc(void)
 	return ((uint64_t)high << 32) | low;
 }
 
+CPU_ACCEL_USER_IMAGE
 static long cpu_accel_user_exit_syscall(int fd)
 {
 	long ret;
@@ -52,9 +58,6 @@ static long cpu_accel_user_exit_syscall(int fd)
 		     : "rcx", "r11", "memory");
 	return ret;
 }
-
-/* This function is the complete first ring-3 accelerator image. */
-#define CPU_ACCEL_USER_IMAGE __attribute__((aligned(4096)))
 
 CPU_ACCEL_USER_IMAGE
 static void cpu_accel_user_escape_image(void *argument)
@@ -332,9 +335,8 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 {
 	struct cpu_accel_user_context *context;
 	uintptr_t entry_ip;
-	uintptr_t entry_page;
-	uintptr_t escape_page;
 	uintptr_t image_end;
+	uintptr_t image_start;
 	void *stack;
 	long page_size;
 	int user_hang = config->workload == CPU_ACCEL_WORKLOAD_USER_HANG;
@@ -364,14 +366,21 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 	config->user_escape_ip = (uintptr_t)cpu_accel_user_escape_image;
 	config->user_stack_top = (uintptr_t)stack + (size_t)page_size * 16;
 	config->user_stack_bytes = (size_t)page_size * 16;
-	entry_page = entry_ip & ~((uintptr_t)page_size - 1);
-	escape_page = (uintptr_t)cpu_accel_user_escape_image &
+	image_start = (uintptr_t)__start_cpu_accel_user_image;
+	image_end = (uintptr_t)__stop_cpu_accel_user_image;
+	if (image_end <= image_start ||
+	    image_end > UINTPTR_MAX - ((uintptr_t)page_size - 1) ||
+	    (image_start & ((uintptr_t)page_size - 1)) ||
+	    entry_ip < image_start || entry_ip >= image_end ||
+	    (uintptr_t)cpu_accel_user_escape_image < image_start ||
+	    (uintptr_t)cpu_accel_user_escape_image >= image_end) {
+		fprintf(stderr, "invalid accelerator image section bounds\n");
+		goto out_stack;
+	}
+	image_end = (image_end + (uintptr_t)page_size - 1) &
 		~((uintptr_t)page_size - 1);
-	config->user_image_start = entry_page < escape_page ? entry_page :
-		escape_page;
-	image_end = entry_page > escape_page ? entry_page : escape_page;
-	config->user_image_bytes = image_end - config->user_image_start +
-		(size_t)page_size;
+	config->user_image_start = image_start;
+	config->user_image_bytes = image_end - image_start;
 	config->user_arg = (uintptr_t)context;
 
 	if (cpu_accel_configure(handle, config) < 0) {

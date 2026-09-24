@@ -317,9 +317,9 @@ static void reset_global_asid_space(void)
 
 	lockdep_assert_held(&global_asid_lock);
 
+	x86_cpu_accel_tlb_flush_begin(&accel_flush, cpu_online_mask);
 	note_tlb_shootdown_targets(cpu_online_mask, NULL,
 				   TLB_GENERATION_INVALID);
-	x86_cpu_accel_tlb_flush_begin(&accel_flush, cpu_online_mask);
 	use_broadcast = accel_flush.no_owners;
 	if (use_broadcast) {
 		invlpgb_flush_all_nonglobals();
@@ -528,11 +528,17 @@ static void finish_asid_transition(struct flush_tlb_info *info)
 
 static void broadcast_tlb_flush(struct flush_tlb_info *info)
 {
+	struct x86_cpu_accel_tlb_flush accel_flush;
 	bool pmd = info->stride_shift == PMD_SHIFT;
 	unsigned long asid = mm_global_asid(info->mm);
 	unsigned long addr = info->start;
 
-	/* INVLPGB broadcasts to CPUs beyond the active mm's CPU mask. */
+	/*
+	 * INVLPGB broadcasts to CPUs beyond the active mm's CPU mask. Reserve
+	 * all online CPUs until TLBSYNC completes so a new accelerator owner
+	 * cannot switch into this mm after its invalidation has passed.
+	 */
+	x86_cpu_accel_tlb_flush_begin(&accel_flush, cpu_online_mask);
 	note_tlb_shootdown_targets(cpu_online_mask, info->mm,
 				   info->new_tlb_gen);
 
@@ -565,6 +571,7 @@ static void broadcast_tlb_flush(struct flush_tlb_info *info)
 
 	/* Wait for the INVLPGBs kicked off above to finish. */
 	__tlbsync();
+	x86_cpu_accel_tlb_flush_end(&accel_flush);
 }
 
 /*
@@ -1561,9 +1568,9 @@ void flush_tlb_all(void)
 	bool use_broadcast;
 
 	count_vm_tlb_event(NR_TLB_REMOTE_FLUSH);
+	x86_cpu_accel_tlb_flush_begin(&accel_flush, cpu_online_mask);
 	note_tlb_shootdown_targets(cpu_online_mask, NULL,
 				   TLB_GENERATION_INVALID);
-	x86_cpu_accel_tlb_flush_begin(&accel_flush, cpu_online_mask);
 	use_broadcast = accel_flush.no_owners;
 
 	/* First try (faster) hardware-assisted TLB invalidation. */
@@ -1612,9 +1619,9 @@ static void kernel_tlb_flush_all(struct flush_tlb_info *info)
 	struct x86_cpu_accel_tlb_flush accel_flush;
 	bool use_broadcast;
 
+	x86_cpu_accel_tlb_flush_begin(&accel_flush, cpu_online_mask);
 	note_tlb_shootdown_targets(cpu_online_mask, info->mm,
 				   info->new_tlb_gen);
-	x86_cpu_accel_tlb_flush_begin(&accel_flush, cpu_online_mask);
 	use_broadcast = accel_flush.no_owners;
 	if (cpu_feature_enabled(X86_FEATURE_INVLPGB) && use_broadcast)
 		invlpgb_flush_all();

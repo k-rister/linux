@@ -24,7 +24,10 @@ int x86_cpu_accel_user_enter(unsigned int cpu, struct mm_struct *mm,
 			     u64 *tlb_targets);
 u64 x86_cpu_accel_user_exit(unsigned int cpu);
 bool x86_cpu_accel_any_active(void);
-/* Reserve admission on targets until end; no_owners permits a broadcast. */
+/*
+ * Call before recording owners; reserve admission until end.
+ * no_owners permits a broadcast.
+ */
 void x86_cpu_accel_tlb_flush_begin(struct x86_cpu_accel_tlb_flush *flush,
 				   const struct cpumask *targets);
 void x86_cpu_accel_tlb_flush_end(struct x86_cpu_accel_tlb_flush *flush);

@@ -163,9 +163,10 @@ Full and all-nonglobal flushes retain the synchronous IPI path during ownership
 because they would evict active accelerator user translations. That fallback
 waits for the owner to exit. New ownership is barred on the selected target
 CPUs until each flush completes, so it cannot race a new owner after choosing
-its target mask. An attempted entry on a reserved target CPU returns
-``-EBUSY``. The worker still uses its process ``mm``. Kernel mapping changes
-affecting code or the exception/recovery path still need a separate
+its target mask. Global-ASID INVLPGB broadcasts reserve all online CPUs through
+``TLBSYNC`` for the same reason. An attempted entry on a reserved target CPU
+returns ``-EBUSY``. The worker still uses its process ``mm``. Kernel mapping
+changes affecting code or the exception/recovery path still need a separate
 maintenance policy; TLB invalidation alone does not establish safety.
 Do not infer TLB isolation or a latency bound from a zero target count or TLB
 counter delta.
@@ -420,8 +421,10 @@ The implementation checkpoints are:
     translations; full and all-nonglobal flushes still wait for owners. The
     current prototype seals an exec-created worker ``mm`` with a complete VMA
     allowlist, including the fixed x86 ``[vsyscall]`` exception. Remaining
-    work includes a safe maintenance policy for full-flush fallback and kernel
-    code/exception mapping updates. A driver-assembled ``mm`` would additionally
+    work includes policy for full-flush fallback and kernel code/exception
+    mapping updates. Global-ASID INVLPGB broadcasts reserve all online CPUs
+    through ``TLBSYNC`` so no new owner can enter during the invalidation.
+    A driver-assembled ``mm`` would additionally
     require MM-core construction and task-lifecycle APIs. Add IOMMU-backed
     ``DMA`` regions and userspace/NIC integration only after this non-networked
     memory contract is stable.

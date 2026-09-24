@@ -3,6 +3,7 @@
 #include "cpu_accel.h"
 
 #include <errno.h>
+#include <fcntl.h>
 #include <inttypes.h>
 #include <limits.h>
 #include <signal.h>
@@ -316,68 +317,153 @@ static int pin_cpu(unsigned int cpu)
 	return sched_setaffinity(0, sizeof(set), &set);
 }
 
+static int close_worker_fds(int keep_fd)
+{
+	if (keep_fd <= STDERR_FILENO)
+		return syscall(SYS_close_range, 3U, UINT_MAX, 0U);
+	if (keep_fd > STDERR_FILENO + 1 &&
+	    syscall(SYS_close_range, 3U, (unsigned int)keep_fd - 1, 0U) < 0)
+		return -1;
+	return syscall(SYS_close_range, (unsigned int)keep_fd + 1, UINT_MAX, 0U);
+}
+
+static int run_user_worker_image(struct cpu_accel_handle *handle,
+				 struct cpu_accel_config *config)
+{
+	struct cpu_accel_user_context *context;
+	uintptr_t entry_ip;
+	uintptr_t entry_page;
+	uintptr_t escape_page;
+	uintptr_t image_end;
+	void *stack;
+	long page_size;
+	int user_hang = config->workload == CPU_ACCEL_WORKLOAD_USER_HANG;
+	int ret = 1;
+
+	page_size = sysconf(_SC_PAGESIZE);
+	if (page_size <= 0 || (size_t)page_size > SIZE_MAX / 16) {
+		fprintf(stderr, "invalid page size\n");
+		goto out;
+	}
+	stack = mmap(NULL, (size_t)page_size * 16,
+		     PROT_READ | PROT_WRITE,
+		     MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
+	if (stack == MAP_FAILED) {
+		perror("mmap user accelerator stack");
+		goto out;
+	}
+
+	context = stack;
+	context->shared = (struct cpu_accel_shared *)(uintptr_t)handle->shared;
+	context->fd = handle->fd;
+	context->cycles_per_ns = cpu_accel_calibrate_cycles_per_ns();
+	entry_ip = user_hang ? (uintptr_t)cpu_accel_user_hang :
+		(uintptr_t)cpu_accel_user_oslat;
+	config->flags |= CPU_ACCEL_FLAG_PERSISTENT;
+	config->user_entry_ip = entry_ip;
+	config->user_escape_ip = (uintptr_t)cpu_accel_user_escape_image;
+	config->user_stack_top = (uintptr_t)stack + (size_t)page_size * 16;
+	config->user_stack_bytes = (size_t)page_size * 16;
+	entry_page = entry_ip & ~((uintptr_t)page_size - 1);
+	escape_page = (uintptr_t)cpu_accel_user_escape_image &
+		~((uintptr_t)page_size - 1);
+	config->user_image_start = entry_page < escape_page ? entry_page :
+		escape_page;
+	image_end = entry_page > escape_page ? entry_page : escape_page;
+	config->user_image_bytes = image_end - config->user_image_start +
+		(size_t)page_size;
+	config->user_arg = (uintptr_t)context;
+
+	if (cpu_accel_configure(handle, config) < 0) {
+		perror("configure user accelerator");
+		goto out_stack;
+	}
+	if (cpu_accel_start(handle) < 0) {
+		perror("start user accelerator");
+		goto out_stack;
+	}
+	ret = 0;
+
+out_stack:
+	munmap(stack, (size_t)page_size * 16);
+out:
+	cpu_accel_close(handle);
+	return ret;
+}
+
+static int run_user_worker(int argc, char **argv)
+{
+	enum { USER_WORKER_ARG_COUNT = 6 };
+	struct cpu_accel_config config = {};
+	struct cpu_accel_handle handle;
+	uint64_t values[USER_WORKER_ARG_COUNT];
+	int fd;
+
+	if (argc != USER_WORKER_ARG_COUNT + 2) {
+		fprintf(stderr, "invalid internal user-worker arguments\n");
+		return 2;
+	}
+	for (int i = 0; i < USER_WORKER_ARG_COUNT; i++) {
+		if (parse_u64(argv[i + 2], &values[i])) {
+			fprintf(stderr, "invalid internal user-worker argument\n");
+			return 2;
+		}
+	}
+	if (values[0] > INT_MAX || values[1] > UINT_MAX ||
+	    values[2] > CPU_ACCEL_WORKLOAD_USER_HANG ||
+	    values[3] > UINT_MAX ||
+	    (values[2] != CPU_ACCEL_WORKLOAD_USER_OSLAT &&
+	     values[2] != CPU_ACCEL_WORKLOAD_USER_HANG)) {
+		fprintf(stderr, "out-of-range internal user-worker argument\n");
+		return 2;
+	}
+
+	fd = values[0];
+	config.cpu = values[1];
+	config.workload = values[2];
+	config.flags = values[3];
+	config.duration_ns = values[4];
+	config.period_ns = values[5];
+	if (pin_cpu(config.cpu) < 0) {
+		perror("pin user accelerator");
+		close(fd);
+		return 1;
+	}
+	if (cpu_accel_attach_fd(&handle, fd) < 0) {
+		perror("map inherited accelerator device");
+		close(fd);
+		return 1;
+	}
+	return run_user_worker_image(&handle, &config);
+}
+
 static int run_user_workload(const struct cpu_accel_config *requested,
 			     uint64_t escape_after_ms,
 			     uint64_t escape_attempts)
 {
 	struct cpu_accel_config config = *requested;
 	struct cpu_accel_handle handle;
-	struct cpu_accel_user_context *context;
-	uintptr_t entry_ip;
-	void *stack;
-	long page_size;
+	char fd_arg[24], cpu_arg[24], workload_arg[24];
+	char flags_arg[24], duration_arg[24], period_arg[24];
+	char *const worker_argv[] = {
+		"/proc/self/exe", "--cpu-accel-user-worker", fd_arg,
+		cpu_arg, workload_arg, flags_arg, duration_arg, period_arg, NULL,
+	};
+	char *const worker_env[] = { NULL };
 	pid_t child;
-	uintptr_t entry_page;
-	uintptr_t escape_page;
-	uintptr_t image_end;
 	int status;
 	int user_hang = requested->workload == CPU_ACCEL_WORKLOAD_USER_HANG;
 	int escape_ret = 0;
 	int ret;
 
-	page_size = sysconf(_SC_PAGESIZE);
-	if (page_size <= 0 || (size_t)page_size > SIZE_MAX / 16) {
-		fprintf(stderr, "invalid page size\n");
-		return 1;
-	}
-	stack = mmap(NULL, (size_t)page_size * 16,
-		    PROT_READ | PROT_WRITE,
-		    MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
-	if (stack == MAP_FAILED) {
-		perror("mmap user accelerator stack");
-		return 1;
-	}
 	if (cpu_accel_open(&handle) < 0) {
 		perror("open /dev/cpu_accel");
-		munmap(stack, (size_t)page_size * 16);
 		return 1;
 	}
 
-	context = stack;
-	context->shared = (struct cpu_accel_shared *)(uintptr_t)handle.shared;
-	context->fd = handle.fd;
-	context->cycles_per_ns = cpu_accel_calibrate_cycles_per_ns();
-	entry_ip = user_hang ? (uintptr_t)cpu_accel_user_hang :
-		(uintptr_t)cpu_accel_user_oslat;
-	config.flags |= CPU_ACCEL_FLAG_PERSISTENT;
-	config.user_entry_ip = entry_ip;
-	config.user_escape_ip = (uintptr_t)cpu_accel_user_escape_image;
-	config.user_stack_top = (uintptr_t)stack + (size_t)page_size * 16;
-	config.user_stack_bytes = (size_t)page_size * 16;
-	entry_page = entry_ip &
-		~((uintptr_t)page_size - 1);
-	escape_page = (uintptr_t)cpu_accel_user_escape_image &
-		~((uintptr_t)page_size - 1);
-	config.user_image_start = entry_page < escape_page ?
-		entry_page : escape_page;
-	image_end = entry_page > escape_page ? entry_page : escape_page;
-	config.user_image_bytes = image_end - config.user_image_start +
-		(size_t)page_size;
-	config.user_arg = (uintptr_t)context;
 	if (user_hang && !escape_after_ms) {
 		fprintf(stderr, "user-hang requires --escape-after-ms\n");
 		cpu_accel_close(&handle);
-		munmap(stack, (size_t)page_size * 16);
 		return 2;
 	}
 
@@ -391,35 +477,44 @@ static int run_user_workload(const struct cpu_accel_config *requested,
 			"same-mm user admission returned %d/errno %d, expected EXDEV\n",
 			ret, configure_errno);
 		cpu_accel_close(&handle);
-		munmap(stack, (size_t)page_size * 16);
 		return 1;
 	}
+	config = *requested;
+	config.flags |= CPU_ACCEL_FLAG_PERSISTENT;
+	snprintf(fd_arg, sizeof(fd_arg), "%d", handle.fd);
+	snprintf(cpu_arg, sizeof(cpu_arg), "%u", config.cpu);
+	snprintf(workload_arg, sizeof(workload_arg), "%u", config.workload);
+	snprintf(flags_arg, sizeof(flags_arg), "%u", config.flags);
+	snprintf(duration_arg, sizeof(duration_arg), "%llu",
+		 (unsigned long long)config.duration_ns);
+	snprintf(period_arg, sizeof(period_arg), "%llu",
+		 (unsigned long long)config.period_ns);
 
 	child = fork();
 	if (child < 0) {
 		perror("fork user accelerator");
 		cpu_accel_close(&handle);
-		munmap(stack, (size_t)page_size * 16);
 		return 1;
 	}
 	if (!child) {
+		int fd_flags = fcntl(handle.fd, F_GETFD);
+
+		if (close_worker_fds(handle.fd) < 0) {
+			perror("close unrelated descriptors before exec");
+			_exit(1);
+		}
+		if (fd_flags < 0 ||
+		    fcntl(handle.fd, F_SETFD, fd_flags & ~FD_CLOEXEC) < 0) {
+			perror("prepare accelerator fd for exec");
+			_exit(1);
+		}
 		if (pin_cpu(config.cpu) < 0) {
 			perror("pin user accelerator");
 			_exit(1);
 		}
-		ret = cpu_accel_configure(&handle, &config);
-		if (ret < 0) {
-			perror("configure user accelerator");
-			_exit(1);
-		}
-		ret = cpu_accel_start(&handle);
-		if (ret < 0) {
-			perror("start user accelerator");
-			_exit(1);
-		}
-		cpu_accel_close(&handle);
-		munmap(stack, (size_t)page_size * 16);
-		_exit(0);
+		execve("/proc/self/exe", worker_argv, worker_env);
+		perror("exec isolated accelerator worker");
+		_exit(127);
 	}
 
 	if (escape_after_ms) {
@@ -470,7 +565,6 @@ static int run_user_workload(const struct cpu_accel_config *requested,
 		ret = -1;
 	}
 	cpu_accel_close(&handle);
-	munmap(stack, (size_t)page_size * 16);
 	return ret < 0 ? 1 : 0;
 }
 
@@ -678,6 +772,8 @@ int main(int argc, char **argv)
 		usage(stderr, argv[0]);
 		return 2;
 	}
+	if (!strcmp(argv[1], "--cpu-accel-user-worker"))
+		return run_user_worker(argc, argv);
 	if (!strcmp(argv[1], "run"))
 		return run_workload(argv[0], argc - 2, argv + 2);
 	if (strcmp(argv[1], "exit") && strcmp(argv[1], "status") &&

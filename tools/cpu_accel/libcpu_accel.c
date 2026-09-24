@@ -27,32 +27,44 @@ static int cpu_accel_ioctl(int fd, unsigned long command, void *argument)
 int cpu_accel_open(struct cpu_accel_handle *handle)
 {
 	int fd;
-	void *mapping;
-	void *shared_mapping;
+	int ret;
+	int saved_errno;
 
-	memset(handle, 0, sizeof(*handle));
-	handle->fd = -1;
 	fd = open(CPU_ACCEL_DEVICE, O_RDWR | O_CLOEXEC);
 	if (fd < 0)
 		return -1;
+	ret = cpu_accel_attach_fd(handle, fd);
+	if (!ret)
+		return 0;
+	saved_errno = errno;
+	close(fd);
+	errno = saved_errno;
+	return -1;
+}
+
+int cpu_accel_attach_fd(struct cpu_accel_handle *handle, int fd)
+{
+	void *mapping;
+	void *shared_mapping;
+	int saved_errno;
+
+	memset(handle, 0, sizeof(*handle));
+	handle->fd = -1;
+	if (fd < 0) {
+		errno = EBADF;
+		return -1;
+	}
 
 	mapping = mmap(NULL, CPU_ACCEL_MAP_SIZE, PROT_READ | PROT_WRITE,
 			       MAP_SHARED, fd, 0);
-	if (mapping == MAP_FAILED) {
-		int saved_errno = errno;
-
-		close(fd);
-		errno = saved_errno;
+	if (mapping == MAP_FAILED)
 		return -1;
-	}
 	shared_mapping = mmap(NULL, CPU_ACCEL_SHARED_MAP_SIZE,
-				      PROT_READ | PROT_WRITE, MAP_SHARED, fd,
-				      CPU_ACCEL_SHARED_MAP_OFFSET);
+			      PROT_READ | PROT_WRITE, MAP_SHARED, fd,
+			      CPU_ACCEL_SHARED_MAP_OFFSET);
 	if (shared_mapping == MAP_FAILED) {
-		int saved_errno = errno;
-
+		saved_errno = errno;
 		munmap(mapping, CPU_ACCEL_MAP_SIZE);
-		close(fd);
 		errno = saved_errno;
 		return -1;
 	}
@@ -66,9 +78,13 @@ int cpu_accel_open(struct cpu_accel_handle *handle)
 	    handle->shared_region->struct_size <
 		    sizeof(struct cpu_accel_shared_region) ||
 	    handle->shared_region->entry_count != CPU_ACCEL_SHARED_ENTRY_COUNT ||
-	    handle->shared_region->entry_size !=
-		    sizeof(struct cpu_accel_shared_entry)) {
-		cpu_accel_close(handle);
+		    handle->shared_region->entry_size !=
+			    sizeof(struct cpu_accel_shared_entry)) {
+		munmap((void *)handle->shared, CPU_ACCEL_MAP_SIZE);
+		munmap((void *)handle->shared_region,
+		       CPU_ACCEL_SHARED_MAP_SIZE);
+		memset(handle, 0, sizeof(*handle));
+		handle->fd = -1;
 		errno = EPROTO;
 		return -1;
 	}

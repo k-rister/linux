@@ -1077,6 +1077,7 @@ static int cpu_accel_user_image_prepare(struct cpu_accel_device *dev)
 	unsigned long rseq_end = 0;
 	unsigned int image_pages;
 	unsigned int stack_pages;
+	unsigned int rseq_pages;
 	long pinned;
 	int ret;
 
@@ -1136,11 +1137,12 @@ static int cpu_accel_user_image_prepare(struct cpu_accel_device *dev)
 
 	image_pages = dev->config.user_image_bytes >> PAGE_SHIFT;
 	stack_pages = dev->config.user_stack_bytes >> PAGE_SHIFT;
-	image->pages = kvmalloc_array(image_pages + stack_pages,
+	rseq_pages = (rseq_end - rseq_start) >> PAGE_SHIFT;
+	image->pages = kvmalloc_array(image_pages + stack_pages + rseq_pages,
 				      sizeof(*image->pages), GFP_KERNEL);
 	if (!image->pages)
 		return -ENOMEM;
-	image->nr_pages = image_pages + stack_pages;
+	image->nr_pages = image_pages + stack_pages + rseq_pages;
 
 	image->mm = get_task_mm(current);
 	if (!image->mm) {
@@ -1162,25 +1164,31 @@ static int cpu_accel_user_image_prepare(struct cpu_accel_device *dev)
 
 	pinned = pin_user_pages_fast(dev->config.user_image_start,
 				     image_pages, 0, image->pages);
+	if (pinned > 0)
+		image->pinned_pages = pinned;
 	if (pinned != image_pages) {
-		image->pinned_pages = pinned > 0 ? pinned : 0;
 		ret = pinned < 0 ? (int)pinned : -EFAULT;
 		goto fail;
 	}
-	image->pinned_pages = image_pages;
 	pinned = pin_user_pages_fast(stack_start, stack_pages, FOLL_WRITE,
 				     image->pages + image_pages);
+	if (pinned > 0)
+		image->pinned_pages += pinned;
 	if (pinned != stack_pages) {
-		if (pinned > 0) {
-			unpin_user_pages(image->pages + image_pages, pinned);
-			image->pinned_pages = image_pages;
-		} else {
-			image->pinned_pages = image_pages;
-		}
 		ret = pinned < 0 ? (int)pinned : -EFAULT;
 		goto fail;
 	}
-	image->pinned_pages = image->nr_pages;
+	if (rseq_pages) {
+		/* Keep the registered user area resident for kernel RSEQ paths. */
+		pinned = pin_user_pages_fast(rseq_start, rseq_pages, FOLL_WRITE,
+					     image->pages + image_pages + stack_pages);
+		if (pinned > 0)
+			image->pinned_pages += pinned;
+		if (pinned != rseq_pages) {
+			ret = pinned < 0 ? (int)pinned : -EFAULT;
+			goto fail;
+		}
+	}
 	mmap_write_lock(image->mm);
 	image->mm_locked = true;
 	ret = cpu_accel_validate_user_range(image->mm,

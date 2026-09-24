@@ -201,40 +201,50 @@ The policy for a protected accelerator address space is:
 Flush completion and kernel maintenance
 ---------------------------------------
 
-The current x86 fallback keeps ``arch_tlbbatch_flush()`` synchronous. When it
-returns, every target CPU has completed the invalidation, so generic MM may
-release the unmapped data and page-table pages. Returning after only recording
-an unscoped pending flush is unsafe: those pages can be freed and reused
-before the owner processes the request. The synchronous IPI path therefore
-waits for an active owner to exit. That wait has no bound if the owner does not
-exit, so the prototype does not promise progress for full-system maintenance
-or a hard dataplane bound across such maintenance.
+The current x86 implementation keeps ``arch_tlbbatch_flush()`` synchronous.
+This hook belongs to the task-local batched-unmap path: generic
+``try_to_unmap_flush()`` passes it ``current->tlb_ubc.arch`` and clears the
+batch only after the hook returns. Reclaim and migration callers rely on that
+completion before proceeding. In particular, a dirty unmapped folio must be
+flushed before I/O starts, or a stale writable translation could modify it
+during writeback.
 
-A nonblocking full-flush path needs an MM-core reclamation mechanism as well
-as an owner acknowledgement. At minimum, it must:
+The x86 batch hook currently issues an unscoped full TLB flush, so it cannot
+use the per-``mm`` owner filter. Its synchronous callback can wait for an
+active owner to exit, with no bound if the owner does not exit. The prototype
+therefore does not promise progress for this maintenance path or a hard
+dataplane bound across it.
 
-* retain every affected data and page-table page until each CPU that could
-  still use or speculatively walk the old tables has invalidated them or been
-  quiesced;
+This path is separate from ``mmu_gather``. The x86 architecture's
+``arch_tlbflush_unmap_batch`` stores only a CPU mask and an
+``unmapped_pages`` flag; it does not own the folios whose mappings were
+removed. Returning after only recording a pending flush would let the generic
+caller proceed to I/O or release a folio before the owner handles it. A
+nonblocking version therefore needs changes to the unmap/reclaim contract so
+the affected folio lifetime and any required I/O remain deferred until the
+owner acknowledgement. Changing the architecture hook alone cannot do that.
+
+``mmu_gather`` is a distinct range-flush path. On x86 it calls
+``flush_tlb_mm_range()``; after the flush/generation rules permit reclamation,
+``tlb_flush_mmu_free()`` releases its queued data pages and page-table batches.
+An asynchronous redesign of that path would need to transfer those
+``mmu_gather`` lists to its own completion-managed object. Those lists are not
+part of ``arch_tlbbatch_flush()`` or its architecture batch.
+
+For either path, any deferred completion must retain every affected data or
+page-table page until each CPU that could still use or speculatively walk the
+old translation has invalidated it or been quiesced. It must also:
+
 * carry enough address-space, generation, and target information to associate
   each acknowledgement with the pages it protects; and
 * preserve outstanding acknowledgements across owner exit, CPU offlining, and
   recovery, with bounded storage or explicit backpressure.
 
-The current x86 ``arch_tlbflush_unmap_batch`` stores only a CPU mask and an
-``unmapped_pages`` flag. The affected data-page and page-table lists remain in
-the stack-owned ``mmu_gather``; ``tlb_flush_mmu_free()`` releases data pages
-after the flush and hands page-table batches to their configured table-free
-path. An asynchronous architecture hook alone therefore cannot retain the
-memory safely. MM core would need to transfer those lists into a
-completion-managed reclaim object and retire that object only after the owner
-acknowledgements arrive.
-
 A per-CPU pending bit alone cannot meet this contract. The driver's current
 NMI escape is also unsuitable as a generic MM mechanism: it is a controller
 request that terminates this prototype's run, not an acknowledgement that
-arbitrary MM callers can request and await. Until MM can retain pages through
-completion, keep full flushes synchronous.
+arbitrary MM callers can request and await. Until the relevant reclaim path can
+hold its folios through completion, keep ``arch_tlbbatch_flush()`` synchronous.
 
 Kernel mapping invalidation and kernel code maintenance have separate
 requirements:
@@ -287,10 +297,11 @@ The normal ``execve()`` path creates a fresh ``mm`` for a worker task, and the
 CLI uses that path so the worker does not share the companion's ``mm``. The
 current prototype now removes the worker's ordinary runtime VMAs and verifies
 the complete remaining VMA set, including the fixed architecture-owned
-``[vsyscall]`` mapping. The driver pins the admitted image and private stack
-and holds the worker ``mm`` write-locked for the active epoch, preserving the
-existing ``current->mm`` and loaded-address-space relationship. This path
-avoids changing the task's ``mm`` during execution.
+``[vsyscall]`` mapping. The driver pins the admitted image, private stack, and
+registered private RSEQ user-area pages, then holds the worker ``mm``
+write-locked for the active epoch, preserving the existing ``current->mm`` and
+loaded-address-space relationship. This path avoids changing the task's
+``mm`` during execution.
 
 If the design instead requires the driver to assemble a new ``mm`` from
 registered pages, that needs a narrow MM-core interface and a task lifecycle

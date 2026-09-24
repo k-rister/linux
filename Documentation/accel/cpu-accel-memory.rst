@@ -185,6 +185,40 @@ is only a mechanism detail. The direct APIC prototype must not advertise
 complete APIC ownership, TLB-shootdown suppression, or protected address-space
 isolation.
 
+MM construction boundary
+========================
+
+When built as a module, the ``cpu_accel`` driver cannot construct a separate
+populated user ``mm`` by combining the interfaces currently exposed to it.
+``mm_alloc()`` is exported only for KUnit, ``insert_vm_struct()`` is
+MM-internal, and ``switch_mm_irqs_off()`` is an architecture-level address
+space switch rather than a task ``mm`` lifecycle API. Helpers such as
+``vm_insert_page()`` map pages into an existing VMA; they do not create and
+own a complete address space or arrange for user execution to run as a task
+whose ``current->mm`` is that address space.
+
+Therefore, the prototype must continue to describe its current process ``mm``
+accurately. A sealed accelerator ``mm`` needs a narrow MM-core interface and a
+task lifecycle that make address-space construction, user execution, and
+teardown one operation. That interface must provide at least:
+
+* creation of an otherwise empty ``mm`` with normal architecture and MM
+  accounting initialized;
+* installation of only the admitted image, private stack/data, and registered
+  shared mappings, with ordinary VMA, reverse-mapping, page-reference, and
+  page-table accounting maintained;
+* prefaulting and freezing those mappings for an active epoch;
+* execution in a task context whose ``current->mm`` and loaded address space
+  agree, with a defined way to restore the task's prior address space; and
+* teardown only after accelerator ownership ends, required local and remote
+  TLB invalidations complete, and mapped pages can safely be released.
+
+The x86 ownership record must then identify the address space actually loaded
+for accelerator execution, independently of the task that submitted the
+request. The existing process-``mm`` backend relies on those identities being
+the same. Do not work around the missing MM lifecycle by assigning a CR3
+directly or by relabeling the worker's ordinary process ``mm`` as sealed.
+
 Shared-region ownership
 =======================
 
@@ -362,7 +396,9 @@ The implementation checkpoints are:
     targets reserved against new ownership. Kernel-address-range flushes use
     INVLPGB plus system-wide completion when available without evicting user
     translations; full and all-nonglobal flushes still wait for owners. The
-    remaining work is sealed ``mm`` admission and a safe maintenance policy
-    for full-flush fallback and kernel code/exception mapping updates. Add
+    remaining work is an MM-core creation/task-lifecycle interface for sealed
+    ``mm`` admission and a safe maintenance policy for full-flush fallback and
+    kernel code/exception mapping updates. The current module interfaces do
+    not support creating a correctly initialized populated user ``mm``. Add
     IOMMU-backed ``DMA`` regions and userspace/NIC integration only after this
     non-networked memory contract is stable.

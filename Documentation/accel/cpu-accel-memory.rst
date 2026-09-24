@@ -9,10 +9,10 @@ Status and scope
 
 This document defines the memory model for the CPU accelerator prototype. It
 is a design contract, not an ABI specification or an implementation claim.
-The current prototype only has kernel-owned workload buffers and a shared
-control/telemetry mapping. In particular, the current ``memmove`` workload
-does not execute user code and does not provide a protected accelerator
-address space.
+The kernel-mode timestamp and ``memmove`` workloads use kernel-owned buffers
+and the shared control/telemetry mapping; the current ``memmove`` workload does
+not execute user code. The x86 ring-3 path is a separate sealed-process-``mm``
+prototype described below, not the final protected address-space model.
 
 The kernel prototype now tracks an internal owner and generation epoch for
 the workload region. Private kernel-owned buffers return to Linux ownership
@@ -101,25 +101,36 @@ space transition and TLB costs; the dataplane interval may not.
 Address-space and TLB ownership policy
 =======================================
 
-The current x86 ring-3 workload is an admission prototype, not yet the final
-address-space ownership model. On device open, the driver retains the opener's
-``mm`` as the companion address space. User-workload admission rejects that
-same ``mm`` during configuration and start, and requires a single-threaded
-worker with a distinct ``mm``. The companion opens and maps the control
-interface, then forks a worker that execs a fresh worker image, passing the
-device file descriptor and preserving standard streams. Other inherited file
-descriptors are closed. The new process maps its own control pages, so it does
-not retain the companion's copy-on-write mappings. The driver pins the worker's
-image and stack and holds that ``mm``'s ``mmap_lock`` for write during the
-active epoch. This blocks ordinary VMA changes to that worker address space.
-The user fixtures, exit syscall helper, and escape trampoline are emitted into
-one page-aligned executable section, and the CLI passes that section's
-page-rounded bounds as the admitted image. This avoids deriving the image from
-the distance between two functions whose placement can change with linker
-layout.
-The worker still uses its process ``mm``; it is not a driver-created sealed
-accelerator ``mm`` with only the registered image and region mappings, and its
-own executable/runtime VMAs may still be present.
+The current x86 ring-3 workload is a sealed-process-``mm`` prototype, not yet
+the final address-space ownership model. On device open, the driver retains
+the opener's ``mm`` as the companion address space. User-workload admission
+rejects that same ``mm`` during configuration and start, and requires a
+single-threaded worker with a distinct ``mm``. The companion opens and maps the
+control interface, then forks a worker that execs a fresh worker image, passing
+the device file descriptor and preserving standard streams. Other inherited
+file descriptors are closed. The new process maps its own control pages, so it
+does not retain the companion's copy-on-write mappings.
+
+Before START, the worker switches to its admitted stack and unmaps every
+removable VMA except the executable image, private stack, control mapping, and
+shared-data mapping. The legacy x86 ``[vsyscall]`` VMA is fixed at
+``VSYSCALL_ADDR`` and rejects ``munmap``; the worker leaves it mapped, and the
+driver accepts only that exact executable-only architecture mapping. The
+image must be file-backed private RX, the stack anonymous private RW without
+execute permission, and the device maps RW shared at their exact offsets and
+sizes (including a single VMA if the adjacent maps are coalesced). The driver
+validates the complete remaining VMA set, pins the image and stack, and holds
+the worker ``mm``'s ``mmap_lock`` for write during the active epoch. The
+user fixtures, seal/start trampoline, exit syscall helper, and escape
+trampoline are emitted into one page-aligned executable section, and the CLI
+passes that section's page-rounded bounds as the admitted image. This avoids
+deriving the image from the distance between functions whose placement can
+change with linker layout.
+
+This path seals the worker's process ``mm`` at VMA level; it does not create an
+``mm`` independently of a task. The architecture-owned ``[vsyscall]`` mapping
+is not a workload entry point and is not pinned as part of the accelerator
+image.
 
 ABI 15 defers and replays call-function IPIs while the native x86 direct
 backend owns a CPU. Native x86 remote TLB flushes use call-function work, so
@@ -199,18 +210,13 @@ whose ``current->mm`` is that address space.
 
 This does not mean the first sealed ``mm`` requires a new MM-core allocator.
 The normal ``execve()`` path creates a fresh ``mm`` for a worker task, and the
-current CLI already forks and execs a worker so it does not share the
-companion's ``mm``. That is a supported task/``mm`` pairing. The current worker
-is not sealed, though: its process image and runtime may leave additional
-VMAs beyond the admitted code, stack, and device mappings.
-
-The first sealed prototype can build on the exec-created worker if its image
-is purpose-built and admission verifies the complete VMA set: only the
-prevalidated image, private stack/data, and explicitly registered control and
-shared mappings may remain. The driver can then pin those pages and hold the
-worker ``mm`` write-locked for the active epoch, preserving the existing
-``current->mm`` and loaded-address-space relationship. This path avoids
-changing the task's ``mm`` during execution.
+CLI uses that path so the worker does not share the companion's ``mm``. The
+current prototype now removes the worker's ordinary runtime VMAs and verifies
+the complete remaining VMA set, including the fixed architecture-owned
+``[vsyscall]`` mapping. The driver pins the admitted image and private stack
+and holds the worker ``mm`` write-locked for the active epoch, preserving the
+existing ``current->mm`` and loaded-address-space relationship. This path
+avoids changing the task's ``mm`` during execution.
 
 If the design instead requires the driver to assemble a new ``mm`` from
 registered pages, that needs a narrow MM-core interface and a task lifecycle
@@ -412,9 +418,10 @@ The implementation checkpoints are:
     targets reserved against new ownership. Kernel-address-range flushes use
     INVLPGB plus system-wide completion when available without evicting user
     translations; full and all-nonglobal flushes still wait for owners. The
-    remaining work is sealed ``mm`` admission, starting with a purpose-built
-    exec-created worker and a complete VMA allowlist, plus a safe maintenance
-    policy for full-flush fallback and kernel code/exception mapping updates.
-    A driver-assembled ``mm`` would additionally require MM-core construction
-    and task-lifecycle APIs. Add IOMMU-backed ``DMA`` regions and userspace/NIC
-    integration only after this non-networked memory contract is stable.
+    current prototype seals an exec-created worker ``mm`` with a complete VMA
+    allowlist, including the fixed x86 ``[vsyscall]`` exception. Remaining
+    work includes a safe maintenance policy for full-flush fallback and kernel
+    code/exception mapping updates. A driver-assembled ``mm`` would additionally
+    require MM-core construction and task-lifecycle APIs. Add IOMMU-backed
+    ``DMA`` regions and userspace/NIC integration only after this non-networked
+    memory contract is stable.

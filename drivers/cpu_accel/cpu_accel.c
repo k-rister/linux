@@ -39,6 +39,7 @@
 #include <asm/processor-flags.h>
 #include <asm/ptrace.h>
 #include <asm/segment.h>
+#include <asm/vsyscall.h>
 #endif
 
 #include <trace/events/workqueue.h>
@@ -940,6 +941,82 @@ static int cpu_accel_validate_user_range(struct mm_struct *mm,
 	return 0;
 }
 
+static bool cpu_accel_vma_has_permissions(struct vm_area_struct *vma,
+					  vm_flags_t required,
+					  vm_flags_t forbidden)
+{
+	return (vma->vm_flags & required) == required &&
+		!(vma->vm_flags & forbidden);
+}
+
+static int cpu_accel_validate_user_vma_set(struct cpu_accel_device *dev,
+					  struct mm_struct *mm,
+					  unsigned long image_start,
+					  unsigned long image_end,
+					  unsigned long stack_start,
+					  unsigned long stack_end)
+{
+	struct vm_area_struct *vma;
+	VMA_ITERATOR(vmi, mm, 0);
+	bool image_found = false;
+	bool stack_found = false;
+	bool control_found = false;
+	bool shared_found = false;
+
+	for_each_vma(vmi, vma) {
+		unsigned long size = vma->vm_end - vma->vm_start;
+
+		/* This fixed architecture mapping cannot be removed by munmap(). */
+		if (vma->vm_start == VSYSCALL_ADDR &&
+		    vma->vm_end == VSYSCALL_ADDR + PAGE_SIZE && !vma->vm_file &&
+		    cpu_accel_vma_has_permissions(vma, VM_EXEC,
+						 VM_READ | VM_WRITE))
+			continue;
+		if (vma->vm_start == image_start && vma->vm_end == image_end &&
+		    vma->vm_file &&
+		    cpu_accel_vma_has_permissions(vma, VM_READ | VM_EXEC,
+						 VM_WRITE | VM_SHARED)) {
+			image_found = true;
+			continue;
+		}
+		if (vma->vm_start == stack_start && vma->vm_end == stack_end &&
+		    !vma->vm_file &&
+		    cpu_accel_vma_has_permissions(vma, VM_READ | VM_WRITE,
+						 VM_EXEC | VM_SHARED)) {
+			stack_found = true;
+			continue;
+		}
+		if (vma->vm_file && vma->vm_file->private_data == dev &&
+		    cpu_accel_vma_has_permissions(vma,
+						 VM_READ | VM_WRITE | VM_SHARED,
+						 VM_EXEC)) {
+			if (!vma->vm_pgoff &&
+			    size == CPU_ACCEL_MAP_SIZE + CPU_ACCEL_SHARED_MAP_SIZE &&
+			    !control_found && !shared_found) {
+				control_found = true;
+				shared_found = true;
+				continue;
+			}
+			if (!vma->vm_pgoff && size == CPU_ACCEL_MAP_SIZE &&
+			    !control_found) {
+				control_found = true;
+				continue;
+			}
+			if (vma->vm_pgoff ==
+			    (CPU_ACCEL_SHARED_MAP_OFFSET >> PAGE_SHIFT) &&
+			    size == CPU_ACCEL_SHARED_MAP_SIZE && !shared_found) {
+				shared_found = true;
+				continue;
+			}
+		}
+
+		return -EACCES;
+	}
+
+	return image_found && stack_found && control_found && shared_found ?
+		0 : -EACCES;
+}
+
 static void cpu_accel_user_image_release(struct cpu_accel_device *dev)
 {
 	struct cpu_accel_user_image *image = &dev->user_image;
@@ -1072,6 +1149,13 @@ static int cpu_accel_user_image_prepare(struct cpu_accel_device *dev)
 		ret = cpu_accel_validate_user_range(image->mm, stack_start,
 						    dev->config.user_stack_bytes,
 						    VM_READ | VM_WRITE);
+	if (!ret)
+		ret = cpu_accel_validate_user_vma_set(dev, image->mm,
+						       dev->config.user_image_start,
+						       dev->config.user_image_start +
+						       dev->config.user_image_bytes,
+						       stack_start,
+						       dev->config.user_stack_top);
 	if (ret)
 		goto fail;
 

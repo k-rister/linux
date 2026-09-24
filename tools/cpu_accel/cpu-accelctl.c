@@ -22,6 +22,7 @@
 /* Keep the bounded ring-3 code in one page-aligned linker section. */
 #define CPU_ACCEL_USER_IMAGE \
 	__attribute__((section("cpu_accel_user_image"), aligned(4096)))
+#define CPU_ACCEL_VSYSCALL_ADDR	(-10UL << 20)
 
 static volatile sig_atomic_t interrupted;
 
@@ -31,10 +32,27 @@ static void handle_signal(int signal_number)
 	interrupted = 1;
 }
 
+struct cpu_accel_user_unmap_range;
+
 struct cpu_accel_user_context {
+	unsigned long stack_top;
 	struct cpu_accel_shared *shared;
 	int fd;
 	uint64_t cycles_per_ns;
+	struct cpu_accel_user_unmap_range *unmap_ranges;
+	unsigned long nr_unmap_ranges;
+};
+
+struct cpu_accel_user_unmap_range {
+	unsigned long start;
+	unsigned long length;
+};
+
+#define CPU_ACCEL_MAX_USER_UNMAP_RANGES	256
+
+struct cpu_accel_user_keep_range {
+	unsigned long start;
+	unsigned long end;
 };
 
 static inline uint64_t cpu_accel_read_tsc(void)
@@ -44,6 +62,82 @@ static inline uint64_t cpu_accel_read_tsc(void)
 
 	__asm__ volatile("rdtsc" : "=a"(low), "=d"(high));
 	return ((uint64_t)high << 32) | low;
+}
+
+static __attribute__((always_inline)) inline long
+cpu_accel_user_syscall1(long number, unsigned long arg1)
+{
+	long ret;
+
+	__asm__ volatile("syscall"
+		     : "=a"(ret)
+		     : "a"(number), "D"(arg1)
+		     : "rcx", "r11", "memory");
+	return ret;
+}
+
+static __attribute__((always_inline)) inline long
+cpu_accel_user_syscall2(long number, unsigned long arg1, unsigned long arg2)
+{
+	long ret;
+
+	__asm__ volatile("syscall"
+		     : "=a"(ret)
+		     : "a"(number), "D"(arg1), "S"(arg2)
+		     : "rcx", "r11", "memory");
+	return ret;
+}
+
+static __attribute__((always_inline)) inline long
+cpu_accel_user_syscall3(long number, unsigned long arg1, unsigned long arg2,
+			unsigned long arg3)
+{
+	long ret;
+
+	__asm__ volatile("syscall"
+		     : "=a"(ret)
+		     : "a"(number), "D"(arg1), "S"(arg2), "d"(arg3)
+		     : "rcx", "r11", "memory");
+	return ret;
+}
+
+/* Switch to the admitted stack before removing the worker's normal mappings. */
+CPU_ACCEL_USER_IMAGE
+__attribute__((naked, noreturn))
+static void cpu_accel_user_launch(struct cpu_accel_user_context *)
+{
+	__asm__ volatile("movq (%rdi), %rsp\n"
+			 "andq $-16, %rsp\n"
+			 "subq $8, %rsp\n"
+			 "jmp cpu_accel_user_seal_and_start\n");
+}
+
+CPU_ACCEL_USER_IMAGE
+__attribute__((noinline, noreturn, used))
+static void cpu_accel_user_seal_and_start(
+	struct cpu_accel_user_context *context)
+{
+	long ret;
+
+	for (unsigned long i = 0; i < context->nr_unmap_ranges; i++) {
+		const struct cpu_accel_user_unmap_range *range =
+			&context->unmap_ranges[i];
+
+		ret = cpu_accel_user_syscall2(SYS_munmap, range->start,
+					     range->length);
+		if (ret) {
+			context->shared->recovery_error = -ret;
+			cpu_accel_user_syscall1(SYS_exit_group, 125);
+			__builtin_unreachable();
+		}
+	}
+
+	ret = cpu_accel_user_syscall3(SYS_ioctl, context->fd,
+				      CPU_ACCEL_IOC_START, 0);
+	if (ret < 0)
+		context->shared->recovery_error = -ret;
+	cpu_accel_user_syscall1(SYS_exit_group, ret < 0 ? 126 : 0);
+	__builtin_unreachable();
 }
 
 CPU_ACCEL_USER_IMAGE
@@ -189,6 +283,105 @@ static uint64_t cpu_accel_calibrate_cycles_per_ns(void)
 	if (!elapsed_ns || cycles / elapsed_ns == 0)
 		return 1;
 	return cycles / elapsed_ns;
+}
+
+static int cpu_accel_add_unmap_range(struct cpu_accel_user_context *context,
+				     unsigned long start,
+				     unsigned long end)
+{
+	struct cpu_accel_user_unmap_range *range;
+
+	if (start >= end)
+		return 0;
+	if (context->nr_unmap_ranges >= CPU_ACCEL_MAX_USER_UNMAP_RANGES)
+		return -E2BIG;
+
+	range = &context->unmap_ranges[context->nr_unmap_ranges++];
+	range->start = start;
+	range->length = end - start;
+	return 0;
+}
+
+static void cpu_accel_sort_keep_ranges(struct cpu_accel_user_keep_range *ranges,
+				       unsigned int nr_ranges)
+{
+	for (unsigned int i = 1; i < nr_ranges; i++) {
+		struct cpu_accel_user_keep_range range = ranges[i];
+		unsigned int j = i;
+
+		while (j && ranges[j - 1].start > range.start) {
+			ranges[j] = ranges[j - 1];
+			j--;
+		}
+		ranges[j] = range;
+	}
+}
+
+static int cpu_accel_collect_unmap_ranges(
+	struct cpu_accel_handle *handle, struct cpu_accel_user_context *context,
+	unsigned long image_start, unsigned long image_end,
+	unsigned long stack_start, unsigned long stack_end,
+	unsigned long page_size)
+{
+	struct cpu_accel_user_keep_range keep[] = {
+		{ .start = image_start, .end = image_end },
+		{ .start = stack_start, .end = stack_end },
+		{ .start = (uintptr_t)handle->shared,
+		  .end = (uintptr_t)handle->shared + CPU_ACCEL_MAP_SIZE },
+		{ .start = (uintptr_t)handle->shared_region,
+		  .end = (uintptr_t)handle->shared_region +
+			CPU_ACCEL_SHARED_MAP_SIZE },
+	};
+	FILE *maps;
+	char *line = NULL;
+	size_t capacity = 0;
+	ssize_t length;
+	int ret = 0;
+
+	cpu_accel_sort_keep_ranges(keep, sizeof(keep) / sizeof(keep[0]));
+	maps = fopen("/proc/self/maps", "r");
+	if (!maps)
+		return -errno;
+
+	while ((length = getline(&line, &capacity, maps)) >= 0) {
+		unsigned long start, end, cursor;
+
+		if (sscanf(line, "%lx-%lx", &start, &end) != 2 || start >= end) {
+			ret = -EINVAL;
+			break;
+		}
+		/* x86 keeps this fixed legacy mapping; munmap rejects it. */
+		if (start == CPU_ACCEL_VSYSCALL_ADDR &&
+		    end - start == page_size)
+			continue;
+		cursor = start;
+		for (unsigned int i = 0; i < sizeof(keep) / sizeof(keep[0]); i++) {
+			if (keep[i].end <= cursor || keep[i].start >= end)
+				continue;
+			if (keep[i].start > cursor) {
+				unsigned long stop = keep[i].start < end ?
+					keep[i].start : end;
+
+				ret = cpu_accel_add_unmap_range(context, cursor, stop);
+				if (ret)
+					goto out;
+			}
+			if (keep[i].end > cursor)
+				cursor = keep[i].end;
+			if (cursor >= end)
+				break;
+		}
+		ret = cpu_accel_add_unmap_range(context, cursor, end);
+		if (ret)
+			break;
+	}
+	if (!ret && ferror(maps))
+		ret = -EIO;
+
+out:
+	free(line);
+	fclose(maps);
+	return ret;
 }
 
 static int parse_u64(const char *text, uint64_t *value)
@@ -337,6 +530,9 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 	uintptr_t entry_ip;
 	uintptr_t image_end;
 	uintptr_t image_start;
+	uintptr_t stack_start;
+	uintptr_t stack_end;
+	size_t unmap_offset;
 	void *stack;
 	long page_size;
 	int user_hang = config->workload == CPU_ACCEL_WORKLOAD_USER_HANG;
@@ -366,6 +562,7 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 	config->user_escape_ip = (uintptr_t)cpu_accel_user_escape_image;
 	config->user_stack_top = (uintptr_t)stack + (size_t)page_size * 16;
 	config->user_stack_bytes = (size_t)page_size * 16;
+	context->stack_top = config->user_stack_top;
 	image_start = (uintptr_t)__start_cpu_accel_user_image;
 	image_end = (uintptr_t)__stop_cpu_accel_user_image;
 	if (image_end <= image_start ||
@@ -382,16 +579,28 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 	config->user_image_start = image_start;
 	config->user_image_bytes = image_end - image_start;
 	config->user_arg = (uintptr_t)context;
+	stack_start = (uintptr_t)stack;
+	stack_end = (uintptr_t)stack + (size_t)page_size * 16;
+	unmap_offset = (sizeof(*context) +
+			_Alignof(struct cpu_accel_user_unmap_range) - 1) &
+		~((size_t)_Alignof(struct cpu_accel_user_unmap_range) - 1);
+	context->unmap_ranges = (void *)((uintptr_t)stack + unmap_offset);
+	context->nr_unmap_ranges = 0;
+	ret = cpu_accel_collect_unmap_ranges(handle, context, image_start,
+					     image_end, stack_start, stack_end,
+					     (unsigned long)page_size);
+	if (ret) {
+		errno = -ret;
+		perror("collect mappings to seal user worker");
+		goto out_stack;
+	}
 
 	if (cpu_accel_configure(handle, config) < 0) {
 		perror("configure user accelerator");
 		goto out_stack;
 	}
-	if (cpu_accel_start(handle) < 0) {
-		perror("start user accelerator");
-		goto out_stack;
-	}
-	ret = 0;
+	/* The image trampoline unmaps these VMAs, starts the workload, then exits. */
+	cpu_accel_user_launch(context);
 
 out_stack:
 	munmap(stack, (size_t)page_size * 16);
@@ -549,8 +758,13 @@ static int run_user_workload(const struct cpu_accel_config *requested,
 	if (waitpid(child, &status, 0) < 0) {
 		perror("wait for user accelerator");
 		ret = -1;
-	} else if (!WIFEXITED(status) || WEXITSTATUS(status)) {
-		fprintf(stderr, "user accelerator child failed\n");
+	} else if (WIFEXITED(status) && WEXITSTATUS(status)) {
+		fprintf(stderr, "user accelerator child failed with status %d\n",
+			WEXITSTATUS(status));
+		ret = -1;
+	} else if (WIFSIGNALED(status)) {
+		fprintf(stderr, "user accelerator child killed by signal %d\n",
+			WTERMSIG(status));
 		ret = -1;
 	} else {
 		ret = 0;

@@ -1394,12 +1394,49 @@ STATIC_NOPV void native_flush_tlb_multi(const struct cpumask *cpumask,
 	}
 }
 
+static void accel_flush_tlb_multi_slow(const struct cpumask *cpumask,
+				       const struct flush_tlb_info *info)
+{
+	bool flush_all = info->freed_tables || mm_in_asid_transition(info->mm);
+	unsigned int cpu;
+
+	/*
+	 * A filtered cpumask could not be allocated. Preserve the owner filter
+	 * by dispatching synchronously one CPU at a time instead.
+	 */
+	count_vm_tlb_event(NR_TLB_REMOTE_FLUSH);
+	if (info->end == TLB_FLUSH_ALL)
+		trace_tlb_flush(TLB_REMOTE_SEND_IPI, TLB_FLUSH_ALL);
+	else
+		trace_tlb_flush(TLB_REMOTE_SEND_IPI,
+				(info->end - info->start) >> PAGE_SHIFT);
+
+	for_each_cpu(cpu, cpumask) {
+		if (!cpu_online(cpu))
+			continue;
+
+		if (x86_cpu_accel_filter_mm_tlb_shootdown(cpu, info->mm,
+							  info->new_tlb_gen))
+			continue;
+
+		if (flush_all)
+			x86_cpu_accel_note_tlb_shootdown(cpu, info->mm,
+							 info->new_tlb_gen);
+		else if (!should_flush_tlb(cpu, (void *)info))
+			continue;
+
+		smp_call_function_single(cpu, flush_tlb_func, (void *)info, true);
+	}
+}
+
 void flush_tlb_multi(const struct cpumask *cpumask,
 		      const struct flush_tlb_info *info)
 {
 	struct x86_cpu_accel_tlb_flush accel_flush;
-	cpumask_t filtered_mask;
+	cpumask_var_t filtered_mask;
 	const struct cpumask *flush_mask = cpumask;
+	bool filtered_mask_allocated = false;
+	bool slow_path = false;
 	int cpu;
 
 	/* Block new owners on this target mask until the batch completes. */
@@ -1410,15 +1447,27 @@ void flush_tlb_multi(const struct cpumask *cpumask,
 	 * another mm's generation will be reconciled before it runs on that CPU.
 	 */
 	if (!accel_flush.no_owners && info->mm) {
-		cpumask_copy(&filtered_mask, cpumask);
-		for_each_cpu(cpu, cpumask) {
-			if (x86_cpu_accel_filter_mm_tlb_shootdown(cpu, info->mm,
-								  info->new_tlb_gen))
-				cpumask_clear_cpu(cpu, &filtered_mask);
+		if (alloc_cpumask_var(&filtered_mask, GFP_ATOMIC)) {
+			filtered_mask_allocated = true;
+			cpumask_copy(filtered_mask, &accel_flush.targets);
+		} else {
+			slow_path = true;
 		}
-		flush_mask = &filtered_mask;
+		if (!slow_path) {
+			for_each_cpu(cpu, &accel_flush.targets) {
+				if (x86_cpu_accel_filter_mm_tlb_shootdown(cpu, info->mm,
+									  info->new_tlb_gen))
+					cpumask_clear_cpu(cpu, filtered_mask);
+			}
+			flush_mask = filtered_mask;
+		}
 	}
-	__flush_tlb_multi(flush_mask, info);
+	if (slow_path)
+		accel_flush_tlb_multi_slow(&accel_flush.targets, info);
+	else
+		__flush_tlb_multi(flush_mask, info);
+	if (filtered_mask_allocated)
+		free_cpumask_var(filtered_mask);
 	x86_cpu_accel_tlb_flush_end(&accel_flush);
 }
 

@@ -117,7 +117,16 @@ ABI 15 defers and replays call-function IPIs while the native x86 direct
 backend owns a CPU. Native x86 remote TLB flushes use call-function work, so
 their callbacks remain queued until the ownership interval ends. A synchronous
 flush sender can therefore wait for the accelerator to exit. This is an
-incidental consequence of call-function deferral. ABI 16 reports
+incidental consequence of call-function deferral. For the ring-3 process-mm
+backend, ``flush_tlb_multi()`` now removes active ring-3 owners from an
+mm-scoped flush mask before dispatching through either the native or KVM
+paravirtual path. The owned worker ``mm`` is write-locked for the active
+interval, so a flush for that ``mm`` is recorded and reconciled with a local
+flush before unlock. A flush for another ``mm`` advances that ``mm``'s TLB
+generation; ``switch_mm()`` performs the needed local flush before the owner
+CPU can use it again. This avoids making a synchronous flush wait for an
+interrupt-disabled ring-3 owner that is running a different address space.
+ABI 16 reports
 ``arch_tlb_shootdown_targets`` for x86 flush batches that target the CPU while
 accelerator ownership is active, including the native IPI and INVLPGB paths.
 The ring-3 process-mm window uses the same per-CPU ownership state as the
@@ -128,8 +137,12 @@ that state while the image mm remains write-locked, then flushes the local TLB
 if either kind of invalidation is pending. Only then does the driver unlock the
 mm and release the pinned image pages. Remote callback completion remains
 governed by the native flush path; there is no separate remote acknowledgment
-queue. The worker still uses its process ``mm``, and paravirtual TLB paths may
-differ.
+queue. Kernel-global flushes on x86 with INVLPGB use the synchronous IPI path
+while any accelerator CPU is owned. New ownership is barred on the selected
+target CPUs while a synchronous TLB flush is in flight, so a flush cannot race
+a new owner after choosing its target mask. An attempted entry on a reserved
+target CPU returns ``-EBUSY``. A global flush can wait for an existing owner to
+exit. The worker still uses its process ``mm``.
 Do not infer TLB isolation or a latency bound from a zero target count or TLB
 counter delta.
 
@@ -142,10 +155,12 @@ The policy for a protected accelerator address space is:
   prefaulted, pinned, and immutable until exit, except for explicitly owned
   shared regions whose mappings remain fixed. Mapping changes, reclaim,
   migration, COW, and unmap must wait for ownership to end.
-* A TLB invalidation targeting an owned CPU is not complete until that CPU has
-  performed the required invalidation. Deferring the interrupt must not let
-  the caller free or reuse a page before acknowledgement. Pending address
-  space generations must be reconciled before Linux can run on the CPU again.
+* For the owned ``mm``, record a targeted invalidation and flush locally before
+  releasing its pages or unlocking the ``mm``. For another ``mm``, omit the
+  owner from the immediate target mask only while it cannot use that address
+  space; its advanced TLB generation must force a local flush before
+  ``switch_mm()`` lets the CPU use it again. Deferral must never permit stale
+  translations to be used after a page is freed or reused.
 * Entry and exit perform the required address-space switch and local
   invalidations. Kernel-global mapping changes need a separate policy because
   they are not limited to the accelerator ``mm``; they must either quiesce the

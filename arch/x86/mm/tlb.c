@@ -286,6 +286,8 @@ static struct new_asid choose_new_asid(struct mm_struct *next, u64 next_tlb_gen)
 	return ns;
 }
 
+static void do_flush_tlb_all(void *info);
+
 /*
  * Global ASIDs are allocated for multi-threaded processes that are
  * active on multiple CPUs simultaneously, giving each of those
@@ -310,9 +312,22 @@ static int global_asid_available = MAX_ASID_AVAILABLE - TLB_NR_DYN_ASIDS - 1;
  */
 static void reset_global_asid_space(void)
 {
+	struct x86_cpu_accel_tlb_flush accel_flush;
+	bool use_broadcast;
+
 	lockdep_assert_held(&global_asid_lock);
 
-	invlpgb_flush_all_nonglobals();
+	note_tlb_shootdown_targets(cpu_online_mask, NULL,
+				   TLB_GENERATION_INVALID);
+	x86_cpu_accel_tlb_flush_begin(&accel_flush, cpu_online_mask);
+	use_broadcast = accel_flush.no_owners;
+	if (use_broadcast) {
+		invlpgb_flush_all_nonglobals();
+	} else {
+		/* Do not broadcast while an accelerator CPU is owned. */
+		on_each_cpu(do_flush_tlb_all, NULL, 1);
+	}
+	x86_cpu_accel_tlb_flush_end(&accel_flush);
 
 	/*
 	 * The TLB flush above makes it safe to re-use the previously
@@ -1382,7 +1397,29 @@ STATIC_NOPV void native_flush_tlb_multi(const struct cpumask *cpumask,
 void flush_tlb_multi(const struct cpumask *cpumask,
 		      const struct flush_tlb_info *info)
 {
-	__flush_tlb_multi(cpumask, info);
+	struct x86_cpu_accel_tlb_flush accel_flush;
+	cpumask_t filtered_mask;
+	const struct cpumask *flush_mask = cpumask;
+	int cpu;
+
+	/* Block new owners on this target mask until the batch completes. */
+	x86_cpu_accel_tlb_flush_begin(&accel_flush, cpumask);
+	/*
+	 * Filter ring-3 accelerator owners before dispatching through the
+	 * native or paravirtual TLB implementation. Their current mm is frozen;
+	 * another mm's generation will be reconciled before it runs on that CPU.
+	 */
+	if (!accel_flush.no_owners && info->mm) {
+		cpumask_copy(&filtered_mask, cpumask);
+		for_each_cpu(cpu, cpumask) {
+			if (x86_cpu_accel_filter_mm_tlb_shootdown(cpu, info->mm,
+								  info->new_tlb_gen))
+				cpumask_clear_cpu(cpu, &filtered_mask);
+		}
+		flush_mask = &filtered_mask;
+	}
+	__flush_tlb_multi(flush_mask, info);
+	x86_cpu_accel_tlb_flush_end(&accel_flush);
 }
 
 /*
@@ -1471,16 +1508,23 @@ static void do_flush_tlb_all(void *info)
 
 void flush_tlb_all(void)
 {
+	struct x86_cpu_accel_tlb_flush accel_flush;
+	bool use_broadcast;
+
 	count_vm_tlb_event(NR_TLB_REMOTE_FLUSH);
 	note_tlb_shootdown_targets(cpu_online_mask, NULL,
 				   TLB_GENERATION_INVALID);
+	x86_cpu_accel_tlb_flush_begin(&accel_flush, cpu_online_mask);
+	use_broadcast = accel_flush.no_owners;
 
 	/* First try (faster) hardware-assisted TLB invalidation. */
-	if (cpu_feature_enabled(X86_FEATURE_INVLPGB))
+	if (cpu_feature_enabled(X86_FEATURE_INVLPGB) && use_broadcast) {
 		invlpgb_flush_all();
-	else
+	} else {
 		/* Fall back to the IPI-based invalidation. */
 		on_each_cpu(do_flush_tlb_all, NULL, 1);
+	}
+	x86_cpu_accel_tlb_flush_end(&accel_flush);
 }
 
 /* Flush an arbitrarily large range of memory with INVLPGB. */
@@ -1516,23 +1560,36 @@ static void do_kernel_range_flush(void *info)
 
 static void kernel_tlb_flush_all(struct flush_tlb_info *info)
 {
+	struct x86_cpu_accel_tlb_flush accel_flush;
+	bool use_broadcast;
+
 	note_tlb_shootdown_targets(cpu_online_mask, info->mm,
 				   info->new_tlb_gen);
-	if (cpu_feature_enabled(X86_FEATURE_INVLPGB))
+	x86_cpu_accel_tlb_flush_begin(&accel_flush, cpu_online_mask);
+	use_broadcast = accel_flush.no_owners;
+	if (cpu_feature_enabled(X86_FEATURE_INVLPGB) && use_broadcast)
 		invlpgb_flush_all();
 	else
 		on_each_cpu(do_flush_tlb_all, NULL, 1);
+	x86_cpu_accel_tlb_flush_end(&accel_flush);
 }
 
 static void kernel_tlb_flush_range(struct flush_tlb_info *info)
 {
-	if (cpu_feature_enabled(X86_FEATURE_INVLPGB))
+	struct x86_cpu_accel_tlb_flush accel_flush;
+	bool use_broadcast;
+
+	x86_cpu_accel_tlb_flush_begin(&accel_flush, cpu_online_mask);
+	use_broadcast = accel_flush.no_owners;
+
+	if (cpu_feature_enabled(X86_FEATURE_INVLPGB) && use_broadcast) {
 		invlpgb_kernel_range_flush(info);
-	else {
+	} else {
 		note_tlb_shootdown_targets(cpu_online_mask, info->mm,
 					   info->new_tlb_gen);
 		on_each_cpu(do_kernel_range_flush, info, 1);
 	}
+	x86_cpu_accel_tlb_flush_end(&accel_flush);
 }
 
 void flush_tlb_kernel_range(unsigned long start, unsigned long end)
@@ -1714,21 +1771,32 @@ EXPORT_SYMBOL_FOR_KVM(__flush_tlb_all);
 
 void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
 {
+	struct x86_cpu_accel_tlb_flush accel_flush;
 	struct flush_tlb_info info;
 	bool remote_flush = false;
+	bool global_flush_reserved = false;
+	bool use_broadcast = false;
 	int cpu = get_cpu();
 
 	init_flush_tlb_info(&info, NULL, 0, TLB_FLUSH_ALL, 0, false,
 			    TLB_GENERATION_INVALID);
+	if (cpu_feature_enabled(X86_FEATURE_INVLPGB) && batch->unmapped_pages) {
+		x86_cpu_accel_tlb_flush_begin(&accel_flush, cpu_online_mask);
+		use_broadcast = accel_flush.no_owners;
+		global_flush_reserved = true;
+	}
 	/*
 	 * flush_tlb_multi() is not optimized for the common case in which only
 	 * a local TLB flush is needed. Optimize this use-case by calling
 	 * flush_tlb_func_local() directly in this case.
 	 */
-	if (cpu_feature_enabled(X86_FEATURE_INVLPGB) && batch->unmapped_pages) {
+	if (global_flush_reserved) {
 		note_tlb_shootdown_targets(cpu_online_mask, NULL,
 					   TLB_GENERATION_INVALID);
-		invlpgb_flush_all_nonglobals();
+		if (use_broadcast)
+			invlpgb_flush_all_nonglobals();
+		else
+			on_each_cpu(do_flush_tlb_all, NULL, 1);
 		batch->unmapped_pages = false;
 	} else if (cpumask_any_but(&batch->cpumask, cpu) < nr_cpu_ids) {
 		remote_flush = true;
@@ -1743,6 +1811,8 @@ void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
 
 	if (remote_flush)
 		flush_tlb_multi(&batch->cpumask, &info);
+	if (global_flush_reserved)
+		x86_cpu_accel_tlb_flush_end(&accel_flush);
 
 	cpumask_clear(&batch->cpumask);
 }

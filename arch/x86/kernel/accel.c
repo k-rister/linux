@@ -38,21 +38,41 @@ struct x86_cpu_accel_request {
 static DEFINE_PER_CPU(struct x86_cpu_accel_request, x86_cpu_accel_request) = {
 	.lock = __RAW_SPIN_LOCK_UNLOCKED(x86_cpu_accel_request.lock),
 };
+
+static DEFINE_PER_CPU(unsigned int, x86_cpu_accel_tlb_flush_count);
 static atomic_t x86_cpu_accel_active_count = ATOMIC_INIT(0);
+static DEFINE_RAW_SPINLOCK(x86_cpu_accel_ownership_lock);
 
 static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets,
 				     struct mm_struct *owner_mm)
 {
 	struct x86_cpu_accel_request *request;
-	unsigned long flags;
+	unsigned long ownership_flags;
+	unsigned long request_flags;
+	bool wrong_cpu;
 
-	if (cpu >= nr_cpu_ids || !cpu_online(cpu))
-		return -EINVAL;
+	preempt_disable();
+	wrong_cpu = owner_mm && cpu != raw_smp_processor_id();
+	if (wrong_cpu || cpu >= nr_cpu_ids || !cpu_online(cpu)) {
+		preempt_enable();
+		return wrong_cpu ? -EXDEV : -EINVAL;
+	}
 
 	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
-	raw_spin_lock_irqsave(&request->lock, flags);
+	raw_spin_lock_irqsave(&x86_cpu_accel_ownership_lock, ownership_flags);
+	/* Do not enter a CPU while a TLB flush targets it. */
+	if (per_cpu(x86_cpu_accel_tlb_flush_count, cpu)) {
+		raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock,
+					   ownership_flags);
+		preempt_enable();
+		return -EBUSY;
+	}
+	raw_spin_lock_irqsave(&request->lock, request_flags);
 	if (atomic_read(&request->active)) {
-		raw_spin_unlock_irqrestore(&request->lock, flags);
+		raw_spin_unlock_irqrestore(&request->lock, request_flags);
+		raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock,
+					   ownership_flags);
+		preempt_enable();
 		return -EBUSY;
 	}
 	atomic_set(&request->reschedule_pending, 0);
@@ -64,9 +84,42 @@ static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets,
 	atomic_set(&request->active, 1);
 	if (tlb_targets)
 		*tlb_targets = atomic64_read(&request->tlb_shootdown_targets);
-	raw_spin_unlock_irqrestore(&request->lock, flags);
+	raw_spin_unlock_irqrestore(&request->lock, request_flags);
+	raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock,
+				   ownership_flags);
+	preempt_enable();
 	return 0;
 }
+
+void x86_cpu_accel_tlb_flush_begin(struct x86_cpu_accel_tlb_flush *flush,
+				   const struct cpumask *targets)
+{
+	unsigned int cpu;
+	unsigned long flags;
+
+	cpumask_copy(&flush->targets, targets);
+	raw_spin_lock_irqsave(&x86_cpu_accel_ownership_lock, flags);
+	flush->no_owners = !atomic_read(&x86_cpu_accel_active_count);
+	for_each_cpu(cpu, &flush->targets)
+		per_cpu(x86_cpu_accel_tlb_flush_count, cpu)++;
+	raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
+}
+EXPORT_SYMBOL_GPL(x86_cpu_accel_tlb_flush_begin);
+
+void x86_cpu_accel_tlb_flush_end(struct x86_cpu_accel_tlb_flush *flush)
+{
+	unsigned int cpu;
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&x86_cpu_accel_ownership_lock, flags);
+	for_each_cpu(cpu, &flush->targets) {
+		if (WARN_ON_ONCE(!per_cpu(x86_cpu_accel_tlb_flush_count, cpu)))
+			continue;
+		per_cpu(x86_cpu_accel_tlb_flush_count, cpu)--;
+	}
+	raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
+}
+EXPORT_SYMBOL_GPL(x86_cpu_accel_tlb_flush_end);
 
 static u64 x86_cpu_accel_owner_exit(unsigned int cpu,
 				    bool *local_tlb_flush)
@@ -241,6 +294,36 @@ bool x86_cpu_accel_note_tlb_shootdown(unsigned int cpu,
 	return active;
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_note_tlb_shootdown);
+
+bool x86_cpu_accel_filter_mm_tlb_shootdown(unsigned int cpu,
+					   const struct mm_struct *mm,
+					   u64 tlb_gen)
+{
+	struct x86_cpu_accel_request *request;
+	unsigned long flags;
+	bool filter = false;
+
+	if (cpu >= nr_cpu_ids || !mm || !x86_cpu_accel_any_active())
+		return false;
+	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
+	raw_spin_lock_irqsave(&request->lock, flags);
+	if (atomic_read(&request->active) && request->owner_mm) {
+		atomic64_inc(&request->tlb_shootdown_targets);
+		if (request->owner_mm == mm &&
+		    tlb_gen > request->pending_tlb_gen)
+			request->pending_tlb_gen = tlb_gen;
+		/*
+		 * The ring-3 owner cannot receive the synchronous call-function
+		 * TLB callback with interrupts disabled. Its own mm is write-locked
+		 * until exit and flushed before unlock; another mm's TLB generation
+		 * is checked by switch_mm() before this CPU can use that mm again.
+		 */
+		filter = true;
+	}
+	raw_spin_unlock_irqrestore(&request->lock, flags);
+	return filter;
+}
+EXPORT_SYMBOL_GPL(x86_cpu_accel_filter_mm_tlb_shootdown);
 
 bool x86_cpu_accel_any_active(void)
 {

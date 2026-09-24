@@ -425,18 +425,33 @@ The implementation checkpoints are:
     targets reserved against new ownership. Kernel-address-range flushes use
     INVLPGB plus system-wide completion when available with no active owner;
     when an owner is active, kernel-only IPIs wait for exit and preserve user
-    translations. Full and all-nonglobal flushes also wait for owners. The
-    current prototype seals an exec-created worker ``mm`` with a complete VMA
+    translations. Full and all-nonglobal flushes also wait for owners.
+    Batched unmap through ``arch_tlbbatch_flush()`` requires all target CPUs
+    to complete invalidation before it returns, so callers can release pages.
+    The synchronous IPI fallback preserves that contract but can wait without
+    bound. Returning with only an unscoped flush pending would allow premature
+    page reclamation. A nonblocking design must retain affected pages until
+    owner-exit acknowledgment or guarantee owner quiescence. The prototype's
+    user NMI escape requires a driver/controller request and cannot serve as
+    the generic MM quiesce path. The current prototype seals an exec-created
+    worker ``mm`` with a complete VMA
     allowlist, including the fixed x86 ``[vsyscall]`` exception. Remaining
-    work includes testing physical-page reuse, safe handling of full-flush
-    waits, and semantic safety for kernel code/exception mapping updates. A
-    focused VM test now unmaps a touched 2 MiB mapping from another ``mm``
-    while the target CPU is ring-3 owned: PTE teardown returns before owner
-    exit, and the unmapped address faults after re-entry. This shows the
-    deferred TLB generation is reconciled before the old ``mm`` can use that
-    address again; the test does not force or observe reuse of the freed
-    physical pages. INVLPGB completion protects TLB translation lifetime but
-    does not make active kernel code patching safe.
+    work includes safe handling of full-flush waits and semantic safety for
+    kernel code/exception mapping updates. A focused VM test unmaps a touched
+    2 MiB mapping from another ``mm`` while the target CPU is ring-3 owned,
+    then uses privileged ``/proc/self/pagemap`` and ``/proc/kpageflags``
+    inspection to track a freed data-page PFN and the PTE-table PFN. While
+    the owner remains active, the data-page PFN is reused in a live 16 MiB
+    mapping and the PTE-table PFN is reused for a new PTE table in the
+    adjacent 2 MiB slot. PTE teardown returns before owner exit; after
+    re-entry, the old VA faults while the replacement data mapping still
+    holds the reused PFN. The VM run observed both forms of physical-page
+    reuse, validating deferred TLB-generation reconciliation in this case.
+    PTE-page reuse is reported as skipped when ``/proc/kpageflags`` is
+    unavailable or the bounded allocation probes do not recycle the page.
+    This does not prove safety for every page-reuse or speculative-walk case.
+    INVLPGB completion protects TLB translation lifetime but does not make
+    active kernel code patching safe.
     Global-ASID INVLPGB broadcasts reserve all online CPUs through ``TLBSYNC``
     so no new owner can enter during the invalidation.
     A driver-assembled ``mm`` would additionally

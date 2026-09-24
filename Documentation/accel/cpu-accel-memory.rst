@@ -137,12 +137,17 @@ that state while the image mm remains write-locked, then flushes the local TLB
 if either kind of invalidation is pending. Only then does the driver unlock the
 mm and release the pinned image pages. Remote callback completion remains
 governed by the native flush path; there is no separate remote acknowledgment
-queue. Kernel-global flushes on x86 with INVLPGB use the synchronous IPI path
-while any accelerator CPU is owned. New ownership is barred on the selected
-target CPUs while a synchronous TLB flush is in flight, so a flush cannot race
-a new owner after choosing its target mask. An attempted entry on a reserved
-target CPU returns ``-EBUSY``. A global flush can wait for an existing owner to
-exit. The worker still uses its process ``mm``.
+queue. A kernel-address-range flush on x86 uses INVLPGB and its system-wide
+completion barrier when available, even while an accelerator CPU is owned;
+this invalidates kernel virtual addresses without evicting user translations.
+Full and all-nonglobal flushes retain the synchronous IPI path during ownership
+because they would evict active accelerator user translations. That fallback
+waits for the owner to exit. New ownership is barred on the selected target
+CPUs until each flush completes, so it cannot race a new owner after choosing
+its target mask. An attempted entry on a reserved target CPU returns
+``-EBUSY``. The worker still uses its process ``mm``. Kernel mapping changes
+affecting code or the exception/recovery path still need a separate
+maintenance policy; TLB invalidation alone does not establish safety.
 Do not infer TLB isolation or a latency bound from a zero target count or TLB
 counter delta.
 
@@ -342,7 +347,14 @@ The implementation checkpoints are:
    batches that overlap direct CPU ownership across the x86 IPI and INVLPGB
    paths. This is target telemetry; it does not track pending generations or
    prove that invalidations completed.
-10. Implement the address-space/TLB ownership policy above, including sealed
-   ``mm`` admission, pending invalidation completion, and kernel-global
-   mapping behavior. Add IOMMU-backed ``DMA`` regions and userspace/NIC
-   integration only after this non-networked memory contract is stable.
+10. [in progress for x86 prototype] Implement the address-space/TLB ownership
+    policy above. The current implementation records per-owner invalidation
+    generations, reconciles the local TLB before releasing pinned image pages,
+    filters mm-scoped flushes for the active ring-3 owner, and keeps flush
+    targets reserved against new ownership. Kernel-address-range flushes use
+    INVLPGB plus system-wide completion when available without evicting user
+    translations; full and all-nonglobal flushes still wait for owners. The
+    remaining work is sealed ``mm`` admission and a safe maintenance policy
+    for full-flush fallback and kernel code/exception mapping updates. Add
+    IOMMU-backed ``DMA`` regions and userspace/NIC integration only after this
+    non-networked memory contract is stable.

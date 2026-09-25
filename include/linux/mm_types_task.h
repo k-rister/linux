@@ -70,9 +70,9 @@ struct tlbflush_unmap_batch {
 	/*
 	 * The arch code makes the following promise: generic code can modify a
 	 * PTE, then call arch_tlbbatch_add_pending() (which internally provides
-	 * all needed barriers), then call arch_tlbbatch_flush(), and the entries
-	 * will be flushed on all CPUs by the time that arch_tlbbatch_flush()
-	 * returns.
+	 * all needed barriers), then call arch_tlbbatch_flush(). On return, no
+	 * CPU may use a stale translation: it must either have been flushed or
+	 * remain unable to use the affected mm until an equivalent flush completes.
 	 */
 	struct arch_tlbflush_unmap_batch arch;
 

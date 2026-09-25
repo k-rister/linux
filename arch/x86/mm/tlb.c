@@ -1401,6 +1401,18 @@ STATIC_NOPV void native_flush_tlb_multi(const struct cpumask *cpumask,
 	}
 }
 
+static bool accel_filter_tlb_shootdown(unsigned int cpu,
+				       const struct flush_tlb_info *info)
+{
+	if (info->mm &&
+	    x86_cpu_accel_filter_mm_tlb_shootdown(cpu, info->mm,
+						  info->new_tlb_gen))
+		return true;
+
+	return info->accel_tlb_unmap_batch &&
+		x86_cpu_accel_filter_tlb_unmap(cpu);
+}
+
 static void accel_flush_tlb_multi_slow(const struct cpumask *cpumask,
 				       const struct flush_tlb_info *info)
 {
@@ -1422,8 +1434,7 @@ static void accel_flush_tlb_multi_slow(const struct cpumask *cpumask,
 		if (!cpu_online(cpu))
 			continue;
 
-		if (x86_cpu_accel_filter_mm_tlb_shootdown(cpu, info->mm,
-							  info->new_tlb_gen))
+		if (accel_filter_tlb_shootdown(cpu, info))
 			continue;
 
 		if (flush_all)
@@ -1452,8 +1463,10 @@ void flush_tlb_multi(const struct cpumask *cpumask,
 	 * Filter ring-3 accelerator owners before dispatching through the
 	 * native or paravirtual TLB implementation. Their current mm is frozen;
 	 * another mm's generation will be reconciled before it runs on that CPU.
+	 * Batched unmaps have already advanced every affected mm's generation.
 	 */
-	if (!accel_flush.no_owners && info->mm) {
+	if (!accel_flush.no_owners &&
+	    (info->mm || info->accel_tlb_unmap_batch)) {
 		if (alloc_cpumask_var(&filtered_mask, GFP_ATOMIC)) {
 			filtered_mask_allocated = true;
 			cpumask_copy(filtered_mask, &accel_flush.targets);
@@ -1462,8 +1475,7 @@ void flush_tlb_multi(const struct cpumask *cpumask,
 		}
 		if (!slow_path) {
 			for_each_cpu(cpu, &accel_flush.targets) {
-				if (x86_cpu_accel_filter_mm_tlb_shootdown(cpu, info->mm,
-									  info->new_tlb_gen))
+				if (accel_filter_tlb_shootdown(cpu, info))
 					cpumask_clear_cpu(cpu, filtered_mask);
 			}
 			flush_mask = filtered_mask;
@@ -1513,6 +1525,7 @@ static void init_flush_tlb_info(struct flush_tlb_info *info,
 	info->new_tlb_gen	= new_tlb_gen;
 	info->initiating_cpu	= smp_processor_id();
 	info->trim_cpumask	= 0;
+	info->accel_tlb_unmap_batch = 0;
 }
 
 void flush_tlb_mm_range(struct mm_struct *mm, unsigned long start,
@@ -1838,6 +1851,7 @@ void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
 
 	init_flush_tlb_info(&info, NULL, 0, TLB_FLUSH_ALL, 0, false,
 			    TLB_GENERATION_INVALID);
+	info.accel_tlb_unmap_batch = 1;
 	if (cpu_feature_enabled(X86_FEATURE_INVLPGB) && batch->unmapped_pages) {
 		x86_cpu_accel_tlb_flush_begin(&accel_flush, cpu_online_mask);
 		use_broadcast = accel_flush.no_owners;
@@ -1849,12 +1863,14 @@ void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
 	 * flush_tlb_func_local() directly in this case.
 	 */
 	if (global_flush_reserved) {
-		note_tlb_shootdown_targets(cpu_online_mask, NULL,
-					   TLB_GENERATION_INVALID);
-		if (use_broadcast)
+		if (use_broadcast) {
+			note_tlb_shootdown_targets(cpu_online_mask, NULL,
+						   TLB_GENERATION_INVALID);
 			invlpgb_flush_all_nonglobals();
-		else
-			on_each_cpu(do_flush_tlb_all, NULL, 1);
+		} else {
+			/* Other-mm owners defer to their generation on next switch. */
+			flush_tlb_multi(cpu_online_mask, &info);
+		}
 		batch->unmapped_pages = false;
 	} else if (cpumask_any_but(&batch->cpumask, cpu) < nr_cpu_ids) {
 		remote_flush = true;

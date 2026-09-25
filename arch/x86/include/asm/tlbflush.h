@@ -8,6 +8,7 @@
 #include <linux/sched.h>
 
 #include <asm/barrier.h>
+#include <asm/cpu_accel.h>
 #include <asm/processor.h>
 #include <asm/cpufeature.h>
 #include <asm/special_insns.h>
@@ -256,6 +257,8 @@ struct flush_tlb_info {
 	u8			stride_shift;
 	u8			freed_tables;
 	u8			trim_cpumask;
+	/* Batched unmap: defer only owners whose current mm is unaffected. */
+	u8			accel_tlb_unmap_batch;
 } __aligned(FLUSH_TLB_INFO_ALIGN);
 
 void flush_tlb_local(void);
@@ -378,7 +381,10 @@ static inline u64 inc_mm_tlb_gen(struct mm_struct *mm)
 static inline void arch_tlbbatch_add_pending(struct arch_tlbflush_unmap_batch *batch,
 		struct mm_struct *mm, unsigned long start, unsigned long end)
 {
-	inc_mm_tlb_gen(mm);
+	u64 tlb_gen = inc_mm_tlb_gen(mm);
+
+	/* Keep active owners of this mm from deferring its own stale mappings. */
+	x86_cpu_accel_note_tlb_unmap(mm, tlb_gen);
 	cpumask_or(&batch->cpumask, &batch->cpumask, mm_cpumask(mm));
 	batch->unmapped_pages = true;
 	mmu_notifier_arch_invalidate_secondary_tlbs(mm, 0, -1UL);

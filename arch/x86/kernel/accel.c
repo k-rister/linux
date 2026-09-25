@@ -4,6 +4,7 @@
 #include <linux/cpu.h>
 #include <linux/errno.h>
 #include <linux/export.h>
+#include <linux/mmap_lock.h>
 #include <linux/types.h>
 #include <linux/percpu.h>
 #include <linux/sched.h>
@@ -161,6 +162,7 @@ int x86_cpu_accel_user_enter(unsigned int cpu, struct mm_struct *mm,
 		return -EXDEV;
 	if (mm != current->mm)
 		return -EXDEV;
+	mmap_assert_write_locked(mm);
 	return x86_cpu_accel_owner_enter(cpu, tlb_targets, mm);
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_user_enter);
@@ -295,6 +297,26 @@ bool x86_cpu_accel_note_tlb_shootdown(unsigned int cpu,
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_note_tlb_shootdown);
 
+void x86_cpu_accel_note_tlb_unmap(struct mm_struct *mm, u64 tlb_gen)
+{
+	struct x86_cpu_accel_request *request;
+	unsigned int cpu;
+	unsigned long flags;
+
+	if (!mm || !x86_cpu_accel_any_active())
+		return;
+
+	for_each_cpu(cpu, mm_cpumask(mm)) {
+		request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
+		raw_spin_lock_irqsave(&request->lock, flags);
+		if (atomic_read(&request->active) && request->owner_mm == mm &&
+		    tlb_gen > request->pending_tlb_gen)
+			request->pending_tlb_gen = tlb_gen;
+		raw_spin_unlock_irqrestore(&request->lock, flags);
+	}
+}
+EXPORT_SYMBOL_GPL(x86_cpu_accel_note_tlb_unmap);
+
 bool x86_cpu_accel_filter_mm_tlb_shootdown(unsigned int cpu,
 					   const struct mm_struct *mm,
 					   u64 tlb_gen)
@@ -324,6 +346,27 @@ bool x86_cpu_accel_filter_mm_tlb_shootdown(unsigned int cpu,
 	return filter;
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_filter_mm_tlb_shootdown);
+
+bool x86_cpu_accel_filter_tlb_unmap(unsigned int cpu)
+{
+	struct x86_cpu_accel_request *request;
+	unsigned long flags;
+	bool filter = false;
+
+	if (cpu >= nr_cpu_ids || !x86_cpu_accel_any_active())
+		return false;
+	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
+	raw_spin_lock_irqsave(&request->lock, flags);
+	if (atomic_read(&request->active) && request->owner_mm &&
+	    !request->pending_tlb_gen &&
+	    !request->pending_unscoped_tlb_flush) {
+		atomic64_inc(&request->tlb_shootdown_targets);
+		filter = true;
+	}
+	raw_spin_unlock_irqrestore(&request->lock, flags);
+	return filter;
+}
+EXPORT_SYMBOL_GPL(x86_cpu_accel_filter_tlb_unmap);
 
 bool x86_cpu_accel_any_active(void)
 {

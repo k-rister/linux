@@ -232,6 +232,28 @@ static int read_page_frame(int pagemap_fd, uintptr_t address,
 	return read_page_frames(pagemap_fd, address, page_size, 1, pfn);
 }
 
+static int page_is_present(int pagemap_fd, uintptr_t address,
+			   unsigned long page_size, bool *present)
+{
+	uint64_t entry;
+	uint64_t page_index;
+
+	if (!page_size || address % page_size) {
+		errno = EINVAL;
+		return -1;
+	}
+	page_index = address / page_size;
+	if (page_index > INT64_MAX / sizeof(entry)) {
+		errno = EOVERFLOW;
+		return -1;
+	}
+	if (pread_exact(pagemap_fd, &entry, sizeof(entry),
+			(off_t)(page_index * sizeof(entry))))
+		return -1;
+	*present = entry & PAGEMAP_PRESENT;
+	return 0;
+}
+
 static void segv_handler(int signal_number)
 {
 	(void)signal_number;
@@ -499,8 +521,10 @@ int main(int argc, char **argv)
 	uintptr_t region_start;
 	uintptr_t mapping_end;
 	uintptr_t probe;
+	uintptr_t pageout_probe;
 	uintptr_t reused_page_address = 0;
 	unsigned long page_size;
+	bool pageout_present;
 	size_t nr_physical_pages = 0;
 	size_t ptable_candidate_count = 0;
 	size_t released_ptable_count = 0;
@@ -598,6 +622,7 @@ int main(int argc, char **argv)
 		goto out_mapping;
 	}
 	probe = region_start + page_size;
+	pageout_probe = probe + page_size;
 
 	/* Keep a real translation in this mm on the accelerator target CPU. */
 	if (pin_to_cpu(target_cpu)) {
@@ -629,8 +654,10 @@ int main(int argc, char **argv)
 			"SKIP: /proc/kpageflags is unavailable for PTE-page tracking\n");
 	}
 	for (unsigned long offset = 0; offset < PTE_TABLE_SIZE;
-	     offset += page_size)
-		touch_page(region_start + offset);
+	     offset += page_size) {
+		if (region_start + offset != pageout_probe)
+			touch_page(region_start + offset);
+	}
 	if (ptable_scan_available &&
 	    scan_pagetable_flags(kpageflags_fd, nr_physical_pages,
 				 ptable_bitmap, ptable_candidates,
@@ -657,6 +684,8 @@ int main(int argc, char **argv)
 		perror("pin to controller CPU");
 		goto out_mapping;
 	}
+	/* MADV_PAGEOUT drains only this CPU's pending LRU additions. */
+	touch_page(pageout_probe);
 	if (pipe2(reschedule_pipe, O_CLOEXEC)) {
 		perror("pipe2(reschedule worker)");
 		goto out_mapping;
@@ -744,6 +773,27 @@ int main(int argc, char **argv)
 		goto out_cli;
 	}
 	nanosleep(&settle, NULL);
+	/* Exercise rmap's task-local batched-unmap TLB flush while owner runs. */
+	if (madvise((void *)pageout_probe, page_size, MADV_PAGEOUT)) {
+		perror("madvise(MADV_PAGEOUT batch probe)");
+		goto out_cli;
+	}
+	if (page_is_present(pagemap_fd, pageout_probe, page_size,
+			    &pageout_present)) {
+		perror("read pagemap(MADV_PAGEOUT batch probe)");
+		goto out_cli;
+	}
+	if (!pageout_present) {
+		if (waitpid(cli_pid, NULL, WNOHANG) == cli_pid ||
+		    !cli_owner_active() || !has_accel_worker_on_cpu(target_cpu)) {
+			fprintf(stderr,
+				"MADV_PAGEOUT completed after the owner exited\n");
+			goto out_cli;
+		}
+		printf("PASS: MADV_PAGEOUT completed while ring-3 owner remained active\n");
+	} else {
+		printf("SKIP: MADV_PAGEOUT left the batch probe PTE present\n");
+	}
 
 	/* Free a complete PTE table while this mm cannot run on target_cpu. */
 	clock_gettime(CLOCK_MONOTONIC, &flush_start);

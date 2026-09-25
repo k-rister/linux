@@ -92,11 +92,14 @@ may prepare the next buffer or process completed work, but it must not alter
 the active accelerator address space or its page contents outside the shared
 region ownership protocol.
 
-The active ``mm`` must not be modified while it is running. This is the
-memory-side rule that prevents Linux from needing to invalidate translations
-on the accelerator CPU for ordinary unmap, mprotect, COW, migration, or
-reclaim activity. Enter and exit may pay the architecture-specific address
-space transition and TLB costs; the dataplane interval may not.
+The active ``mm`` must not undergo VMA or permission changes while it is
+running. The write lock enforces that rule for the current prototype. Reclaim
+can still remove a PTE despite that lock; page pins prevent backing reuse, and
+the batched-unmap generation policy below keeps the owner CPU from using an
+affected address space after the backing can be released. Other PTE-changing
+paths must be excluded unless they provide an equivalent lifetime guarantee.
+Enter and exit may pay the architecture-specific address-space transition and
+TLB costs; the dataplane interval may not.
 
 Address-space and TLB ownership policy
 =======================================
@@ -164,12 +167,18 @@ queue. A kernel-address-range flush on x86 uses INVLPGB and its system-wide
 completion barrier when available and no accelerator CPU is owned. During
 ownership it uses the synchronous kernel-only IPI path and waits for the owner
 to exit; this preserves user translations while keeping stale kernel
-translations from outliving the flush. Full and all-nonglobal flushes also
-retain the synchronous IPI path during ownership because they would evict
-active accelerator user translations. That fallback waits for the owner to
-exit. New ownership is barred on the selected target CPUs until each flush
-completes, so it cannot race a new owner after choosing
-its target mask. Global-ASID INVLPGB broadcasts reserve all online CPUs through
+translations from outliving the flush. Standalone full and all-nonglobal
+flushes retain the synchronous IPI path during ownership because they would
+evict active accelerator user translations. The task-local
+``arch_tlbbatch_flush()`` path has a narrower exception: it may defer a ring-3
+owner only when every affected ``mm`` is different from the owner's sealed
+``mm``. Its per-``mm``
+generations are reconciled by ``switch_mm()`` before that owner CPU can use an
+affected address space. An own-``mm`` unmap and a kernel-mode owner retain the
+synchronous path. New ownership is barred on the selected target CPUs until
+each flush completes, so it cannot race a new owner after choosing its target
+mask.
+Global-ASID INVLPGB broadcasts reserve all online CPUs through
 ``TLBSYNC`` for the same reason. An attempted entry on a reserved target CPU
 returns ``-EBUSY``. The worker still uses its process ``mm``. Kernel mapping
 changes affecting code or the exception/recovery path still need a separate
@@ -182,10 +191,12 @@ The policy for a protected accelerator address space is:
 * The accelerator runs only in its sealed ``mm``. Before entry, the CPU must
   leave any Linux task ``mm`` and be removed from that ``mm``'s active CPU set
   using the architecture's normal address-space-switch rules.
-* Mappings and page-table pages in the active accelerator ``mm`` are
-  prefaulted, pinned, and immutable until exit, except for explicitly owned
-  shared regions whose mappings remain fixed. Mapping changes, reclaim,
-  migration, COW, and unmap must wait for ownership to end.
+* The active accelerator ``mm`` is prefaulted and held against VMA and
+  permission changes. The current prototype pins its admitted pages. Reclaim
+  may still remove a PTE, but it must not release or migrate pinned backing;
+  an own-``mm`` batched unmap stays in the synchronous TLB target set until
+  owner exit. Other PTE-changing paths remain unsupported until they provide
+  an equivalent lifetime guarantee.
 * For the owned ``mm``, record a targeted invalidation and flush locally before
   releasing its pages or unlocking the ``mm``. For another ``mm``, omit the
   owner from the immediate target mask only while it cannot use that address
@@ -209,11 +220,23 @@ completion before proceeding. In particular, a dirty unmapped folio must be
 flushed before I/O starts, or a stale writable translation could modify it
 during writeback.
 
-The x86 batch hook currently issues an unscoped full TLB flush, so it cannot
-use the per-``mm`` owner filter. Its synchronous callback can wait for an
-active owner to exit, with no bound if the owner does not exit. The prototype
-therefore does not promise progress for this maintenance path or a hard
-dataplane bound across it.
+The x86 batch contains a union of target CPUs, not the ``mm`` list or folios
+that produced it. Each ``arch_tlbbatch_add_pending()`` nevertheless advances
+the affected ``mm``'s TLB generation. The accelerator records when an unmap
+targets the active ring-3 owner's own ``mm``. At batch flush, x86 may omit a
+ring-3 owner only when its current ``mm`` has no pending generation and no
+unscoped invalidation. That owner cannot use translations belonging to another
+``mm`` while it remains in the sealed address space; ``switch_mm()`` must
+reconcile the advanced generation before that ``mm`` can run again.
+
+An owner whose own ``mm`` was changed remains in the synchronous target set.
+The write lock excludes VMA changes, and pins keep admitted folios from being
+released while the owner uses them; reclaim can still unmap a PTE before it
+recognizes a pin. If an own-mm generation is recorded, x86 does not filter
+that owner: the flush waits for exit and local TLB reconciliation occurs
+before the driver unlocks the ``mm`` or releases pins. Kernel-mode owners have
+no sealed user ``mm`` and are not filtered, so their synchronous flush can
+still wait without a bound.
 
 This path is separate from ``mmu_gather``. The x86 architecture's
 ``arch_tlbflush_unmap_batch`` stores only a CPU mask and an
@@ -231,9 +254,11 @@ An asynchronous redesign of that path would need to transfer those
 ``mmu_gather`` lists to its own completion-managed object. Those lists are not
 part of ``arch_tlbbatch_flush()`` or its architecture batch.
 
-For either path, any deferred completion must retain every affected data or
-page-table page until each CPU that could still use or speculatively walk the
-old translation has invalidated it or been quiesced. It must also:
+This is address-space deferral, not a general asynchronous reclaim interface.
+Any future path that lets an active owner continue using the affected ``mm``
+must retain every data or page-table page until each CPU that could still use
+or speculatively walk the old translation has invalidated it or been quiesced.
+Such a completion path must also:
 
 * carry enough address-space, generation, and target information to associate
   each acknowledgement with the pages it protects; and
@@ -503,13 +528,16 @@ The implementation checkpoints are:
     targets reserved against new ownership. Kernel-address-range flushes use
     INVLPGB plus system-wide completion when available with no active owner;
     when an owner is active, kernel-only IPIs wait for exit and preserve user
-    translations. Full and all-nonglobal flushes also wait for owners.
-    Batched unmap through ``arch_tlbbatch_flush()`` requires all target CPUs
-    to complete invalidation before it returns, so callers can release pages.
-    The synchronous IPI fallback preserves that contract but can wait without
-    bound. Returning with only an unscoped flush pending would allow premature
-    page reclamation. A nonblocking design must retain affected pages until
-    owner-exit acknowledgment or guarantee owner quiescence. The prototype's
+    translations. Standalone full and all-nonglobal flushes also wait for
+    owners. Batched unmap through ``arch_tlbbatch_flush()`` remains synchronous
+    for each affected address space: an owner whose own ``mm`` was changed,
+    and every kernel-mode owner, stays in the IPI target set. A ring-3 owner
+    in a different ``mm`` may be omitted because the changed ``mm`` generation
+    forces a local flush before that CPU can use the address space again.
+    Returning with an affected ``mm`` usable while its stale translations
+    remain would allow premature I/O or page reclamation. A nonblocking design
+    that permits such use must retain affected pages until owner-exit
+    acknowledgment or guarantee owner quiescence. The prototype's
     user NMI escape requires a driver/controller request and cannot serve as
     the generic MM quiesce path. The current prototype seals an exec-created
     worker ``mm`` with a complete VMA

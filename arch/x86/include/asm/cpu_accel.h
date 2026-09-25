@@ -20,6 +20,7 @@ u64 x86_cpu_accel_reschedule_deferred(unsigned int cpu);
 bool x86_cpu_accel_defer_call_function(unsigned int cpu);
 u64 x86_cpu_accel_call_function_deferred(unsigned int cpu);
 #ifdef CONFIG_X86_LOCAL_APIC
+/* Keep mm write-locked until user_exit() has reconciled its TLB state. */
 int x86_cpu_accel_user_enter(unsigned int cpu, struct mm_struct *mm,
 			     u64 *tlb_targets);
 u64 x86_cpu_accel_user_exit(unsigned int cpu);
@@ -33,10 +34,13 @@ void x86_cpu_accel_tlb_flush_begin(struct x86_cpu_accel_tlb_flush *flush,
 void x86_cpu_accel_tlb_flush_end(struct x86_cpu_accel_tlb_flush *flush);
 bool x86_cpu_accel_note_tlb_shootdown(unsigned int cpu,
 				      const struct mm_struct *mm, u64 tlb_gen);
+void x86_cpu_accel_note_tlb_unmap(struct mm_struct *mm, u64 tlb_gen);
 /* Record an mm-scoped target and filter ring-3 owners from its IPI mask. */
 bool x86_cpu_accel_filter_mm_tlb_shootdown(unsigned int cpu,
 					   const struct mm_struct *mm,
 					   u64 tlb_gen);
+/* A ring-3 owner in another, unchanged mm cannot use these stale entries. */
+bool x86_cpu_accel_filter_tlb_unmap(unsigned int cpu);
 u64 x86_cpu_accel_tlb_shootdown_targets(unsigned int cpu);
 #else
 static inline int x86_cpu_accel_user_enter(unsigned int cpu,
@@ -85,6 +89,13 @@ static inline bool x86_cpu_accel_note_tlb_shootdown(unsigned int cpu,
 	return false;
 }
 
+static inline void x86_cpu_accel_note_tlb_unmap(struct mm_struct *mm,
+						u64 tlb_gen)
+{
+	(void)mm;
+	(void)tlb_gen;
+}
+
 static inline bool
 x86_cpu_accel_filter_mm_tlb_shootdown(unsigned int cpu,
 				      const struct mm_struct *mm,
@@ -93,6 +104,12 @@ x86_cpu_accel_filter_mm_tlb_shootdown(unsigned int cpu,
 	(void)cpu;
 	(void)mm;
 	(void)tlb_gen;
+	return false;
+}
+
+static inline bool x86_cpu_accel_filter_tlb_unmap(unsigned int cpu)
+{
+	(void)cpu;
 	return false;
 }
 

@@ -39,6 +39,9 @@ typedef struct {
 	 */
 	atomic64_t tlb_gen;
 
+	/* Batched rmap PTE updates serialized against accelerator admission. */
+	unsigned int accel_tlb_unmap_depth;
+
 	unsigned long next_trim_cpumask;
 
 #ifdef CONFIG_MODIFY_LDT_SYSCALL
@@ -86,6 +89,7 @@ typedef struct {
 #define INIT_MM_CONTEXT(mm)						\
 	.context = {							\
 		.ctx_id = 1,						\
+		.accel_tlb_unmap_depth = 0,			\
 		.lock = __MUTEX_INITIALIZER(mm.context.lock),		\
 	}
 

@@ -72,6 +72,12 @@ static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets,
 		preempt_enable();
 		return -EBUSY;
 	}
+	if (owner_mm && READ_ONCE(owner_mm->context.accel_tlb_unmap_depth)) {
+		raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock,
+					   ownership_flags);
+		preempt_enable();
+		return -EAGAIN;
+	}
 	/* Do not enter a CPU while a TLB flush targets it. */
 	if (per_cpu(x86_cpu_accel_tlb_flush_count, cpu)) {
 		raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock,
@@ -203,6 +209,8 @@ EXPORT_SYMBOL_GPL(x86_cpu_accel_text_maintenance_end);
 int x86_cpu_accel_user_enter(unsigned int cpu, struct mm_struct *mm,
 			     u64 *tlb_targets)
 {
+	int ret;
+
 	if (!mm)
 		return -EINVAL;
 	if (cpu != raw_smp_processor_id())
@@ -210,7 +218,27 @@ int x86_cpu_accel_user_enter(unsigned int cpu, struct mm_struct *mm,
 	if (mm != current->mm)
 		return -EXDEV;
 	mmap_assert_write_locked(mm);
-	return x86_cpu_accel_owner_enter(cpu, tlb_targets, mm);
+
+	for (;;) {
+		wait_event(x86_cpu_accel_owner_wait,
+			   !READ_ONCE(mm->context.accel_tlb_unmap_depth));
+
+		/*
+		 * A batched unmap may have published a new generation without
+		 * flushing this CPU yet. Reconcile its local translations before
+		 * making the address space available to the accelerator.
+		 */
+		preempt_disable();
+		if (cpu != raw_smp_processor_id()) {
+			preempt_enable();
+			return -EXDEV;
+		}
+		__flush_tlb_all();
+		ret = x86_cpu_accel_owner_enter(cpu, tlb_targets, mm);
+		preempt_enable();
+		if (ret != -EAGAIN)
+			return ret;
+	}
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_user_enter);
 
@@ -225,6 +253,29 @@ u64 x86_cpu_accel_user_exit(unsigned int cpu)
 	return targets;
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_user_exit);
+
+void x86_cpu_accel_tlb_unmap_begin(struct mm_struct *mm)
+{
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&x86_cpu_accel_ownership_lock, flags);
+	mm->context.accel_tlb_unmap_depth++;
+	raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
+}
+
+void x86_cpu_accel_tlb_unmap_end(struct mm_struct *mm)
+{
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&x86_cpu_accel_ownership_lock, flags);
+	if (WARN_ON_ONCE(!mm->context.accel_tlb_unmap_depth)) {
+		raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
+		return;
+	}
+	mm->context.accel_tlb_unmap_depth--;
+	raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
+	wake_up_all(&x86_cpu_accel_owner_wait);
+}
 
 int x86_cpu_accel_direct_enter(unsigned int cpu,
 			       x86_cpu_accel_entry_fn entry, void *data)

@@ -26,6 +26,8 @@ u64 x86_cpu_accel_call_function_deferred(unsigned int cpu);
 int x86_cpu_accel_user_enter(unsigned int cpu, struct mm_struct *mm,
 			     u64 *tlb_targets);
 u64 x86_cpu_accel_user_exit(unsigned int cpu);
+void x86_cpu_accel_tlb_unmap_begin(struct mm_struct *mm);
+void x86_cpu_accel_tlb_unmap_end(struct mm_struct *mm);
 bool x86_cpu_accel_any_active(void);
 /* Drain accelerator owners and block new admission across text maintenance. */
 void x86_cpu_accel_text_maintenance_begin(void);
@@ -63,6 +65,16 @@ static inline u64 x86_cpu_accel_user_exit(unsigned int cpu)
 {
 	(void)cpu;
 	return 0;
+}
+
+static inline void x86_cpu_accel_tlb_unmap_begin(struct mm_struct *mm)
+{
+	(void)mm;
+}
+
+static inline void x86_cpu_accel_tlb_unmap_end(struct mm_struct *mm)
+{
+	(void)mm;
 }
 
 static inline bool x86_cpu_accel_any_active(void)

@@ -367,6 +367,16 @@ static inline bool arch_tlbbatch_should_defer(struct mm_struct *mm)
 	return should_defer;
 }
 
+static inline void arch_tlbbatch_unmap_begin(struct mm_struct *mm)
+{
+	x86_cpu_accel_tlb_unmap_begin(mm);
+}
+
+static inline void arch_tlbbatch_unmap_end(struct mm_struct *mm)
+{
+	x86_cpu_accel_tlb_unmap_end(mm);
+}
+
 static inline u64 inc_mm_tlb_gen(struct mm_struct *mm)
 {
 	/*

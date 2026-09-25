@@ -390,6 +390,9 @@ static inline bool arch_tlbbatch_should_defer(struct mm_struct *mm)
 	return true;
 }
 
+static inline void arch_tlbbatch_unmap_begin(struct mm_struct *mm) { }
+static inline void arch_tlbbatch_unmap_end(struct mm_struct *mm) { }
+
 /*
  * To support TLB batched flush for multiple pages unmapping, we only send
  * the TLBI for each page in arch_tlbbatch_add_pending() and wait for the

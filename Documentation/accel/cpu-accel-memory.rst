@@ -229,13 +229,21 @@ unscoped invalidation. That owner cannot use translations belonging to another
 ``mm`` while it remains in the sealed address space; ``switch_mm()`` must
 reconcile the advanced generation before that ``mm`` can run again.
 
-This generation bookkeeping is not an admission interlock. The unmap records
-the generation after clearing the PTE, and the owner-entry path initializes
-its pending generation when it becomes active. A future path that omits an
-owner for an unmap of its own ``mm`` must therefore serialize address-space
-admission with the start of PTE removal as well as track completion afterward.
-A test of the active-owner state on only one side of the PTE update would leave
-an admission race.
+Generation bookkeeping alone is not an admission interlock: the unmap records
+the generation after clearing the PTE, while owner entry initializes its
+pending generation as it becomes active. Batched reverse-map unmaps now
+bracket PTE clearing and generation publication with
+``arch_tlbbatch_unmap_begin()`` and ``arch_tlbbatch_unmap_end()``. On x86, the
+per-``mm`` in-flight count is serialized with owner admission. A new owner
+waits for that update to finish and locally flushes its TLB before it can use
+the address space. An owner already active when the update starts is recorded
+by the generation bookkeeping and remains in the synchronous target set.
+
+This closes the admission race for batched reverse-map unmaps; it does not make
+their completion asynchronous. The caller still waits for an active owner
+before page I/O or release. Deferred reclaim still needs completion storage
+and a folio disposition that retains affected pages through owner
+acknowledgment. ``mmu_gather`` remains a separate path.
 
 An owner whose own ``mm`` was changed remains in the synchronous target set.
 The write lock excludes VMA changes, and pins keep admitted folios from being

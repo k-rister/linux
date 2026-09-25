@@ -2319,9 +2319,17 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 		page = folio_page(folio, pfn - folio_pfn(folio));
 
 		if (likely(pte_present(pteval))) {
+			bool batch_flush;
+
 			nr_pages = folio_unmap_pte_batch(folio, &pvmw, flags, pteval);
 			end_addr = address + nr_pages * PAGE_SIZE;
 			flush_cache_range(vma, address, end_addr);
+			batch_flush = should_defer_flush(mm, flags);
+			if (batch_flush) {
+#ifdef CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH
+				arch_tlbbatch_unmap_begin(mm);
+#endif
+			}
 
 			/* Nuke the page table entry. */
 			pteval = get_and_clear_ptes(mm, address, pvmw.pte, nr_pages);
@@ -2333,10 +2341,14 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 			 * transition on a cached TLB entry is written through
 			 * and traps if the PTE is unmapped.
 			 */
-			if (should_defer_flush(mm, flags))
+			if (batch_flush) {
 				set_tlb_ubc_flush_pending(mm, pteval, address, end_addr);
-			else
+#ifdef CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH
+				arch_tlbbatch_unmap_end(mm);
+#endif
+			} else {
 				flush_tlb_range(vma, address, end_addr);
+			}
 			if (pte_dirty(pteval))
 				folio_mark_dirty(folio);
 		} else {
@@ -2637,9 +2649,15 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 				 * transition on a cached TLB entry is written through
 				 * and traps if the PTE is unmapped.
 				 */
+#ifdef CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH
+				arch_tlbbatch_unmap_begin(mm);
+#endif
 				pteval = ptep_get_and_clear(mm, address, pvmw.pte);
 
 				set_tlb_ubc_flush_pending(mm, pteval, address, address + PAGE_SIZE);
+#ifdef CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH
+				arch_tlbbatch_unmap_end(mm);
+#endif
 			} else {
 				pteval = ptep_clear_flush(vma, address, pvmw.pte);
 			}

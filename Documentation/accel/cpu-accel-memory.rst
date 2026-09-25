@@ -229,6 +229,14 @@ unscoped invalidation. That owner cannot use translations belonging to another
 ``mm`` while it remains in the sealed address space; ``switch_mm()`` must
 reconcile the advanced generation before that ``mm`` can run again.
 
+This generation bookkeeping is not an admission interlock. The unmap records
+the generation after clearing the PTE, and the owner-entry path initializes
+its pending generation when it becomes active. A future path that omits an
+owner for an unmap of its own ``mm`` must therefore serialize address-space
+admission with the start of PTE removal as well as track completion afterward.
+A test of the active-owner state on only one side of the PTE update would leave
+an admission race.
+
 An owner whose own ``mm`` was changed remains in the synchronous target set.
 The write lock excludes VMA changes, and pins keep admitted folios from being
 released while the owner uses them; reclaim can still unmap a PTE before it
@@ -237,6 +245,16 @@ that owner: the flush waits for exit and local TLB reconciliation occurs
 before the driver unlocks the ``mm`` or releases pins. Kernel-mode owners have
 no sealed user ``mm`` and are not filtered, so their synchronous flush can
 still wait without a bound.
+
+The reclaim call sites impose different completion obligations. In
+``try_to_unmap_one()``, the PTE is cleared and rmap state is updated before the
+task-local batch is flushed. In ``shrink_folio_list()``, a dirty folio must
+complete ``try_to_unmap_flush_dirty()`` before ``pageout()`` starts writeback;
+reclaim also flushes before ``free_unref_folios()`` releases reclaimed folios.
+Migration flushes its task-local batch before it copies or moves folios. A
+deferred flush therefore has to return a disposition for the affected folios
+to these callers. Returning from the architecture hook with only a pending
+generation would let them proceed as if invalidation had completed.
 
 This path is separate from ``mmu_gather``. The x86 architecture's
 ``arch_tlbflush_unmap_batch`` stores only a CPU mask and an
@@ -281,6 +299,16 @@ owner CPUs, and release it only after invalidation or quiescence is
 acknowledged. If completion storage cannot be reserved, the operation must
 retain the synchronous path. Reclaim and ``mmu_gather`` need separate
 completion owners because they carry different page lists.
+
+The first reclaim slice must keep the current synchronous behavior for
+migration, huge-page collapse, and every other caller that has no deferred
+folio disposition. For vmscan, it must retain each affected folio and prevent
+writeback, reuse, and release until its owners acknowledge the generation.
+Completion storage and its owner targets must be secured before clearing the
+first PTE; after PTE removal, allocation failure cannot safely fall back to
+returning without completion. Once this path is established, ``mmu_gather``
+can be designed separately to transfer both its data-page and page-table
+batches.
 
 The alternative is a generic owner-quiesce operation that can safely terminate
 every supported owner type and report completion to MM callers. The current

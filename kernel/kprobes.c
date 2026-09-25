@@ -43,6 +43,35 @@
 #include <linux/cleanup.h>
 #include <linux/wait.h>
 
+#ifdef CONFIG_X86
+#include <asm/cpu_accel.h>
+#endif
+
+static inline void kprobe_text_mutex_lock(struct mutex *lock)
+	__acquires(&text_mutex)
+{
+#ifdef CONFIG_X86
+	(void)lock;
+	x86_cpu_accel_text_mutex_lock();
+#else
+	mutex_lock(lock);
+#endif
+}
+
+static inline void kprobe_text_mutex_unlock(struct mutex *lock)
+	__releases(&text_mutex)
+{
+#ifdef CONFIG_X86
+	(void)lock;
+	x86_cpu_accel_text_mutex_unlock();
+#else
+	mutex_unlock(lock);
+#endif
+}
+
+DEFINE_GUARD(text_mutex, struct mutex *, kprobe_text_mutex_lock(_T),
+	     kprobe_text_mutex_unlock(_T));
+
 #include <asm/sections.h>
 #include <asm/cacheflush.h>
 #include <asm/errno.h>
@@ -628,7 +657,7 @@ static void kprobe_optimizer(void)
 	guard(mutex)(&kprobe_mutex);
 
 	scoped_guard(cpus_read_lock) {
-		guard(mutex)(&text_mutex);
+		guard(text_mutex)(&text_mutex);
 
 		/*
 		 * Step 1: Unoptimize kprobes and collect cleaned (unused and disarmed)
@@ -929,7 +958,7 @@ static void try_to_optimize_kprobe(struct kprobe *p)
 	/* For preparing optimization, jump_label_text_reserved() is called. */
 	guard(cpus_read_lock)();
 	guard(jump_label_lock)();
-	guard(mutex)(&text_mutex);
+	guard(text_mutex)(&text_mutex);
 
 	ap = alloc_aggr_kprobe(p);
 	if (!ap)
@@ -1237,7 +1266,7 @@ static int arm_kprobe(struct kprobe *kp)
 		return arm_kprobe_ftrace(kp);
 
 	guard(cpus_read_lock)();
-	guard(mutex)(&text_mutex);
+	guard(text_mutex)(&text_mutex);
 	__arm_kprobe(kp);
 	return 0;
 }
@@ -1248,7 +1277,7 @@ static int disarm_kprobe(struct kprobe *kp, bool reopt)
 		return disarm_kprobe_ftrace(kp);
 
 	guard(cpus_read_lock)();
-	guard(mutex)(&text_mutex);
+	guard(text_mutex)(&text_mutex);
 	__disarm_kprobe(kp, reopt);
 	return 0;
 }
@@ -1369,7 +1398,7 @@ static int register_aggr_kprobe(struct kprobe *orig_p, struct kprobe *p)
 	scoped_guard(cpus_read_lock) {
 		/* For preparing optimization, jump_label_text_reserved() is called */
 		guard(jump_label_lock)();
-		guard(mutex)(&text_mutex);
+		guard(text_mutex)(&text_mutex);
 
 		if (!kprobe_aggrprobe(orig_p)) {
 			/* If 'orig_p' is not an 'aggr_kprobe', create new one. */
@@ -1688,7 +1717,7 @@ static int __register_kprobe(struct kprobe *p)
 
 	scoped_guard(cpus_read_lock) {
 		/* Prevent text modification */
-		guard(mutex)(&text_mutex);
+		guard(text_mutex)(&text_mutex);
 		ret = prepare_kprobe(p);
 		if (ret)
 			return ret;

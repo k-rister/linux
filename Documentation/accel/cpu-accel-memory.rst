@@ -310,22 +310,32 @@ requirements:
   both the transition path and its backing pages valid for every active owner.
   A successful TLB flush by itself does not establish this semantic safety.
 
-The prototype does not yet enforce a global interlock for all of these kernel
-maintenance mechanisms. Until that exists, classify each operation as allowed,
-routed to housekeeping, deferred, rejected, or requiring controlled owner
-termination. Operations that cannot prove they include the owned CPU in their
-execution and mapping rendezvous are unsupported while accelerator ownership
-is active.
+The x86 prototype now interlocks transactions serialized by ``text_mutex``.
+The x86 text-mutex wrappers first bar new accelerator admissions and wait for
+existing owners to exit, then take the existing mutex; unlock releases the
+mutex before reopening admission. The gate therefore spans the whole
+text-mutex transaction, including its text-patching rendezvous. It covers x86
+text-poke clients and generic kprobes that use this mutex, and may wait without
+a bound for an owner to exit.
 
-A future interlock must cover the entire maintenance transaction: reserve
-owner admission before changing code or mappings, retain that reservation
-through every execution rendezvous and TLB completion, then release it. A
-reservation started only by the final ``smp_text_poke_sync_each_cpu()`` is too
-late to protect the preceding writes. The SMP text-poke sequence uses an INT3
-transition and repeated synchronous core-sync callbacks; its callbacks can
-wait for owners, but that sequence does not cover stop-machine, exception-table,
-IDT/NMI, or other maintenance paths automatically. Each such path needs an
-explicit interlock or an explicit reject/defer/quiesce rule before mutation.
+This is not a global interlock for all kernel maintenance. In particular,
+kgdb's special stopped-machine patch path, stop-machine operations, exception
+table and IDT/NMI changes, and mapping changes that do not use ``text_mutex``
+need their own rule. Classify each such operation as allowed, routed to
+housekeeping, deferred, rejected, or requiring controlled owner termination.
+Operations that cannot prove they include the owned CPU in their execution and
+mapping rendezvous are unsupported while accelerator ownership is active.
+
+Each additional interlock must cover the entire maintenance transaction:
+reserve owner admission before changing code or mappings, retain that
+reservation through every execution rendezvous and TLB completion, then
+release it. A reservation started only by the final
+``smp_text_poke_sync_each_cpu()`` is too late to protect the preceding writes.
+The SMP text-poke sequence uses an INT3 transition and repeated synchronous
+core-sync callbacks; its callbacks can wait for owners, but that sequence does
+not cover stop-machine, exception-table, IDT/NMI, or other maintenance paths
+automatically. Each such path needs an explicit interlock or an explicit
+reject/defer/quiesce rule before mutation.
 
 Until these rules are implemented for an architecture, call-function replay
 is only a mechanism detail. The direct APIC prototype must not advertise

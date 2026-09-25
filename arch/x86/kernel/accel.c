@@ -5,11 +5,13 @@
 #include <linux/errno.h>
 #include <linux/export.h>
 #include <linux/mmap_lock.h>
+#include <linux/mutex.h>
 #include <linux/types.h>
 #include <linux/percpu.h>
 #include <linux/sched.h>
 #include <linux/smp.h>
 #include <linux/spinlock.h>
+#include <linux/wait.h>
 
 #include <asm/apic.h>
 #include <asm/cpu_accel.h>
@@ -43,6 +45,9 @@ static DEFINE_PER_CPU(struct x86_cpu_accel_request, x86_cpu_accel_request) = {
 static DEFINE_PER_CPU(unsigned int, x86_cpu_accel_tlb_flush_count);
 static atomic_t x86_cpu_accel_active_count = ATOMIC_INIT(0);
 static DEFINE_RAW_SPINLOCK(x86_cpu_accel_ownership_lock);
+static DEFINE_MUTEX(x86_cpu_accel_text_maintenance_mutex);
+static DECLARE_WAIT_QUEUE_HEAD(x86_cpu_accel_owner_wait);
+static bool x86_cpu_accel_text_maintenance;
 
 static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets,
 				     struct mm_struct *owner_mm)
@@ -61,6 +66,12 @@ static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets,
 
 	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
 	raw_spin_lock_irqsave(&x86_cpu_accel_ownership_lock, ownership_flags);
+	if (x86_cpu_accel_text_maintenance) {
+		raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock,
+					   ownership_flags);
+		preempt_enable();
+		return -EBUSY;
+	}
 	/* Do not enter a CPU while a TLB flush targets it. */
 	if (per_cpu(x86_cpu_accel_tlb_flush_count, cpu)) {
 		raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock,
@@ -128,6 +139,7 @@ static u64 x86_cpu_accel_owner_exit(unsigned int cpu,
 	struct x86_cpu_accel_request *request;
 	unsigned long flags;
 	u64 targets;
+	bool owner_exited = false;
 
 	if (local_tlb_flush)
 		*local_tlb_flush = false;
@@ -137,6 +149,7 @@ static u64 x86_cpu_accel_owner_exit(unsigned int cpu,
 	raw_spin_lock_irqsave(&request->lock, flags);
 	if (atomic_xchg(&request->active, 0)) {
 		atomic_dec(&x86_cpu_accel_active_count);
+		owner_exited = true;
 		if (local_tlb_flush)
 			*local_tlb_flush = request->pending_unscoped_tlb_flush ||
 				request->pending_tlb_gen != 0;
@@ -150,8 +163,42 @@ static u64 x86_cpu_accel_owner_exit(unsigned int cpu,
 	}
 	targets = atomic64_read(&request->tlb_shootdown_targets);
 	raw_spin_unlock_irqrestore(&request->lock, flags);
+	if (owner_exited)
+		wake_up_all(&x86_cpu_accel_owner_wait);
 	return targets;
 }
+
+void x86_cpu_accel_text_maintenance_begin(void)
+{
+	unsigned long flags;
+
+	might_sleep();
+	mutex_lock(&x86_cpu_accel_text_maintenance_mutex);
+
+	/* Serialize admission with owner entry, then drain the current owners. */
+	raw_spin_lock_irqsave(&x86_cpu_accel_ownership_lock, flags);
+	x86_cpu_accel_text_maintenance = true;
+	raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
+	wait_event(x86_cpu_accel_owner_wait,
+		   !atomic_read(&x86_cpu_accel_active_count));
+}
+EXPORT_SYMBOL_GPL(x86_cpu_accel_text_maintenance_begin);
+
+void x86_cpu_accel_text_maintenance_end(void)
+{
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&x86_cpu_accel_ownership_lock, flags);
+	if (WARN_ON_ONCE(!x86_cpu_accel_text_maintenance)) {
+		raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock,
+					   flags);
+		return;
+	}
+	x86_cpu_accel_text_maintenance = false;
+	raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
+	mutex_unlock(&x86_cpu_accel_text_maintenance_mutex);
+}
+EXPORT_SYMBOL_GPL(x86_cpu_accel_text_maintenance_end);
 
 int x86_cpu_accel_user_enter(unsigned int cpu, struct mm_struct *mm,
 			     u64 *tlb_targets)

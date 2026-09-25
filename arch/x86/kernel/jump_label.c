@@ -12,6 +12,7 @@
 #include <linux/list.h>
 #include <linux/jhash.h>
 #include <linux/cpu.h>
+#include <asm/cpu_accel.h>
 #include <asm/kprobes.h>
 #include <asm/alternative.h>
 #include <asm/text-patching.h>
@@ -109,9 +110,9 @@ static void __ref jump_label_transform(struct jump_entry *entry,
 				       enum jump_label_type type,
 				       int init)
 {
-	mutex_lock(&text_mutex);
+	x86_cpu_accel_text_mutex_lock();
 	__jump_label_transform(entry, type, init);
-	mutex_unlock(&text_mutex);
+	x86_cpu_accel_text_mutex_unlock();
 }
 
 void arch_jump_label_transform(struct jump_entry *entry,
@@ -133,16 +134,16 @@ bool arch_jump_label_transform_queue(struct jump_entry *entry,
 		return true;
 	}
 
-	mutex_lock(&text_mutex);
+	x86_cpu_accel_text_mutex_lock();
 	jlp = __jump_label_patch(entry, type);
 	smp_text_poke_batch_add((void *)jump_entry_code(entry), jlp.code, jlp.size, NULL);
-	mutex_unlock(&text_mutex);
+	x86_cpu_accel_text_mutex_unlock();
 	return true;
 }
 
 void arch_jump_label_transform_apply(void)
 {
-	mutex_lock(&text_mutex);
+	x86_cpu_accel_text_mutex_lock();
 	smp_text_poke_batch_finish();
-	mutex_unlock(&text_mutex);
+	x86_cpu_accel_text_mutex_unlock();
 }

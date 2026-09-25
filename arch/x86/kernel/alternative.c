@@ -16,6 +16,7 @@
 #include <asm/ibt.h>
 #include <asm/set_memory.h>
 #include <asm/nmi.h>
+#include <asm/cpu_accel.h>
 
 int __read_mostly alternatives_patched;
 
@@ -185,7 +186,7 @@ void its_init_mod(struct module *mod)
 	if (!cpu_feature_enabled(X86_FEATURE_INDIRECT_THUNK_ITS))
 		return;
 
-	mutex_lock(&text_mutex);
+	x86_cpu_accel_text_mutex_lock();
 	its_mod = mod;
 	its_page = NULL;
 }
@@ -199,7 +200,7 @@ void its_fini_mod(struct module *mod)
 
 	its_mod = NULL;
 	its_page = NULL;
-	mutex_unlock(&text_mutex);
+	x86_cpu_accel_text_mutex_unlock();
 
 	if (IS_ENABLED(CONFIG_STRICT_MODULE_RWX))
 		its_pages_protect(&mod->arch.its_pages);
@@ -2592,9 +2593,9 @@ void *text_poke_copy_locked(void *addr, const void *opcode, size_t len,
  */
 void *text_poke_copy(void *addr, const void *opcode, size_t len)
 {
-	mutex_lock(&text_mutex);
+	x86_cpu_accel_text_mutex_lock();
 	addr = text_poke_copy_locked(addr, opcode, len, false);
-	mutex_unlock(&text_mutex);
+	x86_cpu_accel_text_mutex_unlock();
 	return addr;
 }
 
@@ -2615,7 +2616,7 @@ void *text_poke_set(void *addr, int c, size_t len)
 	if (WARN_ON_ONCE(core_kernel_text(start)))
 		return NULL;
 
-	mutex_lock(&text_mutex);
+	x86_cpu_accel_text_mutex_lock();
 	while (patched < len) {
 		unsigned long ptr = start + patched;
 		size_t s;
@@ -2625,7 +2626,7 @@ void *text_poke_set(void *addr, int c, size_t len)
 		__text_poke(text_poke_memset, (void *)ptr, (void *)&c, s);
 		patched += s;
 	}
-	mutex_unlock(&text_mutex);
+	x86_cpu_accel_text_mutex_unlock();
 	return addr;
 }
 

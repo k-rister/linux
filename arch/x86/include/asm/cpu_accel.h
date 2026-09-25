@@ -3,6 +3,7 @@
 #define _ASM_X86_CPU_ACCEL_H
 
 #include <linux/cpumask.h>
+#include <linux/mutex.h>
 
 typedef void (*x86_cpu_accel_entry_fn)(void *data);
 
@@ -12,6 +13,7 @@ struct x86_cpu_accel_tlb_flush {
 };
 
 struct mm_struct;
+extern struct mutex text_mutex;
 
 int x86_cpu_accel_direct_enter(unsigned int cpu,
 			       x86_cpu_accel_entry_fn entry, void *data);
@@ -25,6 +27,9 @@ int x86_cpu_accel_user_enter(unsigned int cpu, struct mm_struct *mm,
 			     u64 *tlb_targets);
 u64 x86_cpu_accel_user_exit(unsigned int cpu);
 bool x86_cpu_accel_any_active(void);
+/* Drain accelerator owners and block new admission across text maintenance. */
+void x86_cpu_accel_text_maintenance_begin(void);
+void x86_cpu_accel_text_maintenance_end(void);
 /*
  * Call before recording owners; reserve admission until end.
  * no_owners permits a broadcast.
@@ -63,6 +68,14 @@ static inline u64 x86_cpu_accel_user_exit(unsigned int cpu)
 static inline bool x86_cpu_accel_any_active(void)
 {
 	return false;
+}
+
+static inline void x86_cpu_accel_text_maintenance_begin(void)
+{
+}
+
+static inline void x86_cpu_accel_text_maintenance_end(void)
+{
 }
 
 static inline void
@@ -119,5 +132,19 @@ static inline u64 x86_cpu_accel_tlb_shootdown_targets(unsigned int cpu)
 	return 0;
 }
 #endif
+
+static inline void x86_cpu_accel_text_mutex_lock(void)
+	__acquires(&text_mutex)
+{
+	x86_cpu_accel_text_maintenance_begin();
+	mutex_lock(&text_mutex);
+}
+
+static inline void x86_cpu_accel_text_mutex_unlock(void)
+	__releases(&text_mutex)
+{
+	mutex_unlock(&text_mutex);
+	x86_cpu_accel_text_maintenance_end();
+}
 
 #endif

@@ -30,6 +30,7 @@
 #include <trace/syscall.h>
 
 #include <asm/kprobes.h>
+#include <asm/cpu_accel.h>
 #include <asm/ftrace.h>
 #include <asm/nops.h>
 #include <asm/text-patching.h>
@@ -46,7 +47,7 @@ void ftrace_arch_code_modify_prepare(void)
 	 * and live kernel patching from changing the text permissions while
 	 * ftrace has it set to "read/write".
 	 */
-	mutex_lock(&text_mutex);
+	x86_cpu_accel_text_mutex_lock();
 	ftrace_poke_late = 1;
 }
 
@@ -60,7 +61,7 @@ void ftrace_arch_code_modify_post_process(void)
 	 */
 	smp_text_poke_batch_finish();
 	ftrace_poke_late = 0;
-	mutex_unlock(&text_mutex);
+	x86_cpu_accel_text_mutex_unlock();
 }
 
 static const char *ftrace_nop_replace(void)
@@ -410,7 +411,7 @@ create_trampoline(struct ftrace_ops *ops, unsigned int *tramp_size)
 	memcpy(trampoline + op_offset, &op_ptr, OP_REF_SIZE);
 
 	/* put in the call to the function */
-	mutex_lock(&text_mutex);
+	x86_cpu_accel_text_mutex_lock();
 	call_offset -= start_offset;
 	/*
 	 * No need to translate into a callthunk. The trampoline does
@@ -420,7 +421,7 @@ create_trampoline(struct ftrace_ops *ops, unsigned int *tramp_size)
 	memcpy(trampoline + call_offset,
 	       text_gen_insn(CALL_INSN_OPCODE, trampoline + call_offset, dest),
 	       CALL_INSN_SIZE);
-	mutex_unlock(&text_mutex);
+	x86_cpu_accel_text_mutex_unlock();
 
 	/* ALLOC_TRAMP flags lets us know we created it */
 	ops->flags |= FTRACE_OPS_FL_ALLOC_TRAMP;
@@ -501,11 +502,11 @@ void arch_ftrace_update_trampoline(struct ftrace_ops *ops)
 	ip = ops->trampoline + offset;
 	func = ftrace_ops_get_func(ops);
 
-	mutex_lock(&text_mutex);
+	x86_cpu_accel_text_mutex_lock();
 	/* Do a safe modify in case the trampoline is executing */
 	new = ftrace_call_replace(ip, (unsigned long)func);
 	smp_text_poke_single((void *)ip, new, MCOUNT_INSN_SIZE, NULL);
-	mutex_unlock(&text_mutex);
+	x86_cpu_accel_text_mutex_unlock();
 }
 
 /* Return the address of the function the trampoline calls */

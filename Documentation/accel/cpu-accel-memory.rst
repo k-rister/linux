@@ -271,6 +271,23 @@ request that terminates this prototype's run, not an acknowledgement that
 arbitrary MM callers can request and await. Until the relevant reclaim path can
 hold its folios through completion, keep ``arch_tlbbatch_flush()`` synchronous.
 
+There is no safe timeout-only variant of these flush hooks. The MM hooks return
+no error, and their callers proceed on the assumption that the translation
+lifetime is complete. A timeout followed by return would leave the caller free
+to start writeback or release a page that the owner can still access. A
+completion-managed design must take responsibility for that page before the
+unmap becomes visible, associate it with the affected ``mm`` generation and
+owner CPUs, and release it only after invalidation or quiescence is
+acknowledged. If completion storage cannot be reserved, the operation must
+retain the synchronous path. Reclaim and ``mmu_gather`` need separate
+completion owners because they carry different page lists.
+
+The alternative is a generic owner-quiesce operation that can safely terminate
+every supported owner type and report completion to MM callers. The current
+NMI escape is ring-3-driver-specific, requires a controller request, and does
+not cover kernel-mode owners; it cannot provide this contract. Until a generic
+quiesce API exists, synchronous flush waits remain unbounded by design.
+
 Kernel mapping invalidation and kernel code maintenance have separate
 requirements:
 
@@ -299,6 +316,16 @@ routed to housekeeping, deferred, rejected, or requiring controlled owner
 termination. Operations that cannot prove they include the owned CPU in their
 execution and mapping rendezvous are unsupported while accelerator ownership
 is active.
+
+A future interlock must cover the entire maintenance transaction: reserve
+owner admission before changing code or mappings, retain that reservation
+through every execution rendezvous and TLB completion, then release it. A
+reservation started only by the final ``smp_text_poke_sync_each_cpu()`` is too
+late to protect the preceding writes. The SMP text-poke sequence uses an INT3
+transition and repeated synchronous core-sync callbacks; its callbacks can
+wait for owners, but that sequence does not cover stop-machine, exception-table,
+IDT/NMI, or other maintenance paths automatically. Each such path needs an
+explicit interlock or an explicit reject/defer/quiesce rule before mutation.
 
 Until these rules are implemented for an architecture, call-function replay
 is only a mechanism detail. The direct APIC prototype must not advertise

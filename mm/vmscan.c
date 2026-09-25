@@ -1242,6 +1242,21 @@ retry:
 		}
 
 		/*
+		 * A DMA-pinned folio cannot be reclaimed. Avoid trying to demote
+		 * it or changing its swap state before discovering that it must
+		 * stay resident. Anonymous folios without swap-cache backing keep
+		 * the same locked-list behavior as the swap allocation path below.
+		 * The check after unmapping remains necessary for a pin acquired
+		 * concurrently with this check.
+		 */
+		if (folio_maybe_dma_pinned(folio)) {
+			if (folio_test_anon(folio) && folio_test_swapbacked(folio) &&
+			    !folio_test_swapcache(folio))
+				goto keep_locked;
+			goto activate_locked;
+		}
+
+		/*
 		 * Before reclaiming the folio, try to relocate
 		 * its contents to another node.
 		 */
@@ -1260,8 +1275,6 @@ retry:
 		if (folio_test_anon(folio) && folio_test_swapbacked(folio) &&
 				!folio_test_swapcache(folio)) {
 			if (!(sc->gfp_mask & __GFP_IO))
-				goto keep_locked;
-			if (folio_maybe_dma_pinned(folio))
 				goto keep_locked;
 			if (folio_test_large(folio)) {
 				/* cannot split folio, skip it */
@@ -1320,16 +1333,6 @@ retry:
 			sc->nr_scanned -= (nr_pages - 1);
 			nr_pages = 1;
 		}
-
-		/*
-		 * A DMA-pinned folio cannot be reclaimed. Avoid unmapping it
-		 * first: besides being unnecessary, that could require a remote
-		 * TLB flush while a pinned user is still accessing the folio. The
-		 * check after unmapping below is still required to catch a pin
-		 * acquired concurrently with this check.
-		 */
-		if (folio_maybe_dma_pinned(folio))
-			goto activate_locked;
 
 		/*
 		 * The folio is mapped into the page tables of one or more

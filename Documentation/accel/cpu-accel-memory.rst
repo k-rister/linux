@@ -239,12 +239,14 @@ an admission race.
 
 An owner whose own ``mm`` was changed remains in the synchronous target set.
 The write lock excludes VMA changes, and pins keep admitted folios from being
-released while the owner uses them; reclaim can still unmap a PTE before it
-recognizes a pin. If an own-mm generation is recorded, x86 does not filter
-that owner: the flush waits for exit and local TLB reconciliation occurs
-before the driver unlocks the ``mm`` or releases pins. Kernel-mode owners have
-no sealed user ``mm`` and are not filtered, so their synchronous flush can
-still wait without a bound.
+released while the owner uses them. Vmscan now skips folios it already detects
+as DMA-pinned before trying to unmap them, avoiding needless TLB work for those
+folios. Its post-unmap pin check remains necessary for a pin acquired during
+the unmap race. If an own-mm generation is recorded, x86 does not filter that
+owner: the flush waits for exit and local TLB reconciliation occurs before the
+driver unlocks the ``mm`` or releases pins. Kernel-mode owners have no sealed
+user ``mm`` and are not filtered, so their synchronous flush can still wait
+without a bound.
 
 The reclaim call sites impose different completion obligations. In
 ``try_to_unmap_one()``, the PTE is cleared and rmap state is updated before the

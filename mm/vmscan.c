@@ -1322,6 +1322,16 @@ retry:
 		}
 
 		/*
+		 * A DMA-pinned folio cannot be reclaimed. Avoid unmapping it
+		 * first: besides being unnecessary, that could require a remote
+		 * TLB flush while a pinned user is still accessing the folio. The
+		 * check after unmapping below is still required to catch a pin
+		 * acquired concurrently with this check.
+		 */
+		if (folio_maybe_dma_pinned(folio))
+			goto activate_locked;
+
+		/*
 		 * The folio is mapped into the page tables of one or more
 		 * processes. Try to unmap it here.
 		 */

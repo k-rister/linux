@@ -340,8 +340,8 @@ requirements:
   both the transition path and its backing pages valid for every active owner.
   A successful TLB flush by itself does not establish this semantic safety.
 
-The x86 prototype now interlocks transactions serialized by ``text_mutex``.
-The x86 text-mutex wrappers first bar new accelerator admissions and wait for
+The x86 prototype interlocks transactions serialized by ``text_mutex``. The
+x86 text-mutex wrappers first bar new accelerator admissions and wait for
 existing owners to exit, then take the existing mutex; unlock releases the
 mutex before reopening admission. The gate therefore spans the whole
 text-mutex transaction, including its text-patching rendezvous. It covers x86
@@ -349,12 +349,18 @@ text-poke clients and generic kprobes that use this mutex, and may wait without
 a bound for an owner to exit.
 
 This is not a global interlock for all kernel maintenance. In particular,
-kgdb's special stopped-machine patch path, stop-machine operations, exception
-table and IDT/NMI changes, and mapping changes that do not use ``text_mutex``
-need their own rule. Classify each such operation as allowed, routed to
-housekeeping, deferred, rejected, or requiring controlled owner termination.
-Operations that cannot prove they include the owned CPU in their execution and
-mapping rendezvous are unsupported while accelerator ownership is active.
+stop-machine rendezvous and kgdb's special stopped-machine patch path,
+exception-table and IDT/NMI changes, and mapping changes that do not use
+``text_mutex`` need their own rule. A blanket gate in
+``stop_machine_cpuslocked()`` would run after callers acquired CPU-hotplug
+locks, while existing text-patch paths acquire the gate before their patching
+locks; that ordering needs call-site review to avoid a lock inversion.
+``stop_machine_from_inactive_cpu()`` cannot sleep to acquire the gate, so its
+callers need a safe quiescence point before entering the inactive-CPU phase.
+Classify each such operation as allowed, routed to housekeeping, deferred,
+rejected, or requiring controlled owner termination. Operations that cannot
+prove they include the owned CPU in their execution and mapping rendezvous are
+unsupported while accelerator ownership is active.
 
 Each additional interlock must cover the entire maintenance transaction:
 reserve owner admission before changing code or mappings, retain that

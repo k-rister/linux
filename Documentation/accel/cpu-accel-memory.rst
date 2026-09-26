@@ -256,6 +256,15 @@ driver unlocks the ``mm`` or releases pins. Kernel-mode owners have no sealed
 user ``mm`` and are not filtered, so their synchronous flush can still wait
 without a bound.
 
+The owner can exit between the PTE clear and generation publication. The
+synchronous path remains safe in that ordering: an owner still active when the
+generation is recorded reconciles it on exit; an owner that has already exited
+is no longer filtered from the ordinary batch flush. If the task switches away
+before that flush, the advanced ``mm`` generation is checked before the task
+can use the address space again. An asynchronous completion path must preserve
+this handoff; observing that the accelerator owner is inactive is not by itself
+an acknowledgement that stale translations have been invalidated.
+
 The reclaim call sites impose different completion obligations. In
 ``try_to_unmap_one()``, the PTE is cleared and rmap state is updated before the
 task-local batch is flushed. In ``shrink_folio_list()``, a dirty folio must
@@ -274,6 +283,18 @@ caller proceed to I/O or release a folio before the owner handles it. A
 nonblocking version therefore needs changes to the unmap/reclaim contract so
 the affected folio lifetime and any required I/O remain deferred until the
 owner acknowledgement. Changing the architecture hook alone cannot do that.
+
+For the first deferred-reclaim implementation, reserve a bounded completion
+object before clearing any PTE that may be deferred. Record the affected
+``mm`` generations and transfer the folio references and reclaim disposition
+to that object when the batch is submitted. Flush ordinary CPU targets
+synchronously; an active ring-3 owner may leave that target set only after a
+completion has been registered against its pending generation. Owner exit
+acknowledges such a completion only after its local TLB reconciliation. Keep
+dirty-folio flushes synchronous before writeback, and keep migration
+synchronous until it has a matching caller-side disposition. If completion
+storage is unavailable, retain the existing synchronous path. This keeps
+backpressure explicit and avoids allocating after the PTE update has begun.
 
 ``mmu_gather`` is a distinct range-flush path. On x86 it calls
 ``flush_tlb_mm_range()``; after the flush/generation rules permit reclamation,

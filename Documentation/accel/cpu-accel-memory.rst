@@ -401,6 +401,9 @@ its text-patching rendezvous. It covers x86 text-poke clients and generic
 kprobes that use this mutex, and may wait without a bound for an owner to exit.
 MTRR add and delete operations also take the gate before the CPU-hotplug read
 lock and hold it through their stop-machine rendezvous and MTRR map rebuild.
+Late microcode reload takes the gate before its CPU-hotplug read lock and holds
+it through the update; its static-key text-patch transactions nest the same
+gate in the updating task.
 
 This is not a global interlock for all kernel maintenance. In particular,
 other stop-machine rendezvous and kgdb's special stopped-machine patch path,

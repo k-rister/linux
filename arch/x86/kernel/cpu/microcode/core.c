@@ -33,6 +33,7 @@
 #include <linux/mm.h>
 
 #include <asm/apic.h>
+#include <asm/cpu_accel.h>
 #include <asm/cpu_device_id.h>
 #include <asm/cpuid/api.h>
 #include <asm/perf_event.h>
@@ -770,9 +771,12 @@ static ssize_t reload_store(struct device *dev,
 	if (ret || val != 1)
 		return -EINVAL;
 
+	/* Drain owners before the update's stop-machine and text-patch work. */
+	x86_cpu_accel_maintenance_begin();
 	cpus_read_lock();
 	ret = load_late_locked();
 	cpus_read_unlock();
+	x86_cpu_accel_maintenance_end();
 
 	return ret ? : size;
 }

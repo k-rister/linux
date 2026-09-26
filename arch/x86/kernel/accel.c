@@ -52,6 +52,8 @@ static atomic_t x86_cpu_accel_active_count = ATOMIC_INIT(0);
 static DEFINE_RAW_SPINLOCK(x86_cpu_accel_ownership_lock);
 static DEFINE_MUTEX(x86_cpu_accel_maintenance_mutex);
 static DECLARE_WAIT_QUEUE_HEAD(x86_cpu_accel_owner_wait);
+static struct task_struct *x86_cpu_accel_maintenance_owner;
+static unsigned int x86_cpu_accel_maintenance_depth;
 static bool x86_cpu_accel_maintenance;
 
 static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets,
@@ -217,10 +219,21 @@ void x86_cpu_accel_maintenance_begin(void)
 	unsigned long flags;
 
 	might_sleep();
+	raw_spin_lock_irqsave(&x86_cpu_accel_ownership_lock, flags);
+	if (x86_cpu_accel_maintenance_owner == current) {
+		x86_cpu_accel_maintenance_depth++;
+		raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
+		return;
+	}
+	raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
+
 	mutex_lock(&x86_cpu_accel_maintenance_mutex);
 
 	/* Serialize admission with owner entry, then drain the current owners. */
 	raw_spin_lock_irqsave(&x86_cpu_accel_ownership_lock, flags);
+	WARN_ON_ONCE(x86_cpu_accel_maintenance_owner);
+	x86_cpu_accel_maintenance_owner = current;
+	x86_cpu_accel_maintenance_depth = 1;
 	x86_cpu_accel_maintenance = true;
 	raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
 	wait_event(x86_cpu_accel_owner_wait,
@@ -233,11 +246,17 @@ void x86_cpu_accel_maintenance_end(void)
 	unsigned long flags;
 
 	raw_spin_lock_irqsave(&x86_cpu_accel_ownership_lock, flags);
-	if (WARN_ON_ONCE(!x86_cpu_accel_maintenance)) {
+	if (WARN_ON_ONCE(x86_cpu_accel_maintenance_owner != current ||
+			 !x86_cpu_accel_maintenance_depth)) {
 		raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock,
 					   flags);
 		return;
 	}
+	if (--x86_cpu_accel_maintenance_depth) {
+		raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
+		return;
+	}
+	x86_cpu_accel_maintenance_owner = NULL;
 	x86_cpu_accel_maintenance = false;
 	raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
 	mutex_unlock(&x86_cpu_accel_maintenance_mutex);

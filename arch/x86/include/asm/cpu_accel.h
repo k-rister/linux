@@ -58,7 +58,7 @@ u64 x86_cpu_accel_user_exit(unsigned int cpu);
 void x86_cpu_accel_tlb_unmap_begin(struct mm_struct *mm);
 void x86_cpu_accel_tlb_unmap_end(struct mm_struct *mm);
 bool x86_cpu_accel_any_active(void);
-/* Drain accelerator owners and block new admission across kernel maintenance. */
+/* Drain owners, block admission, and allow same-task nesting. */
 void x86_cpu_accel_maintenance_begin(void);
 void x86_cpu_accel_maintenance_end(void);
 /*

@@ -58,9 +58,9 @@ u64 x86_cpu_accel_user_exit(unsigned int cpu);
 void x86_cpu_accel_tlb_unmap_begin(struct mm_struct *mm);
 void x86_cpu_accel_tlb_unmap_end(struct mm_struct *mm);
 bool x86_cpu_accel_any_active(void);
-/* Drain accelerator owners and block new admission across text maintenance. */
-void x86_cpu_accel_text_maintenance_begin(void);
-void x86_cpu_accel_text_maintenance_end(void);
+/* Drain accelerator owners and block new admission across kernel maintenance. */
+void x86_cpu_accel_maintenance_begin(void);
+void x86_cpu_accel_maintenance_end(void);
 /*
  * Call before recording owners; reserve admission until end.
  * no_owners permits a broadcast.
@@ -146,11 +146,11 @@ static inline bool x86_cpu_accel_any_active(void)
 	return false;
 }
 
-static inline void x86_cpu_accel_text_maintenance_begin(void)
+static inline void x86_cpu_accel_maintenance_begin(void)
 {
 }
 
-static inline void x86_cpu_accel_text_maintenance_end(void)
+static inline void x86_cpu_accel_maintenance_end(void)
 {
 }
 
@@ -214,7 +214,7 @@ static inline u64 x86_cpu_accel_tlb_shootdown_targets(unsigned int cpu)
 static inline void x86_cpu_accel_text_mutex_lock(void)
 	__acquires(&text_mutex)
 {
-	x86_cpu_accel_text_maintenance_begin();
+	x86_cpu_accel_maintenance_begin();
 	mutex_lock(&text_mutex);
 }
 
@@ -222,7 +222,7 @@ static inline void x86_cpu_accel_text_mutex_unlock(void)
 	__releases(&text_mutex)
 {
 	mutex_unlock(&text_mutex);
-	x86_cpu_accel_text_maintenance_end();
+	x86_cpu_accel_maintenance_end();
 }
 
 #endif

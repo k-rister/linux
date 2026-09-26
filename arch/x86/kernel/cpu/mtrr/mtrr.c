@@ -34,6 +34,7 @@
 #include <linux/rcupdate.h>
 
 #include <asm/cacheinfo.h>
+#include <asm/cpu_accel.h>
 #include <asm/cpufeature.h>
 #include <asm/e820/api.h>
 #include <asm/mtrr.h>
@@ -254,6 +255,9 @@ int mtrr_add_page(unsigned long base, unsigned long size,
 	error = -EINVAL;
 	replace = -1;
 
+	/* MTRR updates stop all CPUs and change their memory cache policy. */
+	x86_cpu_accel_maintenance_begin();
+
 	/* No CPU hotplug when we change MTRR entries */
 	cpus_read_lock();
 
@@ -318,6 +322,7 @@ int mtrr_add_page(unsigned long base, unsigned long size,
  out:
 	mutex_unlock(&mtrr_mutex);
 	cpus_read_unlock();
+	x86_cpu_accel_maintenance_end();
 	return error;
 }
 
@@ -403,6 +408,8 @@ int mtrr_del_page(int reg, unsigned long base, unsigned long size)
 		return -ENODEV;
 
 	max = num_var_ranges;
+	/* Keep accelerator owners out of the stop-machine MTRR rendezvous. */
+	x86_cpu_accel_maintenance_begin();
 	/* No CPU hotplug when we change MTRR entries */
 	cpus_read_lock();
 	mutex_lock(&mtrr_mutex);
@@ -439,6 +446,7 @@ int mtrr_del_page(int reg, unsigned long base, unsigned long size)
  out:
 	mutex_unlock(&mtrr_mutex);
 	cpus_read_unlock();
+	x86_cpu_accel_maintenance_end();
 	return error;
 }
 

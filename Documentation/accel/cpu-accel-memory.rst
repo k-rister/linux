@@ -404,20 +404,29 @@ lock and hold it through their stop-machine rendezvous and MTRR map rebuild.
 Late microcode reload takes the gate before its CPU-hotplug read lock and holds
 it through the update; its static-key text-patch transactions nest the same
 gate in the updating task.
+TDX module installation takes the gate before its CPU-hotplug read lock and
+holds it through the stop-machine update.
+The public ``stop_machine()`` entry point takes the gate before its CPU-hotplug
+read lock and holds it through the rendezvous, covering other generic
+stop-machine callers on x86. The inactive-CPU variant cannot sleep, so it
+reserves the gate without waiting and returns ``-EBUSY`` if an owner or other
+maintenance transaction is active; the cache CPU-online callback propagates
+that failure. Direct ``stop_machine_cpuslocked()`` callers still need an
+explicit gate or a proof that CPU-hotplug locking excludes owners.
 
 This is not a global interlock for all kernel maintenance. In particular,
-other stop-machine rendezvous and kgdb's special stopped-machine patch path,
-exception-table and IDT/NMI changes, and mapping changes that do not use the
-gate need their own rule. A blanket gate in
+``stop_machine_cpuslocked()`` callers outside the listed x86 paths, kgdb's
+special stopped-machine patch path, exception-table and IDT/NMI changes, and
+mapping changes that do not use the gate need their own rule. A blanket gate in
 ``stop_machine_cpuslocked()`` would run after callers acquired CPU-hotplug
 locks, while existing text-patch paths acquire the gate before their patching
-locks; that ordering needs call-site review to avoid a lock inversion.
-``stop_machine_from_inactive_cpu()`` cannot sleep to acquire the gate, so its
-callers need a safe quiescence point before entering the inactive-CPU phase.
-Classify each such operation as allowed, routed to housekeeping, deferred,
-rejected, or requiring controlled owner termination. Operations that cannot
-prove they include the owned CPU in their execution and mapping rendezvous are
-unsupported while accelerator ownership is active.
+locks; that ordering needs call-site review to avoid a lock inversion. The
+public ``stop_machine()`` wrapper gates before its hotplug read lock, and the
+inactive-CPU variant uses a nonblocking reservation. Classify each remaining
+operation as allowed, routed to housekeeping, deferred, rejected, or requiring
+controlled owner termination. Operations that cannot prove they include the
+owned CPU in their execution and mapping rendezvous are unsupported while
+accelerator ownership is active.
 
 Each additional interlock must cover the entire maintenance transaction:
 reserve owner admission before changing code or mappings, retain that

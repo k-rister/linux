@@ -55,6 +55,7 @@ static DECLARE_WAIT_QUEUE_HEAD(x86_cpu_accel_owner_wait);
 static struct task_struct *x86_cpu_accel_maintenance_owner;
 static unsigned int x86_cpu_accel_maintenance_depth;
 static bool x86_cpu_accel_maintenance;
+static bool x86_cpu_accel_maintenance_try;
 
 static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets,
 				     struct mm_struct *owner_mm)
@@ -73,7 +74,7 @@ static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets,
 
 	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
 	raw_spin_lock_irqsave(&x86_cpu_accel_ownership_lock, ownership_flags);
-	if (x86_cpu_accel_maintenance) {
+	if (x86_cpu_accel_maintenance || x86_cpu_accel_maintenance_try) {
 		raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock,
 					   ownership_flags);
 		preempt_enable();
@@ -228,14 +229,22 @@ void x86_cpu_accel_maintenance_begin(void)
 	raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
 
 	mutex_lock(&x86_cpu_accel_maintenance_mutex);
-
-	/* Serialize admission with owner entry, then drain the current owners. */
-	raw_spin_lock_irqsave(&x86_cpu_accel_ownership_lock, flags);
-	WARN_ON_ONCE(x86_cpu_accel_maintenance_owner);
-	x86_cpu_accel_maintenance_owner = current;
-	x86_cpu_accel_maintenance_depth = 1;
-	x86_cpu_accel_maintenance = true;
-	raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
+	for (;;) {
+		/* Serialize admission with owner entry and try-only callers. */
+		raw_spin_lock_irqsave(&x86_cpu_accel_ownership_lock, flags);
+		if (!x86_cpu_accel_maintenance_try) {
+			WARN_ON_ONCE(x86_cpu_accel_maintenance_owner);
+			x86_cpu_accel_maintenance_owner = current;
+			x86_cpu_accel_maintenance_depth = 1;
+			x86_cpu_accel_maintenance = true;
+			raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock,
+						   flags);
+			break;
+		}
+		raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
+		wait_event(x86_cpu_accel_owner_wait,
+			   !READ_ONCE(x86_cpu_accel_maintenance_try));
+	}
 	wait_event(x86_cpu_accel_owner_wait,
 		   !atomic_read(&x86_cpu_accel_active_count));
 }
@@ -262,6 +271,38 @@ void x86_cpu_accel_maintenance_end(void)
 	mutex_unlock(&x86_cpu_accel_maintenance_mutex);
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_maintenance_end);
+
+bool x86_cpu_accel_maintenance_try_begin(void)
+{
+	unsigned long flags;
+	bool acquired = false;
+
+	raw_spin_lock_irqsave(&x86_cpu_accel_ownership_lock, flags);
+	if (!x86_cpu_accel_maintenance && !x86_cpu_accel_maintenance_try &&
+	    !atomic_read(&x86_cpu_accel_active_count)) {
+		x86_cpu_accel_maintenance_try = true;
+		acquired = true;
+	}
+	raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
+
+	return acquired;
+}
+EXPORT_SYMBOL_GPL(x86_cpu_accel_maintenance_try_begin);
+
+void x86_cpu_accel_maintenance_try_end(void)
+{
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&x86_cpu_accel_ownership_lock, flags);
+	if (WARN_ON_ONCE(!x86_cpu_accel_maintenance_try)) {
+		raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
+		return;
+	}
+	x86_cpu_accel_maintenance_try = false;
+	raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
+	wake_up_all(&x86_cpu_accel_owner_wait);
+}
+EXPORT_SYMBOL_GPL(x86_cpu_accel_maintenance_try_end);
 
 int x86_cpu_accel_user_enter(unsigned int cpu, struct mm_struct *mm,
 			     u64 *tlb_targets)

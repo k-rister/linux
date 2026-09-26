@@ -13,6 +13,7 @@
 #include <linux/spinlock.h>
 #include <linux/stop_machine.h>
 
+#include <asm/cpu_accel.h>
 #include <asm/cpufeature.h>
 #include <asm/cpufeatures.h>
 #include <asm/seamldr.h>
@@ -339,11 +340,13 @@ int seamldr_install_module(const u8 *data, u32 data_len)
 		goto out;
 
 	/* Ensure a stable set of online CPUs for the update process. */
+	x86_cpu_accel_maintenance_begin();
 	cpus_read_lock();
 	init_state(&update_ctrl);
 	ret = stop_machine_cpuslocked(do_seamldr_install_module, params,
 				      cpu_online_mask);
 	cpus_read_unlock();
+	x86_cpu_accel_maintenance_end();
 
 out:
 	kfree(params);

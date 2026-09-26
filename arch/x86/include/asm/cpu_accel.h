@@ -61,6 +61,9 @@ bool x86_cpu_accel_any_active(void);
 /* Drain owners, block admission, and allow same-task nesting. */
 void x86_cpu_accel_maintenance_begin(void);
 void x86_cpu_accel_maintenance_end(void);
+/* Succeed only with no owners; block admission until try_end(). */
+bool x86_cpu_accel_maintenance_try_begin(void);
+void x86_cpu_accel_maintenance_try_end(void);
 /*
  * Call before recording owners; reserve admission until end.
  * no_owners permits a broadcast.
@@ -151,6 +154,15 @@ static inline void x86_cpu_accel_maintenance_begin(void)
 }
 
 static inline void x86_cpu_accel_maintenance_end(void)
+{
+}
+
+static inline bool x86_cpu_accel_maintenance_try_begin(void)
+{
+	return true;
+}
+
+static inline void x86_cpu_accel_maintenance_try_end(void)
 {
 }
 

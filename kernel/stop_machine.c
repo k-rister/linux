@@ -24,6 +24,10 @@
 #include <linux/nmi.h>
 #include <linux/sched/wake_q.h>
 
+#ifdef CONFIG_X86
+#include <asm/cpu_accel.h>
+#endif
+
 /*
  * Structure to determine completion condition and record errors.  May
  * be shared by works on different cpus.
@@ -622,10 +626,17 @@ int stop_machine(cpu_stop_fn_t fn, void *data, const struct cpumask *cpus)
 {
 	int ret;
 
+	/* Drain owners before taking CPU-hotplug locks or stopping any CPU. */
+#ifdef CONFIG_X86
+	x86_cpu_accel_maintenance_begin();
+#endif
 	/* No CPUs can come up or down during this. */
 	cpus_read_lock();
 	ret = stop_machine_cpuslocked(fn, data, cpus);
 	cpus_read_unlock();
+#ifdef CONFIG_X86
+	x86_cpu_accel_maintenance_end();
+#endif
 	return ret;
 }
 EXPORT_SYMBOL_GPL(stop_machine);
@@ -688,6 +699,11 @@ int stop_machine_from_inactive_cpu(cpu_stop_fn_t fn, void *data,
 
 	/* Local CPU must be inactive and CPU hotplug in progress. */
 	BUG_ON(cpu_active(raw_smp_processor_id()));
+	/* This context cannot sleep; abort if owners cannot be drained now. */
+#ifdef CONFIG_X86
+	if (!x86_cpu_accel_maintenance_try_begin())
+		return -EBUSY;
+#endif
 	msdata.num_threads = num_active_cpus() + 1;	/* +1 for local */
 
 	/* No proper task established and can't sleep - busy wait for lock. */
@@ -706,5 +722,8 @@ int stop_machine_from_inactive_cpu(cpu_stop_fn_t fn, void *data,
 		cpu_relax();
 
 	mutex_unlock(&stop_cpus_mutex);
+#ifdef CONFIG_X86
+	x86_cpu_accel_maintenance_try_end();
+#endif
 	return ret ?: done.ret;
 }

@@ -19,11 +19,48 @@
 #include <linux/leafops.h>
 #include <linux/tracepoint-defs.h>
 
+#ifdef CONFIG_X86
+#include <linux/folio_batch.h>
+#include <linux/refcount.h>
+#include <linux/workqueue.h>
+#include <asm/cpu_accel.h>
+#endif
+
 /* Internal core VMA manipulation functions. */
 #include "vma.h"
 
 struct folio_batch;
 struct hstate;
+struct mmu_reclaim_completion;
+
+#ifdef CONFIG_X86
+/*
+ * A bounded vmscan handoff for a clean folio whose last stale translations
+ * belong to active ring-3 accelerator owners.  The x86 completion records the
+ * mm generations and owner acknowledgements; the generic fields own the folio
+ * and schedule its eventual release.
+ */
+struct mmu_reclaim_completion {
+	struct work_struct work;
+	struct folio_batch folios;
+	refcount_t refs;
+	atomic_t owners;
+	bool ready;
+	bool cancelled;
+	struct x86_cpu_accel_tlb_reclaim_completion arch;
+};
+
+struct mmu_reclaim_completion *mmu_reclaim_completion_alloc(void);
+void mmu_reclaim_completion_owner_get(void *data);
+void mmu_reclaim_completion_owner_ack(void *data);
+void mmu_reclaim_completion_cancel(struct mmu_reclaim_completion *completion);
+void mmu_reclaim_completion_ready(struct mmu_reclaim_completion *completion,
+				  struct folio *folio);
+
+void try_to_unmap_reclaim(struct folio *folio, enum ttu_flags flags,
+			  struct mmu_reclaim_completion *completion);
+bool try_to_unmap_flush_reclaim(struct mmu_reclaim_completion *completion);
+#endif /* CONFIG_X86 */
 
 struct huge_bootmem_page {
 	struct list_head list;

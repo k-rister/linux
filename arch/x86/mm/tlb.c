@@ -1410,7 +1410,8 @@ static bool accel_filter_tlb_shootdown(unsigned int cpu,
 		return true;
 
 	return info->accel_tlb_unmap_batch &&
-		x86_cpu_accel_filter_tlb_unmap(cpu);
+		x86_cpu_accel_filter_tlb_unmap(cpu,
+					       info->accel_tlb_reclaim_completion);
 }
 
 static void accel_flush_tlb_multi_slow(const struct cpumask *cpumask,
@@ -1526,6 +1527,7 @@ static void init_flush_tlb_info(struct flush_tlb_info *info,
 	info->initiating_cpu	= smp_processor_id();
 	info->trim_cpumask	= 0;
 	info->accel_tlb_unmap_batch = 0;
+	info->accel_tlb_reclaim_completion = NULL;
 }
 
 void flush_tlb_mm_range(struct mm_struct *mm, unsigned long start,
@@ -1840,7 +1842,8 @@ void __flush_tlb_all(void)
 }
 EXPORT_SYMBOL_FOR_KVM(__flush_tlb_all);
 
-void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
+static void __arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch,
+				  struct x86_cpu_accel_tlb_reclaim_completion *completion)
 {
 	struct x86_cpu_accel_tlb_flush accel_flush;
 	struct flush_tlb_info info;
@@ -1852,6 +1855,7 @@ void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
 	init_flush_tlb_info(&info, NULL, 0, TLB_FLUSH_ALL, 0, false,
 			    TLB_GENERATION_INVALID);
 	info.accel_tlb_unmap_batch = 1;
+	info.accel_tlb_reclaim_completion = completion;
 	if (cpu_feature_enabled(X86_FEATURE_INVLPGB) && batch->unmapped_pages) {
 		x86_cpu_accel_tlb_flush_begin(&accel_flush, cpu_online_mask);
 		use_broadcast = accel_flush.no_owners;
@@ -1889,6 +1893,29 @@ void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
 		x86_cpu_accel_tlb_flush_end(&accel_flush);
 
 	cpumask_clear(&batch->cpumask);
+}
+
+void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
+{
+	__arch_tlbbatch_flush(batch, NULL);
+}
+
+bool arch_tlbbatch_flush_reclaim(struct arch_tlbflush_unmap_batch *batch,
+				 struct x86_cpu_accel_tlb_reclaim_completion *completion,
+				 void *data, x86_cpu_accel_reclaim_fn get,
+				 x86_cpu_accel_reclaim_fn ack)
+{
+	int ret;
+
+	ret = x86_cpu_accel_reclaim_register(completion, data, get, ack);
+	if (ret <= 0) {
+		/* No owner was deferred, or bounded ack storage was exhausted. */
+		arch_tlbbatch_flush(batch);
+		return false;
+	}
+
+	__arch_tlbbatch_flush(batch, completion);
+	return true;
 }
 
 /*

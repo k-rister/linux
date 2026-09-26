@@ -259,6 +259,9 @@ struct flush_tlb_info {
 	u8			trim_cpumask;
 	/* Batched unmap: defer only owners whose current mm is unaffected. */
 	u8			accel_tlb_unmap_batch;
+	/* One reclaim handoff may additionally defer its registered owners. */
+	struct x86_cpu_accel_tlb_reclaim_completion
+			*accel_tlb_reclaim_completion;
 } __aligned(FLUSH_TLB_INFO_ALIGN);
 
 void flush_tlb_local(void);
@@ -401,6 +404,10 @@ static inline void arch_tlbbatch_add_pending(struct arch_tlbflush_unmap_batch *b
 }
 
 extern void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch);
+bool arch_tlbbatch_flush_reclaim(struct arch_tlbflush_unmap_batch *batch,
+				 struct x86_cpu_accel_tlb_reclaim_completion *completion,
+				  void *data, x86_cpu_accel_reclaim_fn get,
+				  x86_cpu_accel_reclaim_fn ack);
 
 static inline bool pte_flags_need_flush(unsigned long oldflags,
 					unsigned long newflags,

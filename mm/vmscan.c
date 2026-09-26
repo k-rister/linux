@@ -57,6 +57,7 @@
 #include <linux/rculist_nulls.h>
 #include <linux/random.h>
 #include <linux/mmu_notifier.h>
+#include <linux/mempool.h>
 #include <linux/parser.h>
 #include <linux/swap_ops.h>
 
@@ -69,6 +70,100 @@
 #include "internal.h"
 #include "page_alloc.h"
 #include "swap.h"
+
+#ifdef CONFIG_X86
+#define MMU_RECLAIM_COMPLETION_POOL_SIZE	16
+
+static mempool_t mmu_reclaim_completion_pool;
+
+static void mmu_reclaim_completion_work(struct work_struct *work)
+{
+	struct mmu_reclaim_completion *completion =
+		container_of(work, struct mmu_reclaim_completion, work);
+
+	/* Pair with ready publication before the owner references are dropped. */
+	if (smp_load_acquire(&completion->ready)) {
+		WARN_ON_ONCE(READ_ONCE(completion->cancelled));
+		mem_cgroup_uncharge_folios(&completion->folios);
+		free_unref_folios(&completion->folios);
+	} else {
+		WARN_ON_ONCE(!READ_ONCE(completion->cancelled));
+	}
+
+	WARN_ON_ONCE(atomic_read(&completion->owners));
+	x86_cpu_accel_reclaim_release(&completion->arch);
+	mempool_free(completion, &mmu_reclaim_completion_pool);
+}
+
+static void mmu_reclaim_completion_put(struct mmu_reclaim_completion *completion)
+{
+	if (refcount_dec_and_test(&completion->refs))
+		schedule_work(&completion->work);
+}
+
+struct mmu_reclaim_completion *mmu_reclaim_completion_alloc(void)
+{
+	struct mmu_reclaim_completion *completion;
+
+	if (!mempool_initialized(&mmu_reclaim_completion_pool))
+		return NULL;
+	completion = mempool_alloc_preallocated(&mmu_reclaim_completion_pool);
+	if (!completion)
+		return NULL;
+
+	memset(completion, 0, sizeof(*completion));
+	INIT_WORK(&completion->work, mmu_reclaim_completion_work);
+	folio_batch_init(&completion->folios);
+	refcount_set(&completion->refs, 1);
+	atomic_set(&completion->owners, 0);
+	return completion;
+}
+
+void mmu_reclaim_completion_owner_get(void *data)
+{
+	struct mmu_reclaim_completion *completion = data;
+
+	refcount_inc(&completion->refs);
+	atomic_inc(&completion->owners);
+}
+
+void mmu_reclaim_completion_owner_ack(void *data)
+{
+	struct mmu_reclaim_completion *completion = data;
+
+	atomic_dec(&completion->owners);
+	mmu_reclaim_completion_put(completion);
+}
+
+void mmu_reclaim_completion_cancel(struct mmu_reclaim_completion *completion)
+{
+	WRITE_ONCE(completion->cancelled, true);
+	mmu_reclaim_completion_put(completion);
+}
+
+void mmu_reclaim_completion_ready(struct mmu_reclaim_completion *completion,
+				  struct folio *folio)
+{
+	folio_batch_add(&completion->folios, folio);
+	/* Publish the folio disposition before dropping the caller reference. */
+	smp_store_release(&completion->ready, true);
+	mmu_reclaim_completion_put(completion);
+}
+
+static int __init mmu_reclaim_completion_pool_init(void)
+{
+	int ret;
+
+	ret = mempool_init_kmalloc_pool(&mmu_reclaim_completion_pool,
+					MMU_RECLAIM_COMPLETION_POOL_SIZE,
+				      sizeof(struct mmu_reclaim_completion));
+	if (ret)
+		pr_warn("unable to reserve accelerator reclaim completions: %d\n",
+			ret);
+	return 0;
+}
+subsys_initcall(mmu_reclaim_completion_pool_init);
+#endif /* CONFIG_X86 */
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/vmscan.h>
@@ -1077,6 +1172,9 @@ retry:
 	while (!list_empty(folio_list)) {
 		struct address_space *mapping;
 		struct folio *folio;
+#ifdef CONFIG_X86
+		struct mmu_reclaim_completion *reclaim = NULL;
+#endif
 		enum folio_references references = FOLIOREF_RECLAIM;
 		bool dirty, writeback;
 		unsigned int nr_pages;
@@ -1359,8 +1457,24 @@ retry:
 			if (folio_test_large(folio))
 				flags |= TTU_SYNC;
 
-			try_to_unmap(folio, flags);
+#ifdef CONFIG_X86
+			/* Reserve completion storage before clearing any PTE. */
+			if (!folio_test_dirty(folio) && !folio_needs_release(folio) &&
+			    !folio_test_hugetlb(folio))
+				reclaim = mmu_reclaim_completion_alloc();
+			if (reclaim)
+				try_to_unmap_reclaim(folio, flags, reclaim);
+			else
+#endif
+				try_to_unmap(folio, flags);
 			if (folio_mapped(folio)) {
+#ifdef CONFIG_X86
+				if (reclaim) {
+					try_to_unmap_flush();
+					mmu_reclaim_completion_cancel(reclaim);
+					reclaim = NULL;
+				}
+#endif
 				stat->nr_unmap_fail += nr_pages;
 				if (!was_swapbacked &&
 				    folio_test_swapbacked(folio))
@@ -1376,11 +1490,26 @@ retry:
 		 * if the folio is pinned and thus potentially modified by the
 		 * pinning process as that may upset the filesystem.
 		 */
-		if (folio_maybe_dma_pinned(folio))
+		if (folio_maybe_dma_pinned(folio)) {
+#ifdef CONFIG_X86
+			if (reclaim) {
+				try_to_unmap_flush();
+				mmu_reclaim_completion_cancel(reclaim);
+				reclaim = NULL;
+			}
+#endif
 			goto activate_locked;
+		}
 
 		mapping = folio_mapping(folio);
 		if (folio_test_dirty(folio)) {
+#ifdef CONFIG_X86
+			if (reclaim) {
+				try_to_unmap_flush();
+				mmu_reclaim_completion_cancel(reclaim);
+				reclaim = NULL;
+			}
+#endif
 			if (folio_is_file_lru(folio)) {
 				/*
 				 * Immediately reclaim when written back.
@@ -1471,6 +1600,13 @@ retry:
 		 * the folio on the LRU so it is swappable.
 		 */
 		if (folio_needs_release(folio)) {
+#ifdef CONFIG_X86
+			if (reclaim) {
+				try_to_unmap_flush();
+				mmu_reclaim_completion_cancel(reclaim);
+				reclaim = NULL;
+			}
+#endif
 			if (!filemap_release_folio(folio, sc->gfp_mask))
 				goto activate_locked;
 			if (!mapping && folio_ref_count(folio) == 1) {
@@ -1493,8 +1629,16 @@ retry:
 
 		if (folio_test_lazyfree(folio)) {
 			/* follow __remove_mapping for reference */
-			if (!folio_ref_freeze(folio, 1))
+			if (!folio_ref_freeze(folio, 1)) {
+#ifdef CONFIG_X86
+				if (reclaim) {
+					try_to_unmap_flush();
+					mmu_reclaim_completion_cancel(reclaim);
+					reclaim = NULL;
+				}
+#endif
 				goto keep_locked;
+			}
 			/*
 			 * The folio has only one reference left, which is
 			 * from the isolation. After the caller puts the
@@ -1506,8 +1650,16 @@ retry:
 			count_vm_events(PGLAZYFREED, nr_pages);
 			count_memcg_folio_events(folio, PGLAZYFREED, nr_pages);
 		} else if (!mapping || !__remove_mapping(mapping, folio, true,
-							 sc->target_mem_cgroup))
+							 sc->target_mem_cgroup)) {
+#ifdef CONFIG_X86
+			if (reclaim) {
+				try_to_unmap_flush();
+				mmu_reclaim_completion_cancel(reclaim);
+				reclaim = NULL;
+			}
+#endif
 			goto keep_locked;
+		}
 
 		folio_unlock(folio);
 free_it:
@@ -1518,6 +1670,17 @@ free_it:
 		nr_reclaimed += nr_pages;
 
 		folio_unqueue_deferred_split(folio);
+#ifdef CONFIG_X86
+		if (reclaim) {
+			if (try_to_unmap_flush_reclaim(reclaim)) {
+				mmu_reclaim_completion_ready(reclaim, folio);
+				reclaim = NULL;
+				continue;
+			}
+			mmu_reclaim_completion_cancel(reclaim);
+			reclaim = NULL;
+		}
+#endif
 		if (folio_batch_add(&free_folios, folio) == 0) {
 			mem_cgroup_uncharge_folios(&free_folios);
 			try_to_unmap_flush();

@@ -720,6 +720,31 @@ void try_to_unmap_flush(void)
 	tlb_ubc->writable = false;
 }
 
+#ifdef CONFIG_X86
+bool try_to_unmap_flush_reclaim(struct mmu_reclaim_completion *completion)
+{
+	struct tlbflush_unmap_batch *tlb_ubc = &current->tlb_ubc;
+	bool deferred = false;
+
+	if (WARN_ON_ONCE(!completion))
+		return false;
+	if (!tlb_ubc->flush_required)
+		return false;
+
+	if (!tlb_ubc->writable)
+		deferred = arch_tlbbatch_flush_reclaim(&tlb_ubc->arch,
+						       &completion->arch, completion,
+						       mmu_reclaim_completion_owner_get,
+						       mmu_reclaim_completion_owner_ack);
+	else
+		arch_tlbbatch_flush(&tlb_ubc->arch);
+
+	tlb_ubc->flush_required = false;
+	tlb_ubc->writable = false;
+	return deferred;
+}
+#endif /* CONFIG_X86 */
+
 /* Flush iff there are potentially writable TLB entries that can race with IO */
 void try_to_unmap_flush_dirty(void)
 {
@@ -740,7 +765,8 @@ void try_to_unmap_flush_dirty(void)
 	(TLB_FLUSH_BATCH_PENDING_MASK / 2)
 
 static void set_tlb_ubc_flush_pending(struct mm_struct *mm, pte_t pteval,
-		unsigned long start, unsigned long end)
+		unsigned long start, unsigned long end,
+		struct mmu_reclaim_completion *reclaim)
 {
 	struct tlbflush_unmap_batch *tlb_ubc = &current->tlb_ubc;
 	int batch;
@@ -751,6 +777,11 @@ static void set_tlb_ubc_flush_pending(struct mm_struct *mm, pte_t pteval,
 
 	arch_tlbbatch_add_pending(&tlb_ubc->arch, mm, start, end);
 	tlb_ubc->flush_required = true;
+#ifdef CONFIG_X86
+	if (reclaim)
+		x86_cpu_accel_reclaim_record(&reclaim->arch, mm,
+					     atomic64_read(&mm->context.tlb_gen));
+#endif
 
 	/*
 	 * Ensure compiler does not re-order the setting of tlb_flush_batched
@@ -825,7 +856,8 @@ void flush_tlb_batched_pending(struct mm_struct *mm)
 }
 #else
 static void set_tlb_ubc_flush_pending(struct mm_struct *mm, pte_t pteval,
-		unsigned long start, unsigned long end)
+		unsigned long start, unsigned long end,
+		struct mmu_reclaim_completion *reclaim)
 {
 }
 
@@ -1981,12 +2013,18 @@ static inline unsigned int folio_unmap_pte_batch(struct folio *folio,
 				     FPB_RESPECT_WRITE | FPB_RESPECT_SOFT_DIRTY);
 }
 
+struct try_to_unmap_args {
+	enum ttu_flags flags;
+	struct mmu_reclaim_completion *reclaim;
+};
+
 static bool try_to_unmap_poisoned_hugetlb_one(struct folio *folio,
 		struct vm_area_struct *vma, unsigned long address, void *arg)
 {
+	struct try_to_unmap_args *ttu = arg;
 	DEFINE_FOLIO_VMA_WALK(pvmw, folio, vma, address, 0);
 	const unsigned long hsz = huge_page_size(hstate_vma(vma));
-	const enum ttu_flags flags = (enum ttu_flags)(long)arg;
+	const enum ttu_flags flags = ttu->flags;
 	struct mm_struct *mm = vma->vm_mm;
 	struct mmu_notifier_range range;
 	bool ret = true;
@@ -2196,18 +2234,19 @@ static bool ttu_anon_folio(struct vm_area_struct *vma, struct folio *folio,
 }
 
 /*
- * @arg: enum ttu_flags will be passed to this argument
+ * @arg: struct try_to_unmap_args will be passed to this argument
  */
 static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 		     unsigned long address, void *arg)
 {
+	struct try_to_unmap_args *ttu = arg;
 	struct mm_struct *mm = vma->vm_mm;
 	DEFINE_FOLIO_VMA_WALK(pvmw, folio, vma, address, 0);
 	bool ret = true;
 	pte_t pteval;
 	struct page *page;
 	struct mmu_notifier_range range;
-	enum ttu_flags flags = (enum ttu_flags)(long)arg;
+	enum ttu_flags flags = ttu->flags;
 	unsigned long nr_pages = 1, end_addr;
 	unsigned long pfn;
 	int ptes = 0;
@@ -2342,7 +2381,8 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 			 * and traps if the PTE is unmapped.
 			 */
 			if (batch_flush) {
-				set_tlb_ubc_flush_pending(mm, pteval, address, end_addr);
+				set_tlb_ubc_flush_pending(mm, pteval, address, end_addr,
+							  ttu->reclaim);
 #ifdef CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH
 				arch_tlbbatch_unmap_end(mm);
 #endif
@@ -2452,12 +2492,17 @@ static int folio_not_mapped(struct folio *folio)
  *
  * Context: Caller must hold the folio lock.
  */
-void try_to_unmap(struct folio *folio, enum ttu_flags flags)
+static void __try_to_unmap(struct folio *folio, enum ttu_flags flags,
+			   struct mmu_reclaim_completion *reclaim)
 {
+	struct try_to_unmap_args ttu = {
+		.flags = flags,
+		.reclaim = reclaim,
+	};
 	struct rmap_walk_control rwc = {
 		.rmap_one = folio_test_hugetlb(folio) ?
 				try_to_unmap_poisoned_hugetlb_one : try_to_unmap_one,
-		.arg = (void *)flags,
+		.arg = &ttu,
 		.done = folio_not_mapped,
 		.anon_lock = folio_lock_anon_vma_read,
 	};
@@ -2467,6 +2512,21 @@ void try_to_unmap(struct folio *folio, enum ttu_flags flags)
 	else
 		rmap_walk(folio, &rwc);
 }
+
+void try_to_unmap(struct folio *folio, enum ttu_flags flags)
+{
+	__try_to_unmap(folio, flags, NULL);
+}
+
+#ifdef CONFIG_X86
+void try_to_unmap_reclaim(struct folio *folio, enum ttu_flags flags,
+			  struct mmu_reclaim_completion *completion)
+{
+	/* Keep any earlier caller's batch separate from this folio's lifetime. */
+	try_to_unmap_flush();
+	__try_to_unmap(folio, flags, completion);
+}
+#endif /* CONFIG_X86 */
 
 /*
  * @arg: enum ttu_flags will be passed to this argument.
@@ -2654,7 +2714,8 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 #endif
 				pteval = ptep_get_and_clear(mm, address, pvmw.pte);
 
-				set_tlb_ubc_flush_pending(mm, pteval, address, address + PAGE_SIZE);
+				set_tlb_ubc_flush_pending(mm, pteval, address,
+							  address + PAGE_SIZE, NULL);
 #ifdef CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH
 				arch_tlbbatch_unmap_end(mm);
 #endif

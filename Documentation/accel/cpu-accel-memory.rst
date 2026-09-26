@@ -284,17 +284,33 @@ nonblocking version therefore needs changes to the unmap/reclaim contract so
 the affected folio lifetime and any required I/O remain deferred until the
 owner acknowledgement. Changing the architecture hook alone cannot do that.
 
-For the first deferred-reclaim implementation, reserve a bounded completion
-object before clearing any PTE that may be deferred. Record the affected
-``mm`` generations and transfer the folio references and reclaim disposition
-to that object when the batch is submitted. Flush ordinary CPU targets
-synchronously; an active ring-3 owner may leave that target set only after a
-completion has been registered against its pending generation. Owner exit
-acknowledges such a completion only after its local TLB reconciliation. Keep
-dirty-folio flushes synchronous before writeback, and keep migration
-synchronous until it has a matching caller-side disposition. If completion
-storage is unavailable, retain the existing synchronous path. This keeps
-backpressure explicit and avoids allocating after the PTE update has begun.
+The first vmscan reclaim slice now reserves a completion object from a
+preallocated pool before clearing any PTE. Each object can record up to 16
+distinct ``mm`` generations and 16 owner acknowledgements; the pool holds 16
+objects. It is used only for clean, non-hugetlb folios without buffer-release
+work. Rmap records each affected ``mm`` generation in the reserved object.
+When that folio is otherwise ready to be freed, x86 registers each matching
+active ring-3 owner against its pending generation, then flushes ordinary CPU
+targets synchronously. The flush filter omits only owners registered to that
+specific completion. Owner exit acknowledges those entries after its local
+TLB reconciliation; a worker then uncharges and frees the folio.
+
+Dirty folios, writable PTE batches, failed unmaps, DMA-pinned folios, folios
+with buffer-release work, migration, huge-page collapse, and other callers
+without a reclaim disposition keep the synchronous path. Exhausting the pool
+or either fixed-size record array also falls back to synchronous flushing.
+Completion storage is reserved before PTE removal. A stalled owner keeps its
+folio and completion slot; after all 16 slots are occupied, further reclaim
+can wait on the existing synchronous path. This is bounded backpressure, not a
+timeout.
+
+The generic ``arch_tlbbatch_flush()`` remains synchronous. Only the dedicated
+vmscan completion path can defer a matching x86 ring-3 owner, and it retains
+the folio until that owner acknowledges the generation. The per-CPU completion
+list is drained by the orderly ``x86_cpu_accel_user_exit()`` path after its
+local flush. A CPU-offline or recovery path that bypasses that exit must keep
+the completion outstanding until it has independently established equivalent
+quiescence; inactive state alone is not an acknowledgement.
 
 ``mmu_gather`` is a distinct range-flush path. On x86 it calls
 ``flush_tlb_mm_range()``; after the flush/generation rules permit reclamation,
@@ -307,7 +323,8 @@ This is address-space deferral, not a general asynchronous reclaim interface.
 Any future path that lets an active owner continue using the affected ``mm``
 must retain every data or page-table page until each CPU that could still use
 or speculatively walk the old translation has invalidated it or been quiesced.
-Such a completion path must also:
+The vmscan path above does this for one clean folio at a time. Extending it to
+other paths must also:
 
 * carry enough address-space, generation, and target information to associate
   each acknowledgement with the pages it protects; and
@@ -317,8 +334,9 @@ Such a completion path must also:
 A per-CPU pending bit alone cannot meet this contract. The driver's current
 NMI escape is also unsuitable as a generic MM mechanism: it is a controller
 request that terminates this prototype's run, not an acknowledgement that
-arbitrary MM callers can request and await. Until the relevant reclaim path can
-hold its folios through completion, keep ``arch_tlbbatch_flush()`` synchronous.
+arbitrary MM callers can request and await. Keep generic callers on the
+synchronous ``arch_tlbbatch_flush()`` path unless they transfer their own page
+disposition into a completion-managed object.
 
 There is no safe timeout-only variant of these flush hooks. The MM hooks return
 no error, and their callers proceed on the assumption that the translation
@@ -331,15 +349,14 @@ acknowledged. If completion storage cannot be reserved, the operation must
 retain the synchronous path. Reclaim and ``mmu_gather`` need separate
 completion owners because they carry different page lists.
 
-The first reclaim slice must keep the current synchronous behavior for
-migration, huge-page collapse, and every other caller that has no deferred
-folio disposition. For vmscan, it must retain each affected folio and prevent
-writeback, reuse, and release until its owners acknowledge the generation.
-Completion storage and its owner targets must be secured before clearing the
-first PTE; after PTE removal, allocation failure cannot safely fall back to
-returning without completion. Once this path is established, ``mmu_gather``
-can be designed separately to transfer both its data-page and page-table
-batches.
+The current reclaim slice keeps migration, huge-page collapse, and every
+caller without a deferred folio disposition synchronous. For vmscan, it
+retains each eligible folio and prevents reuse or release until its owners
+acknowledge the generation. The preallocated object and its bounded record
+capacity are secured before clearing the first PTE; when capacity is exceeded,
+the operation completes synchronously before reclaim proceeds. ``mmu_gather``
+remains separate and needs its own completion object for both data-page and
+page-table batches.
 
 The alternative is a generic owner-quiesce operation that can safely terminate
 every supported owner type and report completion to MM callers. The current

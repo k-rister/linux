@@ -3,6 +3,7 @@
 #define _ASM_X86_CPU_ACCEL_H
 
 #include <linux/cpumask.h>
+#include <linux/list.h>
 #include <linux/mutex.h>
 
 typedef void (*x86_cpu_accel_entry_fn)(void *data);
@@ -13,6 +14,34 @@ struct x86_cpu_accel_tlb_flush {
 };
 
 struct mm_struct;
+
+#define X86_CPU_ACCEL_TLB_RECLAIM_MAX_MMS	16
+#define X86_CPU_ACCEL_TLB_RECLAIM_MAX_ACKS	16
+
+typedef void (*x86_cpu_accel_reclaim_fn)(void *data);
+
+struct x86_cpu_accel_tlb_reclaim_completion;
+struct x86_cpu_accel_tlb_reclaim_ack {
+	struct list_head link;
+	struct x86_cpu_accel_tlb_reclaim_completion *completion;
+	struct mm_struct *mm;
+	void *data;
+	x86_cpu_accel_reclaim_fn ack;
+	u64 tlb_gen;
+};
+
+struct x86_cpu_accel_tlb_reclaim_completion {
+	struct {
+		struct mm_struct *mm;
+		u64 tlb_gen;
+	} mms[X86_CPU_ACCEL_TLB_RECLAIM_MAX_MMS];
+	struct x86_cpu_accel_tlb_reclaim_ack
+		acks[X86_CPU_ACCEL_TLB_RECLAIM_MAX_ACKS];
+	unsigned int nr_mms;
+	unsigned int nr_acks;
+	bool overflow;
+};
+
 extern struct mutex text_mutex;
 
 int x86_cpu_accel_direct_enter(unsigned int cpu,
@@ -42,12 +71,19 @@ void x86_cpu_accel_tlb_flush_end(struct x86_cpu_accel_tlb_flush *flush);
 bool x86_cpu_accel_note_tlb_shootdown(unsigned int cpu,
 				      const struct mm_struct *mm, u64 tlb_gen);
 void x86_cpu_accel_note_tlb_unmap(struct mm_struct *mm, u64 tlb_gen);
+bool x86_cpu_accel_reclaim_record(struct x86_cpu_accel_tlb_reclaim_completion *comp,
+				  struct mm_struct *mm, u64 tlb_gen);
+int x86_cpu_accel_reclaim_register(struct x86_cpu_accel_tlb_reclaim_completion *comp,
+				   void *data, x86_cpu_accel_reclaim_fn get,
+				   x86_cpu_accel_reclaim_fn ack);
+void x86_cpu_accel_reclaim_release(struct x86_cpu_accel_tlb_reclaim_completion *comp);
 /* Record an mm-scoped target and filter ring-3 owners from its IPI mask. */
 bool x86_cpu_accel_filter_mm_tlb_shootdown(unsigned int cpu,
 					   const struct mm_struct *mm,
 					   u64 tlb_gen);
-/* A ring-3 owner in another, unchanged mm cannot use these stale entries. */
-bool x86_cpu_accel_filter_tlb_unmap(unsigned int cpu);
+/* Filter unchanged-mm owners or owners registered to this reclaim completion. */
+bool x86_cpu_accel_filter_tlb_unmap(unsigned int cpu,
+				    const void *completion);
 u64 x86_cpu_accel_tlb_shootdown_targets(unsigned int cpu);
 #else
 static inline int x86_cpu_accel_user_enter(unsigned int cpu,
@@ -75,6 +111,34 @@ static inline void x86_cpu_accel_tlb_unmap_begin(struct mm_struct *mm)
 static inline void x86_cpu_accel_tlb_unmap_end(struct mm_struct *mm)
 {
 	(void)mm;
+}
+
+static inline bool
+x86_cpu_accel_reclaim_record(struct x86_cpu_accel_tlb_reclaim_completion *comp,
+			     struct mm_struct *mm, u64 tlb_gen)
+{
+	(void)comp;
+	(void)mm;
+	(void)tlb_gen;
+	return false;
+}
+
+static inline int
+x86_cpu_accel_reclaim_register(struct x86_cpu_accel_tlb_reclaim_completion *comp,
+			       void *data, x86_cpu_accel_reclaim_fn get,
+			       x86_cpu_accel_reclaim_fn ack)
+{
+	(void)comp;
+	(void)data;
+	(void)get;
+	(void)ack;
+	return 0;
+}
+
+static inline void
+x86_cpu_accel_reclaim_release(struct x86_cpu_accel_tlb_reclaim_completion *comp)
+{
+	(void)comp;
 }
 
 static inline bool x86_cpu_accel_any_active(void)
@@ -132,9 +196,11 @@ x86_cpu_accel_filter_mm_tlb_shootdown(unsigned int cpu,
 	return false;
 }
 
-static inline bool x86_cpu_accel_filter_tlb_unmap(unsigned int cpu)
+static inline bool x86_cpu_accel_filter_tlb_unmap(unsigned int cpu,
+						  const void *completion)
 {
 	(void)cpu;
+	(void)completion;
 	return false;
 }
 

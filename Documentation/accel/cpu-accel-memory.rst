@@ -237,52 +237,59 @@ bracket PTE clearing and generation publication with
 per-``mm`` in-flight count is serialized with owner admission. A new owner
 waits for that update to finish and locally flushes its TLB before it can use
 the address space. An owner already active when the update starts is recorded
-by the generation bookkeeping and remains in the synchronous target set.
+by the generation bookkeeping. Without a reclaim completion, it remains in the
+synchronous target set; the vmscan completion path may omit it only after
+registering an acknowledgement for the affected generation.
 
-This closes the admission race for batched reverse-map unmaps; it does not make
-their completion asynchronous. The caller still waits for an active owner
-before page I/O or release. Deferred reclaim still needs completion storage
-and a folio disposition that retains affected pages through owner
-acknowledgment. ``mmu_gather`` remains a separate path.
+This closes the admission race for batched reverse-map unmaps. The generic
+``arch_tlbbatch_flush()`` path and migration callers remain synchronous. Vmscan
+has a separate bounded path for eligible clean folios: it reserves completion
+storage before PTE removal and retains each folio until matching owners
+acknowledge. This does not change the generic batch contract, and
+``mmu_gather`` remains a separate path.
 
-An owner whose own ``mm`` was changed remains in the synchronous target set.
-The write lock excludes VMA changes, and pins keep admitted folios from being
-released while the owner uses them. Vmscan now checks for known DMA pins before
-demotion, swap allocation, or unmapping, avoiding work on folios that must stay
-resident. Its post-unmap pin check remains necessary for a pin acquired during
-the unmap race. If an own-mm generation is recorded, x86 does not filter that
-owner: the flush waits for exit and local TLB reconciliation occurs before the
-driver unlocks the ``mm`` or releases pins. Kernel-mode owners have no sealed
-user ``mm`` and are not filtered, so their synchronous flush can still wait
-without a bound.
+Without a reclaim completion, an owner whose own ``mm`` was changed remains
+in the synchronous target set. The write lock excludes VMA changes, and pins
+keep admitted folios from being released while the owner uses them. Vmscan
+checks for known DMA pins before demotion, swap allocation, or unmapping,
+avoiding work on folios that must stay resident. Its post-unmap pin check
+remains necessary for a pin acquired during the unmap race. For eligible
+reclaim, x86 filters an own-``mm`` owner only after registering it against the
+reserved completion; the folio stays held until that owner's local TLB flush
+is acknowledged. Missing completion storage and all other callers use the
+synchronous path. Kernel-mode owners have no sealed user ``mm`` and are not
+filtered, so their synchronous flush can still wait without a bound.
 
 The owner can exit between the PTE clear and generation publication. The
 synchronous path remains safe in that ordering: an owner still active when the
 generation is recorded reconciles it on exit; an owner that has already exited
-is no longer filtered from the ordinary batch flush. If the task switches away
-before that flush, the advanced ``mm`` generation is checked before the task
-can use the address space again. An asynchronous completion path must preserve
-this handoff; observing that the accelerator owner is inactive is not by itself
-an acknowledgement that stale translations have been invalidated.
+is no longer filtered from the ordinary batch flush. The completion path
+preserves this handoff: it registers only owners still active at the recorded
+generation, and a registered owner acknowledges only after its local TLB
+reconciliation. If the task switches away before a synchronous flush, the
+advanced ``mm`` generation is checked before the task can use the address
+space again. Inactive state alone is not an acknowledgement that stale
+translations have been invalidated.
 
 The reclaim call sites impose different completion obligations. In
 ``try_to_unmap_one()``, the PTE is cleared and rmap state is updated before the
 task-local batch is flushed. In ``shrink_folio_list()``, a dirty folio must
 complete ``try_to_unmap_flush_dirty()`` before ``pageout()`` starts writeback;
 reclaim also flushes before ``free_unref_folios()`` releases reclaimed folios.
-Migration flushes its task-local batch before it copies or moves folios. A
-deferred flush therefore has to return a disposition for the affected folios
-to these callers. Returning from the architecture hook with only a pending
-generation would let them proceed as if invalidation had completed.
+Migration flushes its task-local batch before it copies or moves folios. The
+vmscan completion path below transfers an eligible folio to a completion-managed
+list only after reclaim has selected it for release. Other callers continue to
+wait for the synchronous flush; returning with only a pending generation would
+let them proceed as if invalidation had completed.
 
 This path is separate from ``mmu_gather``. The x86 architecture's
 ``arch_tlbflush_unmap_batch`` stores only a CPU mask and an
 ``unmapped_pages`` flag; it does not own the folios whose mappings were
 removed. Returning after only recording a pending flush would let the generic
 caller proceed to I/O or release a folio before the owner handles it. A
-nonblocking version therefore needs changes to the unmap/reclaim contract so
-the affected folio lifetime and any required I/O remain deferred until the
-owner acknowledgement. Changing the architecture hook alone cannot do that.
+nonblocking ``mmu_gather`` version therefore needs its own completion-managed
+page-table and data-page lists. Changing the architecture hook alone cannot
+defer those lifetimes.
 
 The first vmscan reclaim slice now reserves a completion object from a
 preallocated pool before clearing any PTE. Each object can record up to 16
@@ -654,9 +661,11 @@ The implementation checkpoints are:
     in a different ``mm`` may be omitted because the changed ``mm`` generation
     forces a local flush before that CPU can use the address space again.
     Returning with an affected ``mm`` usable while its stale translations
-    remain would allow premature I/O or page reclamation. A nonblocking design
-    that permits such use must retain affected pages until owner-exit
-    acknowledgment or guarantee owner quiescence. The prototype's
+    remain would allow premature I/O or page reclamation. Any path that omits
+    an owner must retain affected pages until owner-exit acknowledgment or
+    guarantee owner quiescence. The first bounded vmscan clean-folio completion
+    path is implemented; dirty/writeback, migration, generic batch, and
+    ``mmu_gather`` paths remain synchronous. The prototype's
     user NMI escape requires a driver/controller request and cannot serve as
     the generic MM quiesce path. The current prototype seals an exec-created
     worker ``mm`` with a complete VMA
@@ -665,15 +674,16 @@ The implementation checkpoints are:
     kernel code/exception mapping updates. A focused VM test unmaps a touched
     2 MiB mapping from another ``mm`` while the target CPU is ring-3 owned,
     then uses privileged ``/proc/self/pagemap`` and ``/proc/kpageflags``
-    inspection to track a freed data-page PFN and the PTE-table PFN. While
-    the owner remains active, the data-page PFN is reused in a live 16 MiB
-    mapping and the PTE-table PFN is reused for a new PTE table in the
-    adjacent 2 MiB slot. PTE teardown returns before owner exit; after
+    inspection to track a freed data-page PFN and, when observed, the
+    PTE-table PFN. While the owner remains active, the data-page PFN is reused
+    in a live 16 MiB mapping; an earlier VM run also observed the PTE-table
+    PFN reused for a new PTE table in the adjacent 2 MiB slot. In the latest
+    run, the PTE-page subprobe skipped because no candidate page was released
+    during its bounded wait. PTE teardown returns before owner exit; after
     re-entry, the old VA faults while the replacement data mapping still
-    holds the reused PFN. The VM run observed both forms of physical-page
-    reuse, validating deferred TLB-generation reconciliation in this case.
-    PTE-page reuse is reported as skipped when ``/proc/kpageflags`` is
-    unavailable or the bounded allocation probes do not recycle the page.
+    holds the reused PFN. PTE-page reuse is optional because
+    ``/proc/kpageflags`` may be unavailable or the bounded allocation probes
+    may not recycle a table page.
     This does not prove safety for every page-reuse or speculative-walk case.
     INVLPGB completion protects TLB translation lifetime but does not make
     active kernel code patching safe.

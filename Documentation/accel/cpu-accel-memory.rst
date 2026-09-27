@@ -470,6 +470,13 @@ follows:
   hibernation pair direct-map invalidation with an explicit kernel-range flush
   before the page can be exposed or reused. A new caller must provide the same
   completion and page-lifetime ordering.
+* Cache-type changes through ``ioremap()`` reject ordinary system RAM that is
+  not reserved; PAT tracks cache types and rejects incompatible aliases, and
+  direct-map updates complete a synchronous TLB flush. Runtime driver buffers
+  still need their own exclusion rule. For example, Intel Trace Hub applies
+  UC before publishing its buffer to users and restores WB only after its
+  user and mmap counts drain. A cache-type transition on any PFN mapped by an
+  accelerator must wait until that mapping is no longer active.
 * Executable-memory permission changes also depend on publication and object
   lifetime. The execmem cache fills unused blocks with trapping instructions
   before publishing them as free. Code generators keep new images unreachable
@@ -482,7 +489,10 @@ follows:
   owners. The Hyper-V conversion path explicitly requires callers to keep the
   range unused and unreferenced throughout the transition. Any range that an
   accelerator can access through a user mapping must be excluded from
-  conversion until that access is gone.
+  conversion until that access is gone. The generic DMA allocation path
+  converts newly allocated pages before returning them and restores the
+  encryption state before freeing them; a future DMA handoff of an
+  accelerator-shared page needs an explicit owner transfer around conversion.
 * Built-in exception tables are fixed after initialization. IDT and FRED
   system-vector installation helpers are ``__init``-only and reject updates
   after setup. Module and BPF exception-table lookup, and NMI handler-list

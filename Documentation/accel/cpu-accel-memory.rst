@@ -167,12 +167,17 @@ queue. A kernel-address-range flush on x86 uses INVLPGB and its system-wide
 completion barrier when available and no accelerator CPU is owned. During
 ownership it uses the synchronous kernel-only IPI path and waits for the owner
 to exit; this preserves user translations while keeping stale kernel
-translations from outliving the flush. Standalone full and all-nonglobal
-flushes retain the synchronous IPI path during ownership because they would
-evict active accelerator user translations. The task-local
-``arch_tlbbatch_flush()`` path has a narrower exception: it may defer a ring-3
-owner only when every affected ``mm`` is different from the owner's sealed
-``mm``. Its per-``mm``
+translations from outliving the flush. Before dispatching those IPIs, the
+``kernel_tlb_flush_range()`` and ``kernel_tlb_flush_all()`` IPI fallbacks
+request each registered owner's nonblocking stop callback while the target
+CPUs remain reserved against new admission.
+Owner exit waits for any callback already in flight before dropping its
+registration.
+Standalone full and all-nonglobal flushes retain the synchronous IPI path
+during ownership because they would evict active accelerator user translations.
+The task-local ``arch_tlbbatch_flush()`` path has a narrower exception: it may
+defer a ring-3 owner only when every affected ``mm`` is different from the
+owner's sealed ``mm``. Its per-``mm``
 generations are reconciled by ``switch_mm()`` before that owner CPU can use an
 affected address space. An own-``mm`` unmap and a kernel-mode owner retain the
 synchronous path. New ownership is barred on the selected target CPUs until
@@ -309,7 +314,10 @@ or either fixed-size record array also falls back to synchronous flushing.
 Completion storage is reserved before PTE removal. A stalled owner keeps its
 folio and completion slot; after all 16 slots are occupied, further reclaim
 can wait on the existing synchronous path. This is bounded backpressure, not a
-timeout.
+timeout. If the acknowledgement array fills after some owners were registered,
+the synchronous fallback sends those owners through the ordinary flush; their
+partial completion references drain after local reconciliation before the
+cancelled slot returns to the pool.
 
 The generic ``arch_tlbbatch_flush()`` remains synchronous. Only the dedicated
 vmscan completion path can defer a matching x86 ring-3 owner, and it retains
@@ -471,15 +479,23 @@ before the flush completes.
 Representative runtime callers fall into these lifecycle groups:
 
 * Executable-memory helpers such as ``execmem``, BPF program packs and
-  trampolines, and the SRAM execute helper change permissions as code is
-  built, published, and retired. Their code-publication and text-lifetime
-  rules are independent of TLB completion.
+  trampolines, module strict-RWX transitions, and the SRAM execute helper
+  change permissions as code is built, published, and retired. Their
+  code-publication and text-lifetime rules are independent of TLB completion.
+  The x86 ITS ``set_memory_x()`` caller for core thunks is reached from the
+  ``__init`` alternatives pass. Module thunks use ``execmem`` while the
+  module's retpoline patching transaction holds the owner-draining text
+  mutex; their ROX transition completes before module initialization can
+  publish the code.
 * DMA and confidential-computing paths change encryption or cache attributes
   for allocations such as direct DMA buffers, SWIOTLB bounce buffers and
-  pools, IOMMU command buffers, SFS command buffers, virtual PTP pages, guest
-  report buffers, Hyper-V shared pages, and KVM PAE roots. Their reverse
-  transition follows device teardown or the end of the hypervisor-sharing
-  lifetime.
+  pools, ALSA WC DMA pages, IOMMU command buffers, SFS command buffers,
+  virtual PTP pages, guest report buffers, Hyper-V shared pages, and KVM PAE
+  roots. Their reverse transition follows device teardown or the end of the
+  hypervisor-sharing lifetime. SEV-SNP host RMP transitions call
+  ``adjust_direct_map()``, which can split a large entry with
+  ``set_memory_4k()``. Its synchronous CPA flush completes before the RMP
+  state changes.
 * Device page tables and trace buffers, including AGP, AMD/Radeon GART tables,
   Intel trace buffers, and staging media page tables, have device or userspace
   lifetime rules that must be drained before their attributes are restored.
@@ -489,6 +505,13 @@ Representative runtime callers fall into these lifecycle groups:
   restore pages. The terminal x86 kexec shutdown path has separate owner-drain
   rules described above; kexec-time page transitions still use CPA's
   synchronous completion.
+
+Most remaining x86 callers establish platform mappings during startup: IDT
+protection, the real-mode trampoline, EFI and legacy PCI BIOS attributes,
+kernel section permissions, and initial direct-map 4K splits, including KFENCE
+and AMD IOMMU setup. They run before a userspace accelerator owner can be
+admitted. The runtime SEV-SNP path above is hardware-specific and is not
+covered by the test VM.
 
 No ``set_memory*()`` call exists in ``drivers/cpu_accel``. The current
 accelerator driver has no import or registration path for these external
@@ -942,6 +965,15 @@ The implementation checkpoints are:
     This does not prove safety for every page-reuse or speculative-walk case.
     INVLPGB completion protects TLB translation lifetime but does not make
     active kernel code patching safe.
+    A temporary VM trigger exercised both kernel-range IPI branches with a
+    direct owner on CPU2. A one-page vmalloc purge traced the range handler and
+    ``do_kernel_range_flush`` on the owner CPU; a 40-page purge selected the
+    full-flush sentinel and traced ``kernel_tlb_flush_all()`` followed by
+    ``do_flush_tlb_all`` on that CPU. In both runs the owner stopped within
+    milliseconds, after the stop callback and before its synchronous IPI
+    handler, and the kernel log had no soft-lockup, RCU-stall, BUG, Oops, or
+    panic matches. The trigger and harness were temporary VM files, not an
+    in-tree regression test. These tests do not exercise INVLPGB.
     Global-ASID INVLPGB broadcasts reserve all online CPUs through ``TLBSYNC``
     so no new owner can enter during the invalidation.
     A driver-assembled ``mm`` would additionally

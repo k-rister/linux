@@ -1642,6 +1642,7 @@ static void do_kernel_range_flush(void *info)
 static void kernel_tlb_flush_all(struct flush_tlb_info *info)
 {
 	struct x86_cpu_accel_tlb_flush accel_flush;
+	unsigned int cpu;
 	bool use_broadcast;
 
 	x86_cpu_accel_tlb_flush_begin(&accel_flush, cpu_online_mask);
@@ -1650,14 +1651,18 @@ static void kernel_tlb_flush_all(struct flush_tlb_info *info)
 	use_broadcast = accel_flush.no_owners;
 	if (cpu_feature_enabled(X86_FEATURE_INVLPGB) && use_broadcast)
 		invlpgb_flush_all();
-	else
+	else {
+		for_each_cpu(cpu, &accel_flush.targets)
+			x86_cpu_accel_request_stop_owner(cpu);
 		on_each_cpu(do_flush_tlb_all, NULL, 1);
+	}
 	x86_cpu_accel_tlb_flush_end(&accel_flush);
 }
 
 static void kernel_tlb_flush_range(struct flush_tlb_info *info)
 {
 	struct x86_cpu_accel_tlb_flush accel_flush;
+	unsigned int cpu;
 	bool use_broadcast;
 
 	x86_cpu_accel_tlb_flush_begin(&accel_flush, cpu_online_mask);
@@ -1670,6 +1675,8 @@ static void kernel_tlb_flush_range(struct flush_tlb_info *info)
 		/* Keep old kernel translations alive until owners have exited. */
 		note_tlb_shootdown_targets(cpu_online_mask, info->mm,
 					   info->new_tlb_gen);
+		for_each_cpu(cpu, &accel_flush.targets)
+			x86_cpu_accel_request_stop_owner(cpu);
 		on_each_cpu(do_kernel_range_flush, info, 1);
 	}
 	x86_cpu_accel_tlb_flush_end(&accel_flush);

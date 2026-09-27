@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/prctl.h>
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <sys/wait.h>
@@ -31,6 +32,8 @@
 #define PAGEMAP_PRESENT (1ULL << 63)
 #define PAGEMAP_PFN_MASK ((1ULL << 55) - 1)
 #define REUSED_PAGE_MARKER 0xa5
+#define COW_SHARED_MARKER 0x39
+#define COW_PRIVATE_MARKER 0xc7
 #define MAX_PGTABLE_CANDIDATES 256
 #define PGTABLE_SCAN_CHUNK 1024
 
@@ -230,6 +233,26 @@ static int read_page_frame(int pagemap_fd, uintptr_t address,
 			   unsigned long page_size, uint64_t *pfn)
 {
 	return read_page_frames(pagemap_fd, address, page_size, 1, pfn);
+}
+
+static int read_process_byte(pid_t pid, uintptr_t address,
+			     unsigned char *value)
+{
+	struct iovec local = {
+		.iov_base = value,
+		.iov_len = sizeof(*value),
+	};
+	struct iovec remote = {
+		.iov_base = (void *)address,
+		.iov_len = sizeof(*value),
+	};
+	ssize_t bytes = process_vm_readv(pid, &local, 1, &remote, 1, 0);
+
+	if (bytes == sizeof(*value))
+		return 0;
+	if (bytes >= 0)
+		errno = EIO;
+	return -1;
 }
 
 static int page_is_present(int pagemap_fd, uintptr_t address,
@@ -515,6 +538,7 @@ int main(int argc, char **argv)
 	struct timespec flush_end;
 	struct timespec settle = { .tv_nsec = 5000000 };
 	void *mapping;
+	void * volatile cow_mapping = MAP_FAILED;
 	void *volatile ptable_reuse_mapping = MAP_FAILED;
 	void *volatile replacement_mapping = MAP_FAILED;
 	uintptr_t mapping_start;
@@ -523,6 +547,7 @@ int main(int argc, char **argv)
 	uintptr_t probe;
 	uintptr_t pageout_probe;
 	uintptr_t reused_page_address = 0;
+	uintptr_t cow_address;
 	unsigned long page_size;
 	bool pageout_present;
 	size_t nr_physical_pages = 0;
@@ -554,6 +579,7 @@ int main(int argc, char **argv)
 	bool ptable_reused_as_table = false;
 	bool ptable_reused_as_data = false;
 	pid_t pid;
+	volatile pid_t cow_holder = -1;
 	pthread_t keeper_thread;
 	pthread_t reschedule_thread;
 	struct reschedule_worker_arg reschedule_arg;
@@ -623,6 +649,47 @@ int main(int argc, char **argv)
 	}
 	probe = region_start + page_size;
 	pageout_probe = probe + page_size;
+	cow_mapping = mmap(NULL, page_size, PROT_READ | PROT_WRITE,
+			   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (cow_mapping == MAP_FAILED) {
+		perror("mmap(COW probe)");
+		goto out_mapping;
+	}
+	cow_address = (uintptr_t)cow_mapping;
+	/* Cache the COW address's writable translation on target_cpu. */
+	if (pin_to_cpu(target_cpu)) {
+		perror("pin to target CPU for COW probe");
+		goto out_mapping;
+	}
+	write_page(cow_address, COW_SHARED_MARKER);
+	if (pin_to_cpu(control_cpu)) {
+		perror("pin to controller CPU for COW fork");
+		goto out_mapping;
+	}
+	cow_holder = fork();
+	if (cow_holder < 0) {
+		perror("fork(COW holder)");
+		goto out_mapping;
+	}
+	if (!cow_holder) {
+		if (prctl(PR_SET_PDEATHSIG, SIGTERM) || getppid() == 1)
+			_exit(EXIT_FAILURE);
+		for (;;)
+			pause();
+	}
+	/* Refresh the read-only PTE on target_cpu after fork write-protects it. */
+	if (pin_to_cpu(target_cpu)) {
+		perror("pin to target CPU after COW fork");
+		goto out_mapping;
+	}
+	if (read_page(cow_address) != COW_SHARED_MARKER) {
+		fprintf(stderr, "COW probe lost its shared-page marker after fork\n");
+		goto out_mapping;
+	}
+	if (pin_to_cpu(control_cpu)) {
+		perror("pin to controller CPU after COW fork");
+		goto out_mapping;
+	}
 
 	/* Keep a real translation in this mm on the accelerator target CPU. */
 	if (pin_to_cpu(target_cpu)) {
@@ -773,6 +840,39 @@ int main(int argc, char **argv)
 		goto out_cli;
 	}
 	nanosleep(&settle, NULL);
+	/*
+	 * A write in this mm must take wp_page_copy() while target_cpu runs the
+	 * accelerator in another mm. The holder verifies that the old page stays
+	 * intact until the COW mapping is switched to its new page.
+	 */
+	if (!cli_owner_active() || !has_accel_worker_on_cpu(target_cpu)) {
+		fprintf(stderr, "COW probe started after the owner exited\n");
+		goto out_cli;
+	}
+	write_page(cow_address, COW_PRIVATE_MARKER);
+	unsigned char holder_value;
+	if (read_page(cow_address) != COW_PRIVATE_MARKER) {
+		fprintf(stderr, "parent did not retain its private COW value\n");
+		goto out_cli;
+	}
+	if (read_process_byte(cow_holder, cow_address, &holder_value)) {
+		perror("read COW probe pages");
+		goto out_cli;
+	}
+	if (holder_value != COW_SHARED_MARKER) {
+		fprintf(stderr,
+			"COW holder saw %#x after parent wrote a private page\n",
+			holder_value);
+		goto out_cli;
+	}
+	if (waitpid(cli_pid, NULL, WNOHANG) == cli_pid ||
+	    !cli_owner_active() || !has_accel_worker_on_cpu(target_cpu)) {
+		fprintf(stderr,
+			"COW page fault completed after the owner exited\n");
+		goto out_cli;
+	}
+	printf("PASS: wp_page_copy COW completed while the other-mm ring-3 "
+	       "owner remained active\n");
 	/* Exercise rmap's task-local batched-unmap TLB flush while owner runs. */
 	if (madvise((void *)pageout_probe, page_size, MADV_PAGEOUT)) {
 		perror("madvise(MADV_PAGEOUT batch probe)");
@@ -1036,6 +1136,12 @@ int main(int argc, char **argv)
 		fprintf(stderr, "task did not migrate back to CPU %d\n", target_cpu);
 		goto out_mapping;
 	}
+	if (read_page(cow_address) != COW_PRIVATE_MARKER) {
+		fprintf(stderr,
+			"COW address-space re-entry observed a stale translation\n");
+		goto out_mapping;
+	}
+	printf("PASS: parent mm re-entry observed the private COW page\n");
 	if (sigaction(SIGSEGV, &action, NULL)) {
 		perror("sigaction(SIGSEGV)");
 		goto out_mapping;
@@ -1072,6 +1178,19 @@ out_mapping:
 	if (kpageflags_fd >= 0)
 		close(kpageflags_fd);
 	free(ptable_bitmap);
+	if (cow_holder > 0) {
+		pid_t waited;
+
+		if (kill(cow_holder, SIGTERM) && errno != ESRCH)
+			perror("kill(COW holder)");
+		do {
+			waited = waitpid(cow_holder, NULL, 0);
+		} while (waited < 0 && errno == EINTR);
+		if (waited < 0 && errno != ECHILD)
+			perror("waitpid(COW holder)");
+	}
+	if (cow_mapping != MAP_FAILED)
+		munmap(cow_mapping, page_size);
 	if (ptable_reuse_mapping != MAP_FAILED)
 		munmap(ptable_reuse_mapping, PTE_TABLE_SIZE);
 	if (replacement_mapping != MAP_FAILED)

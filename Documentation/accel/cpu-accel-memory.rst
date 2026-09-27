@@ -993,24 +993,36 @@ The implementation checkpoints are:
     then uses privileged ``/proc/self/pagemap`` and ``/proc/kpageflags``
     inspection to track a freed data-page PFN and, when observed, the
     PTE-table PFN. While the owner remains active, the data-page PFN is reused
-    in a live 16 MiB mapping; an earlier VM run also observed the PTE-table
-    PFN reused for a new PTE table in the adjacent 2 MiB slot. In the latest
-    run, the PTE-page subprobe skipped because no candidate page was released
-    during its bounded wait. PTE teardown returns before owner exit; after
-    re-entry, the old VA faults while the replacement data mapping still
+    in a live 16 MiB mapping; the 00595 run also observed the PTE-table PFN
+    reused for a new PTE table in the adjacent 2 MiB slot. PTE teardown returns
+    before owner exit. On re-entry, the old VA faults while the replacement data mapping still
     holds the reused PFN. PTE-page reuse is optional because
     ``/proc/kpageflags`` may be unavailable or the bounded allocation probes
     may not recycle a table page.
+    The focused test also forks a page holder and writes the parent's
+    write-protected mapping while the ring-3 owner runs in another ``mm``.
+    It checks that the holder still reads the original page while the parent
+    sees its private copy, then checks the private value again after the parent
+    ``mm`` re-enters the target CPU. This exercises the ``wp_page_copy()``
+    ``flush_tlb_mm_range()`` path and generation reconciliation; it does not
+    cover kernel code or exception mapping updates.
+    The 00595 validation passed the COW/re-entry, pageout, data/PTE-PFN reuse,
+    and deferred-reschedule checks without a soft-lockup or RCU-stall log.
     This does not prove safety for every page-reuse or speculative-walk case.
     INVLPGB completion protects TLB translation lifetime but does not make
     active kernel code patching safe.
-    A temporary VM trigger exercised both kernel-range IPI branches with a
-    direct owner on CPU2. A one-page vmalloc purge traced the range handler and
-    ``do_kernel_range_flush`` on the owner CPU; a 40-page purge selected the
-    full-flush sentinel and traced ``kernel_tlb_flush_all()`` followed by
-    ``do_flush_tlb_all`` on that CPU. In both runs the owner stopped within
-    milliseconds, after the stop callback and before its synchronous IPI
-    handler, and the kernel log had no soft-lockup, RCU-stall, BUG, Oops, or
+    A separate trace-assisted run loaded the ``dummy`` module while the owner
+    was active. The module loader's ``set_memory_nx()`` reached
+    ``kernel_tlb_flush_all()``; the stop callback completed and the owner
+    exited before the synchronous IPI handler ran, and ``modprobe`` succeeded.
+    This exercises module mapping setup, not patching code that is already
+    executing. A temporary VM trigger exercised both kernel-range IPI branches
+    with a direct owner on CPU2. A one-page vmalloc purge traced the range
+    handler and ``do_kernel_range_flush`` on the owner CPU; a 40-page purge
+    selected the full-flush sentinel and traced ``kernel_tlb_flush_all()``
+    followed by ``do_flush_tlb_all`` on that CPU. In both runs the owner
+    stopped within milliseconds, after the stop callback and before the
+    synchronous IPI handler, and the kernel log had no soft-lockup, RCU-stall, BUG, Oops, or
     panic matches. The trigger and harness were temporary VM files, not an
     in-tree regression test. These tests do not exercise INVLPGB.
     Global-ASID INVLPGB broadcasts reserve all online CPUs through ``TLBSYNC``

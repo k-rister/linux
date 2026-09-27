@@ -419,19 +419,46 @@ lock and holds it through the teardown callbacks, including the
 ``stop_machine_cpuslocked()`` rendezvous. This prevents an owned CPU from being
 offlined and bars new owners until the teardown transaction completes.
 
-This is not a global interlock for all kernel maintenance. In particular,
-``stop_machine_cpuslocked()`` callers outside the listed paths, kgdb's special
-stopped-machine patch path, exception-table and IDT/NMI changes, and
-mapping changes that do not use the gate need their own rule. A blanket gate in
-``stop_machine_cpuslocked()`` would run after callers acquired CPU-hotplug
-locks, while existing text-patch paths acquire the gate before their patching
-locks; that ordering needs call-site review to avoid a lock inversion. The
-public ``stop_machine()`` wrapper gates before its hotplug read lock, and the
-inactive-CPU variant uses a nonblocking reservation. Classify each remaining
-operation as allowed, routed to housekeeping, deferred, rejected, or requiring
-controlled owner termination. Operations that cannot prove they include the
-owned CPU in their execution and mapping rendezvous are unsupported while
-accelerator ownership is active.
+The current x86 call-site audit found direct ``stop_machine_cpuslocked()``
+users in CPU teardown, MTRR add/delete, late microcode reload, and TDX module
+installation; each takes the maintenance gate before the CPU-hotplug lock.
+Cache CPU-online initialization uses ``stop_machine_from_inactive_cpu()``,
+which makes a nonblocking reservation and propagates ``-EBUSY``, while ordinary
+``stop_machine()`` callers use the gated wrapper. This inventory is specific
+to the current tree; new direct callers need their own lock-order and
+rendezvous review.
+
+KGDB's x86 breakpoint path uses ``text_poke_kgdb()`` for its read-only text
+fallback after an NMI roundup. The generic KGDB loop proceeds after its
+one-second wait even if not every online CPU entered the debugger, so the
+roundup alone cannot establish accelerator-owner quiescence. The x86 KGDB
+entry now takes the nonblocking maintenance reservation before the roundup.
+If an owner or another maintenance transaction is active, it declines the
+debugger entry and leaves the exception to the normal handler. Otherwise it
+holds the reservation until the debugger CPUs resume, including a debugger CPU
+handoff. This prevents accelerator execution throughout KGDB's patching
+session; the existing timeout behavior for ordinary Linux CPUs is unchanged.
+
+The current exception and NMI paths have different lifetime rules. IDT and
+FRED system-vector installation helpers are ``__init``-only and reject updates
+after setup. Module exception-table lookup and NMI handler-list traversal use
+RCU; module removal and NMI-handler unregister wait for a grace period before
+releasing the old tables or handler. The emergency NMI handler bypasses that
+list only for the one-shot crash CPU shootdown and remains installed while the
+machine stops. These paths therefore do not currently need an owner gate for
+runtime reconfiguration. KGDB's timeout-based roundup remains the unclassified
+nonterminal path in this audit.
+
+This is not a global interlock for all kernel maintenance. Kernel mapping
+changes that do not use the gate still need their own rule, and the init-only
+and RCU lifetime rules above do not cover future exception or NMI mutation
+paths. A blanket gate in ``stop_machine_cpuslocked()`` would run after callers
+acquired CPU-hotplug locks, while existing text-patch paths acquire the gate
+before their patching locks; that ordering needs call-site review to avoid a
+lock inversion. Classify each remaining operation as allowed, routed to
+housekeeping, deferred, rejected, or requiring controlled owner termination.
+Operations that cannot prove they include the owned CPU in their execution
+and mapping rendezvous are unsupported while accelerator ownership is active.
 
 Each additional interlock must cover the entire maintenance transaction:
 reserve owner admission before changing code or mappings, retain that

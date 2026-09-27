@@ -56,9 +56,24 @@
 
 #include <asm/cacheflush.h>
 #include <asm/byteorder.h>
+#ifdef CONFIG_X86
+#include <asm/cpu_accel.h>
+#endif
 #include <linux/atomic.h>
 
 #include "debug_core.h"
+
+static inline void kgdb_accel_gate_release(bool *held)
+{
+#ifdef CONFIG_X86
+	if (*held) {
+		x86_cpu_accel_maintenance_try_end();
+		*held = false;
+	}
+#else
+	(void)held;
+#endif
+}
 
 static int kgdb_break_asap;
 
@@ -578,6 +593,7 @@ static int kgdb_cpu_enter(struct kgdb_state *ks, struct pt_regs *regs,
 	int trace_on = 0;
 	int online_cpus = num_online_cpus();
 	u64 time_left;
+	bool accel_maintenance = false;
 
 	kgdb_info[ks->cpu].enter_kgdb++;
 	kgdb_info[ks->cpu].exception_state |= exception_state;
@@ -649,6 +665,7 @@ return_normal:
 			kgdb_info[cpu].enter_kgdb--;
 			smp_mb__before_atomic();
 			atomic_dec(&slaves_in_kgdb);
+			kgdb_accel_gate_release(&accel_maintenance);
 			dbg_touch_watchdogs();
 			local_irq_restore(flags);
 			rcu_read_unlock();
@@ -685,6 +702,20 @@ return_normal:
 	 */
 	if (kgdb_skipexception(ks->ex_vector, ks->linux_regs))
 		goto kgdb_restore;
+
+#ifdef CONFIG_X86
+	/*
+	 * KGDB's NMI roundup is not part of the accelerator owner protocol.
+	 * Refuse the session unless every accelerator owner is already out,
+	 * and keep new owners out until all debugger CPUs have resumed.
+	 */
+	if (!x86_cpu_accel_maintenance_try_begin()) {
+		pr_crit("accelerator owner active; refusing debugger entry\n");
+		kgdb_info[cpu].ret_state = 1;
+		goto kgdb_restore;
+	}
+	accel_maintenance = true;
+#endif
 
 	atomic_inc(&ignore_console_lock_warning);
 
@@ -817,6 +848,7 @@ kgdb_restore:
 	/* Free kgdb_active */
 	atomic_set(&kgdb_active, -1);
 	raw_spin_unlock(&dbg_master_lock);
+	kgdb_accel_gate_release(&accel_maintenance);
 	dbg_touch_watchdogs();
 	local_irq_restore(flags);
 	rcu_read_unlock();

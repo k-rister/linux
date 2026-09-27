@@ -463,6 +463,26 @@ follows:
   synchronously flush kernel translations before the virtual address, data
   page, or page-table page can be reused. These paths may wait for an active
   owner to exit.
+* The direct-map ``*_noflush()`` helpers do not complete their own TLB
+  transition. Vmalloc's ``VM_FLUSH_RESET_PERMS`` teardown invalidates the
+  direct-map entries, flushes the corresponding direct-map range, then
+  restores the default mapping before freeing the pages. Secretmem and
+  hibernation pair direct-map invalidation with an explicit kernel-range flush
+  before the page can be exposed or reused. A new caller must provide the same
+  completion and page-lifetime ordering.
+* Executable-memory permission changes also depend on publication and object
+  lifetime. The execmem cache fills unused blocks with trapping instructions
+  before publishing them as free. Code generators keep new images unreachable
+  until their contents and ROX permissions are ready. BPF trampoline teardown
+  waits for task RCU and, where needed, its in-flight reference count before
+  freeing the image; module unload waits for its RCU readers before releasing
+  module memory. These are caller lifetime rules, not a global owner gate.
+* Confidential-memory conversions use the x86 memory-encryption lock to
+  coordinate conversion state, but that lock does not drain accelerator
+  owners. The Hyper-V conversion path explicitly requires callers to keep the
+  range unused and unreferenced throughout the transition. Any range that an
+  accelerator can access through a user mapping must be excluded from
+  conversion until that access is gone.
 * Built-in exception tables are fixed after initialization. IDT and FRED
   system-vector installation helpers are ``__init``-only and reject updates
   after setup. Module and BPF exception-table lookup, and NMI handler-list

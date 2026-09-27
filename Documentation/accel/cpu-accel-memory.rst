@@ -407,6 +407,25 @@ owner cannot confirm exit, a timeout still cannot let a void MM flush hook
 return as if invalidation completed; its caller must keep waiting or own the
 affected page lifetime through a completion object.
 
+Any owner-stop implementation needs to keep the stop request, owner exit, and
+TLB acknowledgement as separate events. Admission must be closed before the
+active-owner set is sampled, and the stop request must be issued without
+holding the ownership lock across a callback or NMI. A direct kernel callback
+can be stopped only if its registered owner contract promises to poll a stop
+request and return; callbacks without that capability stay on the synchronous
+fallback. The ring-3 path needs an owner-specific escape entry whose image,
+stack, and exit helper remain pinned for the duration of the request.
+
+The owner CPU may publish stop completion only after accelerator execution has
+ended and a local TLB flush has reconciled every pending ``mm`` generation and
+unscoped invalidation recorded for that owner. The completion must be tied to
+the owner instance and invalidation generation, so CPU offlining or recovery
+cannot silently drop an outstanding acknowledgement. If a mapping change is
+made after the owner's exit flush, the caller must still wait for the ordinary
+shootdown for that change. An MM hook with no error return cannot treat a
+stop timeout as permission to continue; it must keep the synchronous wait or
+transfer the affected page lifetime to a completion object.
+
 Kernel mapping invalidation and kernel code maintenance have separate
 requirements:
 
@@ -428,6 +447,48 @@ requirements:
   recovery must either quiesce the owner before retiring the old path or keep
   both the transition path and its backing pages valid for every active owner.
   A successful TLB flush by itself does not establish this semantic safety.
+
+Runtime ``set_memory*()`` caller audit
+--------------------------------------
+
+The x86 CPA layer keeps these operations synchronous. Depending on the change
+and its aliases, ``cpa_flush()`` uses synchronous per-CPU callbacks or
+``flush_tlb_all()``; cache-attribute changes may also flush caches. While an
+accelerator owns a target CPU, its deferred callback is serviced after owner
+exit and the synchronous caller waits for that completion. A private
+allocation or device-only buffer therefore does not make it safe to return
+before the flush completes.
+
+Representative runtime callers fall into these lifecycle groups:
+
+* Executable-memory helpers such as ``execmem``, BPF program packs and
+  trampolines, and the SRAM execute helper change permissions as code is
+  built, published, and retired. Their code-publication and text-lifetime
+  rules are independent of TLB completion.
+* DMA and confidential-computing paths change encryption or cache attributes
+  for allocations such as direct DMA buffers, SWIOTLB bounce buffers and
+  pools, IOMMU command buffers, SFS command buffers, virtual PTP pages, guest
+  report buffers, Hyper-V shared pages, and KVM PAE roots. Their reverse
+  transition follows device teardown or the end of the hypervisor-sharing
+  lifetime.
+* Device page tables and trace buffers, including AGP, AMD/Radeon GART tables,
+  Intel trace buffers, and staging media page tables, have device or userspace
+  lifetime rules that must be drained before their attributes are restored.
+  The system DMA-BUF heap similarly changes encryption state around buffer
+  exposure and release. Dell firmware-update buffers change cache mode over
+  their staging lifetime. Hibernation restore protection operates on its own
+  restore pages. The terminal x86 kexec shutdown path has separate owner-drain
+  rules described above; kexec-time page transitions still use CPA's
+  synchronous completion.
+
+No ``set_memory*()`` call exists in ``drivers/cpu_accel``. The current
+accelerator driver has no import or registration path for these external
+buffers; its ring-3 image admits only its validated mappings, and the current
+kernel workload receives its own registered work region. This audit does not
+prove arbitrary direct callbacks cannot reference such memory. Any future
+accelerator or NIC integration that shares one of these regions must add an
+explicit ownership handoff that drains CPU and device users before changing
+attributes. It must not weaken CPA's synchronous completion contract.
 
 The x86 prototype has an owner-drain maintenance gate. The x86 text-mutex
 wrappers first bar new accelerator admissions and wait for existing owners to

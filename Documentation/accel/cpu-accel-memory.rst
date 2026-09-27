@@ -446,19 +446,27 @@ triggering a KGDB hardware breakpoint after the session reservation is gone.
 The mapping and exception-path audit classifies the current mechanisms as
 follows:
 
-* Runtime kernel mapping and page-attribute changes use synchronous TLB
-  completion. An owner may continue using the old kernel translation until it
-  handles the flush, and the caller must not release or reuse the affected
-  backing memory before completion. This establishes translation lifetime; it
-  does not establish that changing permissions or code semantics while an
-  owner executes is safe. The central x86 ``set_memory*()`` path has no global
-  owner gate, and its callers span boot setup, page allocation, executable
-  memory, and device mappings. In particular, ``DEBUG_PAGEALLOC`` reaches CPA
-  from allocator contexts and deliberately bypasses the normal CPA lock. Any
-  runtime caller changing code or mappings used by exception, NMI, fault, or
-  recovery execution still needs a call-site proof that the target is
-  unpublished, protected by the maintenance gate, or valid throughout the
+* The x86 CPA ``set_memory*()`` path and ``flush_tlb_kernel_range()`` complete
+  their TLB work synchronously. If an owner is in the target set, its flush
+  callback runs after owner exit, and the caller cannot release or reuse the
+  affected backing memory before completion. This establishes translation
+  lifetime; it does not establish that changing permissions or code semantics
+  while an owner executes is safe. The central x86 ``set_memory*()`` path has
+  no global owner gate, and its callers span boot setup, page allocation,
+  executable memory, and device mappings. In particular, ``DEBUG_PAGEALLOC``
+  reaches CPA from allocator contexts and deliberately bypasses the normal CPA
+  lock. Any runtime caller changing code or mappings used by exception, NMI,
+  fault, or recovery execution still needs a call-site proof that the target
+  is unpublished, protected by the maintenance gate, or valid throughout the
   transition.
+* Local-only kernel invalidation is an explicit exception. KFENCE and KMMIO
+  use ``flush_tlb_one_kernel()``; KFENCE documents that it cannot send IPIs in
+  allocator or fault context and tolerates stale translations on other CPUs.
+  These paths do not record an accelerator owner's pending TLB generation, so
+  their best-effort fault/protection behavior is not a remote-invalidation
+  guarantee for an active owner. Any operation that requires remote
+  invalidation for correctness must use a synchronous path or prevent owner
+  overlap.
 * Vmalloc unmap and kernel page-table reclamation clear the mapping and
   synchronously flush kernel translations before the virtual address, data
   page, or page-table page can be reused. These paths may wait for an active

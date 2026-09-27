@@ -488,6 +488,13 @@ follows:
   synchronously flush kernel translations before the virtual address, data
   page, or page-table page can be reused. These paths may wait for an active
   owner to exit.
+* BPF arena teardown has both kernel and user mappings to retire. It clears
+  the ``init_mm`` alias, completes ``flush_tlb_kernel_range()``, zaps the range
+  from every registered user VMA, and frees the pages only after both steps.
+  The kernel-range flush does not replace the per-``mm`` user unmaps. The
+  current accelerator worker's sealed ``mm`` rejects extra VMAs, including a
+  BPF arena VMA; any future owner that can retain one must be covered by both
+  address-space invalidation and page-lifetime rules before reuse.
 * The direct-map ``*_noflush()`` helpers do not complete their own TLB
   transition. Vmalloc's ``VM_FLUSH_RESET_PERMS`` teardown invalidates the
   direct-map entries, flushes the corresponding direct-map range, then

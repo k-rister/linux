@@ -384,6 +384,29 @@ NMI escape is ring-3-driver-specific, requires a controller request, and does
 not cover kernel-mode owners; it cannot provide this contract. Until a generic
 quiesce API exists, synchronous flush waits remain unbounded by design.
 
+The current NMI escape is not an MM-callable stop-and-ack operation. The
+driver's ``cpu_accel_user_nmi()`` accepts an escape only when the saved frame
+is from user mode on the configured CPU and the admitted image is active; it
+redirects that frame to the image's pinned escape entry and stack. The
+controller sends the NMI and waits up to one second, but a timeout does not
+prove that the owner exited or that its TLB was reconciled. A direct kernel-mode
+owner does not match the handler's user-mode check and cannot be unwound by
+this path. The architecture owner record has no per-owner stop callback or
+error-returning quiesce interface. NMI delivery, a timeout, or an inactive
+state by itself is therefore not a TLB acknowledgement.
+
+The in-tree kernel lifecycle workload has a cooperative ``stop_requested``
+flag, but checks it only at its workload loop boundary, after the optional
+buffer copy. ``x86_cpu_accel_direct_enter()`` accepts a callback and data
+pointer without recording any cancellation capability or callback contract;
+the architecture cannot assume every kernel-mode owner polls the driver's
+flag, and the current loop has no architecture-enforced stop deadline. A
+future quiesce interface would need an owner-specific stop request, an explicit
+completion after the owner returns, and a post-exit TLB acknowledgement. If an
+owner cannot confirm exit, a timeout still cannot let a void MM flush hook
+return as if invalidation completed; its caller must keep waiting or own the
+affected page lifetime through a completion object.
+
 Kernel mapping invalidation and kernel code maintenance have separate
 requirements:
 
@@ -558,6 +581,15 @@ Classify each remaining operation as allowed, routed to housekeeping,
 deferred, rejected, or requiring controlled owner termination. Operations
 that cannot prove they include the owned CPU in their execution and mapping
 rendezvous are unsupported while accelerator ownership is active.
+
+The direct x86 ftrace CPA callers have a narrower, source-verified rule.
+``set_ftrace_ops_ro()`` runs from boot-time ``mark_rodata_ro()``. A newly
+generated trampoline is made ROX before ``arch_ftrace_update_trampoline()``
+publishes its address to the caller. Updates to an existing published
+trampoline take the owner-draining text-mutex wrapper around
+``smp_text_poke_single()``. This closes those ftrace cases; it does not imply
+that other executable pools or subsystem ``set_memory*()`` callers use the
+same gate.
 
 Each additional interlock must cover the entire maintenance transaction:
 reserve owner admission before changing code or mappings, retain that

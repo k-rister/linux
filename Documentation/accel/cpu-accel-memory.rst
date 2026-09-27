@@ -319,6 +319,19 @@ local flush. A CPU-offline or recovery path that bypasses that exit must keep
 the completion outstanding until it has independently established equivalent
 quiescence; inactive state alone is not an acknowledgement.
 
+Terminal x86 kexec has a separate quiescence contract. The native kexec
+shutdown path drains accelerator owners before the confidential-memory
+callbacks and keeps owner admission closed through the handoff. This is needed
+because ``reboot_force`` can skip ``stop_other_cpus()``; the owner gate does
+not quiesce unrelated Linux activity on that forced path. With normal CPU-stop
+policy, ``enc_kexec_finish()`` runs only after ``stop_other_cpus()`` has
+stopped the other CPUs. Crash shutdown sends a one-shot NMI whose responding
+CPUs enter the non-returning stop path before the encryption callback. This is
+quiescence for transfer to another kernel, not an owner-exit acknowledgement
+that a returning MM caller can reuse. The crash NMI shootdown waits only one
+second, so a CPU that does not respond is not proven quiescent by that
+timeout.
+
 ``mmu_gather`` is a distinct range-flush path. On x86 it calls
 ``flush_tlb_mm_range()``; after the flush/generation rules permit reclamation,
 ``tlb_flush_mmu_free()`` releases its queued data pages and page-table batches.

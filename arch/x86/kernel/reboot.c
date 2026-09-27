@@ -670,6 +670,15 @@ static void native_machine_emergency_restart(void)
 void native_machine_shutdown(void)
 {
 	/*
+	 * Drain accelerator owners before kexec conversion callbacks. The
+	 * reboot_force path can skip stop_other_cpus(), so CPU shutdown alone
+	 * cannot guarantee accelerator quiescence. Keep admission closed through
+	 * the one-way transfer to the next kernel.
+	 */
+	if (kexec_in_progress)
+		x86_cpu_accel_maintenance_begin();
+
+	/*
 	 * Call enc_kexec_begin() while all CPUs are still active and
 	 * interrupts are enabled. This will allow all in-flight memory
 	 * conversions to finish cleanly.

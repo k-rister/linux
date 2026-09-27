@@ -1166,73 +1166,73 @@ __split_large_page(struct cpa_data *cpa, pte_t *kpte, unsigned long address,
 	bool nx, rw;
 	pte_t *tmp;
 
-	guard(spinlock)(&pgd_lock);
-	/*
-	 * Check for races, another CPU might have split this page
-	 * up for us already:
-	 */
-	tmp = _lookup_address_cpa(cpa, address, &level, &nx, &rw);
-	if (tmp != kpte)
-		return 1;
-
-	paravirt_alloc_pte(&init_mm, page_to_pfn(base));
-
-	switch (level) {
-	case PG_LEVEL_2M:
-		ref_prot = pmd_pgprot(*(pmd_t *)kpte);
+	{
+		guard(spinlock)(&pgd_lock);
 		/*
-		 * Clear PSE (aka _PAGE_PAT) and move
-		 * PAT bit to correct position.
+		 * Check for races, another CPU might have split this page
+		 * up for us already:
 		 */
-		ref_prot = pgprot_large_2_4k(ref_prot);
-		ref_pfn = pmd_pfn(*(pmd_t *)kpte);
-		lpaddr = address & PMD_MASK;
-		lpinc = PAGE_SIZE;
-		break;
+		tmp = _lookup_address_cpa(cpa, address, &level, &nx, &rw);
+		if (tmp != kpte)
+			return 1;
 
-	case PG_LEVEL_1G:
-		ref_prot = pud_pgprot(*(pud_t *)kpte);
-		ref_pfn = pud_pfn(*(pud_t *)kpte);
-		pfninc = PMD_SIZE >> PAGE_SHIFT;
-		lpaddr = address & PUD_MASK;
-		lpinc = PMD_SIZE;
+		paravirt_alloc_pte(&init_mm, page_to_pfn(base));
+
+		switch (level) {
+		case PG_LEVEL_2M:
+			ref_prot = pmd_pgprot(*(pmd_t *)kpte);
+			/*
+			 * Clear PSE (aka _PAGE_PAT) and move
+			 * PAT bit to correct position.
+			 */
+			ref_prot = pgprot_large_2_4k(ref_prot);
+			ref_pfn = pmd_pfn(*(pmd_t *)kpte);
+			lpaddr = address & PMD_MASK;
+			lpinc = PAGE_SIZE;
+			break;
+
+		case PG_LEVEL_1G:
+			ref_prot = pud_pgprot(*(pud_t *)kpte);
+			ref_pfn = pud_pfn(*(pud_t *)kpte);
+			pfninc = PMD_SIZE >> PAGE_SHIFT;
+			lpaddr = address & PUD_MASK;
+			lpinc = PMD_SIZE;
+			/*
+			 * Clear the PSE flags if the PRESENT flag is not set
+			 * otherwise pmd_present() will return true even on a non
+			 * present pmd.
+			 */
+			if (!(pgprot_val(ref_prot) & _PAGE_PRESENT))
+				pgprot_val(ref_prot) &= ~_PAGE_PSE;
+			break;
+
+		default:
+			return 1;
+		}
+
+		ref_prot = pgprot_clear_protnone_bits(ref_prot);
+
+		/* Get the target PFN from the original entry. */
+		pfn = ref_pfn;
+		for (i = 0; i < PTRS_PER_PTE;
+		     i++, pfn += pfninc, lpaddr += lpinc)
+			split_set_pte(cpa, pbase + i, pfn, ref_prot,
+				      lpaddr, lpinc);
+
+		if (virt_addr_valid(address)) {
+			unsigned long pfn = PFN_DOWN(__pa(address));
+
+			if (pfn_range_is_mapped(pfn, pfn + 1))
+				split_page_count(level);
+		}
+
 		/*
-		 * Clear the PSE flags if the PRESENT flag is not set
-		 * otherwise pmd_present() will return true even on a non
-		 * present pmd.
+		 * Install the new, split up pagetable. The actual PTEs
+		 * control the primary protection behavior:
 		 */
-		if (!(pgprot_val(ref_prot) & _PAGE_PRESENT))
-			pgprot_val(ref_prot) &= ~_PAGE_PSE;
-		break;
-
-	default:
-		return 1;
+		__set_pmd_pte(kpte, address,
+			      mk_pte(base, __pgprot(_KERNPG_TABLE)));
 	}
-
-	ref_prot = pgprot_clear_protnone_bits(ref_prot);
-
-	/*
-	 * Get the target pfn from the original entry:
-	 */
-	pfn = ref_pfn;
-	for (i = 0; i < PTRS_PER_PTE; i++, pfn += pfninc, lpaddr += lpinc)
-		split_set_pte(cpa, pbase + i, pfn, ref_prot, lpaddr, lpinc);
-
-	if (virt_addr_valid(address)) {
-		unsigned long pfn = PFN_DOWN(__pa(address));
-
-		if (pfn_range_is_mapped(pfn, pfn + 1))
-			split_page_count(level);
-	}
-
-	/*
-	 * Install the new, split up pagetable.
-	 *
-	 * We use the standard kernel pagetable protections for the new
-	 * pagetable protections, the actual ptes set above control the
-	 * primary protection behavior:
-	 */
-	__set_pmd_pte(kpte, address, mk_pte(base, __pgprot(_KERNPG_TABLE)));
 
 	/*
 	 * Do a global flush tlb after splitting the large page
@@ -1247,10 +1247,10 @@ __split_large_page(struct cpa_data *cpa, pte_t *kpte, unsigned long address,
 	 *  (e.g., permissions), processor behavior is undefined and may
 	 *  be implementation-specific."
 	 *
-	 * We do this global tlb flush inside the cpa_lock, so that we
-	 * don't allow any other cpu, with stale tlb entries change the
-	 * page attribute in parallel, that also falls into the
-	 * just split large page entry.
+	 * Keep cpa_lock held across this flush to prevent concurrent CPA
+	 * changes from using stale translations of the split mapping. Drop
+	 * pgd_lock first: stop/exit cleanup can need that lock while this
+	 * synchronous flush waits for remote CPUs.
 	 */
 	flush_tlb_all();
 

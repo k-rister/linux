@@ -1016,8 +1016,17 @@ The implementation checkpoints are:
     ``kernel_tlb_flush_all()``; the stop callback completed and the owner
     exited before the synchronous IPI handler ran, and ``modprobe`` succeeded.
     This exercises module mapping setup, not patching code that is already
-    executing. A temporary VM trigger exercised both kernel-range IPI branches
-    with a direct owner on CPU2. A one-page vmalloc purge traced the range
+    executing. A follow-up audit found ``__split_large_page()`` held
+    ``pgd_lock`` over its synchronous ``flush_tlb_all()``. It now publishes
+    the fully populated split table under ``pgd_lock``, releases that lock,
+    then flushes while ``cpa_lock`` still serializes attribute changes. On
+    00596, ``modprobe dummy`` completed with a CPU2 owner active during 256
+    short-lived process creates/exits; telemetry counted one deferred TLB
+    target and call-function request, with no soft-lockup or RCU stall. The
+    owner CLI returned status 1 because its delayed user-escape ioctl raced
+    with the kernel stop and got ``EINVAL``. A temporary VM trigger exercised
+    both kernel-range IPI branches with a direct owner on CPU2. A one-page
+    vmalloc purge traced the range
     handler and ``do_kernel_range_flush`` on the owner CPU; a 40-page purge
     selected the full-flush sentinel and traced ``kernel_tlb_flush_all()``
     followed by ``do_flush_tlb_all`` on that CPU. In both runs the owner

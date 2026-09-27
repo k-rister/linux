@@ -462,11 +462,15 @@ follows:
 * Local-only kernel invalidation is an explicit exception. KFENCE and KMMIO
   use ``flush_tlb_one_kernel()``; KFENCE documents that it cannot send IPIs in
   allocator or fault context and tolerates stale translations on other CPUs.
-  These paths do not record an accelerator owner's pending TLB generation, so
-  their best-effort fault/protection behavior is not a remote-invalidation
-  guarantee for an active owner. Any operation that requires remote
-  invalidation for correctness must use a synchronous path or prevent owner
-  overlap.
+  ``CONFIG_DEBUG_PAGEALLOC`` is another exception: ``__kernel_map_pages()``
+  updates the direct-map PTE through CPA, then deliberately uses a local
+  ``__flush_tlb_all()`` because a remote flush can deadlock in allocator
+  context. This is outside the normal synchronous CPA flush path. None of
+  these local-only paths records an accelerator owner's pending TLB
+  generation, so their best-effort fault/protection behavior is not a
+  remote-invalidation guarantee for an active owner. Any operation that
+  requires remote invalidation for correctness must use a synchronous path or
+  prevent owner overlap.
 * Vmalloc unmap and kernel page-table reclamation clear the mapping and
   synchronously flush kernel translations before the virtual address, data
   page, or page-table page can be reused. These paths may wait for an active

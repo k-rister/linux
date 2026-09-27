@@ -743,6 +743,12 @@ and recovery behavior are specified for the target architecture.
 Implementation sequence
 =======================
 
+The following are implementation checkpoints for the x86 prototype, not the
+numbered phases in the project v1.1 roadmap.  Checkpoint 10 is address-space
+and TLB ownership work; it is not project Phase 10 (SMP).  This work supports
+the sealed-execution requirements in Phase 4 and the adversarial isolation
+and maintenance validation in Phase 8.
+
 The implementation checkpoints are:
 
 1. [completed] Add an internal region/epoch model without exposing physical
@@ -804,8 +810,11 @@ The implementation checkpoints are:
     the generic MM quiesce path. The current prototype seals an exec-created
     worker ``mm`` with a complete VMA
     allowlist, including the fixed x86 ``[vsyscall]`` exception. Remaining
-    work includes safe handling of full-flush waits and semantic safety for
-    kernel code/exception mapping updates. A focused VM test unmaps a touched
+    work includes a progress policy for full-flush waits and semantic safety
+    for kernel code/exception mapping updates. The current synchronous
+    full-flush path preserves invalidation-before-reuse, but may wait without a
+    bound for an owner to exit; there is no generic owner-quiesce operation or
+    safe timeout for these MM hooks. A focused VM test unmaps a touched
     2 MiB mapping from another ``mm`` while the target CPU is ring-3 owned,
     then uses privileged ``/proc/self/pagemap`` and ``/proc/kpageflags``
     inspection to track a freed data-page PFN and, when observed, the

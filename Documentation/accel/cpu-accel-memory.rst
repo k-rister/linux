@@ -443,26 +443,56 @@ breakpoint continues to block accelerator admission until it is removed. This
 prevents an owner from later executing a patched kernel instruction or
 triggering a KGDB hardware breakpoint after the session reservation is gone.
 
-The current exception and NMI paths have different lifetime rules. IDT and
-FRED system-vector installation helpers are ``__init``-only and reject updates
-after setup. Module exception-table lookup and NMI handler-list traversal use
-RCU; module removal and NMI-handler unregister wait for a grace period before
-releasing the old tables or handler. The emergency NMI handler bypasses that
-list only for the one-shot crash CPU shootdown and remains installed while the
-machine stops. These paths therefore do not currently need an owner gate for
-runtime reconfiguration. KGDB's timeout-based roundup remains the unclassified
-nonterminal path in this audit.
+The mapping and exception-path audit classifies the current mechanisms as
+follows:
 
-This is not a global interlock for all kernel maintenance. Kernel mapping
-changes that do not use the gate still need their own rule, and the init-only
-and RCU lifetime rules above do not cover future exception or NMI mutation
-paths. A blanket gate in ``stop_machine_cpuslocked()`` would run after callers
-acquired CPU-hotplug locks, while existing text-patch paths acquire the gate
-before their patching locks; that ordering needs call-site review to avoid a
-lock inversion. Classify each remaining operation as allowed, routed to
-housekeeping, deferred, rejected, or requiring controlled owner termination.
-Operations that cannot prove they include the owned CPU in their execution
-and mapping rendezvous are unsupported while accelerator ownership is active.
+* Runtime kernel mapping and page-attribute changes use synchronous TLB
+  completion. An owner may continue using the old kernel translation until it
+  handles the flush, and the caller must not release or reuse the affected
+  backing memory before completion. This establishes translation lifetime; it
+  does not establish that changing permissions or code semantics while an
+  owner executes is safe. The central x86 ``set_memory*()`` path has no global
+  owner gate, and its callers span boot setup, page allocation, executable
+  memory, and device mappings. In particular, ``DEBUG_PAGEALLOC`` reaches CPA
+  from allocator contexts and deliberately bypasses the normal CPA lock. Any
+  runtime caller changing code or mappings used by exception, NMI, fault, or
+  recovery execution still needs a call-site proof that the target is
+  unpublished, protected by the maintenance gate, or valid throughout the
+  transition.
+* Vmalloc unmap and kernel page-table reclamation clear the mapping and
+  synchronously flush kernel translations before the virtual address, data
+  page, or page-table page can be reused. These paths may wait for an active
+  owner to exit.
+* Built-in exception tables are fixed after initialization. IDT and FRED
+  system-vector installation helpers are ``__init``-only and reject updates
+  after setup. Module and BPF exception-table lookup, and NMI handler-list
+  traversal, use RCU; module removal and NMI-handler unregister wait for a
+  grace period before releasing the old table or handler. These lifetime
+  rules protect lookup readers without requiring an owner gate for those
+  mutations.
+* The emergency NMI handler bypasses the registered list only for the one-shot
+  crash CPU shootdown and remains installed while the machine stops; it is not
+  a runtime reconfiguration path.
+* KGDB retains its timeout-based roundup for ordinary Linux CPUs. On x86, its
+  entry first takes a nonblocking maintenance reservation and declines debugger
+  entry if an owner or another maintenance transaction is active. Once
+  admitted, new owners cannot start during the roundup and debugger session.
+  Armed breakpoints continue to block admission after the session until
+  removal. The timeout therefore does not leave an unclassified
+  accelerator-owner path, although the generic roundup alone does not stop
+  every ordinary CPU.
+
+The audit does not establish semantic safety for every runtime
+``set_memory*()`` caller. Kernel mapping changes that do not use the gate still
+need a call-site rule, and the init-only and RCU lifetime rules above do not
+cover future exception or NMI mutation paths. A blanket gate in
+``stop_machine_cpuslocked()`` would run after callers acquired CPU-hotplug
+locks, while existing text-patch paths acquire the gate before their patching
+locks; that ordering needs call-site review to avoid a lock inversion.
+Classify each remaining operation as allowed, routed to housekeeping,
+deferred, rejected, or requiring controlled owner termination. Operations
+that cannot prove they include the owned CPU in their execution and mapping
+rendezvous are unsupported while accelerator ownership is active.
 
 Each additional interlock must cover the entire maintenance transaction:
 reserve owner admission before changing code or mappings, retain that

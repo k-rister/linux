@@ -42,6 +42,10 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/cpuhp.h>
 
+#ifdef CONFIG_X86
+#include <asm/cpu_accel.h>
+#endif
+
 #include "smpboot.h"
 
 /**
@@ -1412,6 +1416,14 @@ static int __ref _cpu_down(unsigned int cpu, int tasks_frozen,
 	if (!cpu_present(cpu))
 		return -EINVAL;
 
+	/*
+	 * The teardown rendezvous below uses stop_machine_cpuslocked(). Drain
+	 * accelerator owners before taking the CPU-hotplug write lock, which
+	 * they do not participate in.
+	 */
+#ifdef CONFIG_X86
+	x86_cpu_accel_maintenance_begin();
+#endif
 	cpus_write_lock();
 
 	/*
@@ -1467,6 +1479,9 @@ static int __ref _cpu_down(unsigned int cpu, int tasks_frozen,
 out:
 	cpus_write_unlock();
 	arch_smt_update();
+#ifdef CONFIG_X86
+	x86_cpu_accel_maintenance_end();
+#endif
 	return ret;
 }
 

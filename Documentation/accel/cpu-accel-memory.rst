@@ -414,9 +414,14 @@ maintenance transaction is active; the cache CPU-online callback propagates
 that failure. Direct ``stop_machine_cpuslocked()`` callers still need an
 explicit gate or a proof that CPU-hotplug locking excludes owners.
 
+CPU teardown takes the gate in ``_cpu_down()`` before its CPU-hotplug write
+lock and holds it through the teardown callbacks, including the
+``stop_machine_cpuslocked()`` rendezvous. This prevents an owned CPU from being
+offlined and bars new owners until the teardown transaction completes.
+
 This is not a global interlock for all kernel maintenance. In particular,
-``stop_machine_cpuslocked()`` callers outside the listed x86 paths, kgdb's
-special stopped-machine patch path, exception-table and IDT/NMI changes, and
+``stop_machine_cpuslocked()`` callers outside the listed paths, kgdb's special
+stopped-machine patch path, exception-table and IDT/NMI changes, and
 mapping changes that do not use the gate need their own rule. A blanket gate in
 ``stop_machine_cpuslocked()`` would run after callers acquired CPU-hotplug
 locks, while existing text-patch paths acquire the gate before their patching

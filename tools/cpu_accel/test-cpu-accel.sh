@@ -8,8 +8,10 @@ target_cpu=${CPU_ACCEL_CPU:-1}
 online_file=/sys/devices/system/cpu/cpu${target_cpu}/online
 stop_output=$(mktemp)
 invalid_output=$(mktemp)
+hotplug_output=$(mktemp)
 load_pid=0
 run_pid=0
+hotplug_offline=0
 repeats=${CPU_ACCEL_REPEATS:-1}
 load_cpus=${CPU_ACCEL_LOAD_CPUS:-}
 quiescent_arg=
@@ -38,7 +40,10 @@ cleanup()
 	if [ "$load_pid" -ne 0 ]; then
 		kill "$load_pid" 2>/dev/null || true
 	fi
-	rm -f "$stop_output" "$invalid_output"
+	if [ "$hotplug_offline" -eq 1 ] && [ -e "$online_file" ]; then
+		echo 1 >"$online_file" 2>/dev/null || true
+	fi
+	rm -f "$stop_output" "$invalid_output" "$hotplug_output"
 }
 trap cleanup EXIT
 
@@ -197,6 +202,53 @@ x86_64)
 	esac
 	echo "$deferred_user_output" | grep -q 'mode=0' || \
 		fail "500 ms user-oslat run did not return to Linux mode"
+	[ "$(cat "$online_file")" = 1 ] || \
+		fail "target CPU is offline before the hotplug gate test"
+	command -v taskset >/dev/null 2>&1 || \
+		fail "taskset is required for the CPU hotplug gate test"
+	$tool run --cpu "$target_cpu" --duration-ms 3000 --period-us 1000 \
+		--workload user-oslat $quiescent_arg $quarantine_arg \
+		>"$hotplug_output" 2>&1 &
+	run_pid=$!
+	sleep 0.2
+	if ! kill -0 "$run_pid" 2>/dev/null; then
+		wait "$run_pid" || true
+		run_pid=0
+		cat "$hotplug_output"
+		fail "hotplug owner run ended before CPU offlining"
+	fi
+	hotplug_start_ns=$(date +%s%N)
+	if ! taskset -c 0 sh -c 'echo 0 > "$1"' sh "$online_file"; then
+		wait "$run_pid" || true
+		run_pid=0
+		cat "$hotplug_output"
+		fail "CPU offlining failed during accelerator ownership"
+	fi
+	hotplug_offline=1
+	hotplug_end_ns=$(date +%s%N)
+	if ! wait "$run_pid"; then
+		run_pid=0
+		cat "$hotplug_output"
+		fail "owner run failed while CPU offlining waited"
+	fi
+	run_pid=0
+	hotplug_wait_ms=$(((hotplug_end_ns - hotplug_start_ns) / 1000000))
+	cat "$hotplug_output"
+	grep -q '^state=3 ' "$hotplug_output" || \
+		fail "CPU hotplug owner run did not complete"
+	grep -q 'mode=0' "$hotplug_output" || \
+		fail "CPU hotplug owner run did not return to Linux mode"
+	grep -q 'user_active_ns=[1-9][0-9]*' "$hotplug_output" || \
+		fail "CPU hotplug owner run did not enter ring 3"
+	[ "$hotplug_wait_ms" -ge 1000 ] || \
+		fail "CPU offlining did not wait for the active owner"
+	[ "$(cat "$online_file")" = 0 ] || \
+		fail "CPU offlining did not take the target CPU offline"
+	echo 1 >"$online_file"
+	hotplug_offline=0
+	[ "$(cat "$online_file")" = 1 ] || \
+		fail "target CPU did not return online after hotplug test"
+	echo "cpu_accel: owner drained before CPU offlining (${hotplug_wait_ms} ms)"
 	tlb_generation_output=$(./test-tlb-generation "$target_cpu" "$tool" \
 		$quarantine_arg)
 	echo "$tlb_generation_output"

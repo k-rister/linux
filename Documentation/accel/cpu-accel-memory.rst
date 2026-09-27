@@ -391,40 +391,49 @@ redirects that frame to the image's pinned escape entry and stack. The
 controller sends the NMI and waits up to one second, but a timeout does not
 prove that the owner exited or that its TLB was reconciled. A direct kernel-mode
 owner does not match the handler's user-mode check and cannot be unwound by
-this path. The architecture owner record has no per-owner stop callback or
-error-returning quiesce interface. NMI delivery, a timeout, or an inactive
-state by itself is therefore not a TLB acknowledgement.
+this path. The architecture owner record now accepts an optional per-owner
+stop callback, but it still has no error-returning quiesce interface. NMI
+delivery, a timeout, or an inactive state by itself is therefore not a TLB
+acknowledgement.
 
 The in-tree kernel lifecycle workload has a cooperative ``stop_requested``
 flag, but checks it only at its workload loop boundary, after the optional
-buffer copy. ``x86_cpu_accel_direct_enter()`` accepts a callback and data
-pointer without recording any cancellation capability or callback contract;
-the architecture cannot assume every kernel-mode owner polls the driver's
-flag, and the current loop has no architecture-enforced stop deadline. A
-future quiesce interface would need an owner-specific stop request, an explicit
-completion after the owner returns, and a post-exit TLB acknowledgement. If an
-owner cannot confirm exit, a timeout still cannot let a void MM flush hook
-return as if invalidation completed; its caller must keep waiting or own the
-affected page lifetime through a completion object.
+buffer copy. ``x86_cpu_accel_direct_enter()`` now registers an optional stop
+callback with the owner. The in-tree kernel lifecycle callback publishes its
+cooperative stop flag; other callbacks that do not promise to poll and return
+are left on the synchronous fallback. There is no architecture-enforced stop
+deadline. A future quiesce interface would still need an explicit completion
+after the owner returns and a post-exit TLB acknowledgement. If an owner cannot
+confirm exit, a timeout cannot let a void MM flush hook return as if
+invalidation completed; its caller must keep waiting or own the affected page
+lifetime through a completion object.
 
-Any owner-stop implementation needs to keep the stop request, owner exit, and
-TLB acknowledgement as separate events. Admission must be closed before the
-active-owner set is sampled, and the stop request must be issued without
-holding the ownership lock across a callback or NMI. A direct kernel callback
-can be stopped only if its registered owner contract promises to poll a stop
-request and return; callbacks without that capability stay on the synchronous
-fallback. The ring-3 path needs an owner-specific escape entry whose image,
-stack, and exit helper remain pinned for the duration of the request.
+The stop request, owner exit, and TLB acknowledgement remain separate events.
+Synchronous IPI flush paths reserve target CPUs against new owner entry before
+requesting stops. They request a stop only from an owner that registered a
+callback; callbacks without that capability stay on the synchronous fallback.
+The request is marked under the per-CPU owner lock, which pins its callback
+data; the callback itself runs after dropping both that lock and the global
+ownership lock. It must not sleep, wait for owner exit, or re-enter the owner
+API. The ring-3 callback raises the existing owner-specific escape NMI; the
+image, stack, and exit helper remain pinned for the duration of ownership.
 
-The owner CPU may publish stop completion only after accelerator execution has
-ended and a local TLB flush has reconciled every pending ``mm`` generation and
-unscoped invalidation recorded for that owner. The completion must be tied to
-the owner instance and invalidation generation, so CPU offlining or recovery
-cannot silently drop an outstanding acknowledgement. If a mapping change is
-made after the owner's exit flush, the caller must still wait for the ordinary
-shootdown for that change. An MM hook with no error return cannot treat a
-stop timeout as permission to continue; it must keep the synchronous wait or
-transfer the affected page lifetime to a completion object.
+A stop request does not acknowledge a flush. The synchronous IPI completion
+remains the flush acknowledgement for these paths, and filtered ring-3 owners
+continue to rely on generation reconciliation before re-entry. A callback that
+does not return, or an owner that cannot take the IPI, can still block the
+synchronous caller indefinitely.
+
+Owner exit clears the runnable-owner state, then remains counted as active and
+blocks new entry on that CPU until any required local TLB flush and reclaim
+acknowledgements complete. The local flush reconciles every pending ``mm``
+generation and unscoped invalidation recorded for that owner; CPU offlining,
+maintenance, and global-flush selection continue to see the owner until this
+completion. If a mapping change is made after the owner's exit flush, the
+caller must still wait for the ordinary shootdown for that change. An MM hook
+with no error return cannot treat a stop timeout as permission to continue; it
+must keep the synchronous wait or transfer the affected page lifetime to a
+completion object.
 
 Kernel mapping invalidation and kernel code maintenance have separate
 requirements:

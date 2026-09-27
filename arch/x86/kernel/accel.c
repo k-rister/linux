@@ -26,7 +26,12 @@ struct x86_cpu_accel_request {
 	raw_spinlock_t lock;
 	x86_cpu_accel_entry_fn entry;
 	void *data;
+	x86_cpu_accel_stop_fn owner_stop;
+	void *owner_stop_data;
+	bool owner_stop_requested;
+	atomic_t stop_inflight;
 	atomic_t active;
+	bool exiting;
 	atomic_t done;
 	atomic_t reschedule_pending;
 	atomic64_t reschedule_deferred;
@@ -59,7 +64,9 @@ static bool x86_cpu_accel_maintenance_try;
 static unsigned int x86_cpu_accel_kgdb_breakpoints;
 
 static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets,
-				     struct mm_struct *owner_mm)
+				     struct mm_struct *owner_mm,
+				     x86_cpu_accel_stop_fn owner_stop,
+				     void *owner_stop_data)
 {
 	struct x86_cpu_accel_request *request;
 	unsigned long ownership_flags;
@@ -100,7 +107,8 @@ static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets,
 		INIT_LIST_HEAD(&request->tlb_reclaim_acks);
 		request->tlb_reclaim_acks_init = true;
 	}
-	if (atomic_read(&request->active)) {
+	if (atomic_read(&request->active) || request->exiting ||
+	    atomic_read(&request->stop_inflight)) {
 		raw_spin_unlock_irqrestore(&request->lock, request_flags);
 		raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock,
 					   ownership_flags);
@@ -110,6 +118,9 @@ static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets,
 	atomic_set(&request->reschedule_pending, 0);
 	atomic_set(&request->call_function_pending, 0);
 	request->owner_mm = owner_mm;
+	request->owner_stop = owner_stop;
+	request->owner_stop_data = owner_stop_data;
+	request->owner_stop_requested = false;
 	request->pending_tlb_gen = 0;
 	request->pending_unscoped_tlb_flush = false;
 	atomic_inc(&x86_cpu_accel_active_count);
@@ -153,17 +164,46 @@ void x86_cpu_accel_tlb_flush_end(struct x86_cpu_accel_tlb_flush *flush)
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_tlb_flush_end);
 
+void x86_cpu_accel_request_stop_owner(unsigned int cpu)
+{
+	struct x86_cpu_accel_request *request;
+	x86_cpu_accel_stop_fn stop = NULL;
+	void *data = NULL;
+	unsigned long flags;
+
+	if (cpu >= nr_cpu_ids)
+		return;
+	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
+	raw_spin_lock_irqsave(&request->lock, flags);
+	if (atomic_read(&request->active) && request->owner_stop &&
+	    !request->owner_stop_requested) {
+		request->owner_stop_requested = true;
+		stop = request->owner_stop;
+		data = request->owner_stop_data;
+		atomic_inc(&request->stop_inflight);
+	}
+	raw_spin_unlock_irqrestore(&request->lock, flags);
+	if (stop) {
+		/* This callback only publishes a stop request; it must not wait. */
+		stop(data);
+		atomic_dec_return_release(&request->stop_inflight);
+	}
+}
+
 static u64 x86_cpu_accel_owner_exit(unsigned int cpu,
 				    bool *local_tlb_flush,
-				    struct list_head *tlb_reclaim_acks)
+				    struct list_head *tlb_reclaim_acks,
+				    bool *owner_exited)
 {
 	struct x86_cpu_accel_request *request;
 	unsigned long flags;
 	u64 targets;
-	bool owner_exited = false;
+	bool exited = false;
 
 	if (local_tlb_flush)
 		*local_tlb_flush = false;
+	if (owner_exited)
+		*owner_exited = false;
 	if (cpu >= nr_cpu_ids)
 		return 0;
 	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
@@ -171,8 +211,9 @@ static u64 x86_cpu_accel_owner_exit(unsigned int cpu,
 	if (atomic_xchg(&request->active, 0)) {
 		struct x86_cpu_accel_tlb_reclaim_ack *ack;
 
-		atomic_dec(&x86_cpu_accel_active_count);
-		owner_exited = true;
+		WARN_ON_ONCE(request->exiting);
+		request->exiting = true;
+		exited = true;
 		list_for_each_entry(ack, &request->tlb_reclaim_acks, link)
 			WARN_ON_ONCE(ack->mm != request->owner_mm ||
 				     ack->tlb_gen > request->pending_tlb_gen);
@@ -194,9 +235,34 @@ static u64 x86_cpu_accel_owner_exit(unsigned int cpu,
 	}
 	targets = atomic64_read(&request->tlb_shootdown_targets);
 	raw_spin_unlock_irqrestore(&request->lock, flags);
+	/* Keep callback storage alive until every request made under the lock ran. */
+	while (atomic_read_acquire(&request->stop_inflight))
+		cpu_relax();
 	if (owner_exited)
-		wake_up_all(&x86_cpu_accel_owner_wait);
+		*owner_exited = exited;
 	return targets;
+}
+
+static void x86_cpu_accel_owner_exit_finish(unsigned int cpu, bool owner_exited)
+{
+	struct x86_cpu_accel_request *request;
+	unsigned long flags;
+
+	if (!owner_exited)
+		return;
+	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
+	raw_spin_lock_irqsave(&request->lock, flags);
+	if (WARN_ON_ONCE(!request->exiting)) {
+		raw_spin_unlock_irqrestore(&request->lock, flags);
+		return;
+	}
+	request->owner_stop = NULL;
+	request->owner_stop_data = NULL;
+	request->owner_stop_requested = false;
+	request->exiting = false;
+	atomic_dec(&x86_cpu_accel_active_count);
+	raw_spin_unlock_irqrestore(&request->lock, flags);
+	wake_up_all(&x86_cpu_accel_owner_wait);
 }
 
 static void x86_cpu_accel_tlb_reclaim_ack_list(struct list_head *acks)
@@ -215,6 +281,44 @@ static void x86_cpu_accel_tlb_reconcile_and_ack(void *data)
 
 	__flush_tlb_all();
 	x86_cpu_accel_tlb_reclaim_ack_list(acks);
+}
+
+static void x86_cpu_accel_tlb_reconcile(unsigned int cpu,
+					bool local_tlb_flush,
+					struct list_head *acks)
+{
+	int ret;
+
+	if (!local_tlb_flush && list_empty(acks))
+		return;
+	if (cpu == raw_smp_processor_id()) {
+		__flush_tlb_all();
+		x86_cpu_accel_tlb_reclaim_ack_list(acks);
+		return;
+	}
+
+	/* A void owner-exit API cannot report a missing TLB acknowledgement. */
+	do {
+		ret = smp_call_function_single(cpu,
+					       x86_cpu_accel_tlb_reconcile_and_ack,
+					       acks, 1);
+		if (ret) {
+			WARN_ON_ONCE(ret);
+			cpu_relax();
+		}
+	} while (ret);
+}
+
+static void x86_cpu_accel_direct_owner_exit(unsigned int cpu)
+{
+	LIST_HEAD(tlb_reclaim_acks);
+	bool local_tlb_flush;
+	bool owner_exited;
+
+	x86_cpu_accel_owner_exit(cpu, &local_tlb_flush, &tlb_reclaim_acks,
+				&owner_exited);
+	x86_cpu_accel_tlb_reconcile(cpu, local_tlb_flush, &tlb_reclaim_acks);
+	x86_cpu_accel_owner_exit_finish(cpu, owner_exited);
 }
 
 void x86_cpu_accel_maintenance_begin(void)
@@ -331,6 +435,7 @@ void x86_cpu_accel_kgdb_breakpoint_put(void)
 EXPORT_SYMBOL_GPL(x86_cpu_accel_kgdb_breakpoint_put);
 
 int x86_cpu_accel_user_enter(unsigned int cpu, struct mm_struct *mm,
+			     x86_cpu_accel_stop_fn stop, void *data,
 			     u64 *tlb_targets)
 {
 	int ret;
@@ -358,7 +463,8 @@ int x86_cpu_accel_user_enter(unsigned int cpu, struct mm_struct *mm,
 			return -EXDEV;
 		}
 		__flush_tlb_all();
-		ret = x86_cpu_accel_owner_enter(cpu, tlb_targets, mm);
+		ret = x86_cpu_accel_owner_enter(cpu, tlb_targets, mm,
+						stop, data);
 		preempt_enable();
 		if (ret != -EAGAIN)
 			return ret;
@@ -370,38 +476,14 @@ u64 x86_cpu_accel_user_exit(unsigned int cpu)
 {
 	LIST_HEAD(tlb_reclaim_acks);
 	bool local_tlb_flush;
+	bool owner_exited;
 	u64 targets = x86_cpu_accel_owner_exit(cpu, &local_tlb_flush,
-					      &tlb_reclaim_acks);
+						      &tlb_reclaim_acks,
+						      &owner_exited);
 
-	/* Reconcile TLB state before acknowledging deferred folio release. */
-	if (!list_empty(&tlb_reclaim_acks)) {
-		int ret = 0;
-
-		if (cpu == raw_smp_processor_id()) {
-			/* An ack always carries a generation that needs reconciling. */
-			__flush_tlb_all();
-			x86_cpu_accel_tlb_reclaim_ack_list(&tlb_reclaim_acks);
-		} else {
-			ret = smp_call_function_single(cpu,
-						       x86_cpu_accel_tlb_reconcile_and_ack,
-						       &tlb_reclaim_acks, 1);
-			if (ret) {
-				struct x86_cpu_accel_request *request =
-					per_cpu_ptr(&x86_cpu_accel_request, cpu);
-				unsigned long flags;
-
-				/* Keep the folios pinned if the owner CPU cannot flush. */
-				raw_spin_lock_irqsave(&request->lock, flags);
-				list_splice_init(&tlb_reclaim_acks,
-						 &request->tlb_reclaim_acks);
-				raw_spin_unlock_irqrestore(&request->lock, flags);
-				WARN_ON_ONCE(ret);
-			}
-		}
-	} else if (cpu == raw_smp_processor_id() && local_tlb_flush) {
-		/* Reconcile relevant local TLB state before pinned pages are released. */
-		__flush_tlb_all();
-	}
+	/* Flush and run reclaim acks before publishing owner-exit completion. */
+	x86_cpu_accel_tlb_reconcile(cpu, local_tlb_flush, &tlb_reclaim_acks);
+	x86_cpu_accel_owner_exit_finish(cpu, owner_exited);
 	return targets;
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_user_exit);
@@ -430,14 +512,15 @@ void x86_cpu_accel_tlb_unmap_end(struct mm_struct *mm)
 }
 
 int x86_cpu_accel_direct_enter(unsigned int cpu,
-			       x86_cpu_accel_entry_fn entry, void *data)
+			       x86_cpu_accel_entry_fn entry,
+			       x86_cpu_accel_stop_fn stop, void *data)
 {
 	struct x86_cpu_accel_request *request;
 	int ret;
 
 	if (!entry || cpu == raw_smp_processor_id())
 		return -EINVAL;
-	ret = x86_cpu_accel_owner_enter(cpu, NULL, NULL);
+	ret = x86_cpu_accel_owner_enter(cpu, NULL, NULL, stop, data);
 	if (ret)
 		return ret;
 	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
@@ -451,8 +534,6 @@ int x86_cpu_accel_direct_enter(unsigned int cpu,
 	/* The lifecycle callback owns the target until it returns. */
 	while (!atomic_read_acquire(&request->done))
 		cpu_relax();
-
-	x86_cpu_accel_owner_exit(cpu, NULL, NULL);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_direct_enter);
@@ -753,6 +834,12 @@ DEFINE_IDTENTRY_SYSVEC(sysvec_cpu_accel)
 		return;
 	data = READ_ONCE(request->data);
 	entry(data);
+	/*
+	 * Release the target CPU before waking the controller. A synchronous
+	 * TLB flush may be waiting for an IPI that was deferred during ownership;
+	 * the controller can itself be blocked in that flush.
+	 */
+	x86_cpu_accel_direct_owner_exit(raw_smp_processor_id());
 	WRITE_ONCE(request->data, NULL);
 	smp_store_release(&request->entry, NULL);
 	atomic_set_release(&request->done, 1);

@@ -7,6 +7,8 @@
 #include <linux/mutex.h>
 
 typedef void (*x86_cpu_accel_entry_fn)(void *data);
+/* Optional stop callbacks must be nonblocking; no accelerator lock is held. */
+typedef void (*x86_cpu_accel_stop_fn)(void *data);
 
 struct x86_cpu_accel_tlb_flush {
 	cpumask_t targets;
@@ -45,7 +47,8 @@ struct x86_cpu_accel_tlb_reclaim_completion {
 extern struct mutex text_mutex;
 
 int x86_cpu_accel_direct_enter(unsigned int cpu,
-			       x86_cpu_accel_entry_fn entry, void *data);
+			       x86_cpu_accel_entry_fn entry,
+			       x86_cpu_accel_stop_fn stop, void *data);
 bool x86_cpu_accel_defer_reschedule(unsigned int cpu);
 u64 x86_cpu_accel_reschedule_deferred(unsigned int cpu);
 bool x86_cpu_accel_defer_call_function(unsigned int cpu);
@@ -53,6 +56,7 @@ u64 x86_cpu_accel_call_function_deferred(unsigned int cpu);
 #ifdef CONFIG_X86_LOCAL_APIC
 /* Keep mm write-locked until user_exit() has reconciled its TLB state. */
 int x86_cpu_accel_user_enter(unsigned int cpu, struct mm_struct *mm,
+			     x86_cpu_accel_stop_fn stop, void *data,
 			     u64 *tlb_targets);
 u64 x86_cpu_accel_user_exit(unsigned int cpu);
 void x86_cpu_accel_tlb_unmap_begin(struct mm_struct *mm);
@@ -74,6 +78,8 @@ void x86_cpu_accel_kgdb_breakpoint_put(void);
 void x86_cpu_accel_tlb_flush_begin(struct x86_cpu_accel_tlb_flush *flush,
 				   const struct cpumask *targets);
 void x86_cpu_accel_tlb_flush_end(struct x86_cpu_accel_tlb_flush *flush);
+/* Request a registered, nonblocking owner stop before a synchronous flush. */
+void x86_cpu_accel_request_stop_owner(unsigned int cpu);
 bool x86_cpu_accel_note_tlb_shootdown(unsigned int cpu,
 				      const struct mm_struct *mm, u64 tlb_gen);
 void x86_cpu_accel_note_tlb_unmap(struct mm_struct *mm, u64 tlb_gen);
@@ -94,10 +100,14 @@ u64 x86_cpu_accel_tlb_shootdown_targets(unsigned int cpu);
 #else
 static inline int x86_cpu_accel_user_enter(unsigned int cpu,
 					   struct mm_struct *mm,
+					   x86_cpu_accel_stop_fn stop,
+					   void *data,
 					   u64 *tlb_targets)
 {
 	(void)cpu;
 	(void)mm;
+	(void)stop;
+	(void)data;
 	if (tlb_targets)
 		*tlb_targets = 0;
 	return 0;
@@ -189,6 +199,11 @@ static inline void
 x86_cpu_accel_tlb_flush_end(struct x86_cpu_accel_tlb_flush *flush)
 {
 	(void)flush;
+}
+
+static inline void x86_cpu_accel_request_stop_owner(unsigned int cpu)
+{
+	(void)cpu;
 }
 
 static inline bool x86_cpu_accel_note_tlb_shootdown(unsigned int cpu,

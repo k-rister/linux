@@ -27,6 +27,7 @@
 #include <asm/e820/api.h>
 #include <asm/processor.h>
 #include <asm/tlbflush.h>
+#include <asm/cpu_accel.h>
 #include <asm/sections.h>
 #include <asm/setup.h>
 #include <linux/uaccess.h>
@@ -395,9 +396,16 @@ static void __cpa_flush_all(void *arg)
 
 static void cpa_flush_all(unsigned long cache)
 {
+	struct x86_cpu_accel_tlb_flush accel_flush;
+	unsigned int cpu;
+
 	BUG_ON(irqs_disabled() && !early_boot_irqs_disabled);
 
+	x86_cpu_accel_tlb_flush_begin(&accel_flush, cpu_online_mask);
+	for_each_cpu(cpu, &accel_flush.targets)
+		x86_cpu_accel_request_stop_owner(cpu);
 	on_each_cpu(__cpa_flush_all, (void *) cache, 1);
+	x86_cpu_accel_tlb_flush_end(&accel_flush);
 }
 
 static void __cpa_flush_tlb(void *data)
@@ -467,6 +475,8 @@ static void cpa_collapse_large_pages(struct cpa_data *cpa)
 
 static void cpa_flush(struct cpa_data *cpa, int cache)
 {
+	struct x86_cpu_accel_tlb_flush accel_flush;
+	unsigned int cpu;
 	unsigned int i;
 
 	BUG_ON(irqs_disabled() && !early_boot_irqs_disabled);
@@ -478,8 +488,13 @@ static void cpa_flush(struct cpa_data *cpa, int cache)
 
 	if (cpa->force_flush_all || cpa->numpages > tlb_single_page_flush_ceiling)
 		flush_tlb_all();
-	else
+	else {
+		x86_cpu_accel_tlb_flush_begin(&accel_flush, cpu_online_mask);
+		for_each_cpu(cpu, &accel_flush.targets)
+			x86_cpu_accel_request_stop_owner(cpu);
 		on_each_cpu(__cpa_flush_tlb, cpa, 1);
+		x86_cpu_accel_tlb_flush_end(&accel_flush);
+	}
 
 	if (!cache)
 		goto collapse_large_pages;

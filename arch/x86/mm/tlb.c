@@ -313,6 +313,7 @@ static int global_asid_available = MAX_ASID_AVAILABLE - TLB_NR_DYN_ASIDS - 1;
 static void reset_global_asid_space(void)
 {
 	struct x86_cpu_accel_tlb_flush accel_flush;
+	unsigned int cpu;
 	bool use_broadcast;
 
 	lockdep_assert_held(&global_asid_lock);
@@ -325,6 +326,8 @@ static void reset_global_asid_space(void)
 		invlpgb_flush_all_nonglobals();
 	} else {
 		/* Do not broadcast while an accelerator CPU is owned. */
+		for_each_cpu(cpu, &accel_flush.targets)
+			x86_cpu_accel_request_stop_owner(cpu);
 		on_each_cpu(do_flush_tlb_all, NULL, 1);
 	}
 	x86_cpu_accel_tlb_flush_end(&accel_flush);
@@ -1444,6 +1447,7 @@ static void accel_flush_tlb_multi_slow(const struct cpumask *cpumask,
 		else if (!should_flush_tlb(cpu, (void *)info))
 			continue;
 
+		x86_cpu_accel_request_stop_owner(cpu);
 		smp_call_function_single(cpu, flush_tlb_func, (void *)info, true);
 	}
 }
@@ -1482,10 +1486,13 @@ void flush_tlb_multi(const struct cpumask *cpumask,
 			flush_mask = filtered_mask;
 		}
 	}
-	if (slow_path)
+	if (slow_path) {
 		accel_flush_tlb_multi_slow(&accel_flush.targets, info);
-	else
+	} else {
+		for_each_cpu(cpu, flush_mask)
+			x86_cpu_accel_request_stop_owner(cpu);
 		__flush_tlb_multi(flush_mask, info);
+	}
 	if (filtered_mask_allocated)
 		free_cpumask_var(filtered_mask);
 	x86_cpu_accel_tlb_flush_end(&accel_flush);
@@ -1580,6 +1587,7 @@ static void do_flush_tlb_all(void *info)
 void flush_tlb_all(void)
 {
 	struct x86_cpu_accel_tlb_flush accel_flush;
+	unsigned int cpu;
 	bool use_broadcast;
 
 	count_vm_tlb_event(NR_TLB_REMOTE_FLUSH);
@@ -1593,6 +1601,8 @@ void flush_tlb_all(void)
 		invlpgb_flush_all();
 	} else {
 		/* Fall back to the IPI-based invalidation. */
+		for_each_cpu(cpu, &accel_flush.targets)
+			x86_cpu_accel_request_stop_owner(cpu);
 		on_each_cpu(do_flush_tlb_all, NULL, 1);
 	}
 	x86_cpu_accel_tlb_flush_end(&accel_flush);

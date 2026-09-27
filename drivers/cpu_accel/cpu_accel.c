@@ -68,6 +68,10 @@ struct cpu_accel_observation {
 
 typedef void (*cpu_accel_entry_fn)(void *data);
 
+#ifdef CONFIG_X86_LOCAL_APIC
+static void cpu_accel_arch_stop_direct(void *data);
+#endif
+
 static bool cpu_accel_user_workload(u32 workload)
 {
 	return workload == CPU_ACCEL_WORKLOAD_USER_OSLAT ||
@@ -79,7 +83,8 @@ static int cpu_accel_arch_enter(unsigned int cpu, cpu_accel_entry_fn entry,
 				void *data)
 {
 #ifdef CONFIG_X86_LOCAL_APIC
-	return x86_cpu_accel_direct_enter(cpu, entry, data);
+	return x86_cpu_accel_direct_enter(cpu, entry,
+					  cpu_accel_arch_stop_direct, data);
 #else
 	return smp_call_function_single(cpu, entry, data, 1);
 #endif
@@ -314,6 +319,16 @@ struct cpu_accel_device {
 
 static struct cpu_accel_device cpu_accel;
 
+#ifdef CONFIG_X86_LOCAL_APIC
+static void cpu_accel_arch_stop_direct(void *data)
+{
+	struct cpu_accel_device *dev = data;
+
+	atomic_set(&dev->stop_requested, 1);
+	WRITE_ONCE(dev->shared->stop_requested, 1);
+}
+#endif
+
 #ifdef CONFIG_X86
 static unsigned int cpu_accel_user_escape_drop_count;
 module_param_named(user_escape_drop_count, cpu_accel_user_escape_drop_count,
@@ -337,6 +352,22 @@ static int cpu_accel_arch_send_user_escape(unsigned int cpu)
 	return -EOPNOTSUPP;
 #endif
 }
+
+#ifdef CONFIG_X86_LOCAL_APIC
+static void cpu_accel_arch_stop_user(void *data)
+{
+	struct cpu_accel_device *dev = data;
+
+	if (!READ_ONCE(dev->user_image.active))
+		return;
+
+	atomic_set(&dev->stop_requested, 1);
+	WRITE_ONCE(dev->shared->stop_requested, 1);
+	atomic_set(&dev->user_escape_requested, 1);
+	smp_wmb();
+	cpu_accel_arch_send_user_escape(READ_ONCE(dev->config.cpu));
+}
+#endif
 
 static int cpu_accel_user_nmi(unsigned int type, struct pt_regs *regs)
 {
@@ -1237,6 +1268,7 @@ static int cpu_accel_arch_user_enter(struct cpu_accel_device *dev)
 
 #ifdef CONFIG_X86_LOCAL_APIC
 	ret = x86_cpu_accel_user_enter(raw_smp_processor_id(), image->mm,
+				       cpu_accel_arch_stop_user, dev,
 				       &tlb_targets_entry);
 	if (ret)
 		return ret;

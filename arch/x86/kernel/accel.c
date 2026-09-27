@@ -323,6 +323,7 @@ static void x86_cpu_accel_direct_owner_exit(unsigned int cpu)
 
 void x86_cpu_accel_maintenance_begin(void)
 {
+	unsigned int cpu;
 	unsigned long flags;
 
 	might_sleep();
@@ -351,6 +352,20 @@ void x86_cpu_accel_maintenance_begin(void)
 		wait_event(x86_cpu_accel_owner_wait,
 			   !READ_ONCE(x86_cpu_accel_maintenance_try));
 	}
+	/*
+	 * Admission is closed, so this set cannot grow. Ask owners with a
+	 * registered stop callback to leave; the callback only requests a stop
+	 * and does not acknowledge owner exit or TLB completion.
+	 */
+	for_each_possible_cpu(cpu)
+		x86_cpu_accel_request_stop_owner(cpu);
+
+	/*
+	 * owner_exit_finish() drops active_count only after local TLB
+	 * reconciliation and any reclaim acknowledgements have completed.
+	 * Owners without a stop callback, or which do not honor the request,
+	 * retain the existing synchronous wait.
+	 */
 	wait_event(x86_cpu_accel_owner_wait,
 		   !atomic_read(&x86_cpu_accel_active_count));
 }

@@ -523,11 +523,14 @@ explicit ownership handoff that drains CPU and device users before changing
 attributes. It must not weaken CPA's synchronous completion contract.
 
 The x86 prototype has an owner-drain maintenance gate. The x86 text-mutex
-wrappers first bar new accelerator admissions and wait for existing owners to
-exit, then take the existing mutex; unlock releases the mutex before reopening
-admission. The gate therefore spans the whole text-mutex transaction, including
-its text-patching rendezvous. It covers x86 text-poke clients and generic
-kprobes that use this mutex, and may wait without a bound for an owner to exit.
+wrappers first bar new accelerator admissions, request a stop from each owner
+with a registered nonblocking callback, and wait for existing owners to exit
+and finish TLB reconciliation before taking the existing mutex; unlock releases
+the mutex before reopening admission. A stop callback is only a request: owners
+without one, or owners that do not honor it, retain the synchronous wait. The
+gate therefore spans the whole text-mutex transaction, including its
+text-patching rendezvous, and may wait without a bound. It covers x86
+text-poke clients and generic kprobes that use this mutex.
 MTRR add and delete operations also take the gate before the CPU-hotplug read
 lock and hold it through their stop-machine rendezvous and MTRR map rebuild.
 Late microcode reload takes the gate before its CPU-hotplug read lock and holds
@@ -944,12 +947,15 @@ The implementation checkpoints are:
     user NMI escape requires a driver/controller request and cannot serve as
     the generic MM quiesce path. The current prototype seals an exec-created
     worker ``mm`` with a complete VMA
-    allowlist, including the fixed x86 ``[vsyscall]`` exception. Remaining
-    work includes a progress policy for full-flush waits and semantic safety
+    allowlist, including the fixed x86 ``[vsyscall]`` exception. The sleepable
+    maintenance gate now requests registered owner stops and waits for owner
+    exit after local TLB reconciliation; it may still wait without a bound,
+    and this does not change the synchronous MM full-flush contract. Remaining
+    work includes progress reporting for full-flush waits and semantic safety
     for kernel code/exception mapping updates. The current synchronous
     full-flush path preserves invalidation-before-reuse, but may wait without a
-    bound for an owner to exit; there is no generic owner-quiesce operation or
-    safe timeout for these MM hooks. A focused VM test unmaps a touched
+    bound for an owner to exit; there is no safe timeout for these MM hooks. A
+    focused VM test unmaps a touched
     2 MiB mapping from another ``mm`` while the target CPU is ring-3 owned,
     then uses privileged ``/proc/self/pagemap`` and ``/proc/kpageflags``
     inspection to track a freed data-page PFN and, when observed, the

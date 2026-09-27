@@ -325,6 +325,9 @@ int dbg_activate_sw_breakpoints(void)
 
 		kgdb_flush_swbreak_addr(kgdb_break[i].bpt_addr);
 		kgdb_break[i].state = BP_ACTIVE;
+#ifdef CONFIG_X86
+		x86_cpu_accel_kgdb_breakpoint_get();
+#endif
 	}
 	return ret;
 }
@@ -385,10 +388,14 @@ int dbg_deactivate_sw_breakpoints(void)
 			pr_info("BP remove failed: %lx\n",
 				kgdb_break[i].bpt_addr);
 			ret = error;
+			continue;
 		}
 
 		kgdb_flush_swbreak_addr(kgdb_break[i].bpt_addr);
 		kgdb_break[i].state = BP_SET;
+#ifdef CONFIG_X86
+		x86_cpu_accel_kgdb_breakpoint_put();
+#endif
 	}
 	return ret;
 }
@@ -442,9 +449,14 @@ int dbg_remove_all_break(void)
 		if (kgdb_break[i].state != BP_ACTIVE)
 			goto setundefined;
 		error = kgdb_arch_remove_breakpoint(&kgdb_break[i]);
-		if (error)
+		if (error) {
 			pr_err("breakpoint remove failed: %lx\n",
 			       kgdb_break[i].bpt_addr);
+			continue;
+		}
+#ifdef CONFIG_X86
+		x86_cpu_accel_kgdb_breakpoint_put();
+#endif
 setundefined:
 		kgdb_break[i].state = BP_UNDEFINED;
 	}

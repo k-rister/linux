@@ -438,6 +438,10 @@ debugger entry and leaves the exception to the normal handler. Otherwise it
 holds the reservation until the debugger CPUs resume, including a debugger CPU
 handoff. This prevents accelerator execution throughout KGDB's patching
 session; the existing timeout behavior for ordinary Linux CPUs is unchanged.
+After the session, every successfully armed KGDB software or hardware
+breakpoint continues to block accelerator admission until it is removed. This
+prevents an owner from later executing a patched kernel instruction or
+triggering a KGDB hardware breakpoint after the session reservation is gone.
 
 The current exception and NMI paths have different lifetime rules. IDT and
 FRED system-vector installation helpers are ``__init``-only and reject updates

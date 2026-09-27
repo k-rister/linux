@@ -37,6 +37,7 @@
 #include <linux/memory.h>
 
 #include <asm/text-patching.h>
+#include <asm/cpu_accel.h>
 #include <asm/debugreg.h>
 #include <asm/apicdef.h>
 #include <asm/apic.h>
@@ -288,6 +289,7 @@ kgdb_remove_hw_break(unsigned long addr, int len, enum kgdb_bptype bptype)
 		return -1;
 	}
 	breakinfo[i].enabled = 0;
+	x86_cpu_accel_kgdb_breakpoint_put();
 
 	return 0;
 }
@@ -310,9 +312,12 @@ static void kgdb_remove_all_hw_break(void)
 		if (dbg_is_early)
 			early_dr7 &= ~encode_dr7(i, breakinfo[i].len,
 						 breakinfo[i].type);
-		else if (hw_break_release_slot(i))
+		else if (hw_break_release_slot(i)) {
 			printk(KERN_ERR "KGDB: hw bpt remove failed %lx\n",
 			       breakinfo[i].addr);
+			continue;
+		}
+		x86_cpu_accel_kgdb_breakpoint_put();
 		breakinfo[i].enabled = 0;
 	}
 }
@@ -366,6 +371,7 @@ kgdb_set_hw_break(unsigned long addr, int len, enum kgdb_bptype bptype)
 		return -1;
 	}
 	breakinfo[i].enabled = 1;
+	x86_cpu_accel_kgdb_breakpoint_get();
 
 	return 0;
 }

@@ -56,6 +56,7 @@ static struct task_struct *x86_cpu_accel_maintenance_owner;
 static unsigned int x86_cpu_accel_maintenance_depth;
 static bool x86_cpu_accel_maintenance;
 static bool x86_cpu_accel_maintenance_try;
+static unsigned int x86_cpu_accel_kgdb_breakpoints;
 
 static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets,
 				     struct mm_struct *owner_mm)
@@ -74,7 +75,8 @@ static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets,
 
 	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
 	raw_spin_lock_irqsave(&x86_cpu_accel_ownership_lock, ownership_flags);
-	if (x86_cpu_accel_maintenance || x86_cpu_accel_maintenance_try) {
+	if (x86_cpu_accel_maintenance || x86_cpu_accel_maintenance_try ||
+	    x86_cpu_accel_kgdb_breakpoints) {
 		raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock,
 					   ownership_flags);
 		preempt_enable();
@@ -303,6 +305,30 @@ void x86_cpu_accel_maintenance_try_end(void)
 	wake_up_all(&x86_cpu_accel_owner_wait);
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_maintenance_try_end);
+
+void x86_cpu_accel_kgdb_breakpoint_get(void)
+{
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&x86_cpu_accel_ownership_lock, flags);
+	x86_cpu_accel_kgdb_breakpoints++;
+	raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
+}
+EXPORT_SYMBOL_GPL(x86_cpu_accel_kgdb_breakpoint_get);
+
+void x86_cpu_accel_kgdb_breakpoint_put(void)
+{
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&x86_cpu_accel_ownership_lock, flags);
+	if (WARN_ON_ONCE(!x86_cpu_accel_kgdb_breakpoints)) {
+		raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
+		return;
+	}
+	x86_cpu_accel_kgdb_breakpoints--;
+	raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
+}
+EXPORT_SYMBOL_GPL(x86_cpu_accel_kgdb_breakpoint_put);
 
 int x86_cpu_accel_user_enter(unsigned int cpu, struct mm_struct *mm,
 			     u64 *tlb_targets)

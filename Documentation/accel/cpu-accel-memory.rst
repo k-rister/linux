@@ -432,6 +432,27 @@ continue to rely on generation reconciliation before re-entry. A callback that
 does not return, or an owner that cannot take the IPI, can still block the
 synchronous caller indefinitely.
 
+The ``cpu_accel:owner_stop_request`` and
+``cpu_accel:owner_exit_complete`` trace events expose that wait's progress.
+They include the CPU and owner generation so events can be paired across reuse
+of a worker CPU. The stop event records whether a callback exists and whether
+this call dispatched it, along with the requesting call site. The exit event
+is emitted only after the owner's required local TLB reconciliation and
+reclaim acknowledgements complete; its generation and unscoped-flush fields
+describe the state reconciled at exit. With tracefs mounted at
+``/sys/kernel/tracing``, enable both events and read ``trace_pipe``::
+
+  echo 1 > /sys/kernel/tracing/events/cpu_accel/owner_stop_request/enable
+  echo 1 > /sys/kernel/tracing/events/cpu_accel/owner_exit_complete/enable
+  cat /sys/kernel/tracing/trace_pipe
+
+Correlate records by CPU and owner generation; ``callback_sent`` distinguishes
+the one-shot callback dispatch from later stop requests for the same owner.
+If both events were enabled before the request and the trace buffer reports no
+lost records, a stop request without a matching exit event means completion
+has not been reported. Silence alone is not evidence of completion. The event
+pair does not replace synchronous IPI completion or impose a timeout.
+
 Owner exit clears the runnable-owner state, then remains counted as active and
 blocks new entry on that CPU until any required local TLB flush and reclaim
 acknowledgements complete. The local flush reconciles every pending ``mm``
@@ -686,6 +707,18 @@ trampoline take the owner-draining text-mutex wrapper around
 ``smp_text_poke_single()``. This closes those ftrace cases; it does not imply
 that other executable pools or subsystem ``set_memory*()`` callers use the
 same gate.
+
+The live x86 text-patching call-site audit found the owner-draining
+maintenance reservation around ftrace code updates (including function-graph
+hooks), jump-label transforms and batch application, static calls, BPF text
+pokes, module relocations, kprobe mutation, and callthunk patching.
+``text_poke_copy()`` and ``text_poke_set()`` take the same reservation
+themselves. KGDB uses its nonblocking reservation described above. Newly
+generated code is populated before publication, while early text patching is
+limited to initialization or unpublished module text. Uprobes change user
+process mappings and are governed by the per-address-space lifetime rules,
+not this kernel-text audit. This inventory describes the current tree; new
+writers still need to be checked at their call sites.
 
 Each additional interlock must cover the entire maintenance transaction:
 reserve owner admission before changing code or mappings, retain that

@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
+#define CREATE_TRACE_POINTS
+#include <trace/events/cpu_accel.h>
 
 #include <linux/atomic.h>
 #include <linux/cpu.h>
@@ -39,8 +41,12 @@ struct x86_cpu_accel_request {
 	atomic64_t call_function_deferred;
 	atomic64_t tlb_shootdown_targets;
 	struct mm_struct *owner_mm;
+	u64 owner_generation;
+	bool owner_user_mm;
 	/* Highest native TLB generation targeting owner_mm during ownership. */
 	u64 pending_tlb_gen;
+	u64 exit_tlb_gen;
+	bool exit_unscoped_tlb_flush;
 	/* Flushes with no single address-space owner (e.g. kernel/global). */
 	bool pending_unscoped_tlb_flush;
 	/* Reclaim completions acknowledged after user_exit() locally flushes. */
@@ -118,11 +124,16 @@ static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets,
 	atomic_set(&request->reschedule_pending, 0);
 	atomic_set(&request->call_function_pending, 0);
 	request->owner_mm = owner_mm;
+	if (!++request->owner_generation)
+		request->owner_generation++;
+	request->owner_user_mm = !!owner_mm;
 	request->owner_stop = owner_stop;
 	request->owner_stop_data = owner_stop_data;
 	request->owner_stop_requested = false;
 	request->pending_tlb_gen = 0;
 	request->pending_unscoped_tlb_flush = false;
+	request->exit_tlb_gen = 0;
+	request->exit_unscoped_tlb_flush = false;
 	atomic_inc(&x86_cpu_accel_active_count);
 	atomic_set(&request->active, 1);
 	if (tlb_targets)
@@ -169,23 +180,40 @@ void x86_cpu_accel_request_stop_owner(unsigned int cpu)
 	struct x86_cpu_accel_request *request;
 	x86_cpu_accel_stop_fn stop = NULL;
 	void *data = NULL;
+	unsigned long caller = _RET_IP_;
 	unsigned long flags;
+	u64 owner_id = 0;
+	bool active = false;
+	bool user_mm = false;
+	bool callback_registered = false;
+	bool callback_sent = false;
 
 	if (cpu >= nr_cpu_ids)
 		return;
 	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
 	raw_spin_lock_irqsave(&request->lock, flags);
-	if (atomic_read(&request->active) && request->owner_stop &&
-	    !request->owner_stop_requested) {
-		request->owner_stop_requested = true;
-		stop = request->owner_stop;
-		data = request->owner_stop_data;
+	if (atomic_read(&request->active)) {
+		active = true;
 		atomic_inc(&request->stop_inflight);
+		owner_id = request->owner_generation;
+		user_mm = request->owner_user_mm;
+		callback_registered = !!request->owner_stop;
+		if (request->owner_stop && !request->owner_stop_requested) {
+			request->owner_stop_requested = true;
+			stop = request->owner_stop;
+			data = request->owner_stop_data;
+			callback_sent = true;
+		}
 	}
 	raw_spin_unlock_irqrestore(&request->lock, flags);
-	if (stop) {
-		/* This callback only publishes a stop request; it must not wait. */
-		stop(data);
+	if (active) {
+		trace_owner_stop_request(cpu, owner_id, user_mm,
+					 callback_registered, callback_sent,
+					 caller);
+		if (stop) {
+			/* This callback only publishes a stop request; it must not wait. */
+			stop(data);
+		}
 		atomic_dec_return_release(&request->stop_inflight);
 	}
 }
@@ -214,6 +242,9 @@ static u64 x86_cpu_accel_owner_exit(unsigned int cpu,
 		WARN_ON_ONCE(request->exiting);
 		request->exiting = true;
 		exited = true;
+		request->exit_tlb_gen = request->pending_tlb_gen;
+		request->exit_unscoped_tlb_flush =
+			request->pending_unscoped_tlb_flush;
 		list_for_each_entry(ack, &request->tlb_reclaim_acks, link)
 			WARN_ON_ONCE(ack->mm != request->owner_mm ||
 				     ack->tlb_gen > request->pending_tlb_gen);
@@ -246,6 +277,8 @@ static u64 x86_cpu_accel_owner_exit(unsigned int cpu,
 static void x86_cpu_accel_owner_exit_finish(unsigned int cpu, bool owner_exited)
 {
 	struct x86_cpu_accel_request *request;
+	u64 owner_id, tlb_gen;
+	bool user_mm, stop_requested, unscoped_flush;
 	unsigned long flags;
 
 	if (!owner_exited)
@@ -256,9 +289,29 @@ static void x86_cpu_accel_owner_exit_finish(unsigned int cpu, bool owner_exited)
 		raw_spin_unlock_irqrestore(&request->lock, flags);
 		return;
 	}
+	owner_id = request->owner_generation;
+	user_mm = request->owner_user_mm;
+	stop_requested = request->owner_stop_requested;
+	tlb_gen = request->exit_tlb_gen;
+	unscoped_flush = request->exit_unscoped_tlb_flush;
+	raw_spin_unlock_irqrestore(&request->lock, flags);
+
+	/* Keep this owner slot reserved until its completion is observable. */
+	trace_owner_exit_complete(cpu, owner_id, user_mm, stop_requested,
+				  tlb_gen, unscoped_flush);
+
+	raw_spin_lock_irqsave(&request->lock, flags);
+	if (WARN_ON_ONCE(!request->exiting ||
+			 request->owner_generation != owner_id)) {
+		raw_spin_unlock_irqrestore(&request->lock, flags);
+		return;
+	}
 	request->owner_stop = NULL;
 	request->owner_stop_data = NULL;
 	request->owner_stop_requested = false;
+	request->owner_user_mm = false;
+	request->exit_tlb_gen = 0;
+	request->exit_unscoped_tlb_flush = false;
 	request->exiting = false;
 	atomic_dec(&x86_cpu_accel_active_count);
 	raw_spin_unlock_irqrestore(&request->lock, flags);

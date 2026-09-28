@@ -1165,6 +1165,28 @@ The implementation checkpoints are:
     trace events enabled and an independent bounded owner-escape fallback
     before changing the stop/ack protocol.
 
+    A follow-up run on the same 00604 kernel used the checkout-matched
+    ``cpu-accelctl`` and ``test-tlb-generation`` tools. The COW and reclaim
+    regression passed, including ``wp_page_copy()`` and ``MADV_PAGEOUT``
+    while the other-mm ring-3 owner was active. Tracing recorded six
+    ``tlb_flush_wait`` begin/complete pairs with two targets and one owner;
+    the mm-scoped owner filter kept the ring-3 CPU out of those IPI masks, so
+    there were no matching stop-request events. Both owner exits completed
+    with ``stop_requested=0``. The run reported no soft-lockup, RCU-stall, BUG,
+    Oops, or panic records. This validates the exercised mm-scoped COW and
+    reclaim paths, but it does not reproduce the global CPA full-flush stall.
+
+    The VM's installed module tree contains only ten modules, all currently
+    loaded for the accelerator, network, root filesystem, or ``/boot``;
+    ``dummy.ko`` is absent. A guarded ``modprobe dummy`` attempt stopped at
+    this precondition before tracing or changing VM state. Do not unload a
+    live system module to manufacture the global-flush trigger. The installed
+    ``/usr/local/bin/cpu-accelctl`` also rejects the kernel's shared ABI; use
+    the checkout-matched binary staged under ``/tmp`` for further runs. A
+    dedicated test-only CPA trigger compatible with 00604 is needed to capture
+    the missing stop/exit/flush evidence. Keep the synchronous fallback and
+    do not change the stop/ack protocol until that evidence is available.
+
     The test-only fixture now retains one unpinned, read-only shared regular-
     file page in the worker and maps an alias in the companion. On kernel
     ``7.3.0-rc3-accel-tlbfix-00603-g7c09283ad6e9``, the focused reclaim test

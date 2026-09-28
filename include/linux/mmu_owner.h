@@ -23,7 +23,11 @@ struct mmu_owner_snapshot {
 	u64 generation;
 };
 
-/* Snapshot data is borrowed; callers must revalidate the generation. */
+/*
+ * A registered owner pins the live address space on MMU builds. Snapshots
+ * borrow data without pinning its storage, so callers must keep that storage
+ * alive independently and revalidate the owner generation before using it.
+ */
 
 void mmu_owner_init(struct mmu_owner *owner);
 int mmu_owner_register(struct mm_struct *mm, struct mmu_owner *owner,

@@ -656,6 +656,14 @@ follows:
   hibernation pair direct-map invalidation with an explicit kernel-range flush
   before the page can be exposed or reused. A new caller must provide the same
   completion and page-lifetime ordering.
+* Hibernation restore-image protection changes private restore-buffer pages
+  with ``set_memory_ro()`` and ``set_memory_rw()``. A buffer page becomes
+  read-only after its image data has been consumed, and write access is
+  restored before ``swsusp_free()`` releases it. These are data buffers, not
+  executable or exception mappings, and the current accelerator ABI does not
+  map them into the worker ``mm``. Their lifetime still depends on synchronous
+  CPA completion before page reuse; this path does not need the kernel
+  code-patching gate.
 * Cache-type changes through ``ioremap()`` reject ordinary system RAM that is
   not reserved; PAT tracks cache types and rejects incompatible aliases, and
   direct-map updates complete a synchronous TLB flush. Runtime driver buffers

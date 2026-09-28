@@ -4,6 +4,7 @@
 
 #include <linux/cpumask.h>
 #include <linux/list.h>
+#include <linux/mmu_owner.h>
 #include <linux/mutex.h>
 
 typedef void (*x86_cpu_accel_entry_fn)(void *data);

@@ -414,6 +414,16 @@ that registry. Admission and invalidation publication must share an
 interlock, so an owner either joins the affected completion or flushes the
 current generation before it can execute.
 
+The first MM-core step now provides a per-``mm`` execution-owner registry and
+an update-depth interlock. The x86 backend registers the ``mm`` it actually
+loads, publishes TLB generations to those records, and snapshots matching
+owners for reclaim. The snapshot is only a candidate list: x86 rechecks the
+per-CPU owner generation under its request lock before attaching an
+acknowledgment. ``mm_cpumask`` remains the ordinary CPU-flush target set; it
+is not used as the ownership record. Per-owner stop callbacks and reclaim
+acknowledgment lists are still x86-specific, so the generic MM completion
+contract is not yet implemented end to end.
+
 A generic completion is reserved before the first PTE is removed and owns the
 affected page disposition as well as references to the matching owner
 instances. After the mapping change publishes its generation, MM may request
@@ -1129,22 +1139,20 @@ The implementation checkpoints are:
     ``DMA`` regions and userspace/NIC integration only after this non-networked
     memory contract is stable.
 
-    Next, define an MM-core owner registry and completion contract before
-    extending asynchronous reclaim beyond the x86 clean-folio prototype. The
-    contract must bind each owner instance to the address space actually
-    loaded, serialize owner admission with generation publication, keep stop
-    requests separate from exit and TLB acknowledgements, and retain every
-    affected page until both ordinary CPU flushes and owner acknowledgements
-    complete. Owners without a stop contract and callers without an explicit
-    page disposition remain synchronous. No timeout authorizes page reuse.
+    The initial MM-core owner-registry step now binds x86 owner instances to
+    their loaded ``mm`` and serializes admission against batched-unmap
+    publication. Reclaim snapshots candidate owners from that registry and
+    x86 validates each per-CPU generation before registering its existing
+    stop/ack record. The MM core still needs to own the complete stop and
+    acknowledgment lifecycle; ordinary CPU flushes and callers without an
+    explicit page disposition remain synchronous, and no timeout authorizes
+    page reuse. Do not extend asynchronous reclaim to ``mmu_gather`` or other
+    page dispositions in this step.
 
-    The current VM image cannot exercise the reclaim completion: its admitted
-    image, stack, and RSEQ area are pinned, while the control and shared-data
-    mappings use permanently allocated ``vmalloc`` backing. Add a test-only,
-    separately registered read-only file-backed mapping that is not pinned and
-    can be aliased by the companion. The companion can then trigger reclaim
-    while the worker owns the mapping. Trace the stop request and matching
-    owner exit, verify the page's contents after refault, and check physical
-    page reuse where observable. Keep this test mapping out of the normal
-    workload ABI; the existing mapping allowlist must continue to reject
-    unregistered VMAs.
+    The test-only fixture now retains one unpinned, read-only shared regular-
+    file page in the worker and maps an alias in the companion. On kernel
+    ``7.3.0-rc3-accel-tlbfix-00603-g7c09283ad6e9``, the focused reclaim test
+    passed: ``MADV_PAGEOUT`` reclaimed the page after owner exit and the
+    refaulted contents matched the file. This test does not check physical
+    page reuse. Keep the mapping out of the normal workload ABI and continue
+    rejecting unregistered VMAs.

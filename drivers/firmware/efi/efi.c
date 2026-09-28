@@ -72,6 +72,8 @@ struct mm_struct efi_mm = {
 	.write_protect_seq      = SEQCNT_ZERO(efi_mm.write_protect_seq),
 	MMAP_LOCK_INITIALIZER(efi_mm)
 	.page_table_lock	= __SPIN_LOCK_UNLOCKED(efi_mm.page_table_lock),
+	.execution_owner_lock	= __RAW_SPIN_LOCK_UNLOCKED(efi_mm.execution_owner_lock),
+	.execution_owners	= LIST_HEAD_INIT(efi_mm.execution_owners),
 	.mmlist			= LIST_HEAD_INIT(efi_mm.mmlist),
 #ifdef CONFIG_SCHED_MM_CID
 	.mm_cid.lock		= __RAW_SPIN_LOCK_UNLOCKED(efi_mm.mm_cid.lock),

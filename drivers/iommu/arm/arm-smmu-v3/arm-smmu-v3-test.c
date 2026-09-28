@@ -28,6 +28,8 @@ static struct arm_smmu_device smmu = {
 };
 static struct mm_struct sva_mm = {
 	.pgd = (void *)0xdaedbeefdeadbeefULL,
+	.execution_owner_lock = __RAW_SPIN_LOCK_UNLOCKED(sva_mm.execution_owner_lock),
+	.execution_owners = LIST_HEAD_INIT(sva_mm.execution_owners),
 };
 
 enum arm_smmu_test_master_feat {

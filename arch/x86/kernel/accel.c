@@ -41,6 +41,7 @@ struct x86_cpu_accel_request {
 	atomic64_t call_function_deferred;
 	atomic64_t tlb_shootdown_targets;
 	struct mm_struct *owner_mm;
+	struct mmu_owner mmu_owner;
 	u64 owner_generation;
 	bool owner_user_mm;
 	/* Highest native TLB generation targeting owner_mm during ownership. */
@@ -56,6 +57,9 @@ struct x86_cpu_accel_request {
 
 static DEFINE_PER_CPU(struct x86_cpu_accel_request, x86_cpu_accel_request) = {
 	.lock = __RAW_SPIN_LOCK_UNLOCKED(x86_cpu_accel_request.lock),
+	.mmu_owner = {
+		.lock = __RAW_SPIN_LOCK_UNLOCKED(x86_cpu_accel_request.mmu_owner.lock),
+	},
 };
 
 static DEFINE_PER_CPU(unsigned int, x86_cpu_accel_tlb_flush_count);
@@ -96,7 +100,7 @@ static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets,
 		preempt_enable();
 		return -EBUSY;
 	}
-	if (owner_mm && READ_ONCE(owner_mm->context.accel_tlb_unmap_depth)) {
+	if (owner_mm && mmu_owner_update_inflight(owner_mm)) {
 		raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock,
 					   ownership_flags);
 		preempt_enable();
@@ -135,6 +139,23 @@ static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets,
 	request->pending_unscoped_tlb_flush = false;
 	request->exit_tlb_gen = 0;
 	request->exit_unscoped_tlb_flush = false;
+	if (owner_mm) {
+		int ret = mmu_owner_register(owner_mm, &request->mmu_owner,
+					     request,
+					     request->owner_generation);
+
+		if (ret) {
+			request->owner_mm = NULL;
+			request->owner_stop = NULL;
+			request->owner_stop_data = NULL;
+			request->owner_user_mm = false;
+			raw_spin_unlock_irqrestore(&request->lock, request_flags);
+			raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock,
+						   ownership_flags);
+			preempt_enable();
+			return ret;
+		}
+	}
 	atomic_inc(&x86_cpu_accel_active_count);
 	atomic_set(&request->active, 1);
 	if (tlb_targets)
@@ -256,8 +277,9 @@ static u64 x86_cpu_accel_owner_exit(unsigned int cpu,
 				    bool *owner_exited)
 {
 	struct x86_cpu_accel_request *request;
+	struct mm_struct *owner_mm = NULL;
 	unsigned long flags;
-	u64 targets;
+	u64 targets, owner_id = 0;
 	bool exited = false;
 
 	if (local_tlb_flush)
@@ -274,6 +296,8 @@ static u64 x86_cpu_accel_owner_exit(unsigned int cpu,
 		WARN_ON_ONCE(request->exiting);
 		request->exiting = true;
 		exited = true;
+		owner_mm = request->owner_mm;
+		owner_id = request->owner_generation;
 		request->exit_tlb_gen = request->pending_tlb_gen;
 		request->exit_unscoped_tlb_flush =
 			request->pending_unscoped_tlb_flush;
@@ -298,6 +322,21 @@ static u64 x86_cpu_accel_owner_exit(unsigned int cpu,
 	}
 	targets = atomic64_read(&request->tlb_shootdown_targets);
 	raw_spin_unlock_irqrestore(&request->lock, flags);
+	if (exited && owner_mm) {
+		u64 tlb_gen = mmu_owner_unregister(&request->mmu_owner);
+
+		raw_spin_lock_irqsave(&request->lock, flags);
+		if (WARN_ON_ONCE(!request->exiting ||
+				 request->owner_generation != owner_id)) {
+			raw_spin_unlock_irqrestore(&request->lock, flags);
+			return targets;
+		}
+		if (tlb_gen > request->exit_tlb_gen)
+			request->exit_tlb_gen = tlb_gen;
+		if (local_tlb_flush && tlb_gen)
+			*local_tlb_flush = true;
+		raw_spin_unlock_irqrestore(&request->lock, flags);
+	}
 	/* Keep callback storage alive until every request made under the lock ran. */
 	while (atomic_read_acquire(&request->stop_inflight))
 		cpu_relax();
@@ -550,7 +589,7 @@ int x86_cpu_accel_user_enter(unsigned int cpu, struct mm_struct *mm,
 
 	for (;;) {
 		wait_event(x86_cpu_accel_owner_wait,
-			   !READ_ONCE(mm->context.accel_tlb_unmap_depth));
+			   !mmu_owner_update_inflight(mm));
 
 		/*
 		 * A batched unmap may have published a new generation without
@@ -593,7 +632,7 @@ void x86_cpu_accel_tlb_unmap_begin(struct mm_struct *mm)
 	unsigned long flags;
 
 	raw_spin_lock_irqsave(&x86_cpu_accel_ownership_lock, flags);
-	mm->context.accel_tlb_unmap_depth++;
+	mmu_owner_update_begin(mm);
 	raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
 }
 
@@ -602,11 +641,7 @@ void x86_cpu_accel_tlb_unmap_end(struct mm_struct *mm)
 	unsigned long flags;
 
 	raw_spin_lock_irqsave(&x86_cpu_accel_ownership_lock, flags);
-	if (WARN_ON_ONCE(!mm->context.accel_tlb_unmap_depth)) {
-		raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
-		return;
-	}
-	mm->context.accel_tlb_unmap_depth--;
+	mmu_owner_update_end(mm);
 	raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
 	wake_up_all(&x86_cpu_accel_owner_wait);
 }
@@ -719,8 +754,10 @@ bool x86_cpu_accel_note_tlb_shootdown(unsigned int cpu,
 		if (!mm)
 			request->pending_unscoped_tlb_flush = true;
 		else if (request->owner_mm == mm &&
-			 tlb_gen > request->pending_tlb_gen)
+			 tlb_gen > request->pending_tlb_gen) {
 			request->pending_tlb_gen = tlb_gen;
+			mmu_owner_update_one_tlb_gen(&request->mmu_owner, tlb_gen);
+		}
 	}
 	raw_spin_unlock_irqrestore(&request->lock, flags);
 
@@ -734,7 +771,10 @@ void x86_cpu_accel_note_tlb_unmap(struct mm_struct *mm, u64 tlb_gen)
 	unsigned int cpu;
 	unsigned long flags;
 
-	if (!mm || !x86_cpu_accel_any_active())
+	if (!mm)
+		return;
+	mmu_owner_update_tlb_gen(mm, tlb_gen);
+	if (!x86_cpu_accel_any_active())
 		return;
 
 	for_each_cpu(cpu, mm_cpumask(mm)) {
@@ -782,7 +822,7 @@ int x86_cpu_accel_reclaim_register(struct x86_cpu_accel_tlb_reclaim_completion *
 				   x86_cpu_accel_reclaim_fn ack_fn)
 {
 	struct x86_cpu_accel_request *request;
-	unsigned int cpu, i;
+	unsigned int i;
 	unsigned int registered = 0;
 	unsigned long flags;
 
@@ -791,15 +831,27 @@ int x86_cpu_accel_reclaim_register(struct x86_cpu_accel_tlb_reclaim_completion *
 
 	for (i = 0; i < comp->nr_mms; i++) {
 		struct mm_struct *mm = comp->mms[i].mm;
+		struct mmu_owner_snapshot owners[X86_CPU_ACCEL_TLB_RECLAIM_MAX_ACKS];
 		u64 tlb_gen = comp->mms[i].tlb_gen;
+		int nr_owners, j;
 
-		for_each_cpu(cpu, mm_cpumask(mm)) {
+		nr_owners = mmu_owner_snapshot(mm, tlb_gen, owners,
+					       ARRAY_SIZE(owners));
+		if (nr_owners < 0) {
+			comp->overflow = true;
+			return -EOVERFLOW;
+		}
+
+		for (j = 0; j < nr_owners; j++) {
 			struct x86_cpu_accel_tlb_reclaim_ack *ack;
 
-			request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
+			request = owners[j].data;
+			if (WARN_ON_ONCE(!request))
+				continue;
 			raw_spin_lock_irqsave(&request->lock, flags);
 			if (!atomic_read(&request->active) ||
 			    request->owner_mm != mm ||
+			    request->owner_generation != owners[j].generation ||
 			    request->pending_tlb_gen < tlb_gen) {
 				raw_spin_unlock_irqrestore(&request->lock, flags);
 				continue;
@@ -892,8 +944,10 @@ bool x86_cpu_accel_filter_mm_tlb_shootdown(unsigned int cpu,
 	if (atomic_read(&request->active) && request->owner_mm) {
 		atomic64_inc(&request->tlb_shootdown_targets);
 		if (request->owner_mm == mm &&
-		    tlb_gen > request->pending_tlb_gen)
+		    tlb_gen > request->pending_tlb_gen) {
 			request->pending_tlb_gen = tlb_gen;
+			mmu_owner_update_one_tlb_gen(&request->mmu_owner, tlb_gen);
+		}
 		/*
 		 * The ring-3 owner cannot receive the synchronous call-function
 		 * TLB callback with interrupts disabled. Its own mm is write-locked

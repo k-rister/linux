@@ -1149,6 +1149,22 @@ The implementation checkpoints are:
     page reuse. Do not extend asynchronous reclaim to ``mmu_gather`` or other
     page dispositions in this step.
 
+    A later run on ``7.3.0-rc3-accel-tlbfix-00604-g44f7b92cde35-dirty``
+    reported soft lockups during a module load. CPU0's ``modprobe`` was
+    waiting in ``smp_call_function_many_cond()`` from the CPA
+    ``flush_tlb_all()`` in ``__split_large_page()``; an NMI backtrace still
+    found CPU2 in the ring-3 ``cpu-accelctl`` TSC loop. CPUs 4 and 7 were also
+    spinning in ``pgd_alloc()`` and ``pgd_free()``. This shows that the
+    synchronous kernel-wide flush did not complete while the ring-3 owner was
+    still executing, but the supplied log does not show whether the stop
+    callback was absent, its NMI was not accepted, or another target blocked
+    the rendezvous. The ``owner_stop_request``, ``owner_exit_complete``, and
+    ``tlb_flush_wait`` trace records were not captured, and the VM does not
+    retain the previous boot journal. Treat the earlier clean runs as limited
+    coverage, not as validation of this failure path. Reproduce with those
+    trace events enabled and an independent bounded owner-escape fallback
+    before changing the stop/ack protocol.
+
     The test-only fixture now retains one unpinned, read-only shared regular-
     file page in the worker and maps an alias in the companion. On kernel
     ``7.3.0-rc3-accel-tlbfix-00603-g7c09283ad6e9``, the focused reclaim test

@@ -60,6 +60,7 @@ static DEFINE_PER_CPU(struct x86_cpu_accel_request, x86_cpu_accel_request) = {
 
 static DEFINE_PER_CPU(unsigned int, x86_cpu_accel_tlb_flush_count);
 static atomic_t x86_cpu_accel_active_count = ATOMIC_INIT(0);
+static atomic64_t x86_cpu_accel_tlb_flush_id = ATOMIC64_INIT(0);
 static DEFINE_RAW_SPINLOCK(x86_cpu_accel_ownership_lock);
 static DEFINE_MUTEX(x86_cpu_accel_maintenance_mutex);
 static DECLARE_WAIT_QUEUE_HEAD(x86_cpu_accel_owner_wait);
@@ -148,15 +149,32 @@ static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets,
 void x86_cpu_accel_tlb_flush_begin(struct x86_cpu_accel_tlb_flush *flush,
 				   const struct cpumask *targets)
 {
+	unsigned int nr_targets;
 	unsigned int cpu;
 	unsigned long flags;
 
 	cpumask_copy(&flush->targets, targets);
+	flush->id = 0;
+	flush->caller = _RET_IP_;
+	flush->owner_targets = 0;
 	raw_spin_lock_irqsave(&x86_cpu_accel_ownership_lock, flags);
 	flush->no_owners = !atomic_read(&x86_cpu_accel_active_count);
-	for_each_cpu(cpu, &flush->targets)
+	for_each_cpu(cpu, &flush->targets) {
 		per_cpu(x86_cpu_accel_tlb_flush_count, cpu)++;
+		if (!flush->no_owners &&
+		    atomic_read(&per_cpu_ptr(&x86_cpu_accel_request,
+					     cpu)->active))
+			flush->owner_targets++;
+	}
 	raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
+
+	if (!flush->owner_targets)
+		return;
+
+	flush->id = atomic64_inc_return(&x86_cpu_accel_tlb_flush_id);
+	nr_targets = cpumask_weight(&flush->targets);
+	trace_tlb_flush_wait(flush->id, false, nr_targets,
+			     flush->owner_targets, flush->caller);
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_tlb_flush_begin);
 
@@ -164,6 +182,11 @@ void x86_cpu_accel_tlb_flush_end(struct x86_cpu_accel_tlb_flush *flush)
 {
 	unsigned int cpu;
 	unsigned long flags;
+
+	if (flush->id)
+		trace_tlb_flush_wait(flush->id, true,
+				     cpumask_weight(&flush->targets),
+				     flush->owner_targets, flush->caller);
 
 	raw_spin_lock_irqsave(&x86_cpu_accel_ownership_lock, flags);
 	for_each_cpu(cpu, &flush->targets) {

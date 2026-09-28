@@ -432,26 +432,37 @@ continue to rely on generation reconciliation before re-entry. A callback that
 does not return, or an owner that cannot take the IPI, can still block the
 synchronous caller indefinitely.
 
-The ``cpu_accel:owner_stop_request`` and
-``cpu_accel:owner_exit_complete`` trace events expose that wait's progress.
-They include the CPU and owner generation so events can be paired across reuse
-of a worker CPU. The stop event records whether a callback exists and whether
-this call dispatched it, along with the requesting call site. The exit event
-is emitted only after the owner's required local TLB reconciliation and
-reclaim acknowledgements complete; its generation and unscoped-flush fields
-describe the state reconciled at exit. With tracefs mounted at
-``/sys/kernel/tracing``, enable both events and read ``trace_pipe``::
+The ``cpu_accel:tlb_flush_wait`` event brackets a synchronous flush whose
+target set overlaps active owners. Its unique ID, target counts,
+and caller identify the flush; a ``begin`` without a matching ``complete``
+shows that the synchronous operation has not reported completion. On an
+mm-scoped path, a ring-3 owner in another ``mm`` may be filtered from the IPI
+set and reconcile its generation before re-entry; ``complete`` marks the
+flush operation's completion contract, not necessarily a local invalidation
+on every recorded owner target. The
+``cpu_accel:owner_stop_request`` and
+``cpu_accel:owner_exit_complete`` events expose per-owner progress. They
+include the CPU and owner generation so events can be paired across reuse of a
+worker CPU. The stop event records whether a callback exists and whether this
+call dispatched it, along with the requesting call site. The exit event is
+emitted only after the owner's required local TLB reconciliation and reclaim
+acknowledgements complete; its generation and unscoped-flush fields describe
+the state reconciled at exit. With tracefs mounted at
+``/sys/kernel/tracing``, enable the events and read ``trace_pipe``::
 
+  echo 1 > /sys/kernel/tracing/events/cpu_accel/tlb_flush_wait/enable
   echo 1 > /sys/kernel/tracing/events/cpu_accel/owner_stop_request/enable
   echo 1 > /sys/kernel/tracing/events/cpu_accel/owner_exit_complete/enable
   cat /sys/kernel/tracing/trace_pipe
 
-Correlate records by CPU and owner generation; ``callback_sent`` distinguishes
-the one-shot callback dispatch from later stop requests for the same owner.
-If both events were enabled before the request and the trace buffer reports no
-lost records, a stop request without a matching exit event means completion
-has not been reported. Silence alone is not evidence of completion. The event
-pair does not replace synchronous IPI completion or impose a timeout.
+Correlate flush records by ID and owner records by CPU and generation;
+``callback_sent`` distinguishes the one-shot callback dispatch from later stop
+requests for the same owner. If tracing was enabled before the flush and the
+buffer reports no lost records, a flush ``begin`` without ``complete`` means
+the synchronous flush has not reported completion. Likewise, a stop request
+without a matching exit event means that owner's completion has not been
+reported. Silence alone is not evidence of completion. These events do not
+replace synchronous IPI completion or impose a timeout.
 
 Owner exit clears the runnable-owner state, then remains counted as active and
 blocks new entry on that CPU until any required local TLB flush and reclaim
@@ -658,7 +669,13 @@ follows:
   until their contents and ROX permissions are ready. BPF trampoline teardown
   waits for task RCU and, where needed, its in-flight reference count before
   freeing the image; module unload waits for its RCU readers before releasing
-  module memory. These are caller lifetime rules, not a global owner gate.
+  module memory. With ``CONFIG_MITIGATION_ITS``, built-in indirect-thunk pages
+  that use ``set_memory_x()`` are allocated from the ``__init`` alternatives
+  pass and sealed by ``its_fini_core()``. Module ITS thunk generation and
+  relocation run through ``its_init_mod()``/``its_fini_mod()`` during
+  ``module_frob_arch_sections()``, under the owner-draining text-mutex gate;
+  the module remains unpublished during this setup. These are caller
+  lifetime rules, not a global owner gate.
 * Confidential-memory conversions use the x86 memory-encryption lock to
   coordinate conversion state, but that lock does not drain accelerator
   owners. The Hyper-V conversion path explicitly requires callers to keep the
@@ -1034,6 +1051,14 @@ The implementation checkpoints are:
     synchronous IPI handler, and the kernel log had no soft-lockup, RCU-stall, BUG, Oops, or
     panic matches. The trigger and harness were temporary VM files, not an
     in-tree regression test. These tests do not exercise INVLPGB.
+    On 00597, the COW/pageout/PFN-reuse regression passed again with seven TLB
+    targets and one deferred reschedule. The new ``tlb_flush_wait`` trace
+    bracketed ``modprobe dummy``'s kernel full flush: flush ID 20 began with
+    eight targets and one owner, CPU2's stop callback was sent, and the same
+    ID completed before the matching owner-exit event. ``modprobe`` succeeded;
+    the CLI later returned status 1 because its delayed user-escape ioctl
+    raced with the kernel stop and returned ``EINVAL``. The kernel-log scan
+    found no new soft-lockup, RCU-stall, BUG, Oops, or panic records.
     Global-ASID INVLPGB broadcasts reserve all online CPUs through ``TLBSYNC``
     so no new owner can enter during the invalidation.
     A driver-assembled ``mm`` would additionally

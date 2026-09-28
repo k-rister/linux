@@ -12,6 +12,9 @@ typedef void (*x86_cpu_accel_stop_fn)(void *data);
 
 struct x86_cpu_accel_tlb_flush {
 	cpumask_t targets;
+	u64 id;
+	unsigned long caller;
+	unsigned int owner_targets;
 	bool no_owners;
 };
 

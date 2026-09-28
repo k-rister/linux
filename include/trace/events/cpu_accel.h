@@ -73,6 +73,36 @@ TRACE_EVENT(owner_exit_complete,
 		  __entry->unscoped_flush)
 );
 
+TRACE_EVENT(tlb_flush_wait,
+
+	TP_PROTO(u64 flush_id, bool complete, unsigned int targets,
+		 unsigned int owner_targets, unsigned long caller),
+
+	TP_ARGS(flush_id, complete, targets, owner_targets, caller),
+
+	TP_STRUCT__entry(
+		__field(u64, flush_id)
+		__field(bool, complete)
+		__field(unsigned int, targets)
+		__field(unsigned int, owner_targets)
+		__field(unsigned long, caller)
+	),
+
+	TP_fast_assign(
+		__entry->flush_id = flush_id;
+		__entry->complete = complete;
+		__entry->targets = targets;
+		__entry->owner_targets = owner_targets;
+		__entry->caller = caller;
+	),
+
+	TP_printk("id=%llu phase=%s targets=%u owners=%u caller=%pS",
+		  (unsigned long long)__entry->flush_id,
+		  __entry->complete ? "complete" : "begin",
+		  __entry->targets, __entry->owner_targets,
+		  (void *)__entry->caller)
+);
+
 #endif /* _TRACE_CPU_ACCEL_H */
 
 #include <trace/define_trace.h>

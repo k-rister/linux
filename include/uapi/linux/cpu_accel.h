@@ -6,7 +6,7 @@
 #include <linux/types.h>
 
 /* The prototype uses separate fixed-size control and shared-data mappings. */
-#define CPU_ACCEL_ABI_VERSION		16
+#define CPU_ACCEL_ABI_VERSION		17
 #define CPU_ACCEL_MAP_SIZE		(64U * 1024U)
 #define CPU_ACCEL_SHARED_MAP_SIZE	(64U * 1024U)
 #define CPU_ACCEL_SHARED_MAP_OFFSET	CPU_ACCEL_MAP_SIZE
@@ -77,6 +77,8 @@ enum cpu_accel_workload {
 	CPU_ACCEL_WORKLOAD_USER_OSLAT,
 	/* Noncooperative ring-3 fault-injection workload; requires USER_ESCAPE. */
 	CPU_ACCEL_WORKLOAD_USER_HANG,
+	/* Test-only ring-3 workload that reads one reclaimable file-backed page. */
+	CPU_ACCEL_WORKLOAD_USER_RECLAIM,
 };
 
 enum cpu_accel_shared_owner {
@@ -105,6 +107,8 @@ struct cpu_accel_config {
 	__u64 user_image_bytes;
 	__u64 user_arg;
 	__u64 user_escape_ip;
+	/* One read-only test mapping; zero for all other workloads. */
+	__u64 user_reclaim_page;
 };
 
 struct cpu_accel_sample {

@@ -32,6 +32,7 @@
 #define PAGEMAP_PRESENT (1ULL << 63)
 #define PAGEMAP_PFN_MASK ((1ULL << 55) - 1)
 #define REUSED_PAGE_MARKER 0xa5
+#define RECLAIM_PAGE_MARKER 0x6d
 #define COW_SHARED_MARKER 0x39
 #define COW_PRIVATE_MARKER 0xc7
 #define MAX_PGTABLE_CANDIDATES 256
@@ -465,8 +466,10 @@ static int wait_for_owner(int target_cpu, unsigned int timeout_ms)
 	do {
 		int status;
 
-		if (waitpid(cli_pid, &status, WNOHANG) == cli_pid)
+		if (waitpid(cli_pid, &status, WNOHANG) == cli_pid) {
+			cli_pid = -1;
 			return 0;
+		}
 		if (cli_owner_active() &&
 		    has_accel_worker_on_cpu(target_cpu))
 			return 1;
@@ -528,6 +531,206 @@ static unsigned long long cli_reschedule_requests(void)
 	if (!field || sscanf(field, "arch_reschedule_deferred=%llu", &requests) != 1)
 		return 0;
 	return requests;
+}
+
+static int test_reclaim_completion(int target_cpu, int control_cpu,
+				   const char *cpu_accelctl,
+				   unsigned long page_size,
+				   int argc, char **argv)
+{
+	char path[] = "/var/tmp/cpu-accel-reclaim-XXXXXX";
+	char cpu_arg[16];
+	char *cli_argv[20];
+	unsigned char *contents = NULL;
+	unsigned char residency;
+	const struct timespec retry_pause = { .tv_nsec = 10000000 };
+	const struct timespec completion_pause = { .tv_nsec = 1000000 };
+	void *mapping = MAP_FAILED;
+	int file_fd = -1;
+	int pipe_fd[2] = { -1, -1 };
+	int ret = -1;
+	size_t written = 0;
+	size_t cli_argc = 0;
+
+	if (pin_to_cpu(control_cpu)) {
+		perror("pin to controller CPU for reclaim probe");
+		goto out;
+	}
+	file_fd = mkstemp(path);
+	if (file_fd < 0) {
+		perror("mkstemp(reclaim probe)");
+		goto out;
+	}
+	contents = malloc(page_size);
+	if (!contents) {
+		perror("allocate reclaim probe page");
+		goto out;
+	}
+	memset(contents, RECLAIM_PAGE_MARKER, page_size);
+	while (written < page_size) {
+		ssize_t count = write(file_fd, contents + written,
+				      page_size - written);
+
+		if (count < 0 && errno == EINTR)
+			continue;
+		if (count <= 0) {
+			if (!count)
+				errno = EIO;
+			perror("write reclaim probe page");
+			goto out;
+		}
+		written += count;
+	}
+	if (fsync(file_fd)) {
+		perror("fsync reclaim probe page");
+		goto out;
+	}
+	mapping = mmap(NULL, page_size, PROT_READ, MAP_SHARED, file_fd, 0);
+	if (mapping == MAP_FAILED) {
+		perror("mmap reclaim probe alias");
+		goto out;
+	}
+	close(file_fd);
+	file_fd = -1;
+	if (*(volatile unsigned char *)mapping != RECLAIM_PAGE_MARKER) {
+		fprintf(stderr, "reclaim probe file has unexpected contents\n");
+		goto out;
+	}
+	if (mincore(mapping, page_size, &residency)) {
+		perror("mincore before reclaim probe");
+		goto out;
+	}
+	if (!(residency & 1)) {
+		fprintf(stderr, "reclaim probe page was not resident before pageout\n");
+		goto out;
+	}
+	if (pipe2(pipe_fd, O_CLOEXEC)) {
+		perror("pipe2(reclaim probe output)");
+		goto out;
+	}
+	snprintf(cpu_arg, sizeof(cpu_arg), "%d", target_cpu);
+	cli_argv[cli_argc++] = (char *)cpu_accelctl;
+	cli_argv[cli_argc++] = "run";
+	cli_argv[cli_argc++] = "--cpu";
+	cli_argv[cli_argc++] = cpu_arg;
+	cli_argv[cli_argc++] = "--duration-ms";
+	cli_argv[cli_argc++] = "5000";
+	cli_argv[cli_argc++] = "--period-us";
+	cli_argv[cli_argc++] = "1000";
+	cli_argv[cli_argc++] = "--workload";
+	cli_argv[cli_argc++] = "user-reclaim";
+	cli_argv[cli_argc++] = "--test-reclaim-file";
+	cli_argv[cli_argc++] = path;
+	for (int index = 3; index < argc; index++)
+		cli_argv[cli_argc++] = argv[index];
+	cli_argv[cli_argc] = NULL;
+	cli_shared_address = 0;
+	cli_output_size = 0;
+	memset(cli_output, 0, sizeof(cli_output));
+	cli_pid = fork();
+	if (cli_pid < 0) {
+		perror("fork(reclaim probe)");
+		goto out;
+	}
+	if (!cli_pid) {
+		close(pipe_fd[0]);
+		if (dup2(pipe_fd[1], STDOUT_FILENO) < 0 ||
+		    dup2(pipe_fd[1], STDERR_FILENO) < 0)
+			_exit(127);
+		close(pipe_fd[1]);
+		execvp(cli_argv[0], cli_argv);
+		perror("exec cpu-accelctl reclaim probe");
+		_exit(127);
+	}
+	close(pipe_fd[1]);
+	pipe_fd[1] = -1;
+	cli_output_fd = pipe_fd[0];
+	pipe_fd[0] = -1;
+	if (!wait_for_owner(target_cpu, 3000)) {
+		fprintf(stderr, "did not observe a reclaim-test ring-3 owner\n");
+		goto wait_cli;
+	}
+	for (unsigned int attempt = 0; attempt < 8 && cli_owner_active(); attempt++) {
+		if (madvise(mapping, page_size, MADV_PAGEOUT)) {
+			perror("madvise(MADV_PAGEOUT reclaim probe)");
+			goto wait_cli;
+		}
+		if (mincore(mapping, page_size, &residency)) {
+			perror("mincore during reclaim probe");
+			goto wait_cli;
+		}
+		if (!(residency & 1))
+			break;
+		nanosleep(&retry_pause, NULL);
+	}
+	if (wait_for_cli()) {
+		collect_cli_output();
+		fprintf(stderr,
+			"cpu-accelctl reclaim workload did not report owner exit\n");
+		goto out;
+	}
+	collect_cli_output();
+	if (!strstr(cli_output, "user_escape_count=1")) {
+		fprintf(stderr,
+			"pageout did not stop the reclaim-test ring-3 owner\n");
+		goto out;
+	}
+	for (unsigned int attempt = 0; attempt < 1000; attempt++) {
+		if (mincore(mapping, page_size, &residency)) {
+			perror("mincore after reclaim probe");
+			goto out;
+		}
+		if (!(residency & 1))
+			break;
+		nanosleep(&completion_pause, NULL);
+	}
+	if (residency & 1) {
+		fprintf(stderr,
+			"reclaim-test pageout stopped the owner but left the page resident\n");
+		goto out;
+	}
+	if (*(volatile unsigned char *)mapping != RECLAIM_PAGE_MARKER) {
+		fprintf(stderr, "reclaim probe data changed after refault\n");
+		goto out;
+	}
+	printf("PASS: MADV_PAGEOUT reclaimed the shared file page after the "
+	       "ring-3 owner acknowledged exit\n");
+	ret = 0;
+	goto out;
+
+wait_cli:
+	if (cli_pid > 0) {
+		int status;
+		pid_t waited = waitpid(cli_pid, &status, WNOHANG);
+
+		if (waited == cli_pid)
+			cli_pid = -1;
+		else if (waited == 0 && wait_for_cli())
+			fprintf(stderr, "reclaim-test cpu-accelctl failed during cleanup\n");
+		collect_cli_output();
+	}
+out:
+	if (cli_pid > 0) {
+		if (wait_for_cli())
+			fprintf(stderr, "reclaim-test cpu-accelctl failed during cleanup\n");
+	}
+	collect_cli_output();
+	if (ret && cli_output_size)
+		fputs(cli_output, stderr);
+	if (pipe_fd[0] >= 0)
+		close(pipe_fd[0]);
+	if (pipe_fd[1] >= 0)
+		close(pipe_fd[1]);
+	if (file_fd >= 0)
+		close(file_fd);
+	free(contents);
+	if (mapping != MAP_FAILED)
+		munmap(mapping, page_size);
+	if (path[0] && unlink(path) && errno != ENOENT) {
+		perror("unlink reclaim probe file");
+		ret = -1;
+	}
+	return ret;
 }
 
 int main(int argc, char **argv)
@@ -1163,6 +1366,9 @@ int main(int argc, char **argv)
 	       cli_tlb_targets());
 	printf("deferred %llu reschedule request(s) until owner exit\n",
 	       cli_reschedule_requests());
+	if (test_reclaim_completion(target_cpu, control_cpu, argv[2],
+				    page_size, argc, argv))
+		goto out_mapping;
 	result = EXIT_SUCCESS;
 	goto out_mapping;
 

@@ -75,7 +75,8 @@ static void cpu_accel_arch_stop_direct(void *data);
 static bool cpu_accel_user_workload(u32 workload)
 {
 	return workload == CPU_ACCEL_WORKLOAD_USER_OSLAT ||
-		workload == CPU_ACCEL_WORKLOAD_USER_HANG;
+		workload == CPU_ACCEL_WORKLOAD_USER_HANG ||
+		workload == CPU_ACCEL_WORKLOAD_USER_RECLAIM;
 }
 
 #ifdef CONFIG_X86
@@ -987,7 +988,8 @@ static int cpu_accel_validate_user_vma_set(struct cpu_accel_device *dev,
 					  unsigned long stack_start,
 					  unsigned long stack_end,
 					  unsigned long rseq_start,
-					  unsigned long rseq_end)
+					  unsigned long rseq_end,
+					  unsigned long reclaim_page)
 {
 	struct vm_area_struct *vma;
 	VMA_ITERATOR(vmi, mm, 0);
@@ -996,6 +998,7 @@ static int cpu_accel_validate_user_vma_set(struct cpu_accel_device *dev,
 	bool control_found = false;
 	bool shared_found = false;
 	bool rseq_found = !rseq_start;
+	bool reclaim_found = !reclaim_page;
 
 	for_each_vma(vmi, vma) {
 		unsigned long size = vma->vm_end - vma->vm_start;
@@ -1028,6 +1031,17 @@ static int cpu_accel_validate_user_vma_set(struct cpu_accel_device *dev,
 		    cpu_accel_vma_has_permissions(vma, VM_READ | VM_WRITE,
 						 VM_EXEC | VM_SHARED)) {
 			stack_found = true;
+			continue;
+		}
+		if (reclaim_page && vma->vm_start == reclaim_page &&
+		    vma->vm_end == reclaim_page + PAGE_SIZE && vma->vm_file &&
+		    vma->vm_file->f_inode &&
+		    S_ISREG(file_inode(vma->vm_file)->i_mode) &&
+		    cpu_accel_vma_has_permissions(vma, VM_READ | VM_SHARED,
+					 VM_WRITE | VM_MAYWRITE | VM_EXEC |
+					 VM_IO | VM_PFNMAP)) {
+			/* Test fixture only: one clean, evictable file-cache page. */
+			reclaim_found = true;
 			continue;
 		}
 		if (vma->vm_file && vma->vm_file->private_data == dev &&
@@ -1066,7 +1080,7 @@ static int cpu_accel_validate_user_vma_set(struct cpu_accel_device *dev,
 	}
 
 	return image_found && stack_found && control_found && shared_found &&
-		rseq_found ? 0 : -EACCES;
+		rseq_found && reclaim_found ? 0 : -EACCES;
 }
 
 static void cpu_accel_user_image_release(struct cpu_accel_device *dev)
@@ -1106,6 +1120,7 @@ static int cpu_accel_user_image_prepare(struct cpu_accel_device *dev)
 	unsigned long stack_start;
 	unsigned long rseq_start = 0;
 	unsigned long rseq_end = 0;
+	unsigned long reclaim_page = dev->config.user_reclaim_page;
 	unsigned int image_pages;
 	unsigned int stack_pages;
 	unsigned int rseq_pages;
@@ -1165,6 +1180,21 @@ static int cpu_accel_user_image_prepare(struct cpu_accel_device *dev)
 		stack_start && dev->config.user_image_start <
 		dev->config.user_stack_top)
 		return -EINVAL;
+	if (dev->config.workload == CPU_ACCEL_WORKLOAD_USER_RECLAIM) {
+		if (!reclaim_page || !PAGE_ALIGNED(reclaim_page) ||
+		    reclaim_page > ULONG_MAX - PAGE_SIZE ||
+		    !access_ok((void __user *)reclaim_page, PAGE_SIZE) ||
+		    (reclaim_page < dev->config.user_image_start +
+				dev->config.user_image_bytes &&
+		     dev->config.user_image_start < reclaim_page + PAGE_SIZE) ||
+		    (reclaim_page < dev->config.user_stack_top &&
+		     stack_start < reclaim_page + PAGE_SIZE) ||
+		    (rseq_start && reclaim_page < rseq_end &&
+		     rseq_start < reclaim_page + PAGE_SIZE))
+			return -EINVAL;
+	} else if (reclaim_page) {
+		return -EINVAL;
+	}
 
 	image_pages = dev->config.user_image_bytes >> PAGE_SHIFT;
 	stack_pages = dev->config.user_stack_bytes >> PAGE_SHIFT;
@@ -1189,6 +1219,9 @@ static int cpu_accel_user_image_prepare(struct cpu_accel_device *dev)
 		ret = cpu_accel_validate_user_range(image->mm, stack_start,
 						    dev->config.user_stack_bytes,
 						    VM_READ | VM_WRITE);
+	if (!ret && reclaim_page)
+		ret = cpu_accel_validate_user_range(image->mm, reclaim_page,
+						    PAGE_SIZE, VM_READ);
 	mmap_read_unlock(image->mm);
 	if (ret)
 		goto fail;
@@ -1230,6 +1263,9 @@ static int cpu_accel_user_image_prepare(struct cpu_accel_device *dev)
 		ret = cpu_accel_validate_user_range(image->mm, stack_start,
 						    dev->config.user_stack_bytes,
 						    VM_READ | VM_WRITE);
+	if (!ret && reclaim_page)
+		ret = cpu_accel_validate_user_range(image->mm, reclaim_page,
+						    PAGE_SIZE, VM_READ);
 	if (!ret)
 		ret = cpu_accel_validate_user_vma_set(dev, image->mm,
 						       dev->config.user_image_start,
@@ -1237,7 +1273,8 @@ static int cpu_accel_user_image_prepare(struct cpu_accel_device *dev)
 						       dev->config.user_image_bytes,
 						       stack_start,
 						       dev->config.user_stack_top,
-						       rseq_start, rseq_end);
+						       rseq_start, rseq_end,
+						       reclaim_page);
 	if (ret)
 		goto fail;
 
@@ -1966,7 +2003,7 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 				     CPU_ACCEL_FLAG_REQUIRE_QUIESCENT |
 				     CPU_ACCEL_FLAG_IRQ_QUARANTINE) ||
 		    config.reserved || config.reserved2 ||
-			config.workload > CPU_ACCEL_WORKLOAD_USER_HANG ||
+		    config.workload > CPU_ACCEL_WORKLOAD_USER_RECLAIM ||
 		    config.work_bytes > CPU_ACCEL_MAX_WORK_BYTES ||
 		    (config.workload != CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE &&
 		     config.shared_entry) ||
@@ -1986,12 +2023,14 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 			  config.user_entry_ip == 0 || config.user_stack_top == 0 ||
 			  config.user_stack_bytes == 0 || config.user_image_start == 0 ||
 			  config.user_image_bytes == 0 || config.user_arg == 0 ||
-			  config.user_escape_ip == 0)) ||
+			  config.user_escape_ip == 0 ||
+			  ((config.workload == CPU_ACCEL_WORKLOAD_USER_RECLAIM) !=
+			   !!config.user_reclaim_page))) ||
 			(!cpu_accel_user_workload(config.workload) &&
 			 (config.user_entry_ip || config.user_stack_top ||
 			  config.user_stack_bytes || config.user_image_start ||
 			  config.user_image_bytes || config.user_arg ||
-			  config.user_escape_ip)) ||
+			  config.user_escape_ip || config.user_reclaim_page)) ||
 		    !config.period_ns || !config.duration_ns ||
 		    config.duration_ns > CPU_ACCEL_MAX_DURATION_NS ||
 		    config.cpu >= nr_cpu_ids || config.cpu == 0) {

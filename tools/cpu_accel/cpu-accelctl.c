@@ -15,6 +15,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -43,6 +44,7 @@ struct cpu_accel_user_unmap_range;
 
 struct cpu_accel_user_context {
 	unsigned long stack_top;
+	unsigned long reclaim_page;
 	struct cpu_accel_shared *shared;
 	int fd;
 	uint64_t cycles_per_ns;
@@ -201,6 +203,8 @@ static void cpu_accel_user_oslat(void *argument)
 		period_cycles = 1;
 	if (!duration_cycles)
 		duration_cycles = period_cycles;
+	if (context->reclaim_page)
+		(void)*(volatile unsigned char *)context->reclaim_page;
 
 	for (;;) {
 		uint64_t now = cpu_accel_read_tsc();
@@ -366,7 +370,7 @@ static int cpu_accel_collect_unmap_ranges(
 	unsigned long rseq_start, unsigned long rseq_end,
 	unsigned long page_size)
 {
-	struct cpu_accel_user_keep_range keep[5] = {
+	struct cpu_accel_user_keep_range keep[6] = {
 		{ .start = image_start, .end = image_end },
 		{ .start = stack_start, .end = stack_end },
 		{ .start = (uintptr_t)handle->shared,
@@ -375,6 +379,9 @@ static int cpu_accel_collect_unmap_ranges(
 		  .end = (uintptr_t)handle->shared_region +
 			CPU_ACCEL_SHARED_MAP_SIZE },
 		{ .start = rseq_start, .end = rseq_end },
+		{ .start = context->reclaim_page,
+		  .end = context->reclaim_page ?
+			context->reclaim_page + page_size : 0 },
 	};
 	FILE *maps;
 	char *line = NULL;
@@ -529,8 +536,10 @@ static void usage(FILE *stream, const char *program)
 	fprintf(stream,
 		"Usage:\n"
 		"  %s run [--cpu N] [--duration-ms N] [--period-us N]\n"
-		"      [--workload timestamp|memmove|shared-memmove|user-oslat|user-hang]\n"
+		"      [--workload timestamp|memmove|shared-memmove|user-oslat|\n"
+		"                   user-hang|user-reclaim]\n"
 		"      [--work-bytes N] [--shared-entry N]\n"
+		"      [--test-reclaim-file PATH]\n"
 		"      [--escape-after-ms N] [--escape-retries N]\n"
 		"      [--persistent] [--require-quiescent] [--quarantine-irqs]\n"
 		"  %s exit\n"
@@ -568,7 +577,8 @@ static int close_worker_fds(int keep_fd)
 }
 
 static int run_user_worker_image(struct cpu_accel_handle *handle,
-				 struct cpu_accel_config *config)
+				 struct cpu_accel_config *config,
+				 const char *reclaim_file)
 {
 	struct cpu_accel_user_context *context;
 	uintptr_t entry_ip;
@@ -580,13 +590,51 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 	unsigned long rseq_end;
 	size_t unmap_offset;
 	void *stack;
+	void *reclaim_mapping = MAP_FAILED;
 	long page_size;
+	int reclaim_fd = -1;
 	int user_hang = config->workload == CPU_ACCEL_WORKLOAD_USER_HANG;
+	int user_reclaim = config->workload == CPU_ACCEL_WORKLOAD_USER_RECLAIM;
 	int ret = 1;
 
 	page_size = sysconf(_SC_PAGESIZE);
 	if (page_size <= 0 || (size_t)page_size > SIZE_MAX / 16) {
 		fprintf(stderr, "invalid page size\n");
+		goto out;
+	}
+	if (user_reclaim) {
+		struct stat st;
+
+		if (!reclaim_file || !strcmp(reclaim_file, "-")) {
+			fprintf(stderr, "user-reclaim requires a test file\n");
+			goto out;
+		}
+		reclaim_fd = open(reclaim_file, O_RDONLY | O_CLOEXEC);
+		if (reclaim_fd < 0) {
+			perror("open test reclaim file");
+			goto out;
+		}
+		if (fstat(reclaim_fd, &st) < 0) {
+			perror("stat test reclaim file");
+			goto out;
+		}
+		if (!S_ISREG(st.st_mode) || st.st_size < page_size) {
+			fprintf(stderr,
+				"test reclaim file must be regular and at least one page\n");
+			goto out;
+		}
+		reclaim_mapping = mmap(NULL, page_size, PROT_READ, MAP_SHARED,
+				       reclaim_fd, 0);
+		if (reclaim_mapping == MAP_FAILED) {
+			perror("mmap test reclaim page");
+			goto out;
+		}
+		close(reclaim_fd);
+		reclaim_fd = -1;
+		/* Populate a clean, file-backed PTE before the active epoch. */
+		(void)*(volatile unsigned char *)reclaim_mapping;
+	} else if (reclaim_file && strcmp(reclaim_file, "-")) {
+		fprintf(stderr, "test reclaim file requires user-reclaim workload\n");
 		goto out;
 	}
 	stack = mmap(NULL, (size_t)page_size * 16,
@@ -599,6 +647,8 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 
 	context = stack;
 	context->shared = (struct cpu_accel_shared *)(uintptr_t)handle->shared;
+	context->reclaim_page = user_reclaim ?
+		(uintptr_t)reclaim_mapping : 0;
 	context->fd = handle->fd;
 	context->cycles_per_ns = cpu_accel_calibrate_cycles_per_ns();
 	entry_ip = user_hang ? (uintptr_t)cpu_accel_user_hang :
@@ -608,6 +658,8 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 	config->user_escape_ip = (uintptr_t)cpu_accel_user_escape_image;
 	config->user_stack_top = (uintptr_t)stack + (size_t)page_size * 16;
 	config->user_stack_bytes = (size_t)page_size * 16;
+	config->user_reclaim_page = user_reclaim ?
+		(uintptr_t)reclaim_mapping : 0;
 	context->stack_top = config->user_stack_top;
 	image_start = (uintptr_t)__start_cpu_accel_user_image;
 	image_end = (uintptr_t)__stop_cpu_accel_user_image;
@@ -659,6 +711,10 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 out_stack:
 	munmap(stack, (size_t)page_size * 16);
 out:
+	if (reclaim_fd >= 0)
+		close(reclaim_fd);
+	if (reclaim_mapping != MAP_FAILED)
+		munmap(reclaim_mapping, page_size > 0 ? page_size : 0);
 	cpu_accel_close(handle);
 	return ret;
 }
@@ -669,9 +725,10 @@ static int run_user_worker(int argc, char **argv)
 	struct cpu_accel_config config = {};
 	struct cpu_accel_handle handle;
 	uint64_t values[USER_WORKER_ARG_COUNT];
+	const char *reclaim_file = argv[USER_WORKER_ARG_COUNT + 2];
 	int fd;
 
-	if (argc != USER_WORKER_ARG_COUNT + 2) {
+	if (argc != USER_WORKER_ARG_COUNT + 3) {
 		fprintf(stderr, "invalid internal user-worker arguments\n");
 		return 2;
 	}
@@ -682,11 +739,19 @@ static int run_user_worker(int argc, char **argv)
 		}
 	}
 	if (values[0] > INT_MAX || values[1] > UINT_MAX ||
-	    values[2] > CPU_ACCEL_WORKLOAD_USER_HANG ||
+	    values[2] > CPU_ACCEL_WORKLOAD_USER_RECLAIM ||
 	    values[3] > UINT_MAX ||
 	    (values[2] != CPU_ACCEL_WORKLOAD_USER_OSLAT &&
-	     values[2] != CPU_ACCEL_WORKLOAD_USER_HANG)) {
+	     values[2] != CPU_ACCEL_WORKLOAD_USER_HANG &&
+	     values[2] != CPU_ACCEL_WORKLOAD_USER_RECLAIM)) {
 		fprintf(stderr, "out-of-range internal user-worker argument\n");
+		return 2;
+	}
+	if ((values[2] == CPU_ACCEL_WORKLOAD_USER_RECLAIM &&
+	     (!*reclaim_file || !strcmp(reclaim_file, "-"))) ||
+	    (values[2] != CPU_ACCEL_WORKLOAD_USER_RECLAIM &&
+	     strcmp(reclaim_file, "-"))) {
+		fprintf(stderr, "invalid internal user-worker reclaim file\n");
 		return 2;
 	}
 
@@ -706,25 +771,31 @@ static int run_user_worker(int argc, char **argv)
 		close(fd);
 		return 1;
 	}
-	return run_user_worker_image(&handle, &config);
+	return run_user_worker_image(&handle, &config,
+				     reclaim_file);
 }
 
 static int run_user_workload(const struct cpu_accel_config *requested,
 			     uint64_t escape_after_ms,
-			     uint64_t escape_attempts)
+			     uint64_t escape_attempts,
+			     const char *reclaim_file)
 {
 	struct cpu_accel_config config = *requested;
 	struct cpu_accel_handle handle;
 	char fd_arg[24], cpu_arg[24], workload_arg[24];
 	char flags_arg[24], duration_arg[24], period_arg[24];
+	const char *reclaim_file_arg = reclaim_file ? reclaim_file : "-";
 	char *const worker_argv[] = {
 		"/proc/self/exe", "--cpu-accel-user-worker", fd_arg,
-		cpu_arg, workload_arg, flags_arg, duration_arg, period_arg, NULL,
+		cpu_arg, workload_arg, flags_arg, duration_arg, period_arg,
+		(char *)reclaim_file_arg, NULL,
 	};
 	char *const worker_env[] = { NULL };
 	pid_t child;
 	int status;
 	int user_hang = requested->workload == CPU_ACCEL_WORKLOAD_USER_HANG;
+	int user_reclaim = requested->workload ==
+		CPU_ACCEL_WORKLOAD_USER_RECLAIM;
 	int escape_ret = 0;
 	int ret;
 
@@ -827,13 +898,18 @@ static int run_user_workload(const struct cpu_accel_config *requested,
 		ret = -1;
 	print_status(handle.shared);
 	if ((escape_after_ms && handle.shared->state != CPU_ACCEL_STATE_ESCAPED) ||
-	    (!escape_after_ms && handle.shared->state != CPU_ACCEL_STATE_COMPLETE) ||
+	    (user_reclaim && handle.shared->state != CPU_ACCEL_STATE_ESCAPED) ||
+	    (!escape_after_ms && !user_reclaim &&
+	     handle.shared->state != CPU_ACCEL_STATE_COMPLETE) ||
 	    handle.shared->mode != CPU_ACCEL_MODE_LINUX ||
 	    handle.shared->backend != CPU_ACCEL_BACKEND_X86_RING3 ||
-	    (escape_after_ms && handle.shared->recovery_state !=
+	    ((escape_after_ms || user_reclaim) &&
+	     handle.shared->recovery_state !=
 	     CPU_ACCEL_RECOVERY_SUCCEEDED) ||
-	    (!escape_after_ms && !handle.shared->samples_valid) ||
-	    (escape_after_ms && handle.shared->user_escape_count != 1)) {
+	    (!escape_after_ms && !user_reclaim &&
+	     !handle.shared->samples_valid) ||
+	    ((escape_after_ms || user_reclaim) &&
+	     handle.shared->user_escape_count != 1)) {
 		fprintf(stderr, "user accelerator did not complete its ring-3 contract\n");
 		ret = -1;
 	}
@@ -862,6 +938,7 @@ static int run_workload(const char *program, int argc, char **argv)
 	uint64_t value;
 	uint64_t escape_after_ms = 0;
 	uint64_t escape_attempts = 1;
+	const char *reclaim_file = NULL;
 	unsigned int timeout_ms;
 	int persistent = 0;
 	int require_quiescent = 0;
@@ -912,6 +989,8 @@ static int run_workload(const char *program, int argc, char **argv)
 				config.workload = CPU_ACCEL_WORKLOAD_USER_OSLAT;
 			else if (!strcmp(workload, "user-hang"))
 				config.workload = CPU_ACCEL_WORKLOAD_USER_HANG;
+			else if (!strcmp(workload, "user-reclaim"))
+				config.workload = CPU_ACCEL_WORKLOAD_USER_RECLAIM;
 			else {
 				fprintf(stderr, "%s: invalid workload\n", program);
 				return 2;
@@ -931,6 +1010,13 @@ static int run_workload(const char *program, int argc, char **argv)
 				return 2;
 			}
 			config.shared_entry = value;
+		} else if (!strcmp(argv[index], "--test-reclaim-file") &&
+			   index + 1 < argc) {
+			reclaim_file = argv[++index];
+			if (!*reclaim_file || !strcmp(reclaim_file, "-")) {
+				fprintf(stderr, "%s: invalid reclaim file path\n", program);
+				return 2;
+			}
 		} else if (!strcmp(argv[index], "--escape-after-ms") &&
 			   index + 1 < argc) {
 			if (parse_u64(argv[++index], &escape_after_ms) ||
@@ -964,13 +1050,27 @@ static int run_workload(const char *program, int argc, char **argv)
 		config.flags |= CPU_ACCEL_FLAG_IRQ_QUARANTINE;
 	if (escape_after_ms && config.workload != CPU_ACCEL_WORKLOAD_USER_OSLAT &&
 	    config.workload != CPU_ACCEL_WORKLOAD_USER_HANG) {
-		fprintf(stderr, "%s: --escape-after-ms requires a user workload\n",
+		fprintf(stderr,
+			"%s: --escape-after-ms requires user-oslat or user-hang\n",
 			program);
 		return 2;
 	}
+	if (config.workload == CPU_ACCEL_WORKLOAD_USER_RECLAIM && !reclaim_file) {
+		fprintf(stderr,
+			"%s: user-reclaim requires --test-reclaim-file\n",
+			program);
+		return 2;
+	}
+	if (config.workload != CPU_ACCEL_WORKLOAD_USER_RECLAIM && reclaim_file) {
+		fprintf(stderr,
+			"%s: --test-reclaim-file requires user-reclaim\n", program);
+		return 2;
+	}
 	if (config.workload == CPU_ACCEL_WORKLOAD_USER_OSLAT ||
-	    config.workload == CPU_ACCEL_WORKLOAD_USER_HANG)
-		return run_user_workload(&config, escape_after_ms, escape_attempts);
+	    config.workload == CPU_ACCEL_WORKLOAD_USER_HANG ||
+	    config.workload == CPU_ACCEL_WORKLOAD_USER_RECLAIM)
+		return run_user_workload(&config, escape_after_ms, escape_attempts,
+					 reclaim_file);
 
 	timeout_ms = (unsigned int)(config.duration_ns / 1000000ULL) + 1000;
 	if (pin_control_cpu() < 0) {

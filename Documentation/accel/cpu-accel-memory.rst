@@ -117,7 +117,10 @@ does not retain the companion's copy-on-write mappings.
 Before START, the worker switches to its admitted stack and unmaps every
 removable VMA except the executable image, private stack, control mapping,
 shared-data mapping, and the page containing the worker's registered RSEQ
-area, when present. The kernel may update that area on the user-return
+area, when present. The test-only ``user-reclaim`` workload additionally
+retains exactly one read-only, shared, regular-file mapping. That page is
+deliberately left unpinned so the focused reclaim test can ask reclaim to
+remove it. The kernel may update the RSEQ area on the user-return
 slowpath after a deferred reschedule, so removing it would turn normal
 accelerator exit into a SIGSEGV. The driver validates the RSEQ page as private,
 readable, writable, and non-executable. The legacy x86 ``[vsyscall]`` VMA is
@@ -1061,6 +1064,14 @@ The implementation checkpoints are:
     holds the reused PFN. PTE-page reuse is optional because
     ``/proc/kpageflags`` may be unavailable or the bounded allocation probes
     may not recycle a table page.
+    The harness now includes a second owner run for reclaim completion: it
+    writes and fsyncs a one-page regular file, keeps a read-only alias in the
+    test controller's ``mm``, and starts a ring-3 worker that touches the
+    corresponding unpinned page in its own ``mm`` before remaining active.
+    ``MADV_PAGEOUT`` through the test-controller alias must stop the registered
+    owner, reclaim the page, and preserve its contents on refault. This
+    exercises the current clean-file
+    page vmscan completion path; the focused VM run is still pending.
     The focused test also forks a page holder and writes the parent's
     write-protected mapping while the ring-3 owner runs in another ``mm``.
     It checks that the holder still reads the original page while the parent

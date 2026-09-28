@@ -592,6 +592,13 @@ which makes a nonblocking reservation and propagates ``-EBUSY``, while ordinary
 to the current tree; new direct callers need their own lock-order and
 rendezvous review.
 
+The exported ``stop_core_cpuslocked()`` rendezvous is used by Intel IFS. Its
+``do_core_test()`` entry reserves the nonblocking maintenance gate before the
+CPU-hotplug read lock and returns ``-EBUSY`` if any owner is active. The
+reservation spans the per-core rendezvous loop. This check is global and
+conservative; new callers must establish the same owner exclusion before
+taking CPU-hotplug locks.
+
 KGDB's x86 breakpoint path uses ``text_poke_kgdb()`` for its read-only text
 fallback after an NMI roundup. The generic KGDB loop proceeds after its
 one-second wait even if not every online CPU entered the debugger, so the

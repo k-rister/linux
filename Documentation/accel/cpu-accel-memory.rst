@@ -392,11 +392,35 @@ the operation completes synchronously before reclaim proceeds. ``mmu_gather``
 remains separate and needs its own completion object for both data-page and
 page-table batches.
 
-The alternative is a generic owner-quiesce operation that can safely terminate
-every supported owner type and report completion to MM callers. The current
-NMI escape is ring-3-driver-specific, requires a controller request, and does
-not cover kernel-mode owners; it cannot provide this contract. Until a generic
-quiesce API exists, synchronous flush waits remain unbounded by design.
+The generic owner/MM contract must keep four events distinct: closing
+admission, requesting a stop, ending execution, and acknowledging the required
+TLB invalidation. A stop request is nonblocking and runs outside MM, page-table,
+and owner locks. It may ask an owner to leave, but only the matching owner
+instance may acknowledge, and only after execution has ended and its local TLB
+has reconciled the requested ``mm`` generation plus any unscoped invalidation.
+The registry must identify the address space actually loaded by an owner,
+independently of the task that submitted the work; ``mm_cpumask`` alone is not
+that registry. Admission and invalidation publication must share an
+interlock, so an owner either joins the affected completion or flushes the
+current generation before it can execute.
+
+A generic completion is reserved before the first PTE is removed and owns the
+affected page disposition as well as references to the matching owner
+instances. After the mapping change publishes its generation, MM may request
+stops outside locks and let ordinary CPU targets complete synchronously. The
+completion releases its folios or page-table pages only after those CPU flushes
+and all matching owner acknowledgements finish. A later mapping change still
+uses its ordinary shootdown. Owners without a stop contract remain synchronous.
+If storage cannot be reserved, callers keep the existing synchronous path.
+There is no timeout that can make an unacknowledged invalidation complete.
+``mmu_gather`` needs a separate completion owner for its data-page and
+page-table batches; changing the x86 TLB hook cannot transfer those lists by
+itself.
+
+The current NMI escape is ring-3-driver-specific, requires a controller
+request, and does not cover kernel-mode owners; it cannot provide this
+generic contract. The existing x86 clean-folio completion is a prototype of
+page-lifetime transfer, not the generic owner/MM API described above.
 
 The current NMI escape is not an MM-callable stop-and-ack operation. The
 driver's ``cpu_accel_user_nmi()`` accepts an escape only when the saved frame
@@ -1086,3 +1110,23 @@ The implementation checkpoints are:
     require MM-core construction and task-lifecycle APIs. Add IOMMU-backed
     ``DMA`` regions and userspace/NIC integration only after this non-networked
     memory contract is stable.
+
+    Next, define an MM-core owner registry and completion contract before
+    extending asynchronous reclaim beyond the x86 clean-folio prototype. The
+    contract must bind each owner instance to the address space actually
+    loaded, serialize owner admission with generation publication, keep stop
+    requests separate from exit and TLB acknowledgements, and retain every
+    affected page until both ordinary CPU flushes and owner acknowledgements
+    complete. Owners without a stop contract and callers without an explicit
+    page disposition remain synchronous. No timeout authorizes page reuse.
+
+    The current VM image cannot exercise the reclaim completion: its admitted
+    image, stack, and RSEQ area are pinned, while the control and shared-data
+    mappings use permanently allocated ``vmalloc`` backing. Add a test-only,
+    separately registered read-only file-backed mapping that is not pinned and
+    can be aliased by the companion. The companion can then trigger reclaim
+    while the worker owns the mapping. Trace the stop request and matching
+    owner exit, verify the page's contents after refault, and check physical
+    page reuse where observable. Keep this test mapping out of the normal
+    workload ABI; the existing mapping allowlist must continue to reject
+    unregistered VMAs.

@@ -120,7 +120,14 @@ shared-data mapping, and the page containing the worker's registered RSEQ
 area, when present. The test-only ``user-reclaim`` workload additionally
 retains exactly one read-only, shared, regular-file mapping. That page is
 deliberately left unpinned so the focused reclaim test can ask reclaim to
-remove it. The kernel may update the RSEQ area on the user-return
+remove it. The validator recognizes this read-only mapping with
+``VM_MAYSHARE``: Linux does not set ``VM_SHARED`` for a shared mapping made
+from a read-only file descriptor. The focused ``test-tlb-generation`` test
+can run this case alone with ``--reclaim-only``. It requests ``MADV_PAGEOUT``
+while the ring-3 owner is active, schedules owner exit after one second, and
+retries pageout after the owner releases its ``mm`` if the page remains
+resident. It verifies non-residency and the file contents after refault. The
+kernel may update the RSEQ area on the user-return
 slowpath after a deferred reschedule, so removing it would turn normal
 accelerator exit into a SIGSEGV. The driver validates the RSEQ page as private,
 readable, writable, and non-executable. The legacy x86 ``[vsyscall]`` VMA is

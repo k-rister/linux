@@ -1037,10 +1037,10 @@ static int cpu_accel_validate_user_vma_set(struct cpu_accel_device *dev,
 		    vma->vm_end == reclaim_page + PAGE_SIZE && vma->vm_file &&
 		    vma->vm_file->f_inode &&
 		    S_ISREG(file_inode(vma->vm_file)->i_mode) &&
-		    cpu_accel_vma_has_permissions(vma, VM_READ | VM_SHARED,
+		    cpu_accel_vma_has_permissions(vma, VM_READ | VM_MAYSHARE,
 					 VM_WRITE | VM_MAYWRITE | VM_EXEC |
 					 VM_IO | VM_PFNMAP)) {
-			/* Test fixture only: one clean, evictable file-cache page. */
+			/* A read-only MAP_SHARED file VMA is VM_MAYSHARE. */
 			reclaim_found = true;
 			continue;
 		}

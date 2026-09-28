@@ -1049,9 +1049,10 @@ static int run_workload(const char *program, int argc, char **argv)
 	if (quarantine_irqs)
 		config.flags |= CPU_ACCEL_FLAG_IRQ_QUARANTINE;
 	if (escape_after_ms && config.workload != CPU_ACCEL_WORKLOAD_USER_OSLAT &&
-	    config.workload != CPU_ACCEL_WORKLOAD_USER_HANG) {
+	    config.workload != CPU_ACCEL_WORKLOAD_USER_HANG &&
+	    config.workload != CPU_ACCEL_WORKLOAD_USER_RECLAIM) {
 		fprintf(stderr,
-			"%s: --escape-after-ms requires user-oslat or user-hang\n",
+			"%s: --escape-after-ms requires a user workload\n",
 			program);
 		return 2;
 	}

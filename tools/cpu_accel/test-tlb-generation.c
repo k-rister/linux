@@ -617,12 +617,19 @@ static int test_reclaim_completion(int target_cpu, int control_cpu,
 	cli_argv[cli_argc++] = "5000";
 	cli_argv[cli_argc++] = "--period-us";
 	cli_argv[cli_argc++] = "1000";
+	cli_argv[cli_argc++] = "--escape-after-ms";
+	cli_argv[cli_argc++] = ACCEL_ESCAPE_AFTER_MS;
+	cli_argv[cli_argc++] = "--escape-retries";
+	cli_argv[cli_argc++] = ACCEL_ESCAPE_RETRIES;
 	cli_argv[cli_argc++] = "--workload";
 	cli_argv[cli_argc++] = "user-reclaim";
 	cli_argv[cli_argc++] = "--test-reclaim-file";
 	cli_argv[cli_argc++] = path;
-	for (int index = 3; index < argc; index++)
+	for (int index = 3; index < argc; index++) {
+		if (!strcmp(argv[index], "--reclaim-only"))
+			continue;
 		cli_argv[cli_argc++] = argv[index];
+	}
 	cli_argv[cli_argc] = NULL;
 	cli_shared_address = 0;
 	cli_output_size = 0;
@@ -673,6 +680,14 @@ static int test_reclaim_completion(int target_cpu, int control_cpu,
 	if (!strstr(cli_output, "user_escape_count=1")) {
 		fprintf(stderr,
 			"pageout did not stop the reclaim-test ring-3 owner\n");
+		goto out;
+	}
+	if (mincore(mapping, page_size, &residency)) {
+		perror("mincore before post-exit reclaim probe");
+		goto out;
+	}
+	if ((residency & 1) && madvise(mapping, page_size, MADV_PAGEOUT)) {
+		perror("madvise(MADV_PAGEOUT after owner exit)");
 		goto out;
 	}
 	for (unsigned int attempt = 0; attempt < 1000; attempt++) {
@@ -781,6 +796,7 @@ int main(int argc, char **argv)
 	bool ptable_scan_available = false;
 	bool ptable_reused_as_table = false;
 	bool ptable_reused_as_data = false;
+	bool reclaim_only = false;
 	pid_t pid;
 	volatile pid_t cow_holder = -1;
 	pthread_t keeper_thread;
@@ -789,11 +805,16 @@ int main(int argc, char **argv)
 
 	if (argc < 3 || argc > 5) {
 		fprintf(stderr,
-			"usage: %s TARGET_CPU CPU_ACCELCTL [ACCELERATOR_OPTION ...]\n",
+			"usage: %s TARGET_CPU CPU_ACCELCTL [--quarantine-irqs] "
+			"[--reclaim-only]\n",
 			argv[0]);
 		return EXIT_FAILURE;
 	}
 	for (index = 3; index < argc; index++) {
+		if (!strcmp(argv[index], "--reclaim-only")) {
+			reclaim_only = true;
+			continue;
+		}
 		if (strcmp(argv[index], "--quarantine-irqs")) {
 			fprintf(stderr, "unsupported accelerator option: %s\n",
 				argv[index]);
@@ -832,6 +853,10 @@ int main(int argc, char **argv)
 		fprintf(stderr, "expected 4 KiB pages, got %lu\n", page_size);
 		return EXIT_FAILURE;
 	}
+	if (reclaim_only)
+		return test_reclaim_completion(target_cpu, control_cpu, argv[2],
+					       page_size, argc, argv) ?
+			EXIT_FAILURE : EXIT_SUCCESS;
 	mapping = mmap(NULL, PTE_TABLE_SIZE * 4, PROT_READ | PROT_WRITE,
 		       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	if (mapping == MAP_FAILED) {

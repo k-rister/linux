@@ -304,8 +304,13 @@ work. Rmap records each affected ``mm`` generation in the reserved object.
 When that folio is otherwise ready to be freed, x86 registers each matching
 active ring-3 owner against its pending generation, then flushes ordinary CPU
 targets synchronously. The flush filter omits only owners registered to that
-specific completion. Owner exit acknowledges those entries after its local
-TLB reconciliation; a worker then uncharges and frees the folio.
+specific completion. After registration succeeds, x86 also requests those
+owner instances to stop. The request is generation-checked and only prompts
+exit; it is not an acknowledgment. Owner exit acknowledges those entries
+after its local TLB reconciliation; a worker then uncharges and frees the
+folio. If the owner exits before the request is delivered, its registered
+completion is still drained by that exit path. If the CPU has since admitted a
+new owner, the generation check leaves that owner alone.
 
 Dirty folios, writable PTE batches, failed unmaps, DMA-pinned folios, folios
 with buffer-release work, migration, huge-page collapse, and other callers
@@ -315,9 +320,10 @@ Completion storage is reserved before PTE removal. A stalled owner keeps its
 folio and completion slot; after all 16 slots are occupied, further reclaim
 can wait on the existing synchronous path. This is bounded backpressure, not a
 timeout. If the acknowledgement array fills after some owners were registered,
-the synchronous fallback sends those owners through the ordinary flush; their
-partial completion references drain after local reconciliation before the
-cancelled slot returns to the pool.
+the completion-specific stop request is not issued, and the synchronous
+fallback flushes the partial set through the ordinary path. That path may issue
+its own stop requests; the partial completion references drain after local
+reconciliation before the cancelled slot returns to the pool.
 
 The generic ``arch_tlbbatch_flush()`` remains synchronous. Only the dedicated
 vmscan completion path can defer a matching x86 ring-3 owner, and it retains

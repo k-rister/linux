@@ -198,7 +198,9 @@ void x86_cpu_accel_tlb_flush_end(struct x86_cpu_accel_tlb_flush *flush)
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_tlb_flush_end);
 
-void x86_cpu_accel_request_stop_owner(unsigned int cpu)
+/* Generation zero selects the current active owner without an identity check. */
+static void
+x86_cpu_accel_request_stop_owner_gen(unsigned int cpu, u64 owner_generation)
 {
 	struct x86_cpu_accel_request *request;
 	x86_cpu_accel_stop_fn stop = NULL;
@@ -215,7 +217,9 @@ void x86_cpu_accel_request_stop_owner(unsigned int cpu)
 		return;
 	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
 	raw_spin_lock_irqsave(&request->lock, flags);
-	if (atomic_read(&request->active)) {
+	if (atomic_read(&request->active) &&
+	    (!owner_generation ||
+	     request->owner_generation == owner_generation)) {
 		active = true;
 		atomic_inc(&request->stop_inflight);
 		owner_id = request->owner_generation;
@@ -239,6 +243,11 @@ void x86_cpu_accel_request_stop_owner(unsigned int cpu)
 		}
 		atomic_dec_return_release(&request->stop_inflight);
 	}
+}
+
+void x86_cpu_accel_request_stop_owner(unsigned int cpu)
+{
+	x86_cpu_accel_request_stop_owner_gen(cpu, 0);
 }
 
 static u64 x86_cpu_accel_owner_exit(unsigned int cpu,
@@ -820,6 +829,39 @@ int x86_cpu_accel_reclaim_register(struct x86_cpu_accel_tlb_reclaim_completion *
 	return registered;
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_reclaim_register);
+
+void x86_cpu_accel_reclaim_request_stop(struct x86_cpu_accel_tlb_reclaim_completion *comp)
+{
+	unsigned int cpu;
+
+	if (!comp)
+		return;
+
+	for_each_possible_cpu(cpu) {
+		struct x86_cpu_accel_request *request;
+		struct x86_cpu_accel_tlb_reclaim_ack *ack;
+		unsigned long flags;
+		u64 owner_generation = 0;
+		bool found = false;
+
+		request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
+		raw_spin_lock_irqsave(&request->lock, flags);
+		if (atomic_read(&request->active)) {
+			list_for_each_entry(ack, &request->tlb_reclaim_acks, link) {
+				if (ack->completion == comp) {
+					owner_generation = request->owner_generation;
+					found = true;
+					break;
+				}
+			}
+		}
+		raw_spin_unlock_irqrestore(&request->lock, flags);
+
+		if (found)
+			x86_cpu_accel_request_stop_owner_gen(cpu, owner_generation);
+	}
+}
+EXPORT_SYMBOL_GPL(x86_cpu_accel_reclaim_request_stop);
 
 void x86_cpu_accel_reclaim_release(struct x86_cpu_accel_tlb_reclaim_completion *comp)
 {

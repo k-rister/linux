@@ -91,6 +91,8 @@ bool x86_cpu_accel_reclaim_record(struct x86_cpu_accel_tlb_reclaim_completion *c
 int x86_cpu_accel_reclaim_register(struct x86_cpu_accel_tlb_reclaim_completion *comp,
 				   void *data, x86_cpu_accel_reclaim_fn get,
 				   x86_cpu_accel_reclaim_fn ack);
+/* Request stop only for owner instances registered to this completion. */
+void x86_cpu_accel_reclaim_request_stop(struct x86_cpu_accel_tlb_reclaim_completion *comp);
 void x86_cpu_accel_reclaim_release(struct x86_cpu_accel_tlb_reclaim_completion *comp);
 /* Record an mm-scoped target and filter ring-3 owners from its IPI mask. */
 bool x86_cpu_accel_filter_mm_tlb_shootdown(unsigned int cpu,
@@ -152,6 +154,12 @@ x86_cpu_accel_reclaim_register(struct x86_cpu_accel_tlb_reclaim_completion *comp
 	(void)get;
 	(void)ack;
 	return 0;
+}
+
+static inline void
+x86_cpu_accel_reclaim_request_stop(struct x86_cpu_accel_tlb_reclaim_completion *comp)
+{
+	(void)comp;
 }
 
 static inline void

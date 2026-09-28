@@ -1931,6 +1931,13 @@ bool arch_tlbbatch_flush_reclaim(struct arch_tlbflush_unmap_batch *batch,
 		return false;
 	}
 
+	/*
+	 * Prompt registered owners to exit. Their exit path performs the local
+	 * flush and acknowledges the completion; this request is not itself an
+	 * acknowledgment. It is generation-checked to avoid stopping a new
+	 * owner that entered after the registered instance exited.
+	 */
+	x86_cpu_accel_reclaim_request_stop(completion);
 	__arch_tlbbatch_flush(batch, completion);
 	return true;
 }

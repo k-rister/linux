@@ -158,12 +158,14 @@ backend, ``flush_tlb_multi()`` removes active ring-3 owners from an
 mm-scoped flush mask only when they are running a different ``mm``. That
 address space's TLB generation is advanced, and ``switch_mm()`` performs the
 needed local flush before the owner CPU can use it again. For the owner's own
-``mm``, ordinary range flushes remain synchronous. One bounded exception now
-covers the final ``mmu_gather`` data-page batch: when the gather has no
+``mm``, ordinary range flushes remain synchronous. A bounded exception now
+covers eligible ``mmu_gather`` data-page batches: when the gather has no
 page-table batch or immediate walker barrier, it may register owner
 acknowledgements and retain the leaf pages until those owners reconcile their
-local TLBs. Page-table releases, intermediate drains, and gathers without
-completion storage still use synchronous flushes. The owned worker ``mm`` is
+local TLBs. Eligible intermediate data-page drains use the same handoff and
+reserve a new completion before the gather accepts more pages; if storage is
+unavailable, that drain remains synchronous. Page-table releases and drains
+with immediate walker barriers remain synchronous. The owned worker ``mm`` is
 write-locked for the active interval, which excludes ordinary VMA changes;
 reclaim has a separate completion path for eligible clean folios. Neither
 path treats an unacknowledged same-``mm`` generation as permission to reuse
@@ -271,10 +273,13 @@ final leaf data-page batch if no page-table batch, full-mm flush, or immediate
 walker barrier requires the synchronous path. Registered same-``mm`` owners
 are omitted from that flush mask only after subscribing to the completion;
 ordinary CPU targets still flush immediately, and the worker frees the pages
-only after the owner acknowledgements arrive. Intermediate drains, page-table
-releases, missing completion storage, and other ineligible gathers remain
-synchronous. This leaves page-table RCU and GUP-fast barriers unchanged. The
-generic ``arch_tlbbatch_flush()`` path and migration callers also remain synchronous.
+only after the owner acknowledgements arrive. Eligible intermediate
+data-page drains detach and submit their batch independently, then reserve a
+fresh completion before the gather accepts more pages. Pool exhaustion falls
+back to synchronous flushing. Page-table releases and drains with immediate
+walker barriers remain synchronous. This leaves page-table RCU and GUP-fast
+barriers unchanged. The generic ``arch_tlbbatch_flush()`` path and migration
+callers also remain synchronous.
 Vmscan has a separate bounded path for eligible clean folios: it reserves
 completion storage before PTE removal and retains each folio until matching
 owners acknowledge.

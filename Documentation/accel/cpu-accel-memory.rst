@@ -1077,13 +1077,20 @@ The implementation checkpoints are:
     worker ``mm`` with a complete VMA
     allowlist, including the fixed x86 ``[vsyscall]`` exception. The sleepable
     maintenance gate now requests registered owner stops and waits for owner
-    exit after local TLB reconciliation; it may still wait without a bound,
-    and this does not change the synchronous MM full-flush contract. Remaining
-    work includes progress reporting for full-flush waits and semantic safety
-    for kernel code/exception mapping updates. The current synchronous
-    full-flush path preserves invalidation-before-reuse, but may wait without a
-    bound for an owner to exit; there is no safe timeout for these MM hooks. A
-    focused VM test unmaps a touched
+    exit after local TLB reconciliation; it may still wait without a bound.
+    The ``owner_stop_request``/``owner_exit_complete`` and
+    ``tlb_flush_wait`` tracepoints, supplemented by optional IPI/CSD events,
+    expose the stop and callback sequence for diagnosis. An unmatched flush
+    begin shows incomplete synchronous work, but these observational events do
+    not bound it. The full-flush path preserves invalidation-before-reuse, and
+    there is no safe timeout for these void MM hooks. The current x86 caller
+    audit found no additional live kernel-code or exception-state writer
+    outside the established gates and lifecycle rules above. Next review
+    whether any additional reclaim or ``mmu_gather`` path can transfer page
+    lifetime to an explicit owner-completion object; dirty/writeback and
+    migration must retain their synchronous semantics unless their data
+    operations are also protected from concurrent owner writes. A focused VM
+    test unmaps a touched
     2 MiB mapping from another ``mm`` while the target CPU is ring-3 owned,
     then uses privileged ``/proc/self/pagemap`` and ``/proc/kpageflags``
     inspection to track a freed data-page PFN and, when observed, the

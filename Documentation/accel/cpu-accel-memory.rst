@@ -1228,13 +1228,21 @@ The implementation checkpoints are:
     intermittent lockup remains unreproduced; retain the synchronous fallback
     and continue controlled coverage before changing the stop/ack protocol.
 
-    The harness now also requires each observed ``tlb_flush_wait`` begin ID to
-    have exactly one later completion, allowing interleaved flushes. It enables
-    optional core IPI-send, CSD callback, and x86 call-function IRQ tracepoints
-    when available, to capture target masks and callback delivery for future
-    stall diagnosis. The pairing check passed synthetic interleaved and missing
-    completion cases. The VM is currently on its known 6.12 kernel, so these
-    harness updates have not yet been rerun against 00604.
+    The harness also requires every observed ``tlb_flush_wait`` begin ID to
+    have exactly one later completion, allowing interleaved flushes. Optional
+    core IPI-send, CSD callback, and x86 call-function IRQ tracepoints capture
+    target masks and callback delivery when available. After verifying that the
+    VM was running ``7.3.0-rc3-accel-tlbfix-00604-g44f7b92cde35-dirty``, one
+    five-second run completed 43,826 forks and 87,652 forced COW writes on
+    CPU3. Global CPA flush ID 38 began with eight targets and one owner; its
+    stop request targeted owner CPU2, the ``do_flush_tlb_all`` callback entered
+    and exited on CPU2, the matching owner exit was observed, and that same
+    flush ID then completed. The CSD trace also recorded callback delivery for
+    the queued remote CPUs. There were no lost trace events or soft-lockup,
+    RCU-stall, BUG, or Oops records, and the VM remained responsive. This adds
+    low-level delivery evidence but does not reproduce the reported lockup;
+    keep the synchronous fallback and continue the caller-semantics audit
+    before changing the stop/ack protocol.
 
     The test-only fixture now retains one unpinned, read-only shared regular-
     file page in the worker and maps an alias in the companion. On kernel

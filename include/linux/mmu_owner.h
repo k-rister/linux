@@ -60,6 +60,11 @@ struct mmu_owner_snapshot {
 	u64 generation;
 };
 
+#ifdef CONFIG_X86
+extern const struct mmu_owner_subscription_ops
+	mmu_gather_completion_owner_ops;
+#endif
+
 /*
  * A registered owner pins the live address space on MMU builds. A snapshot
  * takes an owner-data reference under the registry lock; callers must release

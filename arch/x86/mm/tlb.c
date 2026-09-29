@@ -1538,12 +1538,14 @@ static void init_flush_tlb_info(struct flush_tlb_info *info,
 	info->accel_tlb_reclaim_completion = NULL;
 }
 
-void flush_tlb_mm_range(struct mm_struct *mm, unsigned long start,
-				unsigned long end, unsigned int stride_shift,
-				bool freed_tables)
+static bool __flush_tlb_mm_range(struct mm_struct *mm, unsigned long start,
+				 unsigned long end, unsigned int stride_shift,
+				 bool freed_tables, void *completion_data)
 {
 	struct flush_tlb_info info;
 	bool remote_flush = false;
+	bool global_asid;
+	bool deferred = false;
 	int cpu = get_cpu();
 	u64 new_tlb_gen;
 
@@ -1551,17 +1553,35 @@ void flush_tlb_mm_range(struct mm_struct *mm, unsigned long start,
 	new_tlb_gen = inc_mm_tlb_gen(mm);
 
 	init_flush_tlb_info(&info, mm, start, end, stride_shift, freed_tables, new_tlb_gen);
+	global_asid = mm_global_asid(mm);
+	if (!global_asid)
+		remote_flush = cpumask_any_but(mm_cpumask(mm), cpu) < nr_cpu_ids;
+
+	/*
+	 * A gather completion can retain leaf pages after registered owners have
+	 * reconciled this generation. Page-table batches and global-ASID flushes
+	 * stay on the ordinary synchronous path.
+	 */
+	if (completion_data && remote_flush && x86_cpu_accel_any_active() &&
+	    x86_cpu_accel_reclaim_record(completion_data, mm, new_tlb_gen)) {
+		x86_cpu_accel_note_tlb_unmap(mm, new_tlb_gen);
+		if (x86_cpu_accel_reclaim_register(completion_data, completion_data,
+						   &mmu_gather_completion_owner_ops) > 0) {
+			info.accel_tlb_unmap_batch = 1;
+			info.accel_tlb_reclaim_completion = completion_data;
+			deferred = true;
+		}
+	}
 
 	/*
 	 * flush_tlb_multi() is not optimized for the common case in which only
 	 * a local TLB flush is needed. Optimize this use-case by calling
 	 * flush_tlb_func_local() directly in this case.
 	 */
-	if (mm_global_asid(mm)) {
+	if (global_asid) {
 		broadcast_tlb_flush(&info);
-	} else if (cpumask_any_but(mm_cpumask(mm), cpu) < nr_cpu_ids) {
-		remote_flush = true;
-	} else if (mm == this_cpu_read(cpu_tlbstate.loaded_mm)) {
+	} else if (!remote_flush &&
+		   mm == this_cpu_read(cpu_tlbstate.loaded_mm)) {
 		lockdep_assert_irqs_enabled();
 		local_irq_disable();
 		flush_tlb_func(&info);
@@ -1577,6 +1597,23 @@ void flush_tlb_mm_range(struct mm_struct *mm, unsigned long start,
 	}
 
 	mmu_notifier_arch_invalidate_secondary_tlbs(mm, start, end);
+	return deferred;
+}
+
+void flush_tlb_mm_range(struct mm_struct *mm, unsigned long start,
+			unsigned long end, unsigned int stride_shift,
+			bool freed_tables)
+{
+	__flush_tlb_mm_range(mm, start, end, stride_shift, freed_tables, NULL);
+}
+
+bool flush_tlb_mm_range_completion(struct mm_struct *mm,
+				   unsigned long start, unsigned long end,
+				   unsigned int stride_shift, bool freed_tables,
+				   void *completion_data)
+{
+	return __flush_tlb_mm_range(mm, start, end, stride_shift, freed_tables,
+				    completion_data);
 }
 
 static void do_flush_tlb_all(void *info)

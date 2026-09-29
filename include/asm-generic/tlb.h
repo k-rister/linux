@@ -324,6 +324,10 @@ static inline void tlb_flush_rmaps(struct mmu_gather *tlb, struct vm_area_struct
  */
 struct mmu_gather {
 	struct mm_struct	*mm;
+	/* Optional x86 owner completion for the final data-page batch. */
+#ifdef CONFIG_X86
+	void			*owner_completion;
+#endif
 
 #ifdef CONFIG_MMU_GATHER_TABLE_FREE
 	struct mmu_table_batch	*batch;
@@ -336,6 +340,10 @@ struct mmu_gather {
 	 * a full mm and can make some optimizations
 	 */
 	unsigned int		fullmm : 1;
+#ifdef CONFIG_X86
+	unsigned int		owner_completion_defer : 1;
+	unsigned int		owner_completion_used : 1;
+#endif
 
 	/*
 	 * we have performed an operation which

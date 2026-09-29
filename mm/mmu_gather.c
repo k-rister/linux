@@ -1,20 +1,29 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/gfp.h>
 #include <linux/highmem.h>
+#include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/mmdebug.h>
 #include <linux/mm_types.h>
 #include <linux/mmu_owner.h>
 #include <linux/mm_inline.h>
+#include <linux/mempool.h>
 #include <linux/pagemap.h>
+#include <linux/refcount.h>
 #include <linux/rcupdate.h>
 #include <linux/smp.h>
+#include <linux/string.h>
 #include <linux/swap.h>
 #include <linux/rmap.h>
 #include <linux/pgalloc.h>
 #include <linux/hugetlb.h>
+#include <linux/workqueue.h>
 
 #include <asm/tlb.h>
+
+#ifdef CONFIG_X86
+#include <asm/cpu_accel.h>
+#endif
 
 #ifndef CONFIG_MMU_GATHER_NO_GATHER
 
@@ -101,14 +110,14 @@ void tlb_flush_rmaps(struct mmu_gather *tlb, struct vm_area_struct *vma)
  */
 #define MAX_NR_FOLIOS_PER_FREE		512
 
-static void __tlb_batch_free_encoded_pages(struct mmu_gather_batch *batch)
+static void __tlb_free_encoded_pages(struct encoded_page **pages,
+				     unsigned int *nr_entries)
 {
-	struct encoded_page **pages = batch->encoded_pages;
 	unsigned int nr, nr_pages;
 
-	while (batch->nr) {
+	while (*nr_entries) {
 		if (!page_poisoning_enabled_static() && !want_init_on_free()) {
-			nr = min(MAX_NR_FOLIOS_PER_FREE, batch->nr);
+			nr = min(MAX_NR_FOLIOS_PER_FREE, *nr_entries);
 
 			/*
 			 * Make sure we cover page + nr_pages, and don't leave
@@ -126,7 +135,7 @@ static void __tlb_batch_free_encoded_pages(struct mmu_gather_batch *batch)
 			 * folios.
 			 */
 			for (nr = 0, nr_pages = 0;
-			     nr < batch->nr && nr_pages < MAX_NR_FOLIOS_PER_FREE;
+			     nr < *nr_entries && nr_pages < MAX_NR_FOLIOS_PER_FREE;
 			     nr++) {
 				if (unlikely(encoded_page_flags(pages[nr]) &
 					     ENCODED_PAGE_BIT_NR_PAGES_NEXT))
@@ -138,11 +147,129 @@ static void __tlb_batch_free_encoded_pages(struct mmu_gather_batch *batch)
 
 		free_pages_and_swap_cache(pages, nr);
 		pages += nr;
-		batch->nr -= nr;
+		*nr_entries -= nr;
 
 		cond_resched();
 	}
 }
+
+static void __tlb_batch_free_encoded_pages(struct mmu_gather_batch *batch)
+{
+	__tlb_free_encoded_pages(batch->encoded_pages, &batch->nr);
+}
+
+#ifdef CONFIG_X86
+#define MMU_GATHER_COMPLETION_POOL_SIZE	16
+
+/* The architecture completion must be first for x86 TLB-flush handoff. */
+struct mmu_gather_completion {
+	struct x86_cpu_accel_tlb_reclaim_completion arch;
+	struct work_struct work;
+	refcount_t refs;
+	atomic_t owners;
+	bool ready;
+	bool cancelled;
+#ifndef CONFIG_MMU_GATHER_NO_GATHER
+	unsigned int nr;
+	struct encoded_page *pages[MMU_GATHER_BUNDLE];
+	struct mmu_gather_batch *batches;
+#endif
+};
+
+static mempool_t mmu_gather_completion_pool;
+
+static void mmu_gather_completion_work(struct work_struct *work)
+{
+	struct mmu_gather_completion *completion =
+		container_of(work, struct mmu_gather_completion, work);
+#ifndef CONFIG_MMU_GATHER_NO_GATHER
+	struct mmu_gather_batch *batch, *next;
+#endif
+
+	/* Pair with ready publication after the gather transfers its page batches. */
+	if (smp_load_acquire(&completion->ready)) {
+		WARN_ON_ONCE(READ_ONCE(completion->cancelled));
+#ifndef CONFIG_MMU_GATHER_NO_GATHER
+		__tlb_free_encoded_pages(completion->pages, &completion->nr);
+		for (batch = completion->batches; batch; batch = next) {
+			next = batch->next;
+			__tlb_batch_free_encoded_pages(batch);
+			free_pages((unsigned long)batch, 0);
+		}
+#endif
+	} else {
+		WARN_ON_ONCE(!READ_ONCE(completion->cancelled));
+	}
+
+	WARN_ON_ONCE(atomic_read(&completion->owners));
+	x86_cpu_accel_reclaim_release(&completion->arch);
+	mempool_free(completion, &mmu_gather_completion_pool);
+}
+
+static void mmu_gather_completion_put(struct mmu_gather_completion *completion)
+{
+	if (refcount_dec_and_test(&completion->refs))
+		schedule_work(&completion->work);
+}
+
+static bool mmu_gather_completion_owner_get(void *data)
+{
+	struct mmu_gather_completion *completion = data;
+
+	refcount_inc(&completion->refs);
+	atomic_inc(&completion->owners);
+	return true;
+}
+
+static void mmu_gather_completion_owner_complete(void *data)
+{
+	struct mmu_gather_completion *completion = data;
+
+	atomic_dec(&completion->owners);
+}
+
+static void mmu_gather_completion_owner_put(void *data)
+{
+	mmu_gather_completion_put(data);
+}
+
+const struct mmu_owner_subscription_ops mmu_gather_completion_owner_ops = {
+	.get = mmu_gather_completion_owner_get,
+	.complete = mmu_gather_completion_owner_complete,
+	.put = mmu_gather_completion_owner_put,
+};
+
+static struct mmu_gather_completion *mmu_gather_completion_alloc(void)
+{
+	struct mmu_gather_completion *completion;
+
+	if (!mempool_initialized(&mmu_gather_completion_pool))
+		return NULL;
+	completion = mempool_alloc_preallocated(&mmu_gather_completion_pool);
+	if (!completion)
+		return NULL;
+
+	memset(completion, 0, sizeof(*completion));
+	INIT_WORK(&completion->work, mmu_gather_completion_work);
+	refcount_set(&completion->refs, 1);
+	atomic_set(&completion->owners, 0);
+	return completion;
+}
+
+static int __init mmu_gather_completion_pool_init(void)
+{
+	int ret;
+
+	ret = mempool_init_kmalloc_pool(&mmu_gather_completion_pool,
+					MMU_GATHER_COMPLETION_POOL_SIZE,
+					sizeof(struct mmu_gather_completion));
+	if (ret)
+		pr_warn("unable to reserve mmu_gather owner completions: %d\n",
+			ret);
+	return 0;
+}
+subsys_initcall(mmu_gather_completion_pool_init);
+#endif /* CONFIG_X86 */
 
 static void tlb_batch_pages_flush(struct mmu_gather *tlb)
 {
@@ -163,6 +290,73 @@ static void tlb_batch_list_free(struct mmu_gather *tlb)
 	}
 	tlb->local.next = NULL;
 }
+
+#if defined(CONFIG_X86) && !defined(CONFIG_MMU_GATHER_NO_GATHER)
+static bool tlb_gather_has_pages(struct mmu_gather *tlb)
+{
+	struct mmu_gather_batch *batch;
+
+	for (batch = &tlb->local; batch; batch = batch->next)
+		if (batch->nr)
+			return true;
+	return false;
+}
+
+static bool tlb_gather_can_defer_final_pages(struct mmu_gather *tlb)
+{
+	if (!tlb->owner_completion || !tlb_gather_has_pages(tlb) ||
+	    tlb->fullmm || tlb->need_flush_all || tlb->freed_tables ||
+	    tlb->delayed_rmap || tlb->vma_pfn || tlb->unshared_tables ||
+	    tlb->fully_unshared_tables)
+		return false;
+
+#ifdef CONFIG_MMU_GATHER_TABLE_FREE
+	if (tlb->batch)
+		return false;
+#endif
+
+	return true;
+}
+
+static void tlb_gather_completion_take_pages(struct mmu_gather *tlb)
+{
+	struct mmu_gather_completion *completion = tlb->owner_completion;
+
+	completion->nr = tlb->local.nr;
+	memcpy(completion->pages, tlb->local.encoded_pages,
+	       completion->nr * sizeof(completion->pages[0]));
+	completion->batches = tlb->local.next;
+	tlb->local.nr = 0;
+	tlb->local.next = NULL;
+	tlb->active = &tlb->local;
+	tlb->batch_count = 0;
+}
+#endif /* CONFIG_X86 && !CONFIG_MMU_GATHER_NO_GATHER */
+
+#ifdef CONFIG_X86
+static void tlb_gather_completion_finish(struct mmu_gather *tlb)
+{
+	struct mmu_gather_completion *completion = tlb->owner_completion;
+
+	if (!completion)
+		return;
+
+	if (tlb->owner_completion_used) {
+		/* Publish detached batches before the last reference queues the work. */
+		smp_store_release(&completion->ready, true);
+	} else {
+		WRITE_ONCE(completion->cancelled, true);
+	}
+
+	tlb->owner_completion = NULL;
+	mmu_gather_completion_put(completion);
+}
+#else
+static inline void tlb_gather_completion_finish(struct mmu_gather *tlb)
+{
+	(void)tlb;
+}
+#endif
 
 static bool __tlb_remove_folio_pages_size(struct mmu_gather *tlb,
 		struct page *page, unsigned int nr_pages, bool delay_rmap,
@@ -421,7 +615,16 @@ static void tlb_flush_mmu_free(struct mmu_gather *tlb)
 
 void tlb_flush_mmu(struct mmu_gather *tlb)
 {
+#ifdef CONFIG_X86
+	tlb->owner_completion_used = 0;
+	#endif
 	tlb_flush_mmu_tlbonly(tlb);
+#if defined(CONFIG_X86) && !defined(CONFIG_MMU_GATHER_NO_GATHER)
+	if (tlb->owner_completion_used) {
+		tlb_gather_completion_take_pages(tlb);
+		return;
+	}
+#endif
 	tlb_flush_mmu_free(tlb);
 }
 
@@ -436,6 +639,15 @@ static void __tlb_gather_mmu(struct mmu_gather *tlb, struct mm_struct *mm,
 	 * visible before admission resumes.
 	 */
 	mmu_owner_update_begin(mm);
+#ifdef CONFIG_X86
+	tlb->owner_completion = NULL;
+	tlb->owner_completion_defer = 0;
+	tlb->owner_completion_used = 0;
+#endif
+#if defined(CONFIG_X86) && !defined(CONFIG_MMU_GATHER_NO_GATHER)
+	if (x86_cpu_accel_any_active())
+		tlb->owner_completion = mmu_gather_completion_alloc();
+#endif
 
 #ifndef CONFIG_MMU_GATHER_NO_GATHER
 	tlb->need_flush_all = 0;
@@ -553,11 +765,19 @@ void tlb_finish_mmu(struct mmu_gather *tlb)
 		tlb->freed_tables = 1;
 	}
 
+#if defined(CONFIG_X86) && !defined(CONFIG_MMU_GATHER_NO_GATHER)
+	tlb->owner_completion_defer =
+		tlb_gather_can_defer_final_pages(tlb);
+#endif
 	tlb_flush_mmu(tlb);
+#ifdef CONFIG_X86
+	tlb->owner_completion_defer = 0;
+#endif
 
 #ifndef CONFIG_MMU_GATHER_NO_GATHER
 	tlb_batch_list_free(tlb);
 #endif
 	dec_tlb_flush_pending(tlb->mm);
+	tlb_gather_completion_finish(tlb);
 	mmu_owner_update_end(tlb->mm);
 }

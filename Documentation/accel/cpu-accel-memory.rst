@@ -157,18 +157,17 @@ incidental consequence of call-function deferral. For the ring-3 process-mm
 backend, ``flush_tlb_multi()`` removes active ring-3 owners from an
 mm-scoped flush mask only when they are running a different ``mm``. That
 address space's TLB generation is advanced, and ``switch_mm()`` performs the
-needed local flush before the owner CPU can use it again. A range flush for
-the owner's own ``mm`` remains synchronous: the owner is asked to stop before
-the flush dispatches, and the caller waits for local TLB reconciliation
-before it can release any gathered pages. ``mmu_gather`` does not yet transfer
-its queued data and page-table pages to a completion owner; adding that
-completion ownership is required before same-``mm`` owners can be filtered.
-The owned worker ``mm`` is write-locked for the active interval, which
-excludes ordinary VMA changes; reclaim has its own completion path for
-eligible clean folios. This avoids making a synchronous flush wait for an
-interrupt-disabled ring-3 owner that is running a different address space,
-without treating an unacknowledged same-``mm`` generation as permission to
-reuse pages.
+needed local flush before the owner CPU can use it again. For the owner's own
+``mm``, ordinary range flushes remain synchronous. One bounded exception now
+covers the final ``mmu_gather`` data-page batch: when the gather has no
+page-table batch or immediate walker barrier, it may register owner
+acknowledgements and retain the leaf pages until those owners reconcile their
+local TLBs. Page-table releases, intermediate drains, and gathers without
+completion storage still use synchronous flushes. The owned worker ``mm`` is
+write-locked for the active interval, which excludes ordinary VMA changes;
+reclaim has a separate completion path for eligible clean folios. Neither
+path treats an unacknowledged same-``mm`` generation as permission to reuse
+pages.
 ABI 16 reports
 ``arch_tlb_shootdown_targets`` for x86 flush batches that target the CPU while
 accelerator ownership is active, including the native IPI and INVLPGB paths.
@@ -267,12 +266,18 @@ This closes the admission race for batched reverse-map unmaps. Generic
 ``mmu_gather`` now holds the same per-``mm`` admission interlock from gather
 initialization through its final TLB flush and page release. That prevents a
 new owner from entering while PTE changes and their TLB generation are in
-flight; it does not defer the gather's data or page-table batches, and a
-same-``mm`` owner still follows the synchronous flush path. The generic
-``arch_tlbbatch_flush()`` path and migration callers also remain synchronous.
+flight. At finish, a reserved completion object may take ownership of the
+final leaf data-page batch if no page-table batch, full-mm flush, or immediate
+walker barrier requires the synchronous path. Registered same-``mm`` owners
+are omitted from that flush mask only after subscribing to the completion;
+ordinary CPU targets still flush immediately, and the worker frees the pages
+only after the owner acknowledgements arrive. Intermediate drains, page-table
+releases, missing completion storage, and other ineligible gathers remain
+synchronous. This leaves page-table RCU and GUP-fast barriers unchanged. The
+generic ``arch_tlbbatch_flush()`` path and migration callers also remain synchronous.
 Vmscan has a separate bounded path for eligible clean folios: it reserves
 completion storage before PTE removal and retains each folio until matching
-owners acknowledge. This does not change the generic batch contract.
+owners acknowledge.
 
 Without a reclaim completion, an owner whose own ``mm`` was changed remains
 in the synchronous target set. The write lock excludes VMA changes, and pins

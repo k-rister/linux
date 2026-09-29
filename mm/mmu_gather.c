@@ -4,6 +4,7 @@
 #include <linux/kernel.h>
 #include <linux/mmdebug.h>
 #include <linux/mm_types.h>
+#include <linux/mmu_owner.h>
 #include <linux/mm_inline.h>
 #include <linux/pagemap.h>
 #include <linux/rcupdate.h>
@@ -429,6 +430,12 @@ static void __tlb_gather_mmu(struct mmu_gather *tlb, struct mm_struct *mm,
 {
 	tlb->mm = mm;
 	tlb->fullmm = fullmm;
+	/*
+	 * Keep a new execution owner from entering this address space while
+	 * page-table changes are in flight. The final TLB generation must be
+	 * visible before admission resumes.
+	 */
+	mmu_owner_update_begin(mm);
 
 #ifndef CONFIG_MMU_GATHER_NO_GATHER
 	tlb->need_flush_all = 0;
@@ -552,4 +559,5 @@ void tlb_finish_mmu(struct mmu_gather *tlb)
 	tlb_batch_list_free(tlb);
 #endif
 	dec_tlb_flush_pending(tlb->mm);
+	mmu_owner_update_end(tlb->mm);
 }

@@ -263,12 +263,16 @@ by the generation bookkeeping. Without a reclaim completion, it remains in the
 synchronous target set; the vmscan completion path may omit it only after
 registering an acknowledgement for the affected generation.
 
-This closes the admission race for batched reverse-map unmaps. The generic
-``arch_tlbbatch_flush()`` path and migration callers remain synchronous. Vmscan
-has a separate bounded path for eligible clean folios: it reserves completion
-storage before PTE removal and retains each folio until matching owners
-acknowledge. This does not change the generic batch contract, and
-``mmu_gather`` remains a separate path.
+This closes the admission race for batched reverse-map unmaps. Generic
+``mmu_gather`` now holds the same per-``mm`` admission interlock from gather
+initialization through its final TLB flush and page release. That prevents a
+new owner from entering while PTE changes and their TLB generation are in
+flight; it does not defer the gather's data or page-table batches, and a
+same-``mm`` owner still follows the synchronous flush path. The generic
+``arch_tlbbatch_flush()`` path and migration callers also remain synchronous.
+Vmscan has a separate bounded path for eligible clean folios: it reserves
+completion storage before PTE removal and retains each folio until matching
+owners acknowledge. This does not change the generic batch contract.
 
 Without a reclaim completion, an owner whose own ``mm`` was changed remains
 in the synchronous target set. The write lock excludes VMA changes, and pins

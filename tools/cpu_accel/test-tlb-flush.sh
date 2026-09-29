@@ -8,14 +8,19 @@ tool=${CPU_ACCELCTL:-$script_dir/cpu-accelctl}
 probe=${CPU_ACCEL_TLB_FLUSH_PROBE:-$script_dir/tlb-flush-probe/cpu_accel_tlb_flush_probe.ko}
 target_cpu=${CPU_ACCEL_CPU:-2}
 escape_ms=${CPU_ACCEL_ESCAPE_AFTER_MS:-3000}
+cow_churn_ms=${CPU_ACCEL_COW_CHURN_MS:-0}
+stress_cpu=${CPU_ACCEL_STRESS_CPU:-3}
+cow_churn_tool=${CPU_ACCEL_TLB_COW_CHURN:-$script_dir/test-tlb-cow-churn}
 trace_root=${TRACEFS:-/sys/kernel/tracing}
 instance="$trace_root/instances/cpu_accel_tlb_flush_$$"
 module_name=
 trace_pid=
 run_pid=
+churn_pid=
 module_loaded=0
 insmod_rc=0
 run_rc=0
+churn_rc=0
 outdir=${CPU_ACCEL_TRACE_DIR:-$(mktemp -d /tmp/cpu-accel-tlb-flush.XXXXXX)}
 
 fail()
@@ -29,6 +34,11 @@ cleanup()
 	if [ -n "$run_pid" ]; then
 		wait "$run_pid" 2>/dev/null || true
 		run_pid=
+	fi
+	if [ -n "$churn_pid" ]; then
+		kill -TERM "$churn_pid" 2>/dev/null || true
+		wait "$churn_pid" 2>/dev/null || true
+		churn_pid=
 	fi
 	if [ -n "$trace_pid" ]; then
 		kill -TERM "$trace_pid" 2>/dev/null || true
@@ -58,10 +68,25 @@ esac
 case "$escape_ms" in
 	''|*[!0-9]*) fail "escape delay must be a positive integer" ;;
 esac
+case "$cow_churn_ms" in
+	''|*[!0-9]*) fail "COW churn duration must be a nonnegative integer" ;;
+esac
+case "$stress_cpu" in
+	''|*[!0-9]*) fail "stress CPU must be a nonnegative integer" ;;
+esac
 [ "$escape_ms" -gt 0 ] || fail "escape delay must be positive"
 [ "$escape_ms" -lt 5000 ] || fail "escape delay must be shorter than the workload"
+[ "$cow_churn_ms" -le 30000 ] || fail "COW churn duration must be at most 30000 ms"
 [ "$(cat "/sys/devices/system/cpu/cpu$target_cpu/online")" = 1 ] || \
 	fail "target CPU $target_cpu is offline"
+if [ "$cow_churn_ms" -gt 0 ]; then
+	[ "$stress_cpu" -ne "$target_cpu" ] || \
+		fail "stress CPU must differ from owner CPU $target_cpu"
+	[ "$(cat "/sys/devices/system/cpu/cpu$stress_cpu/online")" = 1 ] || \
+		fail "stress CPU $stress_cpu is offline"
+	[ -x "$cow_churn_tool" ] || \
+		fail "COW churn helper is not executable: $cow_churn_tool"
+fi
 
 module_name=$(modinfo -F name "$probe")
 case "$(modinfo -F vermagic "$probe")" in
@@ -83,6 +108,13 @@ cat "$instance/trace_pipe" >"$outdir/trace.log" &
 trace_pid=$!
 echo 1 >"$instance/tracing_on"
 
+if [ "$cow_churn_ms" -gt 0 ]; then
+	"$cow_churn_tool" "$stress_cpu" "$cow_churn_ms" \
+		>"$outdir/cow-churn.log" 2>&1 &
+	churn_pid=$!
+	sleep 0.1
+fi
+
 "$tool" run --cpu "$target_cpu" --duration-ms 5000 --period-us 1000 \
 	--workload user-hang --escape-after-ms "$escape_ms" --escape-retries 1 \
 	>"$outdir/ctl.log" 2>&1 &
@@ -100,6 +132,14 @@ else
 	run_rc=$?
 fi
 run_pid=
+if [ -n "$churn_pid" ]; then
+	if wait "$churn_pid"; then
+		churn_rc=0
+	else
+		churn_rc=$?
+	fi
+	churn_pid=
+fi
 
 echo 0 >"$instance/tracing_on"
 kill -TERM "$trace_pid" 2>/dev/null || true
@@ -113,6 +153,11 @@ dmesg | grep -E 'soft lockup|RCU.*stall|BUG:|Oops:' >"$outdir/kernel-errors.log"
 
 [ "$insmod_rc" -eq 0 ] || fail "probe module load failed"
 [ "$run_rc" -eq 0 ] || fail "bounded owner run failed"
+[ "$churn_rc" -eq 0 ] || fail "bounded fork/COW churn failed"
+if [ "$cow_churn_ms" -gt 0 ]; then
+	grep -q '^PASS: forks=[1-9][0-9]* cow_write_faults=[1-9][0-9]* ' \
+		"$outdir/cow-churn.log" || fail "fork/COW churn did not complete"
+fi
 grep -q 'state=7 ' "$outdir/ctl.log" || fail "owner did not report ESCAPED"
 grep -q 'recovery_state=2' "$outdir/ctl.log" || \
 	fail "owner escape recovery did not complete"
@@ -171,6 +216,9 @@ if [ -s "$outdir/kernel-errors.log" ]; then
 fi
 
 echo "PASS: owner stop, exit, and global flush completion traced"
+if [ "$cow_churn_ms" -gt 0 ]; then
+	cat "$outdir/cow-churn.log"
+fi
 cat "$outdir/ctl.log"
 cat "$outdir/trace.log"
 echo "logs: $outdir"

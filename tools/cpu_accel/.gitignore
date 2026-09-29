@@ -1,2 +1,3 @@
 cpu-accelctl
 test-tlb-generation
+test-tlb-cow-churn

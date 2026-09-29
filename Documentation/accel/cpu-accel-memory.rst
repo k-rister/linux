@@ -1191,20 +1191,30 @@ The implementation checkpoints are:
     On the same 00604 kernel, two direct probe loads during the
     non-cooperative ring-3 workload completed the global CPA flush. The trace
     showed one flush begin with eight targets and one owner, a stop callback
-    sent to CPU2,
-    the matching owner exit with ``stop_requested=1`` and an unscoped local
-    flush, then completion of the same flush ID. ``insmod`` succeeded and the
-    probe was unloaded after the owner exited. Neither direct run reported a
-    soft-lockup, RCU-stall, BUG, Oops, or panic. The first run's CLI returned an
-    error because its timed escape ioctl raced with the already completed
-    owner stop and got ``EINVAL``; ``cpu-accelctl`` now accepts that result
-    only when the shared state confirms successful escape. The second direct
+    sent to CPU2, the matching owner exit with ``stop_requested=1`` and an
+    unscoped local flush, then completion of the same flush ID. ``insmod``
+    succeeded and the probe was unloaded after the owner exited. Neither
+    direct run reported a soft-lockup, RCU-stall, BUG, Oops, or panic. The first
+    run's CLI returned an error because its timed escape ioctl raced with the
+    completed owner stop and got ``EINVAL``; ``cpu-accelctl`` now accepts that
+    result only when the shared state confirms successful escape. The second direct
     run passed, as did the standalone harness with a three-second bounded
     escape. Its trace had the same stop/exit/flush ordering and the CLI exited
-    successfully. These runs capture the expected stop/exit/flush sequence but
-    do not reproduce the earlier intermittent soft lockup. Keep the
-    synchronous fallback and continue investigating under concurrent COW and
-    process churn before changing the stop/ack protocol.
+    successfully.
+
+    The harness can run ``test-tlb-cow-churn`` on a separate pinned control
+    CPU by setting ``CPU_ACCEL_COW_CHURN_MS`` and ``CPU_ACCEL_STRESS_CPU``.
+    Each fork child and its parent write the same private page while both
+    address spaces remain alive, forcing two COW faults per iteration. Three
+    two-second runs on CPU3 completed 17,540, 17,940, and 17,715 forks
+    (106,390 COW writes total) while the non-cooperative owner ran on CPU2.
+    All three global CPA flushes stopped the owner, observed its exit, and
+    completed the same flush ID. The second and third traces also captured
+    two-target mm-scoped flush pairs immediately before global flush IDs 12
+    and 14. All runs reported no soft-lockup, RCU-stall, BUG, Oops, or panic.
+    This bounded concurrency test still does not reproduce the earlier
+    intermittent soft lockup, so keep the synchronous fallback and continue
+    increasing concurrent coverage before changing the stop/ack protocol.
 
     The test-only fixture now retains one unpinned, read-only shared regular-
     file page in the worker and maps an alias in the companion. On kernel

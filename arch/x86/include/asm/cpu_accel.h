@@ -31,6 +31,8 @@ struct x86_cpu_accel_tlb_reclaim_completion {
 	} mms[X86_CPU_ACCEL_TLB_RECLAIM_MAX_MMS];
 	struct mmu_owner_subscription
 		subscriptions[X86_CPU_ACCEL_TLB_RECLAIM_MAX_ACKS];
+	/* Subscriptions key on callback data, not this architecture record. */
+	void *subscription_data;
 	unsigned int nr_mms;
 	unsigned int nr_subscriptions;
 	bool overflow;

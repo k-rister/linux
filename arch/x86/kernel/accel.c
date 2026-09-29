@@ -842,8 +842,9 @@ int x86_cpu_accel_reclaim_register(struct x86_cpu_accel_tlb_reclaim_completion *
 	unsigned int i;
 	unsigned int registered = 0;
 
-	if (!comp || comp->overflow || !ops)
+	if (!comp || comp->overflow || !data || !ops)
 		return -EOVERFLOW;
+	comp->subscription_data = data;
 
 	for (i = 0; i < comp->nr_mms; i++) {
 		struct mm_struct *mm = comp->mms[i].mm;
@@ -900,6 +901,7 @@ void x86_cpu_accel_reclaim_release(struct x86_cpu_accel_tlb_reclaim_completion *
 		mmdrop(comp->mms[i].mm);
 	comp->nr_mms = 0;
 	comp->nr_subscriptions = 0;
+	comp->subscription_data = NULL;
 	comp->overflow = false;
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_reclaim_release);
@@ -949,6 +951,7 @@ bool x86_cpu_accel_filter_tlb_unmap(unsigned int cpu,
 				    const void *completion)
 {
 	struct x86_cpu_accel_request *request;
+	const struct x86_cpu_accel_tlb_reclaim_completion *comp = completion;
 	unsigned long flags;
 	bool filter = false;
 
@@ -957,9 +960,9 @@ bool x86_cpu_accel_filter_tlb_unmap(unsigned int cpu,
 	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
 	raw_spin_lock_irqsave(&request->lock, flags);
 	if (atomic_read(&request->active) && request->owner_mm) {
-		if (completion)
+		if (comp && comp->subscription_data)
 			filter = mmu_owner_has_subscription(&request->mmu_owner,
-							    completion);
+							    comp->subscription_data);
 		if (!filter && !request->pending_tlb_gen &&
 		    !request->pending_unscoped_tlb_flush)
 			filter = true;

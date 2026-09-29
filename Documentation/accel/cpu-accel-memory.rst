@@ -740,7 +740,17 @@ follows:
   relocation run through ``its_init_mod()``/``its_fini_mod()`` during
   ``module_frob_arch_sections()``, under the owner-draining text-mutex gate;
   the module remains unpublished during this setup. These are caller
-  lifetime rules, not a global owner gate.
+  lifetime rules, not a global owner gate. The module permission sequence was
+  checked separately: ``complete_formation()`` finalizes core section
+  permissions before setting ``MODULE_STATE_COMING`` and running module init.
+  With strict module RWX enabled, that step makes core data NX and text ROX;
+  core rodata is also made RO when rodata protection is enabled. After
+  successful init publishes ``MODULE_STATE_LIVE``,
+  ``module_enable_rodata_ro_after_init()`` seals ``.data..ro_after_init`` when
+  strict module RWX and rodata protection are enabled. This final RW-to-RO
+  transition relies on the section's no-more-writes contract, so concurrent
+  readers remain valid; any live code update or post-init write still needs
+  its own synchronization rule.
 * Confidential-memory conversions use the x86 memory-encryption lock to
   coordinate conversion state, but that lock does not drain accelerator
   owners. The Hyper-V conversion path explicitly requires callers to keep the
@@ -769,17 +779,20 @@ follows:
   accelerator-owner path, although the generic roundup alone does not stop
   every ordinary CPU.
 
-The audit does not establish semantic safety for every runtime
-``set_memory*()`` caller. Kernel mapping changes that do not use the gate still
-need a call-site rule, and the init-only and RCU lifetime rules above do not
-cover future exception or NMI mutation paths. A blanket gate in
-``stop_machine_cpuslocked()`` would run after callers acquired CPU-hotplug
-locks, while existing text-patch paths acquire the gate before their patching
-locks; that ordering needs call-site review to avoid a lock inversion.
-Classify each remaining operation as allowed, routed to housekeeping,
-deferred, rejected, or requiring controlled owner termination. Operations
-that cannot prove they include the owned CPU in their execution and mapping
-rendezvous are unsupported while accelerator ownership is active.
+The current x86 direct-call sweep found no additional runtime writer of
+published kernel text or exception state outside the established gates and
+explicit lifetime rules above. This is a current-tree result, not an
+owner-aware guarantee from central CPA: new ``set_memory*()`` or kernel
+mapping callers, and any new external-buffer import path, still need a
+call-site rule. Local-only KFENCE, KMMIO, and ``DEBUG_PAGEALLOC`` invalidation
+remains best-effort and cannot provide remote owner invalidation. A blanket
+gate in ``stop_machine_cpuslocked()`` would run after callers acquired
+CPU-hotplug locks, while existing text-patch paths acquire the gate before
+their patching locks; that ordering needs call-site review to avoid a lock
+inversion. New operations must be classified as allowed, routed to
+housekeeping, deferred, rejected, or requiring controlled owner termination.
+Operations that cannot prove they include the owned CPU in their execution
+and mapping rendezvous are unsupported while accelerator ownership is active.
 
 The direct x86 ftrace CPA callers have a narrower, source-verified rule.
 ``set_ftrace_ops_ro()`` runs from boot-time ``mark_rodata_ro()``. A newly

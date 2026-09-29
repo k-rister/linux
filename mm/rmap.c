@@ -734,8 +734,7 @@ bool try_to_unmap_flush_reclaim(struct mmu_reclaim_completion *completion)
 	if (!tlb_ubc->writable)
 		deferred = arch_tlbbatch_flush_reclaim(&tlb_ubc->arch,
 						       &completion->arch, completion,
-						       mmu_reclaim_completion_owner_get,
-						       mmu_reclaim_completion_owner_ack);
+						       &mmu_reclaim_completion_owner_ops);
 	else
 		arch_tlbbatch_flush(&tlb_ubc->arch);
 

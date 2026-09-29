@@ -24,28 +24,15 @@ struct mm_struct;
 #define X86_CPU_ACCEL_TLB_RECLAIM_MAX_MMS	16
 #define X86_CPU_ACCEL_TLB_RECLAIM_MAX_ACKS	16
 
-typedef void (*x86_cpu_accel_reclaim_fn)(void *data);
-
-struct x86_cpu_accel_tlb_reclaim_completion;
-struct x86_cpu_accel_tlb_reclaim_ack {
-	struct list_head link;
-	struct x86_cpu_accel_tlb_reclaim_completion *completion;
-	struct mmu_owner_snapshot owner;
-	struct mm_struct *mm;
-	void *data;
-	x86_cpu_accel_reclaim_fn ack;
-	u64 tlb_gen;
-};
-
 struct x86_cpu_accel_tlb_reclaim_completion {
 	struct {
 		struct mm_struct *mm;
 		u64 tlb_gen;
 	} mms[X86_CPU_ACCEL_TLB_RECLAIM_MAX_MMS];
-	struct x86_cpu_accel_tlb_reclaim_ack
-		acks[X86_CPU_ACCEL_TLB_RECLAIM_MAX_ACKS];
+	struct mmu_owner_subscription
+		subscriptions[X86_CPU_ACCEL_TLB_RECLAIM_MAX_ACKS];
 	unsigned int nr_mms;
-	unsigned int nr_acks;
+	unsigned int nr_subscriptions;
 	bool overflow;
 };
 
@@ -91,10 +78,8 @@ void x86_cpu_accel_note_tlb_unmap(struct mm_struct *mm, u64 tlb_gen);
 bool x86_cpu_accel_reclaim_record(struct x86_cpu_accel_tlb_reclaim_completion *comp,
 				  struct mm_struct *mm, u64 tlb_gen);
 int x86_cpu_accel_reclaim_register(struct x86_cpu_accel_tlb_reclaim_completion *comp,
-				   void *data, x86_cpu_accel_reclaim_fn get,
-				   x86_cpu_accel_reclaim_fn ack);
-/* Request stop only for owner instances registered to this completion. */
-void x86_cpu_accel_reclaim_request_stop(struct x86_cpu_accel_tlb_reclaim_completion *comp);
+				   void *data,
+				   const struct mmu_owner_subscription_ops *ops);
 void x86_cpu_accel_reclaim_release(struct x86_cpu_accel_tlb_reclaim_completion *comp);
 /* Record an mm-scoped target and filter ring-3 owners from its IPI mask. */
 bool x86_cpu_accel_filter_mm_tlb_shootdown(unsigned int cpu,
@@ -148,20 +133,13 @@ x86_cpu_accel_reclaim_record(struct x86_cpu_accel_tlb_reclaim_completion *comp,
 
 static inline int
 x86_cpu_accel_reclaim_register(struct x86_cpu_accel_tlb_reclaim_completion *comp,
-			       void *data, x86_cpu_accel_reclaim_fn get,
-			       x86_cpu_accel_reclaim_fn ack)
+			       void *data,
+			       const struct mmu_owner_subscription_ops *ops)
 {
 	(void)comp;
 	(void)data;
-	(void)get;
-	(void)ack;
+	(void)ops;
 	return 0;
-}
-
-static inline void
-x86_cpu_accel_reclaim_request_stop(struct x86_cpu_accel_tlb_reclaim_completion *comp)
-{
-	(void)comp;
 }
 
 static inline void

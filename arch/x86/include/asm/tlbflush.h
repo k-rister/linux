@@ -406,8 +406,8 @@ static inline void arch_tlbbatch_add_pending(struct arch_tlbflush_unmap_batch *b
 extern void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch);
 bool arch_tlbbatch_flush_reclaim(struct arch_tlbflush_unmap_batch *batch,
 				 struct x86_cpu_accel_tlb_reclaim_completion *completion,
-				  void *data, x86_cpu_accel_reclaim_fn get,
-				  x86_cpu_accel_reclaim_fn ack);
+				 void *data,
+				 const struct mmu_owner_subscription_ops *ops);
 
 static inline bool pte_flags_need_flush(unsigned long oldflags,
 					unsigned long newflags,

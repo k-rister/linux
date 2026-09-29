@@ -119,21 +119,34 @@ struct mmu_reclaim_completion *mmu_reclaim_completion_alloc(void)
 	return completion;
 }
 
-void mmu_reclaim_completion_owner_get(void *data)
+static bool mmu_reclaim_completion_owner_get(void *data)
 {
 	struct mmu_reclaim_completion *completion = data;
 
 	refcount_inc(&completion->refs);
 	atomic_inc(&completion->owners);
+	return true;
 }
 
-void mmu_reclaim_completion_owner_ack(void *data)
+static void mmu_reclaim_completion_owner_complete(void *data)
 {
 	struct mmu_reclaim_completion *completion = data;
 
 	atomic_dec(&completion->owners);
+}
+
+static void mmu_reclaim_completion_owner_put(void *data)
+{
+	struct mmu_reclaim_completion *completion = data;
+
 	mmu_reclaim_completion_put(completion);
 }
+
+const struct mmu_owner_subscription_ops mmu_reclaim_completion_owner_ops = {
+	.get = mmu_reclaim_completion_owner_get,
+	.complete = mmu_reclaim_completion_owner_complete,
+	.put = mmu_reclaim_completion_owner_put,
+};
 
 void mmu_reclaim_completion_cancel(struct mmu_reclaim_completion *completion)
 {

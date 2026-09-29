@@ -1919,25 +1919,19 @@ void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
 
 bool arch_tlbbatch_flush_reclaim(struct arch_tlbflush_unmap_batch *batch,
 				 struct x86_cpu_accel_tlb_reclaim_completion *completion,
-				 void *data, x86_cpu_accel_reclaim_fn get,
-				 x86_cpu_accel_reclaim_fn ack)
+				 void *data,
+				 const struct mmu_owner_subscription_ops *ops)
 {
 	int ret;
 
-	ret = x86_cpu_accel_reclaim_register(completion, data, get, ack);
+	ret = x86_cpu_accel_reclaim_register(completion, data, ops);
 	if (ret <= 0) {
 		/* No owner was deferred, or bounded ack storage was exhausted. */
 		arch_tlbbatch_flush(batch);
 		return false;
 	}
 
-	/*
-	 * Prompt registered owners to exit. Their exit path performs the local
-	 * flush and acknowledges the completion; this request is not itself an
-	 * acknowledgment. It is generation-checked to avoid stopping a new
-	 * owner that entered after the registered instance exited.
-	 */
-	x86_cpu_accel_reclaim_request_stop(completion);
+	/* Subscribing requested stop for each exact owner instance. */
 	__arch_tlbbatch_flush(batch, completion);
 	return true;
 }

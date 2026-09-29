@@ -10,6 +10,7 @@
 #include <linux/fs.h>
 #include <linux/khugepaged.h>
 #include <linux/mm.h>
+#include <linux/mmu_owner.h>
 #include <linux/mm_inline.h>
 #include <linux/mmu_notifier.h>
 #include <linux/pagemap.h>
@@ -51,8 +52,8 @@ struct mmu_reclaim_completion {
 };
 
 struct mmu_reclaim_completion *mmu_reclaim_completion_alloc(void);
-void mmu_reclaim_completion_owner_get(void *data);
-void mmu_reclaim_completion_owner_ack(void *data);
+extern const struct mmu_owner_subscription_ops
+	mmu_reclaim_completion_owner_ops;
 void mmu_reclaim_completion_cancel(struct mmu_reclaim_completion *completion);
 void mmu_reclaim_completion_ready(struct mmu_reclaim_completion *completion,
 				  struct folio *folio);

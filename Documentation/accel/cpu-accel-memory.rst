@@ -432,25 +432,24 @@ current generation before it can execute.
 The first MM-core step now provides a per-``mm`` execution-owner registry and
 an update-depth interlock. The x86 backend registers the ``mm`` it actually
 loads, publishes TLB generations to those records, and snapshots matching
-owners for reclaim. The snapshot is only a candidate list: x86 rechecks the
-per-CPU owner generation under its request lock before attaching an
-acknowledgment. ``mm_cpumask`` remains the ordinary CPU-flush target set; it
-is not used as the ownership record. Per-owner stop callbacks and reclaim
-acknowledgment lists are still x86-specific, so the generic MM completion
-contract is not yet implemented end to end.
+owners for reclaim. The snapshot is only a candidate list: MM now attaches a
+subscription to the exact owner generation under the registry lock.
+``mm_cpumask`` remains the ordinary CPU-flush target set; it is not used as
+the ownership record. The x86 clean-folio prototype uses this generic
+subscription and owner-stop callback contract.
 
 ``mmu_owner_snapshot()`` now invokes each registered owner's ``get`` operation
 while holding the registry lock and returns a reference to its owner-data
 context; callers release it with ``mmu_owner_snapshot_put()``. The x86 backend
 uses permanent per-CPU request storage, so its get/put operations are no-ops.
-The pinned candidate remains subject to the per-CPU owner-generation check
-before an acknowledgement is attached. This closes the snapshot-to-storage
-lifetime gap, but the completion lists and stop callback are still x86-specific.
-A generic subscription must attach to the exact owner instance while unregister
-is excluded, or retain the pinned context through the owner-exit handoff.
-Owner exit must detach completion records before unregistering, reconcile its
-local TLB state, and only then acknowledge them. Stop callbacks run after
-registry, owner, and page-table locks are released.
+``mmu_owner_subscribe()`` validates the snapshot generation, pins both owner
+and completion data, attaches the preallocated record while unregister is
+excluded, and issues a nonblocking stop request after releasing MM and owner
+locks. Unregister detaches subscriptions; x86 acknowledges them only after
+local TLB reconciliation. The owner-data pin is released before the completion
+callback, and the completion reference is released after that callback.
+Owners without a stop contract and any bounded-storage or generation failure
+retain the synchronous path.
 
 A generic completion is reserved before the first PTE is removed and owns the
 affected page disposition as well as references to the matching owner
@@ -1120,10 +1119,11 @@ The implementation checkpoints are:
     disposition, while ``mmu_gather`` has intermediate data/table drains and
     immediate GUP-fast and RCU lifetime barriers. Keep these paths synchronous
     until MM core can reserve a completion before unmap and own the caller's
-    deferred operation or page disposition across every release point. A
-    next MM-core step is a stable owner-subscription API with post-reconcile
-    acknowledgement; then ``mmu_gather`` can transfer data/table batches at
-    each drain point while preserving its immediate walker barriers.
+    deferred operation or page disposition across every release point. The stable
+    owner-subscription API now provides post-reconcile acknowledgement for the
+    existing clean-folio prototype. The next distinct MM-core step is an
+    ``mmu_gather`` completion owner that transfers data/table batches at every
+    drain point while preserving its immediate walker barriers.
     Dirty/writeback reclaim and migration remain synchronous until their data
     operations can also be transferred as post-ack continuations. A focused VM
     test unmaps a touched
@@ -1195,13 +1195,13 @@ The implementation checkpoints are:
     ``DMA`` regions and userspace/NIC integration only after this non-networked
     memory contract is stable.
 
-    The initial MM-core owner-registry step now binds x86 owner instances to
-    their loaded ``mm`` and serializes admission against batched-unmap
-    publication. Reclaim snapshots candidate owners from that registry and
-    x86 validates each per-CPU generation before registering its existing
-    stop/ack record. The MM core still needs to own the complete stop and
-    acknowledgment lifecycle; ordinary CPU flushes and callers without an
-    explicit page disposition remain synchronous, and no timeout authorizes
+    The MM-core owner registry binds x86 owner instances to their loaded
+    ``mm`` and serializes admission against batched-unmap publication. The
+    generic subscription API now validates owner generation, holds owner and
+    completion references, requests stops outside registry locks, and detaches
+    subscriptions during unregister. The x86 owner-exit path acknowledges
+    after local TLB reconciliation. Ordinary CPU flushes and callers without
+    an explicit page disposition remain synchronous, and no timeout authorizes
     page reuse. Do not extend asynchronous reclaim to ``mmu_gather`` or other
     page dispositions in this step.
 

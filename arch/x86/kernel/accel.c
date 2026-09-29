@@ -26,6 +26,7 @@
 
 struct x86_cpu_accel_request {
 	raw_spinlock_t lock;
+	unsigned int cpu;
 	x86_cpu_accel_entry_fn entry;
 	void *data;
 	x86_cpu_accel_stop_fn owner_stop;
@@ -50,9 +51,7 @@ struct x86_cpu_accel_request {
 	bool exit_unscoped_tlb_flush;
 	/* Flushes with no single address-space owner (e.g. kernel/global). */
 	bool pending_unscoped_tlb_flush;
-	/* Reclaim completions acknowledged after user_exit() locally flushes. */
-	struct list_head tlb_reclaim_acks;
-	bool tlb_reclaim_acks_init;
+	bool mmu_owner_initialized;
 };
 
 static DEFINE_PER_CPU(struct x86_cpu_accel_request, x86_cpu_accel_request) = {
@@ -61,6 +60,9 @@ static DEFINE_PER_CPU(struct x86_cpu_accel_request, x86_cpu_accel_request) = {
 		.lock = __RAW_SPIN_LOCK_UNLOCKED(x86_cpu_accel_request.mmu_owner.lock),
 	},
 };
+
+static void x86_cpu_accel_request_stop_owner_gen(unsigned int cpu,
+						u64 owner_generation);
 
 /* Per-CPU request storage is permanent, so snapshot pinning is a no-op. */
 static bool x86_cpu_accel_owner_data_get(void *data)
@@ -74,7 +76,20 @@ static void x86_cpu_accel_owner_data_put(void *data)
 	(void)data;
 }
 
+static void x86_cpu_accel_owner_request_stop(void *data, u64 generation)
+{
+	struct x86_cpu_accel_request *request = data;
+
+	x86_cpu_accel_request_stop_owner_gen(request->cpu, generation);
+}
+
 static const struct mmu_owner_ops x86_cpu_accel_owner_ops = {
+	.get = x86_cpu_accel_owner_data_get,
+	.put = x86_cpu_accel_owner_data_put,
+	.request_stop = x86_cpu_accel_owner_request_stop,
+};
+
+static const struct mmu_owner_ops x86_cpu_accel_owner_no_stop_ops = {
 	.get = x86_cpu_accel_owner_data_get,
 	.put = x86_cpu_accel_owner_data_put,
 };
@@ -131,9 +146,9 @@ static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets,
 		return -EBUSY;
 	}
 	raw_spin_lock_irqsave(&request->lock, request_flags);
-	if (!request->tlb_reclaim_acks_init) {
-		INIT_LIST_HEAD(&request->tlb_reclaim_acks);
-		request->tlb_reclaim_acks_init = true;
+	if (!request->mmu_owner_initialized) {
+		mmu_owner_init(&request->mmu_owner);
+		request->mmu_owner_initialized = true;
 	}
 	if (atomic_read(&request->active) || request->exiting ||
 	    atomic_read(&request->stop_inflight)) {
@@ -145,6 +160,7 @@ static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets,
 	}
 	atomic_set(&request->reschedule_pending, 0);
 	atomic_set(&request->call_function_pending, 0);
+	request->cpu = cpu;
 	request->owner_mm = owner_mm;
 	if (!++request->owner_generation)
 		request->owner_generation++;
@@ -160,7 +176,9 @@ static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets,
 		int ret = mmu_owner_register(owner_mm, &request->mmu_owner,
 					     request,
 					     request->owner_generation,
-					     &x86_cpu_accel_owner_ops);
+					     owner_stop ?
+						     &x86_cpu_accel_owner_ops :
+						     &x86_cpu_accel_owner_no_stop_ops);
 
 		if (ret) {
 			request->owner_mm = NULL;
@@ -291,7 +309,7 @@ void x86_cpu_accel_request_stop_owner(unsigned int cpu)
 
 static u64 x86_cpu_accel_owner_exit(unsigned int cpu,
 				    bool *local_tlb_flush,
-				    struct list_head *tlb_reclaim_acks,
+				    struct list_head *subscriptions,
 				    bool *owner_exited)
 {
 	struct x86_cpu_accel_request *request;
@@ -309,8 +327,6 @@ static u64 x86_cpu_accel_owner_exit(unsigned int cpu,
 	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
 	raw_spin_lock_irqsave(&request->lock, flags);
 	if (atomic_xchg(&request->active, 0)) {
-		struct x86_cpu_accel_tlb_reclaim_ack *ack;
-
 		WARN_ON_ONCE(request->exiting);
 		request->exiting = true;
 		exited = true;
@@ -319,20 +335,12 @@ static u64 x86_cpu_accel_owner_exit(unsigned int cpu,
 		request->exit_tlb_gen = request->pending_tlb_gen;
 		request->exit_unscoped_tlb_flush =
 			request->pending_unscoped_tlb_flush;
-		list_for_each_entry(ack, &request->tlb_reclaim_acks, link)
-			WARN_ON_ONCE(ack->mm != request->owner_mm ||
-				     ack->tlb_gen > request->pending_tlb_gen);
 		if (local_tlb_flush)
 			*local_tlb_flush = request->pending_unscoped_tlb_flush ||
 				request->pending_tlb_gen != 0;
 		request->owner_mm = NULL;
 		request->pending_tlb_gen = 0;
 		request->pending_unscoped_tlb_flush = false;
-		if (tlb_reclaim_acks)
-			list_splice_init(&request->tlb_reclaim_acks,
-					 tlb_reclaim_acks);
-		else
-			WARN_ON_ONCE(!list_empty(&request->tlb_reclaim_acks));
 		if (atomic_xchg(&request->call_function_pending, 0))
 			__apic_send_IPI(cpu, CALL_FUNCTION_SINGLE_VECTOR);
 		if (atomic_xchg(&request->reschedule_pending, 0))
@@ -341,7 +349,8 @@ static u64 x86_cpu_accel_owner_exit(unsigned int cpu,
 	targets = atomic64_read(&request->tlb_shootdown_targets);
 	raw_spin_unlock_irqrestore(&request->lock, flags);
 	if (exited && owner_mm) {
-		u64 tlb_gen = mmu_owner_unregister(&request->mmu_owner);
+		u64 tlb_gen = mmu_owner_unregister(&request->mmu_owner,
+							    subscriptions);
 
 		raw_spin_lock_irqsave(&request->lock, flags);
 		if (WARN_ON_ONCE(!request->exiting ||
@@ -407,36 +416,25 @@ static void x86_cpu_accel_owner_exit_finish(unsigned int cpu, bool owner_exited)
 	wake_up_all(&x86_cpu_accel_owner_wait);
 }
 
-static void x86_cpu_accel_tlb_reclaim_ack_list(struct list_head *acks)
-{
-	struct x86_cpu_accel_tlb_reclaim_ack *ack, *next;
-
-	list_for_each_entry_safe(ack, next, acks, link) {
-		list_del_init(&ack->link);
-		mmu_owner_snapshot_put(&ack->owner);
-		ack->ack(ack->data);
-	}
-}
-
 static void x86_cpu_accel_tlb_reconcile_and_ack(void *data)
 {
-	struct list_head *acks = data;
+	struct list_head *subscriptions = data;
 
 	__flush_tlb_all();
-	x86_cpu_accel_tlb_reclaim_ack_list(acks);
+	mmu_owner_subscription_complete_all(subscriptions);
 }
 
 static void x86_cpu_accel_tlb_reconcile(unsigned int cpu,
 					bool local_tlb_flush,
-					struct list_head *acks)
+					struct list_head *subscriptions)
 {
 	int ret;
 
-	if (!local_tlb_flush && list_empty(acks))
+	if (!local_tlb_flush && list_empty(subscriptions))
 		return;
 	if (cpu == raw_smp_processor_id()) {
 		__flush_tlb_all();
-		x86_cpu_accel_tlb_reclaim_ack_list(acks);
+		mmu_owner_subscription_complete_all(subscriptions);
 		return;
 	}
 
@@ -444,7 +442,7 @@ static void x86_cpu_accel_tlb_reconcile(unsigned int cpu,
 	do {
 		ret = smp_call_function_single(cpu,
 					       x86_cpu_accel_tlb_reconcile_and_ack,
-					       acks, 1);
+					       subscriptions, 1);
 		if (ret) {
 			WARN_ON_ONCE(ret);
 			cpu_relax();
@@ -454,13 +452,13 @@ static void x86_cpu_accel_tlb_reconcile(unsigned int cpu,
 
 static void x86_cpu_accel_direct_owner_exit(unsigned int cpu)
 {
-	LIST_HEAD(tlb_reclaim_acks);
+	LIST_HEAD(subscriptions);
 	bool local_tlb_flush;
 	bool owner_exited;
 
-	x86_cpu_accel_owner_exit(cpu, &local_tlb_flush, &tlb_reclaim_acks,
+	x86_cpu_accel_owner_exit(cpu, &local_tlb_flush, &subscriptions,
 				&owner_exited);
-	x86_cpu_accel_tlb_reconcile(cpu, local_tlb_flush, &tlb_reclaim_acks);
+	x86_cpu_accel_tlb_reconcile(cpu, local_tlb_flush, &subscriptions);
 	x86_cpu_accel_owner_exit_finish(cpu, owner_exited);
 }
 
@@ -632,15 +630,15 @@ EXPORT_SYMBOL_GPL(x86_cpu_accel_user_enter);
 
 u64 x86_cpu_accel_user_exit(unsigned int cpu)
 {
-	LIST_HEAD(tlb_reclaim_acks);
+	LIST_HEAD(subscriptions);
 	bool local_tlb_flush;
 	bool owner_exited;
 	u64 targets = x86_cpu_accel_owner_exit(cpu, &local_tlb_flush,
-						      &tlb_reclaim_acks,
+						      &subscriptions,
 						      &owner_exited);
 
-	/* Flush and run reclaim acks before publishing owner-exit completion. */
-	x86_cpu_accel_tlb_reconcile(cpu, local_tlb_flush, &tlb_reclaim_acks);
+	/* Flush and complete subscriptions before publishing owner exit. */
+	x86_cpu_accel_tlb_reconcile(cpu, local_tlb_flush, &subscriptions);
 	x86_cpu_accel_owner_exit_finish(cpu, owner_exited);
 	return targets;
 }
@@ -837,15 +835,14 @@ bool x86_cpu_accel_reclaim_record(struct x86_cpu_accel_tlb_reclaim_completion *c
 EXPORT_SYMBOL_GPL(x86_cpu_accel_reclaim_record);
 
 int x86_cpu_accel_reclaim_register(struct x86_cpu_accel_tlb_reclaim_completion *comp,
-				   void *data, x86_cpu_accel_reclaim_fn get,
-				   x86_cpu_accel_reclaim_fn ack_fn)
+				   void *data,
+				   const struct mmu_owner_subscription_ops *ops)
 {
 	struct x86_cpu_accel_request *request;
 	unsigned int i;
 	unsigned int registered = 0;
-	unsigned long flags;
 
-	if (!comp || comp->overflow)
+	if (!comp || comp->overflow || !ops)
 		return -EOVERFLOW;
 
 	for (i = 0; i < comp->nr_mms; i++) {
@@ -862,48 +859,30 @@ int x86_cpu_accel_reclaim_register(struct x86_cpu_accel_tlb_reclaim_completion *
 		}
 
 		for (j = 0; j < nr_owners; j++) {
-			struct x86_cpu_accel_tlb_reclaim_ack *ack;
-
 			request = owners[j].data;
-			if (WARN_ON_ONCE(!request)) {
-				mmu_owner_snapshot_put(&owners[j]);
-				continue;
-			}
-			raw_spin_lock_irqsave(&request->lock, flags);
-			if (!atomic_read(&request->active) ||
-			    request->owner_mm != mm ||
-			    request->owner_generation != owners[j].generation ||
-			    request->pending_tlb_gen < tlb_gen) {
-				raw_spin_unlock_irqrestore(&request->lock, flags);
-				mmu_owner_snapshot_put(&owners[j]);
-				continue;
-			}
-
-			if (comp->nr_acks ==
+			if (!request || comp->nr_subscriptions ==
 			    X86_CPU_ACCEL_TLB_RECLAIM_MAX_ACKS) {
 				comp->overflow = true;
-				raw_spin_unlock_irqrestore(&request->lock, flags);
 				mmu_owner_snapshot_put(&owners[j]);
 				for (j++; j < nr_owners; j++)
 					mmu_owner_snapshot_put(&owners[j]);
 				return -EOVERFLOW;
 			}
 
-			ack = &comp->acks[comp->nr_acks++];
-			INIT_LIST_HEAD(&ack->link);
-			ack->completion = comp;
-			ack->owner = owners[j];
-			owners[j].data = NULL;
-			owners[j].put = NULL;
-			owners[j].generation = 0;
-			ack->mm = mm;
-			ack->tlb_gen = tlb_gen;
-			ack->data = data;
-			ack->ack = ack_fn;
-			get(data);
-			list_add_tail(&ack->link, &request->tlb_reclaim_acks);
+			if (mmu_owner_subscribe(&request->mmu_owner,
+						owners[j].generation, tlb_gen,
+						&comp->subscriptions[
+							comp->nr_subscriptions],
+						data, ops)) {
+				comp->overflow = true;
+				mmu_owner_snapshot_put(&owners[j]);
+				for (j++; j < nr_owners; j++)
+					mmu_owner_snapshot_put(&owners[j]);
+				return -EOVERFLOW;
+			}
+			comp->nr_subscriptions++;
 			registered++;
-			raw_spin_unlock_irqrestore(&request->lock, flags);
+			mmu_owner_snapshot_put(&owners[j]);
 		}
 	}
 
@@ -911,49 +890,16 @@ int x86_cpu_accel_reclaim_register(struct x86_cpu_accel_tlb_reclaim_completion *
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_reclaim_register);
 
-void x86_cpu_accel_reclaim_request_stop(struct x86_cpu_accel_tlb_reclaim_completion *comp)
-{
-	unsigned int cpu;
-
-	if (!comp)
-		return;
-
-	for_each_possible_cpu(cpu) {
-		struct x86_cpu_accel_request *request;
-		struct x86_cpu_accel_tlb_reclaim_ack *ack;
-		unsigned long flags;
-		u64 owner_generation = 0;
-		bool found = false;
-
-		request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
-		raw_spin_lock_irqsave(&request->lock, flags);
-		if (atomic_read(&request->active)) {
-			list_for_each_entry(ack, &request->tlb_reclaim_acks, link) {
-				if (ack->completion == comp) {
-					owner_generation = request->owner_generation;
-					found = true;
-					break;
-				}
-			}
-		}
-		raw_spin_unlock_irqrestore(&request->lock, flags);
-
-		if (found)
-			x86_cpu_accel_request_stop_owner_gen(cpu, owner_generation);
-	}
-}
-EXPORT_SYMBOL_GPL(x86_cpu_accel_reclaim_request_stop);
-
 void x86_cpu_accel_reclaim_release(struct x86_cpu_accel_tlb_reclaim_completion *comp)
 {
 	unsigned int i;
 
-	for (i = 0; i < comp->nr_acks; i++)
-		WARN_ON_ONCE(!list_empty(&comp->acks[i].link));
+	for (i = 0; i < comp->nr_subscriptions; i++)
+		WARN_ON_ONCE(!list_empty(&comp->subscriptions[i].link));
 	for (i = 0; i < comp->nr_mms; i++)
 		mmdrop(comp->mms[i].mm);
 	comp->nr_mms = 0;
-	comp->nr_acks = 0;
+	comp->nr_subscriptions = 0;
 	comp->overflow = false;
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_reclaim_release);
@@ -994,7 +940,6 @@ bool x86_cpu_accel_filter_tlb_unmap(unsigned int cpu,
 				    const void *completion)
 {
 	struct x86_cpu_accel_request *request;
-	struct x86_cpu_accel_tlb_reclaim_ack *ack;
 	unsigned long flags;
 	bool filter = false;
 
@@ -1003,14 +948,9 @@ bool x86_cpu_accel_filter_tlb_unmap(unsigned int cpu,
 	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
 	raw_spin_lock_irqsave(&request->lock, flags);
 	if (atomic_read(&request->active) && request->owner_mm) {
-		if (completion) {
-			list_for_each_entry(ack, &request->tlb_reclaim_acks, link) {
-				if (ack->completion == completion) {
-					filter = true;
-					break;
-				}
-			}
-		}
+		if (completion)
+			filter = mmu_owner_has_subscription(&request->mmu_owner,
+							    completion);
 		if (!filter && !request->pending_tlb_gen &&
 		    !request->pending_unscoped_tlb_flush)
 			filter = true;

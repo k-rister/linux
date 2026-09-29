@@ -175,11 +175,20 @@ function number(line, name, rest, pos)
 }
 /tlb_flush_wait:/ {
 	id = number($0, "id")
-	if (index($0, "phase=begin") && number($0, "owners") == 1) {
-		begin_id = id
-		begin_line = NR
+	if (index($0, "phase=begin")) {
+		if (id == "" || ++begin_count[id] != 1)
+			bad_pair = 1
+		begin_at[id] = NR
+		if (number($0, "owners") == 1) {
+			begin_id = id
+			begin_line = NR
+		}
 	}
 	if (index($0, "phase=complete")) {
+		if (id == "" || begin_count[id] != 1 ||
+		    ++complete_count[id] != 1)
+			bad_pair = 1
+		complete_at[id] = NR
 		complete_id = id
 		complete_line = NR
 	}
@@ -198,14 +207,20 @@ function number(line, name, rest, pos)
 		exit_line = NR
 }
 END {
-	if (begin_id != "" && begin_id == complete_id &&
+	for (id in begin_count)
+		if (complete_count[id] != 1 || complete_at[id] <= begin_at[id])
+			bad_pair = 1
+	for (id in complete_count)
+		if (begin_count[id] != 1)
+			bad_pair = 1
+	if (!bad_pair && begin_id != "" && begin_id == complete_id &&
 	    stop_owner != "" && stop_line > begin_line &&
 	    exit_line > stop_line && complete_line > exit_line)
 		exit 0
 	exit 1
 }' "$outdir/trace.log"; then
 	cat "$outdir/trace.log" >&2
-	fail "trace did not show a completed stop/exit/flush sequence"
+	fail "trace did not pair every flush or show a completed stop/exit/flush sequence"
 fi
 if grep -Eq 'LOST [0-9]+ EVENTS' "$outdir/trace.log"; then
 	fail "trace buffer reported lost events"

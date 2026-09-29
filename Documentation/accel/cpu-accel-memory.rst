@@ -1179,13 +1179,32 @@ The implementation checkpoints are:
     The VM's installed module tree contains only ten modules, all currently
     loaded for the accelerator, network, root filesystem, or ``/boot``;
     ``dummy.ko`` is absent. A guarded ``modprobe dummy`` attempt stopped at
-    this precondition before tracing or changing VM state. Do not unload a
-    live system module to manufacture the global-flush trigger. The installed
-    ``/usr/local/bin/cpu-accelctl`` also rejects the kernel's shared ABI; use
-    the checkout-matched binary staged under ``/tmp`` for further runs. A
-    dedicated test-only CPA trigger compatible with 00604 is needed to capture
-    the missing stop/exit/flush evidence. Keep the synchronous fallback and
-    do not change the stop/ack protocol until that evidence is available.
+    this precondition before tracing or changing VM state. A no-op probe module
+    in ``tools/cpu_accel/tlb-flush-probe/`` now provides the module-load CPA
+    trigger without unloading a live system module. The standalone
+    ``tools/cpu_accel/test-tlb-flush.sh`` captures the flush, stop, and exit
+    events in a separate tracefs instance and gives the ring-3 owner a bounded
+    escape fallback. The installed ``/usr/local/bin/cpu-accelctl`` rejects the
+    kernel's shared ABI; use the checkout-matched binary staged under
+    ``/tmp``.
+
+    On the same 00604 kernel, two direct probe loads during the
+    non-cooperative ring-3 workload completed the global CPA flush. The trace
+    showed one flush begin with eight targets and one owner, a stop callback
+    sent to CPU2,
+    the matching owner exit with ``stop_requested=1`` and an unscoped local
+    flush, then completion of the same flush ID. ``insmod`` succeeded and the
+    probe was unloaded after the owner exited. Neither direct run reported a
+    soft-lockup, RCU-stall, BUG, Oops, or panic. The first run's CLI returned an
+    error because its timed escape ioctl raced with the already completed
+    owner stop and got ``EINVAL``; ``cpu-accelctl`` now accepts that result
+    only when the shared state confirms successful escape. The second direct
+    run passed, as did the standalone harness with a three-second bounded
+    escape. Its trace had the same stop/exit/flush ordering and the CLI exited
+    successfully. These runs capture the expected stop/exit/flush sequence but
+    do not reproduce the earlier intermittent soft lockup. Keep the
+    synchronous fallback and continue investigating under concurrent COW and
+    process churn before changing the stop/ack protocol.
 
     The test-only fixture now retains one unpinned, read-only shared regular-
     file page in the worker and maps an alias in the companion. On kernel

@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -775,6 +776,15 @@ static int run_user_worker(int argc, char **argv)
 				     reclaim_file);
 }
 
+static bool user_escape_completed(const volatile struct cpu_accel_shared *shared)
+{
+	return __atomic_load_n(&shared->state, __ATOMIC_ACQUIRE) ==
+		CPU_ACCEL_STATE_ESCAPED &&
+	       __atomic_load_n(&shared->recovery_state, __ATOMIC_ACQUIRE) ==
+		CPU_ACCEL_RECOVERY_SUCCEEDED &&
+	       __atomic_load_n(&shared->user_escape_count, __ATOMIC_ACQUIRE) == 1;
+}
+
 static int run_user_workload(const struct cpu_accel_config *requested,
 			     uint64_t escape_after_ms,
 			     uint64_t escape_attempts,
@@ -875,6 +885,11 @@ static int run_user_workload(const struct cpu_accel_config *requested,
 				escape_ret = cpu_accel_user_escape(&handle);
 				if (!escape_ret)
 					break;
+				if (errno == EINVAL &&
+				    user_escape_completed(handle.shared)) {
+					escape_ret = 0;
+					break;
+				}
 			}
 			if (escape_ret)
 				perror("user escape");

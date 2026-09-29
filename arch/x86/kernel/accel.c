@@ -918,18 +918,27 @@ bool x86_cpu_accel_filter_mm_tlb_shootdown(unsigned int cpu,
 	raw_spin_lock_irqsave(&request->lock, flags);
 	if (atomic_read(&request->active) && request->owner_mm) {
 		atomic64_inc(&request->tlb_shootdown_targets);
-		if (request->owner_mm == mm &&
-		    tlb_gen > request->pending_tlb_gen) {
-			request->pending_tlb_gen = tlb_gen;
-			mmu_owner_update_one_tlb_gen(&request->mmu_owner, tlb_gen);
+		if (request->owner_mm == mm) {
+			if (tlb_gen > request->pending_tlb_gen) {
+				request->pending_tlb_gen = tlb_gen;
+				mmu_owner_update_one_tlb_gen(&request->mmu_owner,
+							    tlb_gen);
+			}
+			/*
+			 * A range flush can be followed immediately by freeing the
+			 * data or page-table pages collected by mmu_gather. Until that
+			 * caller transfers those pages to an owner completion, it must
+			 * wait for this owner to reconcile its local TLB.
+			 */
+			filter = false;
+		} else {
+			/*
+			 * This owner cannot use another mm while it remains in its
+			 * sealed address space. switch_mm() checks the advanced
+			 * generation before this CPU can use the affected mm again.
+			 */
+			filter = true;
 		}
-		/*
-		 * The ring-3 owner cannot receive the synchronous call-function
-		 * TLB callback with interrupts disabled. Its own mm is write-locked
-		 * until exit and flushed before unlock; another mm's TLB generation
-		 * is checked by switch_mm() before this CPU can use that mm again.
-		 */
-		filter = true;
 	}
 	raw_spin_unlock_irqrestore(&request->lock, flags);
 	return filter;

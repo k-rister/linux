@@ -154,14 +154,21 @@ backend owns a CPU. Native x86 remote TLB flushes use call-function work, so
 their callbacks remain queued until the ownership interval ends. A synchronous
 flush sender can therefore wait for the accelerator to exit. This is an
 incidental consequence of call-function deferral. For the ring-3 process-mm
-backend, ``flush_tlb_multi()`` now removes active ring-3 owners from an
-mm-scoped flush mask before dispatching through either the native or KVM
-paravirtual path. The owned worker ``mm`` is write-locked for the active
-interval, so a flush for that ``mm`` is recorded and reconciled with a local
-flush before unlock. A flush for another ``mm`` advances that ``mm``'s TLB
-generation; ``switch_mm()`` performs the needed local flush before the owner
-CPU can use it again. This avoids making a synchronous flush wait for an
-interrupt-disabled ring-3 owner that is running a different address space.
+backend, ``flush_tlb_multi()`` removes active ring-3 owners from an
+mm-scoped flush mask only when they are running a different ``mm``. That
+address space's TLB generation is advanced, and ``switch_mm()`` performs the
+needed local flush before the owner CPU can use it again. A range flush for
+the owner's own ``mm`` remains synchronous: the owner is asked to stop before
+the flush dispatches, and the caller waits for local TLB reconciliation
+before it can release any gathered pages. ``mmu_gather`` does not yet transfer
+its queued data and page-table pages to a completion owner; adding that
+completion ownership is required before same-``mm`` owners can be filtered.
+The owned worker ``mm`` is write-locked for the active interval, which
+excludes ordinary VMA changes; reclaim has its own completion path for
+eligible clean folios. This avoids making a synchronous flush wait for an
+interrupt-disabled ring-3 owner that is running a different address space,
+without treating an unacknowledged same-``mm`` generation as permission to
+reuse pages.
 ABI 16 reports
 ``arch_tlb_shootdown_targets`` for x86 flush batches that target the CPU while
 accelerator ownership is active, including the native IPI and INVLPGB paths.
@@ -1083,8 +1090,11 @@ The implementation checkpoints are:
 10. [in progress for x86 prototype] Implement the address-space/TLB ownership
     policy above. The current implementation records per-owner invalidation
     generations, reconciles the local TLB before releasing pinned image pages,
-    filters mm-scoped flushes for the active ring-3 owner, and keeps flush
-    targets reserved against new ownership. Kernel-address-range flushes use
+    filters mm-scoped flushes only for ring-3 owners in a different ``mm``;
+    same-``mm`` range flushes request owner stop and synchronously wait for
+    reconciliation. Filtering same-``mm`` owners requires the pending
+    ``mmu_gather`` completion-ownership work. Flush targets remain reserved
+    against new ownership. Kernel-address-range flushes use
     INVLPGB plus system-wide completion when available with no active owner;
     when an owner is active, kernel-only IPIs wait for exit and preserve user
     translations. Standalone full and all-nonglobal flushes also wait for

@@ -81,7 +81,7 @@ int x86_cpu_accel_reclaim_register(struct x86_cpu_accel_tlb_reclaim_completion *
 				   void *data,
 				   const struct mmu_owner_subscription_ops *ops);
 void x86_cpu_accel_reclaim_release(struct x86_cpu_accel_tlb_reclaim_completion *comp);
-/* Record an mm-scoped target and filter ring-3 owners from its IPI mask. */
+/* Filter only owners running a different mm from an mm-scoped IPI mask. */
 bool x86_cpu_accel_filter_mm_tlb_shootdown(unsigned int cpu,
 					   const struct mm_struct *mm,
 					   u64 tlb_gen);

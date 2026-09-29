@@ -1465,9 +1465,10 @@ void flush_tlb_multi(const struct cpumask *cpumask,
 	/* Block new owners on this target mask until the batch completes. */
 	x86_cpu_accel_tlb_flush_begin(&accel_flush, cpumask);
 	/*
-	 * Filter ring-3 accelerator owners before dispatching through the
-	 * native or paravirtual TLB implementation. Their current mm is frozen;
-	 * another mm's generation will be reconciled before it runs on that CPU.
+	 * Filter subscribed owners and owners running a different mm before
+	 * dispatching through the native or paravirtual TLB implementation.
+	 * A same-mm owner without a completion subscription stays in the target
+	 * mask; the synchronous path below requests its stop before dispatch.
 	 * Batched unmaps have already advanced every affected mm's generation.
 	 */
 	if (!accel_flush.no_owners &&

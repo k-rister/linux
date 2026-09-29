@@ -785,6 +785,22 @@ static bool user_escape_completed(const volatile struct cpu_accel_shared *shared
 	       __atomic_load_n(&shared->user_escape_count, __ATOMIC_ACQUIRE) == 1;
 }
 
+static bool user_reclaim_owner_stop_completed(
+		const volatile struct cpu_accel_shared *shared)
+{
+	return __atomic_load_n(&shared->state, __ATOMIC_ACQUIRE) ==
+		CPU_ACCEL_STATE_COMPLETE &&
+	       __atomic_load_n(&shared->mode, __ATOMIC_ACQUIRE) ==
+		CPU_ACCEL_MODE_LINUX &&
+	       __atomic_load_n(&shared->backend, __ATOMIC_ACQUIRE) ==
+		CPU_ACCEL_BACKEND_X86_RING3 &&
+	       __atomic_load_n(&shared->recovery_state, __ATOMIC_ACQUIRE) ==
+		CPU_ACCEL_RECOVERY_FAILED &&
+	       __atomic_load_n(&shared->recovery_error, __ATOMIC_ACQUIRE) ==
+		-EALREADY &&
+	       __atomic_load_n(&shared->user_escape_count, __ATOMIC_ACQUIRE) == 0;
+}
+
 static int run_user_workload(const struct cpu_accel_config *requested,
 			     uint64_t escape_after_ms,
 			     uint64_t escape_attempts,
@@ -806,6 +822,7 @@ static int run_user_workload(const struct cpu_accel_config *requested,
 	int user_hang = requested->workload == CPU_ACCEL_WORKLOAD_USER_HANG;
 	int user_reclaim = requested->workload ==
 		CPU_ACCEL_WORKLOAD_USER_RECLAIM;
+	bool reclaim_owner_stopped;
 	int escape_ret = 0;
 	int ret;
 
@@ -890,6 +907,12 @@ static int run_user_workload(const struct cpu_accel_config *requested,
 					escape_ret = 0;
 					break;
 				}
+				if (errno == EALREADY && user_reclaim &&
+				    user_reclaim_owner_stop_completed(handle.shared)) {
+					/* Reclaim's subscribed stop beat the timed NMI. */
+					escape_ret = 0;
+					break;
+				}
 			}
 			if (escape_ret)
 				perror("user escape");
@@ -912,18 +935,24 @@ static int run_user_workload(const struct cpu_accel_config *requested,
 	if (escape_ret)
 		ret = -1;
 	print_status(handle.shared);
-	if ((escape_after_ms && handle.shared->state != CPU_ACCEL_STATE_ESCAPED) ||
-	    (user_reclaim && handle.shared->state != CPU_ACCEL_STATE_ESCAPED) ||
+	reclaim_owner_stopped = user_reclaim &&
+		user_reclaim_owner_stop_completed(handle.shared);
+	if ((escape_after_ms && handle.shared->state != CPU_ACCEL_STATE_ESCAPED &&
+	     !reclaim_owner_stopped) ||
+	    (user_reclaim && handle.shared->state != CPU_ACCEL_STATE_ESCAPED &&
+	     !reclaim_owner_stopped) ||
 	    (!escape_after_ms && !user_reclaim &&
 	     handle.shared->state != CPU_ACCEL_STATE_COMPLETE) ||
 	    handle.shared->mode != CPU_ACCEL_MODE_LINUX ||
 	    handle.shared->backend != CPU_ACCEL_BACKEND_X86_RING3 ||
 	    ((escape_after_ms || user_reclaim) &&
+	     !reclaim_owner_stopped &&
 	     handle.shared->recovery_state !=
 	     CPU_ACCEL_RECOVERY_SUCCEEDED) ||
 	    (!escape_after_ms && !user_reclaim &&
 	     !handle.shared->samples_valid) ||
 	    ((escape_after_ms || user_reclaim) &&
+	     !reclaim_owner_stopped &&
 	     handle.shared->user_escape_count != 1)) {
 		fprintf(stderr, "user accelerator did not complete its ring-3 contract\n");
 		ret = -1;

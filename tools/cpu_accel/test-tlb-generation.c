@@ -513,6 +513,26 @@ static void collect_cli_output(void)
 	cli_output_fd = -1;
 }
 
+static bool cli_reclaim_owner_stop_completed(void)
+{
+	char expected[96];
+
+	snprintf(expected, sizeof(expected), "state=%u mode=%u",
+		 CPU_ACCEL_STATE_COMPLETE, CPU_ACCEL_MODE_LINUX);
+	if (!strstr(cli_output, expected))
+		return false;
+	snprintf(expected, sizeof(expected), "backend=%u",
+		 CPU_ACCEL_BACKEND_X86_RING3);
+	if (!strstr(cli_output, expected))
+		return false;
+	snprintf(expected, sizeof(expected),
+		 "recovery_state=%u recovery_error=%d",
+		 CPU_ACCEL_RECOVERY_FAILED, -EALREADY);
+	if (!strstr(cli_output, expected))
+		return false;
+	return strstr(cli_output, "user_escape_count=0") != NULL;
+}
+
 static unsigned long long cli_tlb_targets(void)
 {
 	const char *field = strstr(cli_output, "arch_tlb_shootdown_targets=");
@@ -677,7 +697,8 @@ static int test_reclaim_completion(int target_cpu, int control_cpu,
 		goto out;
 	}
 	collect_cli_output();
-	if (!strstr(cli_output, "user_escape_count=1")) {
+	if (!strstr(cli_output, "user_escape_count=1") &&
+	    !cli_reclaim_owner_stop_completed()) {
 		fprintf(stderr,
 			"pageout did not stop the reclaim-test ring-3 owner\n");
 		goto out;

@@ -1216,6 +1216,18 @@ The implementation checkpoints are:
     intermittent soft lockup, so keep the synchronous fallback and continue
     increasing concurrent coverage before changing the stop/ack protocol.
 
+    Three additional five-second runs on CPU3 completed 43,795, 44,183, and
+    45,668 forks (133,646 total, with 267,292 forced COW writes) while the
+    ring-3 owner ran on CPU2. Each global CPA flush stopped that owner, observed
+    its exit, and completed the same flush ID. In the second run, twenty
+    two-target mm-scoped flush pairs (IDs 16--35) completed immediately before
+    global flush ID 36; the trace then showed the CPU2 stop request, matching
+    owner exit, and flush completion. The first and third runs likewise
+    completed global flush IDs 15 and 37 through the stop/exit path. All three
+    runs reported no soft-lockup, RCU-stall, BUG, Oops, or panic. The reported
+    intermittent lockup remains unreproduced; retain the synchronous fallback
+    and continue controlled coverage before changing the stop/ack protocol.
+
     The test-only fixture now retains one unpinned, read-only shared regular-
     file page in the worker and maps an alias in the companion. On kernel
     ``7.3.0-rc3-accel-tlbfix-00603-g7c09283ad6e9``, the focused reclaim test

@@ -439,6 +439,18 @@ is not used as the ownership record. Per-owner stop callbacks and reclaim
 acknowledgment lists are still x86-specific, so the generic MM completion
 contract is not yet implemented end to end.
 
+The current ``mmu_owner_snapshot()`` returns borrowed owner data and a
+generation; it does not pin either the owner record or the data storage. That
+is sufficient only while the caller keeps that storage alive independently
+and revalidates the owner, as the x86 backend does under its per-CPU request
+lock. A generic completion cannot retain a snapshot and attach an
+acknowledgment later. It needs an operation that either attaches to the exact
+owner instance while unregister is excluded or takes a lifetime reference to
+that instance and its stop target under the registry interlock. Owner exit
+must detach its completion records before unregistering, reconcile its local
+TLB state, and only then acknowledge them. Stop callbacks run after registry,
+owner, and page-table locks are released.
+
 A generic completion is reserved before the first PTE is removed and owns the
 affected page disposition as well as references to the matching owner
 instances. After the mapping change publishes its generation, MM may request
@@ -1108,7 +1120,11 @@ The implementation checkpoints are:
     immediate GUP-fast and RCU lifetime barriers. Keep these paths synchronous
     until MM core can reserve a completion before unmap and own the caller's
     deferred operation or page disposition across every release point. A
-    focused VM
+    next MM-core step is a stable owner-subscription API with post-reconcile
+    acknowledgement; then ``mmu_gather`` can transfer data/table batches at
+    each drain point while preserving its immediate walker barriers.
+    Dirty/writeback reclaim and migration remain synchronous until their data
+    operations can also be transferred as post-ack continuations. A focused VM
     test unmaps a touched
     2 MiB mapping from another ``mm`` while the target CPU is ring-3 owned,
     then uses privileged ``/proc/self/pagemap`` and ``/proc/kpageflags``

@@ -104,6 +104,20 @@ for event in tlb_flush_wait owner_stop_request owner_exit_complete; do
 		fail "trace event is unavailable: $event"
 	echo 1 >"$instance/events/cpu_accel/$event/enable"
 done
+
+# These core tracepoints identify IPI targets and callback delivery when
+# diagnosing a stalled synchronous flush. They are optional across configs.
+for event in \
+	ipi/ipi_send_cpu ipi/ipi_send_cpumask \
+	csd/csd_queue_cpu csd/csd_function_entry csd/csd_function_exit \
+	irq_vectors/call_function_entry irq_vectors/call_function_exit \
+	irq_vectors/call_function_single_entry \
+	irq_vectors/call_function_single_exit; do
+	if [ -e "$instance/events/$event/enable" ]; then
+		echo 1 >"$instance/events/$event/enable"
+	fi
+done
+
 cat "$instance/trace_pipe" >"$outdir/trace.log" &
 trace_pid=$!
 echo 1 >"$instance/tracing_on"

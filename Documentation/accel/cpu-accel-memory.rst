@@ -1228,6 +1228,14 @@ The implementation checkpoints are:
     intermittent lockup remains unreproduced; retain the synchronous fallback
     and continue controlled coverage before changing the stop/ack protocol.
 
+    The harness now also requires each observed ``tlb_flush_wait`` begin ID to
+    have exactly one later completion, allowing interleaved flushes. It enables
+    optional core IPI-send, CSD callback, and x86 call-function IRQ tracepoints
+    when available, to capture target masks and callback delivery for future
+    stall diagnosis. The pairing check passed synthetic interleaved and missing
+    completion cases. The VM is currently on its known 6.12 kernel, so these
+    harness updates have not yet been rerun against 00604.
+
     The test-only fixture now retains one unpinned, read-only shared regular-
     file page in the worker and maps an alias in the companion. On kernel
     ``7.3.0-rc3-accel-tlbfix-00603-g7c09283ad6e9``, the focused reclaim test

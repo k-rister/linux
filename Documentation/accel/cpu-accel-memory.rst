@@ -293,9 +293,15 @@ complete ``try_to_unmap_flush_dirty()`` before ``pageout()`` starts writeback;
 reclaim also flushes before ``free_unref_folios()`` releases reclaimed folios.
 Migration flushes its task-local batch before it copies or moves folios. The
 vmscan completion path below transfers an eligible folio to a completion-managed
-list only after reclaim has selected it for release. Other callers continue to
-wait for the synchronous flush; returning with only a pending generation would
-let them proceed as if invalidation had completed.
+list only after reclaim has selected it for release. The dirty-reclaim and
+migration ordering also protects data operations: a stale owner must not write
+the folio while writeback reads it or while migration copies it. Deferring
+those flushes therefore requires transferring the writeback or migration
+operation itself to work that starts after owner acknowledgement, while
+retaining the folio locks, references, and caller accounting. Holding the folio
+while the original caller proceeds is not sufficient. Other callers continue
+to wait for the synchronous flush; returning with only a pending generation
+would let them proceed as if invalidation had completed.
 
 This path is separate from ``mmu_gather``. The x86 architecture's
 ``arch_tlbflush_unmap_batch`` stores only a CPU mask and an
@@ -361,7 +367,16 @@ timeout.
 ``tlb_flush_mmu_free()`` releases its queued data pages and page-table batches.
 An asynchronous redesign of that path would need to transfer those
 ``mmu_gather`` lists to its own completion-managed object. Those lists are not
-part of ``arch_tlbbatch_flush()`` or its architecture batch.
+part of ``arch_tlbbatch_flush()`` or its architecture batch. The transfer must
+also cover intermediate drains: exhausting a data-page batch can make the
+caller run ``tlb_flush_mmu()``, and a full page-table batch can be flushed and
+freed before ``tlb_finish_mmu()``. Page-table unsharing has an immediate TLB
+flush and a GUP-fast synchronization before a table can be reused; delayed rmap
+removals are also performed after a TLB-only flush. Deferring only the final
+lists in ``tlb_finish_mmu()`` would miss these earlier release points. A
+completion design must preserve those immediate barriers and transfer each
+deferred data-page and table batch, including its software-walker RCU lifetime,
+to the completion owner.
 
 This is address-space deferral, not a general asynchronous reclaim interface.
 Any future path that lets an active owner continue using the affected ``mm``
@@ -1085,11 +1100,15 @@ The implementation checkpoints are:
     not bound it. The full-flush path preserves invalidation-before-reuse, and
     there is no safe timeout for these void MM hooks. The current x86 caller
     audit found no additional live kernel-code or exception-state writer
-    outside the established gates and lifecycle rules above. Next review
-    whether any additional reclaim or ``mmu_gather`` path can transfer page
-    lifetime to an explicit owner-completion object; dirty/writeback and
-    migration must retain their synchronous semantics unless their data
-    operations are also protected from concurrent owner writes. A focused VM
+    outside the established gates and lifecycle rules above. The source review
+    found no safe flush-hook-only extension for dirty reclaim or migration:
+    each would need to transfer and resume its data operation after owner
+    acknowledgement. Generic batched unmap also lacks the affected-page
+    disposition, while ``mmu_gather`` has intermediate data/table drains and
+    immediate GUP-fast and RCU lifetime barriers. Keep these paths synchronous
+    until MM core can reserve a completion before unmap and own the caller's
+    deferred operation or page disposition across every release point. A
+    focused VM
     test unmaps a touched
     2 MiB mapping from another ``mm`` while the target CPU is ring-3 owned,
     then uses privileged ``/proc/self/pagemap`` and ``/proc/kpageflags``

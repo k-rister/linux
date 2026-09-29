@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/cpu_accel.h>
+#include <linux/falloc.h>
 #include <linux/kernel-page-flags.h>
 #include <pthread.h>
 #include <sched.h>
@@ -23,6 +24,9 @@
 #include <unistd.h>
 
 #define PTE_TABLE_SIZE (512UL * 4096)
+#define MMU_GATHER_PROBE_SIZE (64UL * 1024UL * 1024UL)
+#define MMU_GATHER_OWNER_TIMEOUT_MS 12000
+#define MMU_GATHER_ESCAPE_AFTER_MS "5000"
 #define REUSE_PROBE_SIZE (16UL * 1024UL * 1024UL)
 #define ACCEL_DURATION_MS "2000"
 /* Escape a stuck owner so a broken synchronous flush cannot strand the VM. */
@@ -556,7 +560,8 @@ static unsigned long long cli_reschedule_requests(void)
 static int test_reclaim_completion(int target_cpu, int control_cpu,
 				   const char *cpu_accelctl,
 				   unsigned long page_size,
-				   int argc, char **argv)
+				   int argc, char **argv,
+				   bool mmu_gather_only)
 {
 	char path[] = "/var/tmp/cpu-accel-reclaim-XXXXXX";
 	char cpu_arg[16];
@@ -565,12 +570,19 @@ static int test_reclaim_completion(int target_cpu, int control_cpu,
 	unsigned char residency;
 	const struct timespec retry_pause = { .tv_nsec = 10000000 };
 	const struct timespec completion_pause = { .tv_nsec = 1000000 };
+	void *allocation;
 	void *mapping = MAP_FAILED;
 	int file_fd = -1;
 	int pipe_fd[2] = { -1, -1 };
 	int ret = -1;
 	size_t written = 0;
+	size_t file_bytes = mmu_gather_only ? MMU_GATHER_PROBE_SIZE : page_size;
 	size_t cli_argc = 0;
+	const char *duration_ms = "5000";
+	const char *escape_after_ms = mmu_gather_only ?
+		MMU_GATHER_ESCAPE_AFTER_MS : ACCEL_ESCAPE_AFTER_MS;
+	unsigned int owner_timeout_ms = mmu_gather_only ?
+		MMU_GATHER_OWNER_TIMEOUT_MS : 3000;
 
 	if (pin_to_cpu(control_cpu)) {
 		perror("pin to controller CPU for reclaim probe");
@@ -581,15 +593,39 @@ static int test_reclaim_completion(int target_cpu, int control_cpu,
 		perror("mkstemp(reclaim probe)");
 		goto out;
 	}
-	contents = malloc(page_size);
-	if (!contents) {
-		perror("allocate reclaim probe page");
-		goto out;
+	if (mmu_gather_only) {
+		close(file_fd);
+		file_fd = open(path, O_RDWR | O_DIRECT | O_CLOEXEC);
+		if (file_fd < 0) {
+			perror("open direct-I/O gather probe");
+			goto out;
+		}
 	}
-	memset(contents, RECLAIM_PAGE_MARKER, page_size);
-	while (written < page_size) {
+	{
+		int alloc_error = posix_memalign(&allocation, page_size, file_bytes);
+
+		if (alloc_error) {
+			errno = alloc_error;
+			perror("allocate reclaim probe page");
+			goto out;
+		}
+		contents = allocation;
+	}
+	memset(contents, RECLAIM_PAGE_MARKER, file_bytes);
+	if (mmu_gather_only) {
+		ssize_t count = write(file_fd, contents, file_bytes);
+
+		if (count != (ssize_t)file_bytes) {
+			if (count >= 0)
+				errno = EIO;
+			perror("direct write reclaim probe file");
+			goto out;
+		}
+		written = file_bytes;
+	}
+	while (written < file_bytes) {
 		ssize_t count = write(file_fd, contents + written,
-				      page_size - written);
+					      file_bytes - written);
 
 		if (count < 0 && errno == EINTR)
 			continue;
@@ -605,13 +641,11 @@ static int test_reclaim_completion(int target_cpu, int control_cpu,
 		perror("fsync reclaim probe page");
 		goto out;
 	}
-	mapping = mmap(NULL, page_size, PROT_READ, MAP_SHARED, file_fd, 0);
+	mapping = mmap(NULL, file_bytes, PROT_READ, MAP_SHARED, file_fd, 0);
 	if (mapping == MAP_FAILED) {
 		perror("mmap reclaim probe alias");
 		goto out;
 	}
-	close(file_fd);
-	file_fd = -1;
 	if (*(volatile unsigned char *)mapping != RECLAIM_PAGE_MARKER) {
 		fprintf(stderr, "reclaim probe file has unexpected contents\n");
 		goto out;
@@ -634,19 +668,22 @@ static int test_reclaim_completion(int target_cpu, int control_cpu,
 	cli_argv[cli_argc++] = "--cpu";
 	cli_argv[cli_argc++] = cpu_arg;
 	cli_argv[cli_argc++] = "--duration-ms";
-	cli_argv[cli_argc++] = "5000";
+	cli_argv[cli_argc++] = (char *)duration_ms;
 	cli_argv[cli_argc++] = "--period-us";
 	cli_argv[cli_argc++] = "1000";
-	cli_argv[cli_argc++] = "--escape-after-ms";
-	cli_argv[cli_argc++] = ACCEL_ESCAPE_AFTER_MS;
-	cli_argv[cli_argc++] = "--escape-retries";
-	cli_argv[cli_argc++] = ACCEL_ESCAPE_RETRIES;
+	if (escape_after_ms) {
+		cli_argv[cli_argc++] = "--escape-after-ms";
+		cli_argv[cli_argc++] = (char *)escape_after_ms;
+		cli_argv[cli_argc++] = "--escape-retries";
+		cli_argv[cli_argc++] = ACCEL_ESCAPE_RETRIES;
+	}
 	cli_argv[cli_argc++] = "--workload";
 	cli_argv[cli_argc++] = "user-reclaim";
 	cli_argv[cli_argc++] = "--test-reclaim-file";
 	cli_argv[cli_argc++] = path;
 	for (int index = 3; index < argc; index++) {
-		if (!strcmp(argv[index], "--reclaim-only"))
+		if (!strcmp(argv[index], "--reclaim-only") ||
+		    !strcmp(argv[index], "--mmu-gather-only"))
 			continue;
 		cli_argv[cli_argc++] = argv[index];
 	}
@@ -673,9 +710,41 @@ static int test_reclaim_completion(int target_cpu, int control_cpu,
 	pipe_fd[1] = -1;
 	cli_output_fd = pipe_fd[0];
 	pipe_fd[0] = -1;
-	if (!wait_for_owner(target_cpu, 3000)) {
+	if (!wait_for_owner(target_cpu, owner_timeout_ms)) {
 		fprintf(stderr, "did not observe a reclaim-test ring-3 owner\n");
 		goto wait_cli;
+	}
+	if (mmu_gather_only) {
+		/*
+		 * Hole punching zaps this file mapping through unmap_mapping_range()
+		 * and mmu_gather in the active owner's own mm. The owner keeps its
+		 * mmap write lock, so this covers the lockless file-invalidation path.
+		 * Its private COW fixture leaves one PTE in every PTE table. Punch the
+		 * whole file in one operation so this gather removes more than 10,000
+		 * populated pages without freeing any of those PTE tables.
+		 */
+		if (fallocate(file_fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE,
+			      0, file_bytes)) {
+			perror("fallocate same-mm mmu_gather probe");
+			goto wait_cli;
+		}
+		if (wait_for_cli()) {
+			collect_cli_output();
+			fprintf(stderr,
+				"cpu-accelctl mmu_gather workload failed to exit\n");
+			goto out;
+		}
+		collect_cli_output();
+		if (!strstr(cli_output, "state=7 mode=0") ||
+		    !strstr(cli_output, "recovery_state=2") ||
+		    !strstr(cli_output, "user_escape_count=1") ||
+		    !strstr(cli_output, "recovery_attempts=0")) {
+			fprintf(stderr, "same-mm gather stop/ack missed fallback\n");
+			goto out;
+		}
+		printf("PASS: intermediate same-mm gather drain acked\n");
+		ret = 0;
+		goto out;
 	}
 	for (unsigned int attempt = 0; attempt < 8 && cli_owner_active(); attempt++) {
 		if (madvise(mapping, page_size, MADV_PAGEOUT)) {
@@ -761,7 +830,7 @@ out:
 		close(file_fd);
 	free(contents);
 	if (mapping != MAP_FAILED)
-		munmap(mapping, page_size);
+		munmap(mapping, file_bytes);
 	if (path[0] && unlink(path) && errno != ENOENT) {
 		perror("unlink reclaim probe file");
 		ret = -1;
@@ -818,6 +887,7 @@ int main(int argc, char **argv)
 	bool ptable_reused_as_table = false;
 	bool ptable_reused_as_data = false;
 	bool reclaim_only = false;
+	bool mmu_gather_only = false;
 	pid_t pid;
 	volatile pid_t cow_holder = -1;
 	pthread_t keeper_thread;
@@ -825,15 +895,17 @@ int main(int argc, char **argv)
 	struct reschedule_worker_arg reschedule_arg;
 
 	if (argc < 3 || argc > 5) {
-		fprintf(stderr,
-			"usage: %s TARGET_CPU CPU_ACCELCTL [--quarantine-irqs] "
-			"[--reclaim-only]\n",
+		fprintf(stderr, "usage: %s TARGET_CPU CPU_ACCELCTL [OPTIONS]\n",
 			argv[0]);
 		return EXIT_FAILURE;
 	}
 	for (index = 3; index < argc; index++) {
 		if (!strcmp(argv[index], "--reclaim-only")) {
 			reclaim_only = true;
+			continue;
+		}
+		if (!strcmp(argv[index], "--mmu-gather-only")) {
+			mmu_gather_only = true;
 			continue;
 		}
 		if (strcmp(argv[index], "--quarantine-irqs")) {
@@ -874,10 +946,17 @@ int main(int argc, char **argv)
 		fprintf(stderr, "expected 4 KiB pages, got %lu\n", page_size);
 		return EXIT_FAILURE;
 	}
-	if (reclaim_only)
+	if (reclaim_only || mmu_gather_only) {
+		if (reclaim_only && mmu_gather_only) {
+			fprintf(stderr,
+				"--reclaim-only and --mmu-gather-only are exclusive\n");
+			return EXIT_FAILURE;
+		}
 		return test_reclaim_completion(target_cpu, control_cpu, argv[2],
-					       page_size, argc, argv) ?
+					       page_size, argc, argv,
+					       mmu_gather_only) ?
 			EXIT_FAILURE : EXIT_SUCCESS;
+	}
 	mapping = mmap(NULL, PTE_TABLE_SIZE * 4, PROT_READ | PROT_WRITE,
 		       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	if (mapping == MAP_FAILED) {
@@ -1413,7 +1492,7 @@ int main(int argc, char **argv)
 	printf("deferred %llu reschedule request(s) until owner exit\n",
 	       cli_reschedule_requests());
 	if (test_reclaim_completion(target_cpu, control_cpu, argv[2],
-				    page_size, argc, argv))
+				    page_size, argc, argv, false))
 		goto out_mapping;
 	result = EXIT_SUCCESS;
 	goto out_mapping;

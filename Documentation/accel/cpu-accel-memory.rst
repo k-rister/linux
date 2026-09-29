@@ -118,19 +118,30 @@ Before START, the worker switches to its admitted stack and unmaps every
 removable VMA except the executable image, private stack, control mapping,
 shared-data mapping, and the page containing the worker's registered RSEQ
 area, when present. The test-only ``user-reclaim`` workload additionally
-retains exactly one read-only, shared, regular-file mapping. That page is
-deliberately left unpinned so the focused reclaim test can ask reclaim to
-remove it. The validator recognizes this read-only mapping with
-``VM_MAYSHARE``: Linux does not set ``VM_SHARED`` for a shared mapping made
-from a read-only file descriptor. The focused ``test-tlb-generation`` test
-can run this case alone with ``--reclaim-only``. It requests ``MADV_PAGEOUT``
-while the ring-3 owner is active, schedules owner exit after one second, and
-retries pageout after the owner releases its ``mm`` if the page remains
-resident. It verifies non-residency and the file contents after refault. The
-kernel may update the RSEQ area on the user-return
-slowpath after a deferred reschedule, so removing it would turn normal
-accelerator exit into a SIGSEGV. The driver validates the RSEQ page as private,
-readable, writable, and non-executable. The legacy x86 ``[vsyscall]`` VMA is
+retains a read-only regular-file mapping. The focused reclaim test uses one
+shared page and leaves it unpinned so reclaim can remove it. The validator
+recognizes this read-only mapping with ``VM_MAYSHARE``: Linux does not set
+``VM_SHARED`` for a shared mapping made from a read-only file descriptor. The
+focused ``test-tlb-generation`` test can run this case alone with
+``--reclaim-only``. It requests ``MADV_PAGEOUT`` while the ring-3 owner is
+active, schedules owner exit after one second, and retries pageout after the
+owner releases its ``mm`` if the page remains resident. It verifies
+non-residency and the file contents after refault.
+
+The ``--mmu-gather-only`` case uses a 64 MiB private file mapping. The harness
+populates the test file with direct I/O, and the CLI maps it with random-read
+and no-hugepage advice before faulting in each 4 KiB page. It writes one
+private COW page per 2 MiB PTE table, then makes the mapping read-only. The
+validator permits this read-only regular-file VMA while the active ``mm``
+remains write-locked. A single whole-file hole punch invalidates more than
+10,000 file-backed pages in the owner's ``mm`` while the COW pages keep each
+PTE table populated. This forces an eligible intermediate ``mmu_gather``
+data-page drain without also requiring page-table release. The test checks
+that the owner acknowledges the stop and that no timeout recovery was needed.
+The kernel may update the RSEQ area on the user-return slowpath after a
+deferred reschedule, so removing it would turn normal accelerator exit into a
+SIGSEGV. The driver validates the RSEQ page as private, readable, writable,
+and non-executable. The legacy x86 ``[vsyscall]`` VMA is
 fixed at ``VSYSCALL_ADDR`` and rejects ``munmap``; the worker leaves it mapped,
 and the driver accepts only that exact executable-only architecture mapping. The
 image must be file-backed private RX, the stack anonymous private RW without

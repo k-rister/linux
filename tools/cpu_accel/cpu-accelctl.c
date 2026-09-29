@@ -32,6 +32,8 @@ extern const unsigned int __rseq_size __attribute__((weak));
 #define CPU_ACCEL_USER_IMAGE \
 	__attribute__((section("cpu_accel_user_image"), aligned(4096)))
 #define CPU_ACCEL_VSYSCALL_ADDR	(-10UL << 20)
+#define CPU_ACCEL_MAX_USER_RECLAIM_BYTES	(64UL * 1024UL * 1024UL)
+#define CPU_ACCEL_USER_PTE_TABLE_PAGES	512UL
 
 static volatile sig_atomic_t interrupted;
 
@@ -46,6 +48,7 @@ struct cpu_accel_user_unmap_range;
 struct cpu_accel_user_context {
 	unsigned long stack_top;
 	unsigned long reclaim_page;
+	unsigned long reclaim_bytes;
 	struct cpu_accel_shared *shared;
 	int fd;
 	uint64_t cycles_per_ns;
@@ -59,6 +62,31 @@ struct cpu_accel_user_unmap_range {
 };
 
 #define CPU_ACCEL_MAX_USER_UNMAP_RANGES	256
+
+static int cpu_accel_populate_file_mapping(void *mapping, size_t bytes,
+					   size_t page_size,
+					   bool preserve_pte_tables)
+{
+	for (size_t offset = 0; offset < bytes; offset += page_size) {
+		const char *address = (const char *)mapping + offset;
+
+		__asm__ volatile("movb (%0), %%al" : : "r" (address) : "rax", "memory");
+	}
+	if (preserve_pte_tables) {
+		size_t table_bytes = page_size * CPU_ACCEL_USER_PTE_TABLE_PAGES;
+
+		for (size_t offset = table_bytes - page_size;
+		     offset < bytes; offset += table_bytes) {
+			const char *address = (const char *)mapping + offset;
+
+			/* Keep one anonymous COW PTE in each table through hole punch. */
+			__asm__ volatile("movb $0x5a, (%0)" : : "r" (address) : "memory");
+		}
+		if (mprotect(mapping, bytes, PROT_READ))
+			return -errno;
+	}
+	return 0;
+}
 
 struct cpu_accel_user_keep_range {
 	unsigned long start;
@@ -382,7 +410,7 @@ static int cpu_accel_collect_unmap_ranges(
 		{ .start = rseq_start, .end = rseq_end },
 		{ .start = context->reclaim_page,
 		  .end = context->reclaim_page ?
-			context->reclaim_page + page_size : 0 },
+			context->reclaim_page + context->reclaim_bytes : 0 },
 	};
 	FILE *maps;
 	char *line = NULL;
@@ -589,6 +617,7 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 	uintptr_t stack_end;
 	unsigned long rseq_start;
 	unsigned long rseq_end;
+	size_t reclaim_bytes = 0;
 	size_t unmap_offset;
 	void *stack;
 	void *reclaim_mapping = MAP_FAILED;
@@ -599,12 +628,24 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 	int ret = 1;
 
 	page_size = sysconf(_SC_PAGESIZE);
-	if (page_size <= 0 || (size_t)page_size > SIZE_MAX / 16) {
+	if (page_size <= 0 || (size_t)page_size > SIZE_MAX / 16 ||
+	    (size_t)page_size > SIZE_MAX / CPU_ACCEL_USER_PTE_TABLE_PAGES) {
 		fprintf(stderr, "invalid page size\n");
 		goto out;
 	}
+	image_start = (uintptr_t)__start_cpu_accel_user_image;
+	image_end = (uintptr_t)__stop_cpu_accel_user_image;
+	if (image_end <= image_start ||
+	    image_end > UINTPTR_MAX - ((uintptr_t)page_size - 1) ||
+	    (image_start & ((uintptr_t)page_size - 1))) {
+		fprintf(stderr, "invalid accelerator image section bounds\n");
+		goto out;
+	}
+	image_end = (image_end + (uintptr_t)page_size - 1) &
+		~((uintptr_t)page_size - 1);
 	if (user_reclaim) {
 		struct stat st;
+		int private_pte_tables;
 
 		if (!reclaim_file || !strcmp(reclaim_file, "-")) {
 			fprintf(stderr, "user-reclaim requires a test file\n");
@@ -619,21 +660,40 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 			perror("stat test reclaim file");
 			goto out;
 		}
-		if (!S_ISREG(st.st_mode) || st.st_size < page_size) {
+		if (!S_ISREG(st.st_mode) || st.st_size < page_size ||
+		    st.st_size > (off_t)CPU_ACCEL_MAX_USER_RECLAIM_BYTES ||
+		    st.st_size % page_size) {
 			fprintf(stderr,
-				"test reclaim file must be regular and at least one page\n");
+				"reclaim file must be page-aligned and 1 page to 64 MiB\n");
 			goto out;
 		}
-		reclaim_mapping = mmap(NULL, page_size, PROT_READ, MAP_SHARED,
+		reclaim_bytes = st.st_size;
+		private_pte_tables = reclaim_bytes >
+			(size_t)page_size * CPU_ACCEL_USER_PTE_TABLE_PAGES;
+		reclaim_mapping = mmap(NULL, reclaim_bytes,
+				       private_pte_tables ?
+				       PROT_READ | PROT_WRITE : PROT_READ,
+				       private_pte_tables ? MAP_PRIVATE : MAP_SHARED,
 				       reclaim_fd, 0);
 		if (reclaim_mapping == MAP_FAILED) {
 			perror("mmap test reclaim page");
 			goto out;
 		}
+		if (private_pte_tables &&
+		    (madvise(reclaim_mapping, reclaim_bytes, MADV_NOHUGEPAGE) ||
+		     madvise(reclaim_mapping, reclaim_bytes, MADV_RANDOM))) {
+			perror("madvise test reclaim mapping");
+			goto out;
+		}
 		close(reclaim_fd);
 		reclaim_fd = -1;
-		/* Populate a clean, file-backed PTE before the active epoch. */
-		(void)*(volatile unsigned char *)reclaim_mapping;
+		/* Populate file-backed PTEs before the active epoch. */
+		if (cpu_accel_populate_file_mapping(reclaim_mapping, reclaim_bytes,
+						    page_size,
+						    private_pte_tables)) {
+			perror("populate test reclaim mapping");
+			goto out;
+		}
 	} else if (reclaim_file && strcmp(reclaim_file, "-")) {
 		fprintf(stderr, "test reclaim file requires user-reclaim workload\n");
 		goto out;
@@ -650,6 +710,7 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 	context->shared = (struct cpu_accel_shared *)(uintptr_t)handle->shared;
 	context->reclaim_page = user_reclaim ?
 		(uintptr_t)reclaim_mapping : 0;
+	context->reclaim_bytes = reclaim_bytes;
 	context->fd = handle->fd;
 	context->cycles_per_ns = cpu_accel_calibrate_cycles_per_ns();
 	entry_ip = user_hang ? (uintptr_t)cpu_accel_user_hang :
@@ -662,19 +723,12 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 	config->user_reclaim_page = user_reclaim ?
 		(uintptr_t)reclaim_mapping : 0;
 	context->stack_top = config->user_stack_top;
-	image_start = (uintptr_t)__start_cpu_accel_user_image;
-	image_end = (uintptr_t)__stop_cpu_accel_user_image;
-	if (image_end <= image_start ||
-	    image_end > UINTPTR_MAX - ((uintptr_t)page_size - 1) ||
-	    (image_start & ((uintptr_t)page_size - 1)) ||
-	    entry_ip < image_start || entry_ip >= image_end ||
+	if (entry_ip < image_start || entry_ip >= image_end ||
 	    (uintptr_t)cpu_accel_user_escape_image < image_start ||
 	    (uintptr_t)cpu_accel_user_escape_image >= image_end) {
 		fprintf(stderr, "invalid accelerator image section bounds\n");
 		goto out_stack;
 	}
-	image_end = (image_end + (uintptr_t)page_size - 1) &
-		~((uintptr_t)page_size - 1);
 	config->user_image_start = image_start;
 	config->user_image_bytes = image_end - image_start;
 	config->user_arg = (uintptr_t)context;
@@ -715,7 +769,7 @@ out:
 	if (reclaim_fd >= 0)
 		close(reclaim_fd);
 	if (reclaim_mapping != MAP_FAILED)
-		munmap(reclaim_mapping, page_size > 0 ? page_size : 0);
+		munmap(reclaim_mapping, reclaim_bytes);
 	cpu_accel_close(handle);
 	return ret;
 }

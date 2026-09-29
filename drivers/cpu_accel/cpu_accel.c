@@ -945,6 +945,7 @@ static void cpu_accel_observation_finish(struct cpu_accel_device *dev,
 #ifdef CONFIG_X86
 #define CPU_ACCEL_MAX_USER_IMAGE_BYTES	(4UL * 1024UL * 1024UL)
 #define CPU_ACCEL_MAX_USER_STACK_BYTES	(1UL * 1024UL * 1024UL)
+#define CPU_ACCEL_MAX_USER_RECLAIM_BYTES	(64UL * 1024UL * 1024UL)
 
 static int cpu_accel_validate_user_range(struct mm_struct *mm,
 					unsigned long start, unsigned long bytes,
@@ -1034,13 +1035,16 @@ static int cpu_accel_validate_user_vma_set(struct cpu_accel_device *dev,
 			continue;
 		}
 		if (reclaim_page && vma->vm_start == reclaim_page &&
-		    vma->vm_end == reclaim_page + PAGE_SIZE && vma->vm_file &&
+		    vma->vm_end > reclaim_page &&
+		    vma->vm_end - reclaim_page <=
+				CPU_ACCEL_MAX_USER_RECLAIM_BYTES && vma->vm_file &&
 		    vma->vm_file->f_inode &&
 		    S_ISREG(file_inode(vma->vm_file)->i_mode) &&
-		    cpu_accel_vma_has_permissions(vma, VM_READ | VM_MAYSHARE,
-					 VM_WRITE | VM_MAYWRITE | VM_EXEC |
-					 VM_IO | VM_PFNMAP)) {
-			/* A read-only MAP_SHARED file VMA is VM_MAYSHARE. */
+		    cpu_accel_vma_has_permissions(vma, VM_READ,
+						  VM_WRITE | VM_EXEC | VM_IO |
+						  VM_PFNMAP) &&
+		    (vma->vm_flags & (VM_MAYSHARE | VM_MAYWRITE))) {
+			/* Accept read-only shared and private regular-file mappings. */
 			reclaim_found = true;
 			continue;
 		}

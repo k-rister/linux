@@ -30,6 +30,7 @@ struct x86_cpu_accel_tlb_reclaim_completion;
 struct x86_cpu_accel_tlb_reclaim_ack {
 	struct list_head link;
 	struct x86_cpu_accel_tlb_reclaim_completion *completion;
+	struct mmu_owner_snapshot owner;
 	struct mm_struct *mm;
 	void *data;
 	x86_cpu_accel_reclaim_fn ack;

@@ -439,17 +439,18 @@ is not used as the ownership record. Per-owner stop callbacks and reclaim
 acknowledgment lists are still x86-specific, so the generic MM completion
 contract is not yet implemented end to end.
 
-The current ``mmu_owner_snapshot()`` returns borrowed owner data and a
-generation; it does not pin either the owner record or the data storage. That
-is sufficient only while the caller keeps that storage alive independently
-and revalidates the owner, as the x86 backend does under its per-CPU request
-lock. A generic completion cannot retain a snapshot and attach an
-acknowledgment later. It needs an operation that either attaches to the exact
-owner instance while unregister is excluded or takes a lifetime reference to
-that instance and its stop target under the registry interlock. Owner exit
-must detach its completion records before unregistering, reconcile its local
-TLB state, and only then acknowledge them. Stop callbacks run after registry,
-owner, and page-table locks are released.
+``mmu_owner_snapshot()`` now invokes each registered owner's ``get`` operation
+while holding the registry lock and returns a reference to its owner-data
+context; callers release it with ``mmu_owner_snapshot_put()``. The x86 backend
+uses permanent per-CPU request storage, so its get/put operations are no-ops.
+The pinned candidate remains subject to the per-CPU owner-generation check
+before an acknowledgement is attached. This closes the snapshot-to-storage
+lifetime gap, but the completion lists and stop callback are still x86-specific.
+A generic subscription must attach to the exact owner instance while unregister
+is excluded, or retain the pinned context through the owner-exit handoff.
+Owner exit must detach completion records before unregistering, reconcile its
+local TLB state, and only then acknowledge them. Stop callbacks run after
+registry, owner, and page-table locks are released.
 
 A generic completion is reserved before the first PTE is removed and owns the
 affected page disposition as well as references to the matching owner

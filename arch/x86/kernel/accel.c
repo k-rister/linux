@@ -62,6 +62,23 @@ static DEFINE_PER_CPU(struct x86_cpu_accel_request, x86_cpu_accel_request) = {
 	},
 };
 
+/* Per-CPU request storage is permanent, so snapshot pinning is a no-op. */
+static bool x86_cpu_accel_owner_data_get(void *data)
+{
+	(void)data;
+	return true;
+}
+
+static void x86_cpu_accel_owner_data_put(void *data)
+{
+	(void)data;
+}
+
+static const struct mmu_owner_ops x86_cpu_accel_owner_ops = {
+	.get = x86_cpu_accel_owner_data_get,
+	.put = x86_cpu_accel_owner_data_put,
+};
+
 static DEFINE_PER_CPU(unsigned int, x86_cpu_accel_tlb_flush_count);
 static atomic_t x86_cpu_accel_active_count = ATOMIC_INIT(0);
 static atomic64_t x86_cpu_accel_tlb_flush_id = ATOMIC64_INIT(0);
@@ -142,7 +159,8 @@ static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets,
 	if (owner_mm) {
 		int ret = mmu_owner_register(owner_mm, &request->mmu_owner,
 					     request,
-					     request->owner_generation);
+					     request->owner_generation,
+					     &x86_cpu_accel_owner_ops);
 
 		if (ret) {
 			request->owner_mm = NULL;
@@ -395,6 +413,7 @@ static void x86_cpu_accel_tlb_reclaim_ack_list(struct list_head *acks)
 
 	list_for_each_entry_safe(ack, next, acks, link) {
 		list_del_init(&ack->link);
+		mmu_owner_snapshot_put(&ack->owner);
 		ack->ack(ack->data);
 	}
 }
@@ -846,14 +865,17 @@ int x86_cpu_accel_reclaim_register(struct x86_cpu_accel_tlb_reclaim_completion *
 			struct x86_cpu_accel_tlb_reclaim_ack *ack;
 
 			request = owners[j].data;
-			if (WARN_ON_ONCE(!request))
+			if (WARN_ON_ONCE(!request)) {
+				mmu_owner_snapshot_put(&owners[j]);
 				continue;
+			}
 			raw_spin_lock_irqsave(&request->lock, flags);
 			if (!atomic_read(&request->active) ||
 			    request->owner_mm != mm ||
 			    request->owner_generation != owners[j].generation ||
 			    request->pending_tlb_gen < tlb_gen) {
 				raw_spin_unlock_irqrestore(&request->lock, flags);
+				mmu_owner_snapshot_put(&owners[j]);
 				continue;
 			}
 
@@ -861,12 +883,19 @@ int x86_cpu_accel_reclaim_register(struct x86_cpu_accel_tlb_reclaim_completion *
 			    X86_CPU_ACCEL_TLB_RECLAIM_MAX_ACKS) {
 				comp->overflow = true;
 				raw_spin_unlock_irqrestore(&request->lock, flags);
+				mmu_owner_snapshot_put(&owners[j]);
+				for (j++; j < nr_owners; j++)
+					mmu_owner_snapshot_put(&owners[j]);
 				return -EOVERFLOW;
 			}
 
 			ack = &comp->acks[comp->nr_acks++];
 			INIT_LIST_HEAD(&ack->link);
 			ack->completion = comp;
+			ack->owner = owners[j];
+			owners[j].data = NULL;
+			owners[j].put = NULL;
+			owners[j].generation = 0;
 			ack->mm = mm;
 			ack->tlb_gen = tlb_gen;
 			ack->data = data;

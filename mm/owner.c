@@ -45,18 +45,21 @@ void mmu_owner_init(struct mmu_owner *owner)
 	INIT_LIST_HEAD(&owner->link);
 	owner->mm = NULL;
 	owner->data = NULL;
+	owner->ops = NULL;
 	owner->generation = 0;
 	owner->pending_tlb_gen = 0;
 }
 
 int mmu_owner_register(struct mm_struct *mm, struct mmu_owner *owner,
-		       void *data, u64 generation)
+		       void *data, u64 generation,
+		       const struct mmu_owner_ops *ops)
 {
 	unsigned long flags;
 	unsigned long owner_flags;
 	int ret = 0;
 
-	if (WARN_ON_ONCE(!mm || !owner))
+	if (WARN_ON_ONCE(!mm || !owner || !ops || !ops->get ||
+			 !ops->put))
 		return -EINVAL;
 	if (!mmu_owner_get_mm(mm))
 		return -ESRCH;
@@ -74,6 +77,7 @@ int mmu_owner_register(struct mm_struct *mm, struct mmu_owner *owner,
 		INIT_LIST_HEAD(&owner->link);
 		owner->mm = mm;
 		owner->data = data;
+		owner->ops = ops;
 		owner->generation = generation;
 		owner->pending_tlb_gen = 0;
 		list_add_tail(&owner->link, &mm->execution_owners);
@@ -103,6 +107,7 @@ u64 mmu_owner_unregister(struct mmu_owner *owner)
 	list_del_init(&owner->link);
 	owner->mm = NULL;
 	owner->data = NULL;
+	owner->ops = NULL;
 	owner->generation = 0;
 	owner->pending_tlb_gen = 0;
 	raw_spin_unlock_irqrestore(&mm->execution_owner_lock, flags);
@@ -156,6 +161,9 @@ int mmu_owner_snapshot(struct mm_struct *mm, u64 tlb_gen,
 	unsigned long flags;
 	int ret = 0;
 
+	if (!mm || (!snapshot && capacity))
+		return -EINVAL;
+
 	raw_spin_lock_irqsave(&mm->execution_owner_lock, flags);
 	list_for_each_entry(owner, &mm->execution_owners, link) {
 		if (owner->pending_tlb_gen < tlb_gen)
@@ -164,13 +172,39 @@ int mmu_owner_snapshot(struct mm_struct *mm, u64 tlb_gen,
 			ret = -EOVERFLOW;
 			break;
 		}
+		if (WARN_ON_ONCE(!owner->ops ||
+				 !owner->ops->get || !owner->ops->put) ||
+		    !owner->ops->get(owner->data)) {
+			ret = -EAGAIN;
+			break;
+		}
 		snapshot[nr].data = owner->data;
+		snapshot[nr].put = owner->ops->put;
 		snapshot[nr].generation = owner->generation;
 		nr++;
 	}
 	raw_spin_unlock_irqrestore(&mm->execution_owner_lock, flags);
 
-	return ret ?: nr;
+	if (ret) {
+		while (nr)
+			mmu_owner_snapshot_put(&snapshot[--nr]);
+		return ret;
+	}
+	return nr;
+}
+
+void mmu_owner_snapshot_put(struct mmu_owner_snapshot *snapshot)
+{
+	if (!snapshot)
+		return;
+
+	if (snapshot->put)
+		snapshot->put(snapshot->data);
+	else
+		WARN_ON_ONCE(snapshot->data);
+	snapshot->data = NULL;
+	snapshot->put = NULL;
+	snapshot->generation = 0;
 }
 
 void mmu_owner_update_begin(struct mm_struct *mm)

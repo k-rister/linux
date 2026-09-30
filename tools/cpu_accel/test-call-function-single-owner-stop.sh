@@ -19,12 +19,29 @@ dmesg_pid=
 run_pid=
 probe_rc=0
 run_rc=0
+mode=${1:-sync}
 
 fail()
 {
-	echo "cpu_accel single-call stop test: $* (logs: $outdir)" >&2
+	echo "cpu_accel $mode stop test: $* (logs: $outdir)" >&2
 	exit 1
 }
+
+case "$mode" in
+sync)
+	fire_parameter=fire
+	expected_count=1
+	require_deferred=0
+	;;
+async-reuse)
+	fire_parameter=fire_reuse
+	expected_count=3
+	require_deferred=1
+	;;
+*)
+	fail "usage: $0 [sync|async-reuse]"
+	;;
+esac
 
 cleanup()
 {
@@ -82,7 +99,7 @@ if grep -q "^${module_name} " /proc/modules; then
 fi
 insmod "$probe" "target_cpu=$target_cpu" || fail "could not load probe module"
 module_loaded=1
-fire_path="/sys/module/$module_name/parameters/fire"
+fire_path="/sys/module/$module_name/parameters/$fire_parameter"
 [ -w "$fire_path" ] || fail "probe fire parameter is unavailable"
 
 for event in owner_stop_request owner_exit_complete; do
@@ -119,7 +136,8 @@ done
 
 start_ns=$(date +%s%N)
 if timeout --kill-after=2s 8s taskset -c "$work_cpu" \
-	sh -c 'set -e; echo 1 >"$1"; echo callback_count=1' sh "$fire_path" \
+	sh -c 'set -e; echo 1 >"$1"; echo callback_count="$2"' sh \
+	"$fire_path" "$expected_count" \
 	>"$outdir/probe.log" 2>&1; then
 	probe_rc=0
 else
@@ -144,17 +162,21 @@ dmesg_pid=
 grep -Ei 'soft lockup|task .* blocked for more than|RCU.*stall|(^|[[:space:]])BUG:|Oops:|Kernel panic' \
 	"$outdir/dmesg-new.log" >"$outdir/kernel-errors.log" || true
 
-[ "$probe_rc" -eq 0 ] || fail "synchronous single-call probe failed or timed out"
+[ "$probe_rc" -eq 0 ] || fail "$mode probe failed or timed out"
 [ "$probe_elapsed_ms" -lt 2000 ] || \
-	fail "single-call waiter waited for timed owner escape (${probe_elapsed_ms} ms)"
+	fail "$mode waiter waited for timed owner escape (${probe_elapsed_ms} ms)"
 [ "$run_rc" -eq 0 ] || fail "bounded owner run failed"
 grep -q 'state=7 ' "$outdir/ctl.log" || fail "owner did not report ESCAPED"
 grep -q 'recovery_state=2' "$outdir/ctl.log" || \
 	fail "owner escape recovery did not complete"
 grep -q 'user_escape_count=1' "$outdir/ctl.log" || \
 	fail "owner escape count was not one"
-grep -q 'callback_count=1' "$outdir/probe.log" || \
-	fail "single-call callback did not complete"
+grep -q "callback_count=$expected_count" "$outdir/probe.log" || \
+	fail "$mode callbacks did not complete"
+if [ "$require_deferred" -eq 1 ]; then
+	grep -Eq 'arch_call_function_deferred=[1-9][0-9]*' "$outdir/ctl.log" || \
+		fail "first asynchronous callback was not deferred by the active owner"
+fi
 if ! awk -v target="$target_cpu" '
 function number(line, name, rest, pos)
 {
@@ -181,7 +203,7 @@ END {
 	exit !(stop_owner != "" && stop_line && exit_line > stop_line)
 }' "$outdir/trace.log"; then
 	cat "$outdir/trace.log" >&2
-	fail "trace did not pair single-call stop with the active owner exit"
+	fail "trace did not pair the call-function stop with the active owner exit"
 fi
 if grep -Eq 'LOST [0-9]+ EVENTS' "$outdir/trace.log"; then
 	fail "trace buffer reported lost events"
@@ -191,7 +213,7 @@ if [ -s "$outdir/kernel-errors.log" ]; then
 	fail "kernel log contains a lockup or error record"
 fi
 
-echo "PASS: synchronous single-call waiter stopped the registered owner"
+echo "PASS: $mode waiter stopped the registered owner"
 echo "probe_elapsed_ms=$probe_elapsed_ms"
 cat "$outdir/ctl.log" "$outdir/probe.log" "$outdir/trace.log"
 echo "logs: $outdir"

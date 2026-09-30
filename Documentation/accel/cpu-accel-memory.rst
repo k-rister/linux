@@ -301,6 +301,29 @@ back to synchronous flushing. Page-table releases and drains with immediate
 walker barriers remain synchronous. This leaves page-table RCU and GUP-fast
 barriers unchanged. The generic ``arch_tlbbatch_flush()`` path and migration
 callers also remain synchronous.
+
+The table-batch path has a separate release boundary. The x86 completion
+eligibility check rejects a gather with ``freed_tables`` set or a pending
+``tlb->batch``. A table batch is drained either when it reaches capacity or
+from ``tlb_flush_mmu_free()`` during a gather drain/finalization. The
+``tlb_table_invalidate()`` call ensures the ordinary synchronous TLB flush has
+run before the batch enters the existing RCU-free path; finalization can reuse
+the flush it performed just before ``tlb_flush_mmu_free()``. The RCU grace
+period then protects software page-table walkers. If table-batch allocation
+fails, invalidation still precedes the one-table fallback, which uses a
+per-table ``call_rcu()`` callback with ``CONFIG_PT_RECLAIM`` or otherwise calls
+``tlb_remove_table_sync_rcu()`` before immediate free. These page-table
+objects are not transferred to the owner-completion work item. A later
+leaf-only drain can use a new completion after an earlier full table batch has
+crossed its synchronous TLB barrier.
+
+The existing cross-mm unmap test can observe page-table PFN reuse, but it does
+not cover a table batch while an owner of that same ``mm`` is active. The
+same-mm hole-punch probes intentionally retain one COW PTE in each table, and
+the sealed worker's write-locked ``mm`` excludes a VMA-unmap operation during
+its active epoch. Testing that same-mm table-release case needs a safe way to
+request page-table teardown without weakening the VMA lock contract.
+
 Vmscan has a separate bounded path for eligible clean folios: it reserves
 completion storage before PTE removal and retains each folio until matching
 owners acknowledge.

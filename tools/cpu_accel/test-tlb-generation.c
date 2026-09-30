@@ -24,6 +24,7 @@
 #include <unistd.h>
 
 #define PTE_TABLE_SIZE (512UL * 4096)
+#define TABLE_BATCH_PROBE_PTE_TABLES 512UL
 #define MMU_GATHER_FINAL_PROBE_SIZE (8UL * 1024UL * 1024UL)
 #define MMU_GATHER_PROBE_SIZE (64UL * 1024UL * 1024UL)
 #define MMU_GATHER_OWNER_TIMEOUT_MS 12000
@@ -62,6 +63,53 @@ struct reschedule_worker_arg {
 static void touch_page(uintptr_t address)
 {
 	__asm__ __volatile__("movb $0x5a, (%0)" : : "r" (address) : "memory");
+}
+
+static int test_table_batch_unmap(void)
+{
+	size_t bytes = TABLE_BATCH_PROBE_PTE_TABLES * PTE_TABLE_SIZE;
+	size_t reserve_bytes = bytes + PTE_TABLE_SIZE;
+	void *reservation;
+	uintptr_t base;
+	size_t prefix, suffix;
+
+	reservation = mmap(NULL, reserve_bytes, PROT_READ | PROT_WRITE,
+			   MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+	if (reservation == MAP_FAILED)
+		return -1;
+
+	base = ((uintptr_t)reservation + PTE_TABLE_SIZE - 1) &
+		~(PTE_TABLE_SIZE - 1);
+	prefix = base - (uintptr_t)reservation;
+	suffix = reserve_bytes - prefix - bytes;
+	if (prefix && munmap(reservation, prefix)) {
+		int saved_errno = errno;
+
+		munmap(reservation, reserve_bytes);
+		errno = saved_errno;
+		return -1;
+	}
+	if (suffix && munmap((void *)(base + bytes), suffix)) {
+		int saved_errno = errno;
+
+		munmap((void *)base, bytes + suffix);
+		errno = saved_errno;
+		return -1;
+	}
+
+	if (madvise((void *)base, bytes, MADV_NOHUGEPAGE)) {
+		int saved_errno = errno;
+
+		munmap((void *)base, bytes);
+		errno = saved_errno;
+		return -1;
+	}
+
+	/* One 4 KiB leaf in each 2 MiB span allocates one PTE table. */
+	for (size_t offset = 0; offset < bytes; offset += PTE_TABLE_SIZE)
+		touch_page(base + offset);
+
+	return munmap((void *)base, bytes);
 }
 
 static unsigned char read_page(uintptr_t address)
@@ -1434,6 +1482,18 @@ int main(int argc, char **argv)
 			"accelerator owner exited before physical page reuse completed\n");
 		goto out_cli;
 	}
+	if (test_table_batch_unmap()) {
+		perror("munmap(512-table batch probe)");
+		goto out_cli;
+	}
+	if (waitpid(cli_pid, NULL, WNOHANG) == cli_pid ||
+	    !cli_owner_active() || !has_accel_worker_on_cpu(target_cpu)) {
+		fprintf(stderr,
+			"accelerator owner exited during the table-batch probe\n");
+		goto out_cli;
+	}
+	printf("PASS: 512-table mmu_gather unmap completed while the other-mm "
+	       "ring-3 owner remained active\n");
 	if (write(reschedule_pipe[1], "r", 1) != 1) {
 		perror("wake reschedule worker");
 		goto out_cli;

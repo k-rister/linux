@@ -1165,8 +1165,10 @@ The implementation checkpoints are:
     remain would allow premature I/O or page reclamation. Any path that omits
     an owner must retain affected pages until owner-exit acknowledgment or
     guarantee owner quiescence. The first bounded vmscan clean-folio completion
-    path is implemented; dirty/writeback, migration, generic batch, and
-    ``mmu_gather`` paths remain synchronous. The prototype's
+    path is implemented; dirty/writeback, migration, and generic batch remain
+    synchronous. ``mmu_gather`` now transfers eligible final and intermediate
+    leaf data-page batches to completion owners; page-table batches and
+    immediate walker barriers remain synchronous. The prototype's
     user NMI escape requires a driver/controller request and cannot serve as
     the generic MM quiesce path. The current prototype seals an exec-created
     worker ``mm`` with a complete VMA
@@ -1184,14 +1186,15 @@ The implementation checkpoints are:
     found no safe flush-hook-only extension for dirty reclaim or migration:
     each would need to transfer and resume its data operation after owner
     acknowledgement. Generic batched unmap also lacks the affected-page
-    disposition, while ``mmu_gather`` has intermediate data/table drains and
-    immediate GUP-fast and RCU lifetime barriers. Keep these paths synchronous
-    until MM core can reserve a completion before unmap and own the caller's
-    deferred operation or page disposition across every release point. The stable
-    owner-subscription API now provides post-reconcile acknowledgement for the
-    existing clean-folio prototype. The next distinct MM-core step is an
-    ``mmu_gather`` completion owner that transfers data/table batches at every
-    drain point while preserving its immediate walker barriers.
+    disposition. The stable owner-subscription API provides post-reconcile
+    acknowledgement for the clean-folio prototype, and ``mmu_gather`` uses it
+    for eligible leaf data-page batches. Table batches remain on the
+    synchronous TLB invalidation and existing RCU path. The remaining coverage
+    gap is same-mm table teardown while an owner is active: the sealed worker
+    holds ``mmap_lock`` for write, and the current same-mm hole-punch probe
+    retains a COW PTE in every table. Do not weaken the VMA lock contract just
+    to exercise that path; design a safe test operation before changing table
+    completion ownership.
     Dirty/writeback reclaim and migration remain synchronous until their data
     operations can also be transferred as post-ack continuations. A focused VM
     test unmaps a touched
@@ -1205,6 +1208,14 @@ The implementation checkpoints are:
     holds the reused PFN. PTE-page reuse is optional because
     ``/proc/kpageflags`` may be unavailable or the bounded allocation probes
     may not recycle a table page.
+    The full ``test-tlb-generation`` run also unmaps a 1 GiB-aligned,
+    no-hugepage mapping with one touched page in each of 512 2 MiB spans while
+    the ring-3 owner of another ``mm`` is active. This exceeds the x86 table
+    batch capacity, exercising both the at-capacity flush and the final
+    remainder; the test checks that unmap returns while the owner remains
+    active. This covers the cross-mm generation-filter path, not same-mm table
+    deferral. Table batches remain synchronous with TLB invalidation and retain
+    the existing RCU lifetime for software page-table walkers.
     The harness now includes a second owner run for reclaim completion: it
     writes and fsyncs a one-page regular file, keeps a read-only alias in the
     test controller's ``mm``, and starts a ring-3 worker that touches the

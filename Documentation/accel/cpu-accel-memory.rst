@@ -1190,11 +1190,14 @@ The implementation checkpoints are:
     acknowledgement for the clean-folio prototype, and ``mmu_gather`` uses it
     for eligible leaf data-page batches. Table batches remain on the
     synchronous TLB invalidation and existing RCU path. The remaining coverage
-    gap is same-mm table teardown while an owner is active: the sealed worker
-    holds ``mmap_lock`` for write, and the current same-mm hole-punch probe
-    retains a COW PTE in every table. Do not weaken the VMA lock contract just
-    to exercise that path; design a safe test operation before changing table
-    completion ownership.
+    gap is same-mm table teardown while an owner is active. The sealed worker
+    holds ``mmap_lock`` for write; VMA teardown cannot run during that epoch.
+    File hole-punch invalidation can zap file-backed PTEs without removing the
+    VMA, but ``unmap_mapping_range_tree()`` does not call ``free_pgtables()``.
+    Dropping the test's COW PTEs would therefore not exercise table release.
+    Reaching ``free_pgtables()`` requires a safe VMA teardown path, so do not
+    weaken the VMA lock contract just to exercise it; resolve the owner/MM-core
+    lifecycle first.
     Dirty/writeback reclaim and migration remain synchronous until their data
     operations can also be transferred as post-ack continuations. A focused VM
     test unmaps a touched

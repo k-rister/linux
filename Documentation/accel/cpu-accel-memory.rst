@@ -1272,7 +1272,8 @@ The implementation checkpoints are:
     ``MADV_PAGEOUT`` through the test-controller alias must stop the registered
     owner, reclaim the page, and preserve its contents on refault. This
     exercises the current clean-file
-    page vmscan completion path; the focused VM run is still pending.
+    page vmscan completion path; at this point in the audit the focused VM run
+    was still pending. Its later validation is recorded below.
     The focused test also forks a page holder and writes the parent's
     write-protected mapping while the ring-3 owner runs in another ``mm``.
     It checks that the holder still reads the original page while the parent
@@ -1499,3 +1500,20 @@ The implementation checkpoints are:
     numdummies=0``. The trace paired the stop request and owner exit with the
     completing global TLB flush, and the owner recovered without retries.
     Neither regression run produced new kernel alert records.
+
+    The generic synchronous call-function wait path now reserves remote target
+    CPUs before queueing work and requests a registered owner stop after the
+    callback is queued. On ``7.3.0-rc3-accel-tlbfix-00635-g26aec819ea93-dirty``,
+    ``test-call-function-owner-stop.sh`` passed with prewarmed seccomp/JIT
+    workers: one deferred call-function callback was observed, the matching
+    owner stopped and exited, and the workers completed in 504 ms before the
+    timed escape. ``test-tlb-flush.sh --modprobe dummy numdummies=0`` also
+    passed with the stop, owner-exit, and matching global-flush completion
+    events. The single-call probe passed both modes on the same kernel: the
+    synchronous call completed one callback in 4 ms; the asynchronous CSD
+    reuse case completed all three callbacks in 55 ms, reported one deferred
+    callback, and paired the stop request with owner exit. None of these runs
+    produced a filtered lockup or kernel-error record. These results exercise
+    the audited waits and callback replay; they do not bound full-flush waits
+    or reproduce the earlier intermittent soft lockup, so the synchronous
+    completion and known-good boot fallback remain in place.

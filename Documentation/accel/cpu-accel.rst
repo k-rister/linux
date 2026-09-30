@@ -253,16 +253,19 @@ to be recoverable without reverting to the known-good kernel.  This lifecycle
 is the first step toward that model.  ABI version 15 added selective
 reschedule- and call-function-IPI deferral and replay while retaining the
 ABI12 recovery capability and debug-only dropped-NMI fixture. ABI 16 adds TLB
-flush target telemetry, but neither ABI defines complete TLB ownership or
-suppression. A controller may retry after
+target telemetry, and implementation checkpoint 10 now defines the x86
+address-space/TLB ownership policy, including completion before eligible
+page reuse and conservative synchronous paths for other cases. Same-mm range
+flushes and page-table release remain synchronous; runtime ``INVLPGB``
+validation awaits AMD EPYC 7003-or-later hardware. The current roadmap focus is
+Phase 8 adversarial isolation validation. A controller may retry after
 ``TIMEOUT`` or ``FAILED``; it must not treat those states as a return to Linux.
 The proposed protected address-space and shared-memory contract is documented
 in :doc:`cpu-accel-memory`; the internal region/epoch model and the first
 prefaulted shared entry are now in place.  The x86 cooperative ring-3 image is
 the first protected-address-space proof, and the ABI 12 NMI escape is the
-first x86 recovery experiment.  The common recovery contract and direct APIC
-entry prototype are now in place; the next implementation step is to implement
-the address-space/TLB ownership policy specified in :doc:`cpu-accel-memory`
-before adding IOMMU-backed memory and networking.
+first x86 recovery experiment. The common recovery contract, direct APIC entry,
+and checkpoint 10 TLB policy are in place for the tested x86 prototype. IOMMU-
+backed memory and networking remain gated on the adversarial validation phase.
 A stronger latency claim must wait for those controls and for a defined
 recovery contract.

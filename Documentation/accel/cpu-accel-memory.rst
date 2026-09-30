@@ -1180,13 +1180,15 @@ The implementation checkpoints are:
    batches that overlap direct CPU ownership across the x86 IPI and INVLPGB
    paths. This is target telemetry; it does not track pending generations or
    prove that invalidations completed.
-10. [in progress for x86 prototype] Implement the address-space/TLB ownership
+10. [completed for the x86 prototype; INVLPGB hardware validation deferred]
+    Implement the address-space/TLB ownership
     policy above. The current implementation records per-owner invalidation
     generations, reconciles the local TLB before releasing pinned image pages,
     filters mm-scoped flushes only for ring-3 owners in a different ``mm``;
     same-``mm`` range flushes request owner stop and synchronously wait for
-    reconciliation. Filtering same-``mm`` owners requires the pending
-    ``mmu_gather`` completion-ownership work. Flush targets remain reserved
+    reconciliation. Eligible ``mmu_gather`` leaf-page batches transfer page
+    lifetime to owner-completion work; page-table batches remain synchronous.
+    Flush targets remain reserved
     against new ownership. Kernel-address-range flushes use
     INVLPGB plus system-wide completion when available with no active owner;
     when an owner is active, kernel-only IPIs wait for exit and preserve user
@@ -1224,17 +1226,22 @@ The implementation checkpoints are:
     disposition. The stable owner-subscription API provides post-reconcile
     acknowledgement for the clean-folio prototype, and ``mmu_gather`` uses it
     for eligible leaf data-page batches. Table batches remain on the
-    synchronous TLB invalidation and existing RCU path. The remaining coverage
-    gap is same-mm table teardown while an owner is active. The sealed worker
-    holds ``mmap_lock`` for write; VMA teardown cannot run during that epoch.
-    File hole-punch invalidation can zap file-backed PTEs without removing the
-    VMA, but ``unmap_mapping_range_tree()`` does not call ``free_pgtables()``.
-    Dropping the test's COW PTEs would therefore not exercise table release.
-    Reaching ``free_pgtables()`` requires a safe VMA teardown path, so do not
-    weaken the VMA lock contract just to exercise it; resolve the owner/MM-core
-    lifecycle first.
+    synchronous TLB invalidation and existing RCU path. Same-mm VMA teardown
+    cannot overlap an active owner under the present sealing contract because
+    the worker holds ``mmap_lock`` for write. File hole-punch invalidation can
+    zap file-backed PTEs without removing the VMA, but
+    ``unmap_mapping_range_tree()`` does not call ``free_pgtables()``. Therefore
+    a same-mm table-free probe cannot exercise active-owner table release
+    without first changing the MM lifecycle contract. This is not a missing
+    correctness path in the current policy: page-table releases stay
+    synchronous, and VMA teardown waits until owner exit. Any future design
+    that permits same-mm VMA teardown during ownership must define MM-core
+    owner lifetime and page-table completion before it can defer table release.
     Dirty/writeback reclaim and migration remain synchronous until their data
-    operations can also be transferred as post-ack continuations. A focused VM
+    operations can also be transferred as post-ack continuations. Runtime
+    ``INVLPGB`` validation remains deferred until AMD EPYC 7003-or-later
+    hardware is available. This completes checkpoint 10 for the tested x86
+    prototype; Phase 8 adversarial isolation validation continues. A focused VM
     test unmaps a touched
     2 MiB mapping from another ``mm`` while the target CPU is ring-3 owned,
     then uses privileged ``/proc/self/pagemap`` and ``/proc/kpageflags``

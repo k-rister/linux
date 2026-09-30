@@ -19,13 +19,18 @@ test-tlb-generation: test-tlb-generation.o
 test-tlb-cow-churn: test-tlb-cow-churn.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
+test-seccomp-jit-churn: test-seccomp-jit-churn.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
 cpu-accelctl.o: cpu_accel_user_image.h
 cpu-accelctl.o libcpu_accel.o: cpu_accel.h ../../include/uapi/linux/cpu_accel.h
 test-tlb-generation.o: ../../include/uapi/linux/cpu_accel.h
+test-seccomp-jit-churn.o: CPPFLAGS := -D_GNU_SOURCE
 
 clean:
 	rm -f cpu-accelctl test-tlb-generation test-tlb-generation.o \
 		test-tlb-cow-churn test-tlb-cow-churn.o \
+		test-seccomp-jit-churn test-seccomp-jit-churn.o \
 		cpu-accelctl.o libcpu_accel.o
 
 .PHONY: all clean test

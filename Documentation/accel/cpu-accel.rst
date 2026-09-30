@@ -228,6 +228,14 @@ The companion SDK in ``tools/cpu_accel`` wraps the device and
   sudo tools/cpu_accel/cpu-accelctl run --cpu 1 --duration-ms 100 \
     --period-us 1000 --quarantine-irqs
 
+The focused function-graph teardown test can also overlap BPF JIT/seccomp
+filter allocation and teardown with an active owner. Build the bounded churn
+helper and set ``CPU_ACCEL_SECCOMP_CHURN`` to enable this additional workload::
+
+  make -C tools/cpu_accel test-seccomp-jit-churn
+  sudo env CPU_ACCEL_SECCOMP_CHURN=tools/cpu_accel/test-seccomp-jit-churn \
+    CPU_ACCEL_SECCOMP_CPUS=3-7 sh tools/cpu_accel/test-ftrace-maintenance.sh
+
 The tool prints the shared result, including the maximum observed lateness,
 selected workload, work size, completed work iterations, and lifecycle
 telemetry.  The generic interrupt and context-switch deltas

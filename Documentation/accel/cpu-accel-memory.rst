@@ -1446,3 +1446,12 @@ The implementation checkpoints are:
     ``unregister_ftrace_graph()`` maintenance-gate path from the reported
     blocked ``rmdir`` stack. It is a focused overlap test, not a reproduction
     of the earlier global CPA lockup.
+
+    The same test was then run with four seccomp-filter workers on CPUs 3–7
+    while BPF JIT was enabled. Over eight seconds they installed and released
+    88,499 filters as the test removed the function-graph instance and stopped
+    the active owner. The owner again exited through the stop callback with
+    ``state=7`` and ``recovery_state=2``; no controller fallback, kernel alert,
+    or leftover tracefs instance was observed. This exercises concurrent
+    seccomp BPF JIT allocation against ftrace teardown, but still does not
+    reproduce the reported lockup.

@@ -40,6 +40,7 @@ struct x86_cpu_accel_request {
 	atomic64_t reschedule_deferred;
 	atomic_t call_function_pending;
 	atomic64_t call_function_deferred;
+	unsigned int call_function_waiters;
 	atomic64_t tlb_shootdown_targets;
 	struct mm_struct *owner_mm;
 	struct mmu_owner mmu_owner;
@@ -151,6 +152,7 @@ static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets,
 		request->mmu_owner_initialized = true;
 	}
 	if (atomic_read(&request->active) || request->exiting ||
+	    request->call_function_waiters ||
 	    atomic_read(&request->stop_inflight)) {
 		raw_spin_unlock_irqrestore(&request->lock, request_flags);
 		raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock,
@@ -305,6 +307,61 @@ x86_cpu_accel_request_stop_owner_gen(unsigned int cpu, u64 owner_generation)
 void x86_cpu_accel_request_stop_owner(unsigned int cpu)
 {
 	x86_cpu_accel_request_stop_owner_gen(cpu, 0);
+}
+
+void arch_smp_call_function_wait_begin(int cpu)
+{
+	struct x86_cpu_accel_request *request;
+	unsigned long flags;
+
+	if (cpu < 0 || (unsigned int)cpu >= nr_cpu_ids ||
+	    cpu == raw_smp_processor_id())
+		return;
+
+	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
+	raw_spin_lock_irqsave(&request->lock, flags);
+	request->call_function_waiters++;
+	raw_spin_unlock_irqrestore(&request->lock, flags);
+}
+
+void arch_smp_call_function_wait_stop(int cpu)
+{
+	struct x86_cpu_accel_request *request;
+	unsigned long flags;
+	u64 owner_generation = 0;
+
+	if (cpu < 0 || (unsigned int)cpu >= nr_cpu_ids ||
+	    cpu == raw_smp_processor_id())
+		return;
+
+	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
+	raw_spin_lock_irqsave(&request->lock, flags);
+	if (request->call_function_waiters && atomic_read(&request->active))
+		owner_generation = request->owner_generation;
+	raw_spin_unlock_irqrestore(&request->lock, flags);
+
+	/* Request owner exit when active ownership can block a waiter. */
+	if (owner_generation)
+		x86_cpu_accel_request_stop_owner_gen(cpu, owner_generation);
+}
+
+void arch_smp_call_function_wait_end(int cpu)
+{
+	struct x86_cpu_accel_request *request;
+	unsigned long flags;
+
+	if (cpu < 0 || (unsigned int)cpu >= nr_cpu_ids ||
+	    cpu == raw_smp_processor_id())
+		return;
+
+	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
+	raw_spin_lock_irqsave(&request->lock, flags);
+	if (WARN_ON_ONCE(!request->call_function_waiters)) {
+		raw_spin_unlock_irqrestore(&request->lock, flags);
+		return;
+	}
+	request->call_function_waiters--;
+	raw_spin_unlock_irqrestore(&request->lock, flags);
 }
 
 static u64 x86_cpu_accel_owner_exit(unsigned int cpu,
@@ -725,7 +782,6 @@ bool x86_cpu_accel_defer_call_function(unsigned int cpu)
 {
 	struct x86_cpu_accel_request *request;
 	unsigned long flags;
-	u64 owner_generation = 0;
 
 	if (cpu >= nr_cpu_ids)
 		return false;
@@ -733,20 +789,9 @@ bool x86_cpu_accel_defer_call_function(unsigned int cpu)
 	raw_spin_lock_irqsave(&request->lock, flags);
 	if (!atomic_read(&request->active))
 		goto out;
-	owner_generation = request->owner_generation;
 	atomic64_inc(&request->call_function_deferred);
 	atomic_set(&request->call_function_pending, 1);
 	raw_spin_unlock_irqrestore(&request->lock, flags);
-	/*
-	 * A synchronous call-function sender waits for this callback. Deferring
-	 * its IPI without asking a registered owner to leave can pin the sender
-	 * for the entire ownership interval (for example, BPF's IBPB flush).
-	 * Do this only on the sender side. The receiver-side check in the IPI
-	 * handler is defensive against an entry race; sending the owner's NMI
-	 * escape from that handler could hit kernel mode before ring-3 entry.
-	 */
-	if (cpu != raw_smp_processor_id())
-		x86_cpu_accel_request_stop_owner_gen(cpu, owner_generation);
 	return true;
 
 out:

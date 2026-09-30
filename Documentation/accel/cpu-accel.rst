@@ -85,11 +85,15 @@ IPIs, TLB shootdowns, local timer interrupts, NMIs, and other interrupt paths
 are covered independently.  The
 ``CPU_ACCEL_BACKEND_FLAG_CALL_FUNCTION_DEFER`` bit means that call-function
 IPIs are deferred and replayed after exit; ``arch_call_function_deferred``
-reports how many were deferred.  TLB shootdowns and other interrupt paths are
-not covered by either capability as an explicit policy.  On the native x86
+reports how many were deferred. Asynchronous callbacks remain deferred without
+stopping the owner. A synchronous waiter reserves the target against new
+ownership before queueing its callback, then asks an active registered owner
+to stop before it waits. This also covers a caller blocked while reusing a CSD
+for earlier asynchronous work. TLB shootdowns and other interrupt paths are
+not covered by either capability as an explicit policy. On the native x86
 path, remote TLB flush callbacks use call-function work, so this generic
 deferral also delays those callbacks until after exit; synchronous flush
-senders can wait for the accelerator to return.  ABI 16's
+senders can request the active owner to stop. ABI 16's
 ``arch_tlb_shootdown_targets`` counts native x86 flush batches that targeted
 the CPU while accelerator ownership was active, including the ring-3
 process-mm window through image unlock. For that worker, native x86 hooks also

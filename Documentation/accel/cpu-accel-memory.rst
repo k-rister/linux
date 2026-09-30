@@ -1173,9 +1173,13 @@ The implementation checkpoints are:
 8. [completed for x86 prototype] Add ABI 15 selective call-function-IPI
    ownership.  Remote call-function requests remain queued, are deferred and
    counted while the direct backend owns the CPU, then are replayed after
-   exit. On native x86 this also delays TLB flush callbacks carried by
-   call-function work, but does not define TLB ownership or cover other
-   interrupt sources.
+   exit. Asynchronous callbacks do not by themselves force owner exit.
+   Synchronous waiters reserve the target before queueing and ask a registered
+   owner to stop after queueing, then hold that reservation until callback
+   completion. A caller blocked while reusing a CSD for earlier asynchronous
+   work follows the same stop path. On native x86 this also delays TLB flush
+   callbacks carried by call-function work, but does not define TLB ownership
+   or cover other interrupt sources.
 9. [completed for x86 prototype] Add ABI 16 accounting for TLB flush target
    batches that overlap direct CPU ownership across the x86 IPI and INVLPGB
    paths. This is target telemetry; it does not track pending generations or

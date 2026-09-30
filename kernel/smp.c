@@ -52,6 +52,21 @@ static DEFINE_PER_CPU(atomic_t, trigger_backtrace) = ATOMIC_INIT(1);
 
 static void __flush_smp_call_function_queue(bool warn_cpu_offline);
 
+void __weak arch_smp_call_function_wait_begin(int cpu)
+{
+	(void)cpu;
+}
+
+void __weak arch_smp_call_function_wait_stop(int cpu)
+{
+	(void)cpu;
+}
+
+void __weak arch_smp_call_function_wait_end(int cpu)
+{
+	(void)cpu;
+}
+
 int smpcfd_prepare_cpu(unsigned int cpu)
 {
 	struct call_function_data *cfd = &per_cpu(cfd_data, cpu);
@@ -377,8 +392,22 @@ static __always_inline void csd_lock_wait(call_single_data_t *csd)
 }
 #endif
 
-static __always_inline void csd_lock(call_single_data_t *csd)
+static __always_inline void csd_lock(call_single_data_t *csd, int cpu,
+				     bool wait_registered)
 {
+	bool wait = READ_ONCE(csd->node.u_flags) & CSD_FLAG_LOCK;
+
+	/*
+	 * Reusing the per-CPU CSD can itself wait for an earlier asynchronous
+	 * callback. Let the architecture stop an owner only while a caller is
+	 * actually blocked on that callback.
+	 */
+	if (wait) {
+		if (!wait_registered)
+			arch_smp_call_function_wait_begin(cpu);
+		arch_smp_call_function_wait_stop(cpu);
+	}
+
 	if (IS_ENABLED(CONFIG_CSD_LOCK_WAIT_DEBUG) &&
 	    static_branch_unlikely(&csdlock_debug_enabled)) {
 
@@ -396,6 +425,9 @@ static __always_inline void csd_lock(call_single_data_t *csd)
 		csd_lock_wait(csd);
 		csd->node.u_flags |= CSD_FLAG_LOCK;
 	}
+
+	if (wait && !wait_registered)
+		arch_smp_call_function_wait_end(cpu);
 
 	/*
 	 * prevent CPU from reordering the above assignment
@@ -690,6 +722,7 @@ static int __smp_call_function_single(int cpu, smp_call_func_t func,
 	};
 	int this_cpu;
 	int err;
+	bool accel_wait = false;
 
 	/*
 	 * Prevent preemption and reschedule on another CPU, as well as CPU
@@ -727,7 +760,7 @@ static int __smp_call_function_single(int cpu, smp_call_func_t func,
 	csd = &csd_stack;
 	if (!wait) {
 		csd = get_single_csd_data(cpu);
-		csd_lock(csd);
+		csd_lock(csd, cpu, false);
 	}
 
 	csd->func = func;
@@ -736,8 +769,14 @@ static int __smp_call_function_single(int cpu, smp_call_func_t func,
 	csd->node.src = this_cpu;
 	csd->node.dst = cpu;
 #endif
+	if (wait && cpu != this_cpu && (unsigned int)cpu < nr_cpu_ids) {
+		arch_smp_call_function_wait_begin(cpu);
+		accel_wait = true;
+	}
 
 	err = generic_exec_single(cpu, csd);
+	if (accel_wait && !err)
+		arch_smp_call_function_wait_stop(cpu);
 
 	/*
 	 * @csd is stack-allocated when @wait is true. No concurrent access
@@ -746,8 +785,11 @@ static int __smp_call_function_single(int cpu, smp_call_func_t func,
 	 */
 	put_cpu();
 
-	if (wait)
+	if (wait) {
 		csd_lock_wait(csd);
+		if (accel_wait)
+			arch_smp_call_function_wait_end(cpu);
+	}
 
 	return err;
 }
@@ -941,7 +983,9 @@ static void smp_call_function_many_cond(const struct cpumask *mask,
 			/* Work is enqueued on a remote CPU. */
 			run_remote = true;
 
-			csd_lock(csd);
+			if (wait)
+				arch_smp_call_function_wait_begin(cpu);
+			csd_lock(csd, cpu, wait);
 			if (wait)
 				csd->node.u_flags |= CSD_TYPE_SYNC;
 			csd->func = func;
@@ -972,6 +1016,11 @@ static void smp_call_function_many_cond(const struct cpumask *mask,
 			send_call_function_single_ipi(last_cpu);
 		else if (likely(nr_cpus > 1))
 			send_call_function_ipi_mask(cfd->cpumask_ipi);
+
+		if (wait) {
+			for_each_cpu(cpu, cpumask)
+				arch_smp_call_function_wait_stop(cpu);
+		}
 	}
 
 	/* Check if we need local execution. */
@@ -1000,6 +1049,7 @@ static void smp_call_function_many_cond(const struct cpumask *mask,
 
 			csd = per_cpu_ptr(cfd->csd, cpu);
 			csd_lock_wait(csd);
+			arch_smp_call_function_wait_end(cpu);
 		}
 	}
 }

@@ -139,6 +139,8 @@ grep -Eq 'arch_call_function_deferred=[1-9][0-9]*' "$outdir/ctl.log" || \
 	fail "the active owner did not defer a call-function IPI"
 [ "$helper_elapsed_ms" -lt 2000 ] || \
 	fail "seccomp/JIT caller waited for the timed owner escape (${helper_elapsed_ms} ms)"
+# The x86 hook tail-calls the stop helper, so the trace names this generic
+# synchronous call-function path as the caller.
 if ! awk -v target="$target_cpu" '
 function number(line, name, rest, pos)
 {
@@ -151,7 +153,7 @@ function number(line, name, rest, pos)
 }
 /owner_stop_request:/ {
 	if (number($0, "cpu") == target && index($0, "stop_cb=1") &&
-	    index($0, "sent=1") && index($0, "caller=x86_cpu_accel_defer_call_function")) {
+	    index($0, "sent=1") && index($0, "caller=smp_call_function_many_cond")) {
 		stop_owner = number($0, "owner")
 		stop_line = NR
 	}

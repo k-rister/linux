@@ -236,6 +236,24 @@ helper and set ``CPU_ACCEL_SECCOMP_CHURN`` to enable this additional workload::
   sudo env CPU_ACCEL_SECCOMP_CHURN=tools/cpu_accel/test-seccomp-jit-churn \
     CPU_ACCEL_SECCOMP_CPUS=3-7 sh tools/cpu_accel/test-ftrace-maintenance.sh
 
+The global TLB-flush test can load a module already installed for the running
+kernel. This is useful when a matching probe module cannot be built locally.
+Choose a module that is safe to load and unload; module parameters are passed
+after the module name::
+
+  sudo env CPU_ACCELCTL=/tmp/cpu-accelctl \
+    sh tools/cpu_accel/test-tlb-flush.sh --modprobe dummy numdummies=0
+
+Without ``--modprobe``, the test continues to load its matching no-op probe
+module with ``insmod``.
+
+To validate synchronous call-function IPIs during ring-3 ownership, run the
+prewarmed seccomp/JIT overlap test with a small two-CPU worker set::
+
+  sudo env CPU_ACCELCTL=/tmp/cpu-accelctl \
+    CPU_ACCEL_SECCOMP_CHURN=/tmp/test-seccomp-jit-churn \
+    sh tools/cpu_accel/test-call-function-owner-stop.sh
+
 The tool prints the shared result, including the maximum observed lateness,
 selected workload, work size, completed work iterations, and lifecycle
 telemetry.  The generic interrupt and context-switch deltas

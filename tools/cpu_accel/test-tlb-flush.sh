@@ -6,6 +6,8 @@ set -eu
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 tool=${CPU_ACCELCTL:-$script_dir/cpu-accelctl}
 probe=${CPU_ACCEL_TLB_FLUSH_PROBE:-$script_dir/tlb-flush-probe/cpu_accel_tlb_flush_probe.ko}
+load_mode=insmod
+module_spec=
 target_cpu=${CPU_ACCEL_CPU:-2}
 escape_ms=${CPU_ACCEL_ESCAPE_AFTER_MS:-3000}
 cow_churn_ms=${CPU_ACCEL_COW_CHURN_MS:-0}
@@ -15,6 +17,7 @@ trace_root=${TRACEFS:-/sys/kernel/tracing}
 instance="$trace_root/instances/cpu_accel_tlb_flush_$$"
 module_name=
 trace_pid=
+dmesg_pid=
 run_pid=
 churn_pid=
 module_loaded=0
@@ -28,6 +31,18 @@ fail()
 	echo "cpu_accel TLB flush test: $* (logs: $outdir)" >&2
 	exit 1
 }
+
+case "${1:-}" in
+--modprobe)
+	shift
+	[ "$#" -gt 0 ] || fail "usage: $0 [--modprobe MODULE [MODULE_ARGS...]]"
+	load_mode=modprobe
+	module_spec=$1
+	shift
+	;;
+'') ;;
+*) fail "usage: $0 [--modprobe MODULE [MODULE_ARGS...]]" ;;
+esac
 
 cleanup()
 {
@@ -45,12 +60,21 @@ cleanup()
 		wait "$trace_pid" 2>/dev/null || true
 		trace_pid=
 	fi
+	if [ -n "$dmesg_pid" ]; then
+		kill -TERM "$dmesg_pid" 2>/dev/null || true
+		wait "$dmesg_pid" 2>/dev/null || true
+		dmesg_pid=
+	fi
 	if [ -d "$instance" ]; then
 		echo 0 >"$instance/tracing_on" 2>/dev/null || true
 		rmdir "$instance" 2>/dev/null || true
 	fi
 	if [ "$module_loaded" -eq 1 ]; then
-		rmmod "$module_name" 2>/dev/null || true
+		if [ "$load_mode" = modprobe ]; then
+			modprobe -r "$module_spec" 2>/dev/null || true
+		else
+			rmmod "$module_name" 2>/dev/null || true
+		fi
 	fi
 }
 trap cleanup EXIT
@@ -59,7 +83,11 @@ trap 'exit 1' HUP INT TERM
 [ "$(id -u)" -eq 0 ] || fail "run as root"
 [ -x "$tool" ] || fail "cpu-accelctl is not executable: $tool"
 [ -c /dev/cpu_accel ] || fail "/dev/cpu_accel is unavailable"
-[ -f "$probe" ] || fail "flush probe module is missing: $probe"
+if [ "$load_mode" = insmod ]; then
+	[ -f "$probe" ] || fail "flush probe module is missing: $probe"
+else
+	command -v modprobe >/dev/null 2>&1 || fail "modprobe is unavailable"
+fi
 [ -d "$trace_root/events/cpu_accel" ] || fail "cpu_accel tracepoints are unavailable"
 [ -d "$trace_root/instances" ] || fail "tracefs instances are unavailable"
 case "$target_cpu" in
@@ -88,10 +116,18 @@ if [ "$cow_churn_ms" -gt 0 ]; then
 		fail "COW churn helper is not executable: $cow_churn_tool"
 fi
 
-module_name=$(modinfo -F name "$probe")
-case "$(modinfo -F vermagic "$probe")" in
+if [ "$load_mode" = modprobe ]; then
+	module_name=$(modinfo -F name "$module_spec") || \
+		fail "cannot inspect module: $module_spec"
+	module_vermagic=$(modinfo -F vermagic "$module_spec") || \
+		fail "cannot read module vermagic: $module_spec"
+else
+	module_name=$(modinfo -F name "$probe")
+	module_vermagic=$(modinfo -F vermagic "$probe")
+fi
+case "$module_vermagic" in
 	"$(uname -r) "*) ;;
-	*) fail "probe vermagic does not match running kernel $(uname -r)" ;;
+	*) fail "module vermagic does not match running kernel $(uname -r)" ;;
 esac
 if grep -q "^${module_name} " /proc/modules; then
 	fail "probe module is already loaded: $module_name"
@@ -118,6 +154,8 @@ for event in \
 	fi
 done
 
+dmesg --follow-new >"$outdir/dmesg-new.log" 2>&1 &
+dmesg_pid=$!
 cat "$instance/trace_pipe" >"$outdir/trace.log" &
 trace_pid=$!
 echo 1 >"$instance/tracing_on"
@@ -135,7 +173,15 @@ fi
 run_pid=$!
 sleep 0.5
 
-if insmod "$probe" >"$outdir/insmod.log" 2>&1; then
+if [ "$load_mode" = modprobe ]; then
+	if timeout --kill-after=2s 12s modprobe "$module_spec" "$@" \
+		>"$outdir/modprobe.log" 2>&1; then
+		module_loaded=1
+	else
+		insmod_rc=$?
+	fi
+elif timeout --kill-after=2s 12s insmod "$probe" \
+	>"$outdir/insmod.log" 2>&1; then
 	module_loaded=1
 else
 	insmod_rc=$?
@@ -160,12 +206,20 @@ kill -TERM "$trace_pid" 2>/dev/null || true
 wait "$trace_pid" 2>/dev/null || true
 trace_pid=
 if [ "$module_loaded" -eq 1 ]; then
-	rmmod "$module_name"
+	if [ "$load_mode" = modprobe ]; then
+		modprobe -r "$module_spec"
+	else
+		rmmod "$module_name"
+	fi
 	module_loaded=0
 fi
-dmesg | grep -E 'soft lockup|RCU.*stall|BUG:|Oops:' >"$outdir/kernel-errors.log" || true
+kill -TERM "$dmesg_pid" 2>/dev/null || true
+wait "$dmesg_pid" 2>/dev/null || true
+dmesg_pid=
+grep -Ei 'soft lockup|task .* blocked for more than|RCU.*stall|(^|[[:space:]])BUG:|Oops:|Kernel panic' \
+	"$outdir/dmesg-new.log" >"$outdir/kernel-errors.log" || true
 
-[ "$insmod_rc" -eq 0 ] || fail "probe module load failed"
+[ "$insmod_rc" -eq 0 ] || fail "test module load failed"
 [ "$run_rc" -eq 0 ] || fail "bounded owner run failed"
 [ "$churn_rc" -eq 0 ] || fail "bounded fork/COW churn failed"
 if [ "$cow_churn_ms" -gt 0 ]; then

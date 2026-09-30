@@ -725,6 +725,7 @@ bool x86_cpu_accel_defer_call_function(unsigned int cpu)
 {
 	struct x86_cpu_accel_request *request;
 	unsigned long flags;
+	u64 owner_generation = 0;
 
 	if (cpu >= nr_cpu_ids)
 		return false;
@@ -732,9 +733,20 @@ bool x86_cpu_accel_defer_call_function(unsigned int cpu)
 	raw_spin_lock_irqsave(&request->lock, flags);
 	if (!atomic_read(&request->active))
 		goto out;
+	owner_generation = request->owner_generation;
 	atomic64_inc(&request->call_function_deferred);
 	atomic_set(&request->call_function_pending, 1);
 	raw_spin_unlock_irqrestore(&request->lock, flags);
+	/*
+	 * A synchronous call-function sender waits for this callback. Deferring
+	 * its IPI without asking a registered owner to leave can pin the sender
+	 * for the entire ownership interval (for example, BPF's IBPB flush).
+	 * Do this only on the sender side. The receiver-side check in the IPI
+	 * handler is defensive against an entry race; sending the owner's NMI
+	 * escape from that handler could hit kernel mode before ring-3 entry.
+	 */
+	if (cpu != raw_smp_processor_id())
+		x86_cpu_accel_request_stop_owner_gen(cpu, owner_generation);
 	return true;
 
 out:

@@ -1455,3 +1455,43 @@ The implementation checkpoints are:
     or leftover tracefs instance was observed. This exercises concurrent
     seccomp BPF JIT allocation against ftrace teardown, but still does not
     reproduce the reported lockup.
+
+    On ``7.3.0-rc3-accel-tlbfix-00625-gd9a0f6424ea0``, a trace-assisted run
+    loaded and unloaded the installed ``dummy.ko`` with ``numdummies=0`` while
+    a ring-3 owner was active. The function-graph trace captured
+    ``move_module()`` -> ``execmem_alloc_rw()`` -> ``set_memory_nx()`` ->
+    ``flush_tlb_all()``. The full-flush path requested the stop of CPU2 owner
+    11 from ``kernel_tlb_flush_all()``; the matching owner-exit event reported
+    ``stop_requested=1`` and ``unscoped=1`` before module loading completed.
+    The owner returned ``state=7`` and ``recovery_state=2`` with zero recovery
+    attempts. The current-boot log contained no new soft-lockup, blocked-task,
+    RCU-stall, BUG, Oops, or panic records. This exercised the module-load CPA
+    path from the reported stack without needing the unavailable 00625 build
+    tree. ``test-tlb-flush.sh`` now accepts ``--modprobe MODULE [ARGS...]`` to
+    repeat the tracepoint-checked global-flush scenario with a module from the
+    running kernel's installed module tree.
+
+    A prewarmed two-worker seccomp overlap exposed a separate synchronous
+    call-function wait. Function-graph tracing showed ``bpf_arch_ibpb()``
+    blocked for 1.483 seconds while the ring-3 owner ran; the call-function
+    IPI was deferred once and replayed only after the owner's 1.489-second
+    timed escape. No stop request or kernel alert occurred. This matches the
+    reported ``bpf_prog_pack_alloc()`` / ``smp_call_function_many_cond()``
+    wait when BPF reuses a dirty executable pack. The sender-side deferral now
+    requests the matching generation's registered, nonblocking owner stop;
+    owner exit still replays the queued IPI before the synchronous caller can
+    continue. The receiver-side check only records the deferred IPI, avoiding
+    an escape NMI sent from a kernel-mode interrupt frame during the ring-3
+    entry race. On ``7.3.0-rc3-accel-tlbfix-00634-g39b3e84206fe-dirty``,
+    ``test-call-function-owner-stop.sh`` passed with two prewarmed seccomp/JIT
+    workers. The deferred-IPI count was one, the matching stop request came
+    from ``x86_cpu_accel_defer_call_function()``, and the owner-exit event
+    reported ``stop_requested=1``. The workers completed in 505 ms, before the
+    3-second timed escape; the owner then reported ``state=7`` and
+    ``recovery_state=2`` with zero recovery attempts. No new soft-lockup,
+    blocked-task, RCU-stall, BUG, Oops, or panic records were observed.
+
+    The same kernel also passed ``test-tlb-flush.sh --modprobe dummy
+    numdummies=0``. The trace paired the stop request and owner exit with the
+    completing global TLB flush, and the owner recovered without retries.
+    Neither regression run produced new kernel alert records.

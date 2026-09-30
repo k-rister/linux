@@ -225,8 +225,8 @@ mask.
 Global-ASID INVLPGB broadcasts reserve all online CPUs through
 ``TLBSYNC`` for the same reason. An attempted entry on a reserved target CPU
 returns ``-EBUSY``. The worker still uses its process ``mm``. Kernel mapping
-changes affecting code or the exception/recovery path still need a separate
-maintenance policy; TLB invalidation alone does not establish safety.
+changes affecting code or the exception/recovery path need the maintenance
+policy described below; TLB invalidation alone does not establish safety.
 Do not infer TLB isolation or a latency bound from a zero target count or TLB
 counter delta.
 
@@ -252,6 +252,41 @@ The policy for a protected accelerator address space is:
   they are not limited to the accelerator ``mm``; they must either quiesce the
   owner before acknowledgement or be proven irrelevant to all code executed
   during the active interval and its recovery path.
+
+Kernel text and page-attribute maintenance
+------------------------------------------
+
+Live x86 text updates use ``x86_cpu_accel_text_mutex_lock()``. It first enters
+the x86 accelerator maintenance gate, then takes ``text_mutex``. The gate
+blocks new owner entry, requests stoppable owners to exit, and waits until
+active owners have exited and reconciled their local TLB state. The matching
+unlock releases ``text_mutex`` before reopening admission. The x86 ftrace,
+static-call, jump-label, module-relocation, call-thunk, and live
+``text_poke_copy()``/``text_poke_set()`` paths use this serialization. CPU
+offlining, ``stop_machine()``, reboot, MTRR, microcode, and TDX SEAM-loader
+maintenance also use the owner maintenance gate.
+
+The ordinary x86 CPA path for ``set_memory_*()`` changes page-table
+attributes and then performs a synchronous TLB/cache flush. Its flush path
+reserves target CPUs, requests active stoppable owners to exit, and waits for
+the required remote flushes before returning. This protects translation
+lifetime across the completed operation; it does not serialize the PTE
+updates themselves against an owner that is still executing. Callers that
+change mappings used by live kernel code, exception handling, or recovery
+must use the owner maintenance gate around the update, or establish that the
+affected pages cannot be reached during ownership.
+
+Direct-map ``*_noflush`` helpers leave invalidation to their callers. The
+``CONFIG_DEBUG_PAGEALLOC`` ``__kernel_map_pages()`` path intentionally uses a
+local TLB flush and documents that remote CPUs may retain stale direct-map
+translations. Such paths are safe for this prototype only when their page
+allocator or caller-specific lifetime rules exclude every active owner
+dependency. Boot-only page-table helpers also remain outside the runtime
+policy. The low-level CPA and direct-map entry points have not been converted
+into blanket owner-maintenance operations. Any such guard must account for
+their caller locks and execution contexts, as well as operations on
+allocator-private or not-yet-published pages. Runtime callers that can affect
+an owner's code or recovery mappings still require a case-by-case audit.
 
 Flush completion and kernel maintenance
 ---------------------------------------

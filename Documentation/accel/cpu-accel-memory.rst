@@ -1431,3 +1431,18 @@ The implementation checkpoints are:
     refaulted contents matched the file. This test does not check physical
     page reuse. Keep the mapping out of the normal workload ABI and continue
     rejecting unregistered VMAs.
+
+    On ``7.3.0-rc3-accel-tlbfix-00625-gd9a0f6424ea0``,
+    ``tools/cpu_accel/test-ftrace-maintenance.sh`` removed a tracefs instance
+    running ``function_graph`` while a non-cooperative ring-3 owner was active.
+    The ``rmdir`` path entered ftrace shutdown, requested the stop of owner 7
+    on CPU2, and returned after the matching owner-exit event reported
+    ``stop_requested=1``. The run ended in ``state=7`` with
+    ``recovery_state=2``, ``user_escape_count=1``, and
+    ``recovery_attempts=0``; the owner-stop escape completed without the timed
+    controller fallback. The current-boot journal had no soft
+    lockup, blocked-task, RCU-stall, BUG, Oops, or panic records after the run.
+    This directly covers the ``tracefs_syscall_rmdir()`` /
+    ``unregister_ftrace_graph()`` maintenance-gate path from the reported
+    blocked ``rmdir`` stack. It is a focused overlap test, not a reproduction
+    of the earlier global CPA lockup.

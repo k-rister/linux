@@ -138,6 +138,16 @@ remains write-locked. A single whole-file hole punch invalidates more than
 PTE table populated. This forces an eligible intermediate ``mmu_gather``
 data-page drain without also requiring page-table release. The test checks
 that the owner acknowledges the stop and that no timeout recovery was needed.
+
+The ``--mmu-gather-final-only`` case uses an 8 MiB file mapping (2,048 pages),
+below the intermediate-drain limit. Its hole punch therefore exercises the
+final data-page batch released from ``tlb_finish_mmu()`` while the same-mm owner
+is active. Together, these modes cover both intermediate and final data-page
+completion releases. They do not exercise page-table batches: the private COW
+PTE retained in each table keeps those tables allocated during hole punching,
+and page-table batch release remains synchronous with its TLB and software-
+walker barriers.
+
 The kernel may update the RSEQ area on the user-return slowpath after a
 deferred reschedule, so removing it would turn normal accelerator exit into a
 SIGSEGV. The driver validates the RSEQ page as private, readable, writable,

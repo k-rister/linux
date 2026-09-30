@@ -24,6 +24,7 @@
 #include <unistd.h>
 
 #define PTE_TABLE_SIZE (512UL * 4096)
+#define MMU_GATHER_FINAL_PROBE_SIZE (8UL * 1024UL * 1024UL)
 #define MMU_GATHER_PROBE_SIZE (64UL * 1024UL * 1024UL)
 #define MMU_GATHER_OWNER_TIMEOUT_MS 12000
 #define MMU_GATHER_ESCAPE_AFTER_MS "5000"
@@ -561,7 +562,8 @@ static int test_reclaim_completion(int target_cpu, int control_cpu,
 				   const char *cpu_accelctl,
 				   unsigned long page_size,
 				   int argc, char **argv,
-				   bool mmu_gather_only)
+				   bool mmu_gather_intermediate_only,
+				   bool mmu_gather_final_only)
 {
 	char path[] = "/var/tmp/cpu-accel-reclaim-XXXXXX";
 	char cpu_arg[16];
@@ -576,12 +578,15 @@ static int test_reclaim_completion(int target_cpu, int control_cpu,
 	int pipe_fd[2] = { -1, -1 };
 	int ret = -1;
 	size_t written = 0;
-	size_t file_bytes = mmu_gather_only ? MMU_GATHER_PROBE_SIZE : page_size;
+	size_t file_bytes = mmu_gather_intermediate_only ? MMU_GATHER_PROBE_SIZE :
+		mmu_gather_final_only ? MMU_GATHER_FINAL_PROBE_SIZE : page_size;
 	size_t cli_argc = 0;
 	const char *duration_ms = "5000";
-	const char *escape_after_ms = mmu_gather_only ?
+	const char *escape_after_ms = (mmu_gather_intermediate_only ||
+				       mmu_gather_final_only) ?
 		MMU_GATHER_ESCAPE_AFTER_MS : ACCEL_ESCAPE_AFTER_MS;
-	unsigned int owner_timeout_ms = mmu_gather_only ?
+	unsigned int owner_timeout_ms = (mmu_gather_intermediate_only ||
+					 mmu_gather_final_only) ?
 		MMU_GATHER_OWNER_TIMEOUT_MS : 3000;
 
 	if (pin_to_cpu(control_cpu)) {
@@ -593,7 +598,7 @@ static int test_reclaim_completion(int target_cpu, int control_cpu,
 		perror("mkstemp(reclaim probe)");
 		goto out;
 	}
-	if (mmu_gather_only) {
+	if (mmu_gather_intermediate_only || mmu_gather_final_only) {
 		close(file_fd);
 		file_fd = open(path, O_RDWR | O_DIRECT | O_CLOEXEC);
 		if (file_fd < 0) {
@@ -612,7 +617,7 @@ static int test_reclaim_completion(int target_cpu, int control_cpu,
 		contents = allocation;
 	}
 	memset(contents, RECLAIM_PAGE_MARKER, file_bytes);
-	if (mmu_gather_only) {
+	if (mmu_gather_intermediate_only || mmu_gather_final_only) {
 		ssize_t count = write(file_fd, contents, file_bytes);
 
 		if (count != (ssize_t)file_bytes) {
@@ -683,7 +688,8 @@ static int test_reclaim_completion(int target_cpu, int control_cpu,
 	cli_argv[cli_argc++] = path;
 	for (int index = 3; index < argc; index++) {
 		if (!strcmp(argv[index], "--reclaim-only") ||
-		    !strcmp(argv[index], "--mmu-gather-only"))
+		    !strcmp(argv[index], "--mmu-gather-only") ||
+		    !strcmp(argv[index], "--mmu-gather-final-only"))
 			continue;
 		cli_argv[cli_argc++] = argv[index];
 	}
@@ -714,7 +720,7 @@ static int test_reclaim_completion(int target_cpu, int control_cpu,
 		fprintf(stderr, "did not observe a reclaim-test ring-3 owner\n");
 		goto wait_cli;
 	}
-	if (mmu_gather_only) {
+	if (mmu_gather_intermediate_only || mmu_gather_final_only) {
 		/*
 		 * Hole punching zaps this file mapping through unmap_mapping_range()
 		 * and mmu_gather in the active owner's own mm. The owner keeps its
@@ -739,10 +745,12 @@ static int test_reclaim_completion(int target_cpu, int control_cpu,
 		    !strstr(cli_output, "recovery_state=2") ||
 		    !strstr(cli_output, "user_escape_count=1") ||
 		    !strstr(cli_output, "recovery_attempts=0")) {
-			fprintf(stderr, "same-mm gather stop/ack missed fallback\n");
+			fprintf(stderr,
+				"same-mm gather stop/ack failed or recovery was needed\n");
 			goto out;
 		}
-		printf("PASS: intermediate same-mm gather drain acked\n");
+		printf("PASS: %s same-mm gather release acked\n",
+		       mmu_gather_intermediate_only ? "intermediate" : "final");
 		ret = 0;
 		goto out;
 	}
@@ -887,7 +895,8 @@ int main(int argc, char **argv)
 	bool ptable_reused_as_table = false;
 	bool ptable_reused_as_data = false;
 	bool reclaim_only = false;
-	bool mmu_gather_only = false;
+	bool mmu_gather_intermediate_only = false;
+	bool mmu_gather_final_only = false;
 	pid_t pid;
 	volatile pid_t cow_holder = -1;
 	pthread_t keeper_thread;
@@ -905,7 +914,11 @@ int main(int argc, char **argv)
 			continue;
 		}
 		if (!strcmp(argv[index], "--mmu-gather-only")) {
-			mmu_gather_only = true;
+			mmu_gather_intermediate_only = true;
+			continue;
+		}
+		if (!strcmp(argv[index], "--mmu-gather-final-only")) {
+			mmu_gather_final_only = true;
 			continue;
 		}
 		if (strcmp(argv[index], "--quarantine-irqs")) {
@@ -946,15 +959,19 @@ int main(int argc, char **argv)
 		fprintf(stderr, "expected 4 KiB pages, got %lu\n", page_size);
 		return EXIT_FAILURE;
 	}
-	if (reclaim_only || mmu_gather_only) {
-		if (reclaim_only && mmu_gather_only) {
+	if (reclaim_only || mmu_gather_intermediate_only ||
+	    mmu_gather_final_only) {
+		if ((reclaim_only && (mmu_gather_intermediate_only ||
+				      mmu_gather_final_only)) ||
+		    (mmu_gather_intermediate_only && mmu_gather_final_only)) {
 			fprintf(stderr,
-				"--reclaim-only and --mmu-gather-only are exclusive\n");
+				"reclaim and mmu_gather probe options are exclusive\n");
 			return EXIT_FAILURE;
 		}
 		return test_reclaim_completion(target_cpu, control_cpu, argv[2],
 					       page_size, argc, argv,
-					       mmu_gather_only) ?
+					       mmu_gather_intermediate_only,
+					       mmu_gather_final_only) ?
 			EXIT_FAILURE : EXIT_SUCCESS;
 	}
 	mapping = mmap(NULL, PTE_TABLE_SIZE * 4, PROT_READ | PROT_WRITE,
@@ -1492,7 +1509,7 @@ int main(int argc, char **argv)
 	printf("deferred %llu reschedule request(s) until owner exit\n",
 	       cli_reschedule_requests());
 	if (test_reclaim_completion(target_cpu, control_cpu, argv[2],
-				    page_size, argc, argv, false))
+				    page_size, argc, argv, false, false))
 		goto out_mapping;
 	result = EXIT_SUCCESS;
 	goto out_mapping;

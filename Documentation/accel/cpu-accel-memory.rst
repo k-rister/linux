@@ -1556,3 +1556,20 @@ The implementation checkpoints are:
     results close the audited synchronous workqueue paths, while Phase 8's
     broader isolation audit and the reported intermittent lockup investigation
     remain open.
+
+    A further wait-path audit found that ``ring_buffer_resize()`` also queues
+    per-CPU ``update_pages_work`` and waits on ``update_done``. Its remote
+    single-CPU and all-CPU paths now reserve each target before queueing, request
+    an active owner's stop after queueing, and hold the reservation until the
+    page update completes. Local and offline CPU updates retain their existing
+    synchronous paths. ``test-sync-work-owner-stop.sh`` now resizes a tracefs
+    per-CPU buffer while its target owner is active.
+
+    On ``7.3.0-rc3-accel-tlbfix-00641-gef2d8a103ff4-dirty``, all three focused
+    cases passed on accelerator-dev: ``schedule_on_each_cpu()`` stopped CPU 2's
+    owner in 7 ms, ``__lru_add_drain_all()`` in 26 ms, and the trace ring-buffer
+    resize in 13 ms. Each trace paired the owner-stop request with that owner's
+    exit, and the harness found no new soft-lockup, blocked-task, RCU-stall,
+    BUG, Oops, or panic record. The candidate booted through a one-time GRUB
+    entry; the saved default remains 00603. These results validate the three
+    covered waits while Phase 8's broader isolation audit remains open.

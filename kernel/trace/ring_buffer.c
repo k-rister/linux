@@ -29,6 +29,7 @@
 #include <linux/hash.h>
 #include <linux/list.h>
 #include <linux/cpu.h>
+#include <linux/smp.h>
 #include <linux/oom.h>
 #include <linux/mm.h>
 
@@ -3294,6 +3295,7 @@ int ring_buffer_resize(struct trace_buffer *buffer, unsigned long size,
 			int cpu_id)
 {
 	struct ring_buffer_per_cpu *cpu_buffer;
+	cpumask_t sync_wait_cpus;
 	unsigned long nr_pages;
 	int cpu, err;
 
@@ -3313,6 +3315,7 @@ int ring_buffer_resize(struct trace_buffer *buffer, unsigned long size,
 	 * with new per CPU buffers being created.
 	 */
 	guard(cpus_read_lock)();
+	cpumask_clear(&sync_wait_cpus);
 
 	/* prevent another thread from changing buffer sizes */
 	mutex_lock(&buffer->mutex);
@@ -3383,8 +3386,11 @@ int ring_buffer_resize(struct trace_buffer *buffer, unsigned long size,
 				migrate_disable();
 				if (cpu != smp_processor_id()) {
 					migrate_enable();
+					arch_smp_sync_wait_begin(cpu);
 					schedule_work_on(cpu,
 							 &cpu_buffer->update_pages_work);
+					arch_smp_sync_wait_stop(cpu);
+					cpumask_set_cpu(cpu, &sync_wait_cpus);
 				} else {
 					update_pages_handler(&cpu_buffer->update_pages_work);
 					migrate_enable();
@@ -3400,6 +3406,8 @@ int ring_buffer_resize(struct trace_buffer *buffer, unsigned long size,
 
 			if (cpu_online(cpu))
 				wait_for_completion(&cpu_buffer->update_done);
+			if (cpumask_test_cpu(cpu, &sync_wait_cpus))
+				arch_smp_sync_wait_end(cpu);
 			cpu_buffer->nr_pages_to_update = 0;
 		}
 
@@ -3441,9 +3449,12 @@ int ring_buffer_resize(struct trace_buffer *buffer, unsigned long size,
 				migrate_enable();
 			} else {
 				migrate_enable();
+				arch_smp_sync_wait_begin(cpu_id);
 				schedule_work_on(cpu_id,
 						 &cpu_buffer->update_pages_work);
+				arch_smp_sync_wait_stop(cpu_id);
 				wait_for_completion(&cpu_buffer->update_done);
+				arch_smp_sync_wait_end(cpu_id);
 			}
 		}
 

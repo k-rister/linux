@@ -11,6 +11,7 @@ work_cpu=${CPU_ACCEL_WORK_CPU:-3}
 escape_ms=${CPU_ACCEL_ESCAPE_AFTER_MS:-3000}
 trace_root=${TRACEFS:-/sys/kernel/tracing}
 instance="$trace_root/instances/cpu_accel_sync_wait_$$"
+resize_instance="$trace_root/instances/cpu_accel_resize_$$"
 outdir=${CPU_ACCEL_TRACE_DIR:-$(mktemp -d /tmp/cpu-accel-sync-wait.XXXXXX)}
 trace_pid=
 dmesg_pid=
@@ -56,6 +57,10 @@ cleanup()
 		echo 0 >"$instance/tracing_on" 2>/dev/null || true
 		rmdir "$instance" 2>/dev/null || true
 	fi
+	if [ -d "$resize_instance" ]; then
+		echo 0 >"$resize_instance/tracing_on" 2>/dev/null || true
+		rmdir "$resize_instance" 2>/dev/null || true
+	fi
 }
 trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
@@ -82,6 +87,13 @@ done
 
 mkdir "$instance"
 echo 4096 >"$instance/buffer_size_kb"
+mkdir "$resize_instance"
+resize_path="$resize_instance/per_cpu/cpu$target_cpu/buffer_size_kb"
+[ -w "$resize_path" ] || fail "target CPU ring buffer size is unavailable"
+case "$(cat "$resize_path")" in
+128) resize_size=256 ;;
+*) resize_size=128 ;;
+esac
 for event in owner_stop_request owner_exit_complete; do
 	echo 1 >"$instance/events/cpu_accel/$event/enable"
 done
@@ -112,6 +124,7 @@ run_case()
 	name=$1
 	sysctl_path=$2
 	expected_caller=$3
+	write_value=${4:-1}
 	entry_count=$(grep -Fc 'x86_cpu_accel_user_enter();' "$outdir/trace.log" || true)
 
 	"$tool" run --cpu "$target_cpu" --duration-ms 5000 --period-us 1000 \
@@ -131,7 +144,7 @@ run_case()
 
 	start_ns=$(date +%s%N)
 	if timeout --kill-after=2s 8s taskset -c "$work_cpu" \
-		sh -c "echo 1 > '$sysctl_path'" >"$outdir/$name-trigger.log" 2>&1; then
+		sh -c "echo '$write_value' > '$sysctl_path'" >"$outdir/$name-trigger.log" 2>&1; then
 		helper_rc=0
 	else
 		helper_rc=$?
@@ -186,6 +199,7 @@ END {
 
 run_case vmstat /proc/sys/vm/stat_refresh schedule_on_each_cpu
 run_case lru /proc/sys/vm/drop_caches __lru_add_drain_all
+run_case ring_resize "$resize_path" ring_buffer_resize "$resize_size"
 
 echo 0 >"$instance/tracing_on"
 kill -TERM "$trace_pid" "$dmesg_pid" 2>/dev/null || true
@@ -201,5 +215,5 @@ if [ -s "$outdir/kernel-errors.log" ]; then
 	fail "kernel log contains a lockup or error record"
 fi
 
-echo "PASS: synchronous per-CPU work and LRU drain stop active owners"
+echo "PASS: synchronous per-CPU work, LRU drain, and ring-buffer resize stop active owners"
 echo "logs: $outdir"

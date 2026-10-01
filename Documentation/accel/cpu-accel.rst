@@ -258,6 +258,19 @@ prewarmed seccomp/JIT overlap test with a small two-CPU worker set::
     CPU_ACCEL_SECCOMP_CHURN=/tmp/test-seccomp-jit-churn \
     sh tools/cpu_accel/test-call-function-owner-stop.sh
 
+The focused single-call probe covers synchronous IPI delivery, reuse of a CSD
+whose earlier asynchronous callback is still pending, and the remote
+``smp_call_on_cpu()`` and ``work_on_cpu()`` workqueue waits. Build its module
+against the running kernel, then run any of the modes below (the default
+target and work CPUs are 2 and 3)::
+
+  make -C /lib/modules/$(uname -r)/build \
+    M="$PWD/tools/cpu_accel/tlb-flush-probe" modules
+  sudo tools/cpu_accel/test-call-function-single-owner-stop.sh sync
+  sudo tools/cpu_accel/test-call-function-single-owner-stop.sh async-reuse
+  sudo tools/cpu_accel/test-call-function-single-owner-stop.sh smp-call-on-cpu
+  sudo tools/cpu_accel/test-call-function-single-owner-stop.sh work-on-cpu
+
 The tool prints the shared result, including the maximum observed lateness,
 selected workload, work size, completed work iterations, and lifecycle
 telemetry.  The generic interrupt and context-switch deltas

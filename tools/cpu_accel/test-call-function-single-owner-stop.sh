@@ -38,8 +38,18 @@ async-reuse)
 	expected_count=3
 	require_deferred=1
 	;;
+smp-call-on-cpu)
+	fire_parameter=fire_on_cpu
+	expected_count=1
+	require_deferred=0
+	;;
+work-on-cpu)
+	fire_parameter=fire_work_on_cpu
+	expected_count=1
+	require_deferred=0
+	;;
 *)
-	fail "usage: $0 [sync|async-reuse]"
+	fail "usage: $0 [sync|async-reuse|smp-call-on-cpu|work-on-cpu]"
 	;;
 esac
 

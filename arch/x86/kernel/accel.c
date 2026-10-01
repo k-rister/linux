@@ -40,7 +40,7 @@ struct x86_cpu_accel_request {
 	atomic64_t reschedule_deferred;
 	atomic_t call_function_pending;
 	atomic64_t call_function_deferred;
-	unsigned int call_function_waiters;
+	unsigned int sync_waiters;
 	atomic64_t tlb_shootdown_targets;
 	struct mm_struct *owner_mm;
 	struct mmu_owner mmu_owner;
@@ -152,7 +152,7 @@ static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets,
 		request->mmu_owner_initialized = true;
 	}
 	if (atomic_read(&request->active) || request->exiting ||
-	    request->call_function_waiters ||
+	    request->sync_waiters ||
 	    atomic_read(&request->stop_inflight)) {
 		raw_spin_unlock_irqrestore(&request->lock, request_flags);
 		raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock,
@@ -320,7 +320,7 @@ void arch_smp_call_function_wait_begin(int cpu)
 
 	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
 	raw_spin_lock_irqsave(&request->lock, flags);
-	request->call_function_waiters++;
+	request->sync_waiters++;
 	raw_spin_unlock_irqrestore(&request->lock, flags);
 }
 
@@ -336,7 +336,7 @@ void arch_smp_call_function_wait_stop(int cpu)
 
 	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
 	raw_spin_lock_irqsave(&request->lock, flags);
-	if (request->call_function_waiters && atomic_read(&request->active))
+	if (request->sync_waiters && atomic_read(&request->active))
 		owner_generation = request->owner_generation;
 	raw_spin_unlock_irqrestore(&request->lock, flags);
 
@@ -350,17 +350,16 @@ void arch_smp_call_function_wait_end(int cpu)
 	struct x86_cpu_accel_request *request;
 	unsigned long flags;
 
-	if (cpu < 0 || (unsigned int)cpu >= nr_cpu_ids ||
-	    cpu == raw_smp_processor_id())
+	if (cpu < 0 || (unsigned int)cpu >= nr_cpu_ids)
 		return;
 
 	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
 	raw_spin_lock_irqsave(&request->lock, flags);
-	if (WARN_ON_ONCE(!request->call_function_waiters)) {
+	if (WARN_ON_ONCE(!request->sync_waiters)) {
 		raw_spin_unlock_irqrestore(&request->lock, flags);
 		return;
 	}
-	request->call_function_waiters--;
+	request->sync_waiters--;
 	raw_spin_unlock_irqrestore(&request->lock, flags);
 }
 

@@ -8,6 +8,7 @@
 #include <linux/module.h>
 #include <linux/param.h>
 #include <linux/smp.h>
+#include <linux/workqueue.h>
 
 static int target_cpu = 2;
 module_param(target_cpu, int, 0444);
@@ -15,10 +16,24 @@ module_param(target_cpu, int, 0444);
 static atomic_t callback_count = ATOMIC_INIT(0);
 static bool fire;
 static bool fire_reuse;
+static bool fire_on_cpu;
+static bool fire_work_on_cpu;
 
 static void cpu_accel_call_function_single_probe_callback(void *data)
 {
 	atomic_inc(data);
+}
+
+static int cpu_accel_smp_call_on_cpu_probe_callback(void *data)
+{
+	atomic_inc(data);
+	return 0;
+}
+
+static long cpu_accel_work_on_cpu_probe_callback(void *data)
+{
+	atomic_inc(data);
+	return 0;
 }
 
 static int probe_run(const char *value, const struct kernel_param *kp,
@@ -83,6 +98,62 @@ static int probe_fire_reuse(const char *value, const struct kernel_param *kp)
 	return probe_run(value, kp, true);
 }
 
+static int probe_fire_on_cpu(const char *value, const struct kernel_param *kp)
+{
+	bool trigger;
+	int ret;
+
+	(void)kp;
+	ret = kstrtobool(value, &trigger);
+	if (ret || !trigger)
+		return ret;
+
+	if (target_cpu < 0 || target_cpu >= nr_cpu_ids ||
+	    !cpu_online(target_cpu))
+		return -ENXIO;
+
+	atomic_set(&callback_count, 0);
+	ret = smp_call_on_cpu(target_cpu,
+			      cpu_accel_smp_call_on_cpu_probe_callback,
+			      &callback_count, false);
+	if (ret)
+		return ret;
+	if (atomic_read(&callback_count) != 1)
+		return -EIO;
+
+	pr_info("cpu_accel_call_function_single_probe: cpu=%d mode=smp-call-on-cpu callback_count=1\n",
+		target_cpu);
+	return 0;
+}
+
+static int probe_fire_work_on_cpu(const char *value,
+				  const struct kernel_param *kp)
+{
+	bool trigger;
+	long ret;
+
+	(void)kp;
+	ret = kstrtobool(value, &trigger);
+	if (ret || !trigger)
+		return ret;
+
+	if (target_cpu < 0 || target_cpu >= nr_cpu_ids ||
+	    !cpu_online(target_cpu))
+		return -ENXIO;
+
+	atomic_set(&callback_count, 0);
+	ret = work_on_cpu(target_cpu, cpu_accel_work_on_cpu_probe_callback,
+			  &callback_count);
+	if (ret)
+		return ret;
+	if (atomic_read(&callback_count) != 1)
+		return -EIO;
+
+	pr_info("cpu_accel_call_function_single_probe: cpu=%d mode=work-on-cpu callback_count=1\n",
+		target_cpu);
+	return 0;
+}
+
 static const struct kernel_param_ops
 cpu_accel_call_function_single_probe_ops = {
 	.set = probe_fire,
@@ -95,6 +166,20 @@ cpu_accel_call_function_single_probe_reuse_ops = {
 };
 module_param_cb(fire_reuse, &cpu_accel_call_function_single_probe_reuse_ops,
 		&fire_reuse, 0200);
+
+static const struct kernel_param_ops
+cpu_accel_call_function_single_probe_on_cpu_ops = {
+	.set = probe_fire_on_cpu,
+};
+module_param_cb(fire_on_cpu, &cpu_accel_call_function_single_probe_on_cpu_ops,
+		&fire_on_cpu, 0200);
+
+static const struct kernel_param_ops
+cpu_accel_work_on_cpu_probe_ops = {
+	.set = probe_fire_work_on_cpu,
+};
+module_param_cb(fire_work_on_cpu, &cpu_accel_work_on_cpu_probe_ops,
+		&fire_work_on_cpu, 0200);
 
 static int __init cpu_accel_call_function_single_probe_init(void)
 {

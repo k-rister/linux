@@ -52,6 +52,11 @@ static DEFINE_PER_CPU(atomic_t, trigger_backtrace) = ATOMIC_INIT(1);
 
 static void __flush_smp_call_function_queue(bool warn_cpu_offline);
 
+/*
+ * These hooks cover synchronous work that waits for a remote CPU, including
+ * call-function callbacks and the smp_call_on_cpu()/work_on_cpu_key() workqueue
+ * callbacks.
+ */
 void __weak arch_smp_call_function_wait_begin(int cpu)
 {
 	(void)cpu;
@@ -396,6 +401,7 @@ static __always_inline void csd_lock(call_single_data_t *csd, int cpu,
 				     bool wait_registered)
 {
 	bool wait = READ_ONCE(csd->node.u_flags) & CSD_FLAG_LOCK;
+	bool accel_wait = false;
 
 	/*
 	 * Reusing the per-CPU CSD can itself wait for an earlier asynchronous
@@ -403,9 +409,12 @@ static __always_inline void csd_lock(call_single_data_t *csd, int cpu,
 	 * actually blocked on that callback.
 	 */
 	if (wait) {
-		if (!wait_registered)
+		if (!wait_registered && cpu != raw_smp_processor_id()) {
 			arch_smp_call_function_wait_begin(cpu);
-		arch_smp_call_function_wait_stop(cpu);
+			accel_wait = true;
+		}
+		if (wait_registered || accel_wait)
+			arch_smp_call_function_wait_stop(cpu);
 	}
 
 	if (IS_ENABLED(CONFIG_CSD_LOCK_WAIT_DEBUG) &&
@@ -426,7 +435,7 @@ static __always_inline void csd_lock(call_single_data_t *csd, int cpu,
 		csd->node.u_flags |= CSD_FLAG_LOCK;
 	}
 
-	if (wait && !wait_registered)
+	if (accel_wait)
 		arch_smp_call_function_wait_end(cpu);
 
 	/*
@@ -1340,14 +1349,30 @@ int smp_call_on_cpu(unsigned int cpu, int (*func)(void *), void *par, bool phys)
 		.data = par,
 		.cpu  = phys ? cpu : -1,
 	};
+	bool accel_wait;
 
 	INIT_WORK_ONSTACK(&sscs.work, smp_call_on_cpu_callback);
 
 	if (cpu >= nr_cpu_ids || !cpu_online(cpu))
 		return -ENXIO;
 
+	/*
+	 * The per-CPU worker cannot run while the target is owned. Reserve the
+	 * target before queueing, stop an active owner after queueing, and keep
+	 * the reservation until the work completes.
+	 */
+	get_cpu();
+	accel_wait = cpu != raw_smp_processor_id();
+	if (accel_wait)
+		arch_smp_call_function_wait_begin(cpu);
 	queue_work_on(cpu, system_percpu_wq, &sscs.work);
+	if (accel_wait)
+		arch_smp_call_function_wait_stop(cpu);
+	put_cpu();
+
 	wait_for_completion(&sscs.done);
+	if (accel_wait)
+		arch_smp_call_function_wait_end(cpu);
 	destroy_work_on_stack(&sscs.work);
 
 	return sscs.ret;

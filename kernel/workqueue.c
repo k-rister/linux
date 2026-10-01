@@ -43,6 +43,7 @@
 #include <linux/debug_locks.h>
 #include <linux/device/devres.h>
 #include <linux/lockdep.h>
+#include <linux/smp.h>
 #include <linux/idr.h>
 #include <linux/jhash.h>
 #include <linux/hashtable.h>
@@ -7123,10 +7124,22 @@ long work_on_cpu_key(int cpu, long (*fn)(void *),
 		     void *arg, struct lock_class_key *key)
 {
 	struct work_for_cpu wfc = { .fn = fn, .arg = arg };
+	bool accel_wait;
 
 	INIT_WORK_ONSTACK_KEY(&wfc.work, work_for_cpu_fn, key);
+	/* Keep an active accelerator owner from starving the queued work. */
+	get_cpu();
+	accel_wait = cpu != raw_smp_processor_id();
+	if (accel_wait)
+		arch_smp_call_function_wait_begin(cpu);
 	schedule_work_on(cpu, &wfc.work);
+	if (accel_wait)
+		arch_smp_call_function_wait_stop(cpu);
+	put_cpu();
+
 	flush_work(&wfc.work);
+	if (accel_wait)
+		arch_smp_call_function_wait_end(cpu);
 	destroy_work_on_stack(&wfc.work);
 	return wfc.ret;
 }

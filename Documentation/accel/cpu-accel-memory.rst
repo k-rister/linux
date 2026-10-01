@@ -1517,3 +1517,21 @@ The implementation checkpoints are:
     the audited waits and callback replay; they do not bound full-flush waits
     or reproduce the earlier intermittent soft lockup, so the synchronous
     completion and known-good boot fallback remain in place.
+
+    A follow-up Phase 8 wait-path audit found two synchronous per-CPU workqueue
+    APIs that bypass the call-function IPI path: ``smp_call_on_cpu()`` queues
+    to ``system_percpu_wq`` directly, while ``work_on_cpu_key()`` uses
+    ``schedule_work_on()`` and ``flush_work()``. Both remote paths now reserve
+    the target before queueing, request an active owner's stop after queueing,
+    and hold the reservation until the callback completes. The focused
+    single-call probe covers both workqueue routes, synchronous IPI delivery,
+    and asynchronous CSD reuse. On
+    ``7.3.0-rc3-accel-tlbfix-00639-g916bc014c53e-dirty`` build ``#49``, all
+    four modes passed: ``work_on_cpu()`` completed in 8 ms,
+    ``smp_call_on_cpu()`` in 4 ms, the synchronous IPI in 5 ms, and asynchronous
+    reuse in 55 ms. Each trace paired the stop request with the matching owner
+    exit, and no new filtered kernel alert was recorded. The VM booted 00639
+    through a one-time GRUB entry; 00603 remains its saved default. These
+    results close the audited synchronous workqueue paths, while Phase 8's
+    broader isolation audit and the reported intermittent lockup investigation
+    remain open.

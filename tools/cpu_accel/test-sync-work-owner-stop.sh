@@ -12,6 +12,7 @@ escape_ms=${CPU_ACCEL_ESCAPE_AFTER_MS:-3000}
 trace_root=${TRACEFS:-/sys/kernel/tracing}
 instance="$trace_root/instances/cpu_accel_sync_wait_$$"
 resize_instance="$trace_root/instances/cpu_accel_resize_$$"
+slab_shrink=${CPU_ACCEL_SLAB_SHRINK:-/sys/kernel/slab/kmalloc-64/shrink}
 outdir=${CPU_ACCEL_TRACE_DIR:-$(mktemp -d /tmp/cpu-accel-sync-wait.XXXXXX)}
 trace_pid=
 dmesg_pid=
@@ -71,6 +72,7 @@ trap 'exit 1' HUP INT TERM
 [ -c /dev/cpu_accel ] || fail "/dev/cpu_accel is unavailable"
 [ -w /proc/sys/vm/stat_refresh ] || fail "vm.stat_refresh is unavailable"
 [ -w /proc/sys/vm/drop_caches ] || fail "drop_caches is unavailable"
+[ -w "$slab_shrink" ] || fail "SLUB shrink control is unavailable: $slab_shrink"
 [ -d "$trace_root/events/cpu_accel" ] || fail "cpu_accel tracepoints are unavailable"
 [ -d "$trace_root/instances" ] || fail "tracefs instances are unavailable"
 grep -qw function_graph "$trace_root/available_tracers" || \
@@ -199,6 +201,7 @@ END {
 
 run_case vmstat /proc/sys/vm/stat_refresh schedule_on_each_cpu
 run_case lru /proc/sys/vm/drop_caches __lru_add_drain_all
+run_case slub_shrink "$slab_shrink" flush_all_cpus_locked
 run_case ring_resize "$resize_path" ring_buffer_resize "$resize_size"
 
 echo 0 >"$instance/tracing_on"
@@ -215,5 +218,5 @@ if [ -s "$outdir/kernel-errors.log" ]; then
 	fail "kernel log contains a lockup or error record"
 fi
 
-echo "PASS: synchronous per-CPU work, LRU drain, and ring-buffer resize stop active owners"
+echo "PASS: synchronous per-CPU work, LRU drain, SLUB flush, and ring-buffer resize stop active owners"
 echo "logs: $outdir"

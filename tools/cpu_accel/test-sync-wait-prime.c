@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/eventfd.h>
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -67,6 +68,20 @@ int main(int argc, char **argv)
 
 	for (i = 0; i < pages; i++)
 		mapping[i * (size_t)page_size] = (unsigned char)i + 1;
+
+	/* Leave freed kmalloc-64 objects in this CPU's SLUB sheaf. */
+	for (i = 0; i < 128; i++) {
+		int fd = eventfd(0, EFD_CLOEXEC);
+
+		if (fd < 0) {
+			perror("eventfd");
+			return EXIT_FAILURE;
+		}
+		if (close(fd)) {
+			perror("close eventfd");
+			return EXIT_FAILURE;
+		}
+	}
 
 	printf("ready cpu=%u pages=%u\n", cpu, pages);
 	fflush(stdout);

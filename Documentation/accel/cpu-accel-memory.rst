@@ -1573,3 +1573,15 @@ The implementation checkpoints are:
     BUG, Oops, or panic record. The candidate booted through a one-time GRUB
     entry; the saved default remains 00603. These results validate the three
     covered waits while Phase 8's broader isolation audit remains open.
+
+    The next wait-path audit found two SLUB sheaf drains that queue work on
+    online CPUs and synchronously call ``flush_work()``:
+    ``flush_all_cpus_locked()`` and ``flush_rcu_sheaves_on_cache()``. Both now
+    reserve each target before queueing, request an active owner's stop after
+    queueing, and release the reservation only after the worker completes.
+    The synchronous-work test primes the target CPU's ``kmalloc-64`` sheaf
+    with freed ``eventfd`` contexts, then writes the cache's ``shrink`` sysfs
+    control while an owner is active. This covers the ordinary SLUB cache
+    flush; the RCU sheaf drain has received source review but does not yet have
+    a focused runtime trigger. The remaining audit includes network backlog
+    flush, timer migration, SRCU cleanup, and vmalloc purge waits.

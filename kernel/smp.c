@@ -53,21 +53,20 @@ static DEFINE_PER_CPU(atomic_t, trigger_backtrace) = ATOMIC_INIT(1);
 static void __flush_smp_call_function_queue(bool warn_cpu_offline);
 
 /*
- * These hooks cover synchronous work that waits for a remote CPU, including
- * call-function callbacks and the smp_call_on_cpu()/work_on_cpu_key() workqueue
- * callbacks.
+ * These hooks cover synchronous work that waits for a CPU, including
+ * call-function callbacks and per-CPU workqueue callbacks.
  */
-void __weak arch_smp_call_function_wait_begin(int cpu)
+void __weak arch_smp_sync_wait_begin(int cpu)
 {
 	(void)cpu;
 }
 
-void __weak arch_smp_call_function_wait_stop(int cpu)
+void __weak arch_smp_sync_wait_stop(int cpu)
 {
 	(void)cpu;
 }
 
-void __weak arch_smp_call_function_wait_end(int cpu)
+void __weak arch_smp_sync_wait_end(int cpu)
 {
 	(void)cpu;
 }
@@ -410,11 +409,11 @@ static __always_inline void csd_lock(call_single_data_t *csd, int cpu,
 	 */
 	if (wait) {
 		if (!wait_registered && cpu != raw_smp_processor_id()) {
-			arch_smp_call_function_wait_begin(cpu);
+			arch_smp_sync_wait_begin(cpu);
 			accel_wait = true;
 		}
 		if (wait_registered || accel_wait)
-			arch_smp_call_function_wait_stop(cpu);
+			arch_smp_sync_wait_stop(cpu);
 	}
 
 	if (IS_ENABLED(CONFIG_CSD_LOCK_WAIT_DEBUG) &&
@@ -436,7 +435,7 @@ static __always_inline void csd_lock(call_single_data_t *csd, int cpu,
 	}
 
 	if (accel_wait)
-		arch_smp_call_function_wait_end(cpu);
+		arch_smp_sync_wait_end(cpu);
 
 	/*
 	 * prevent CPU from reordering the above assignment
@@ -779,13 +778,13 @@ static int __smp_call_function_single(int cpu, smp_call_func_t func,
 	csd->node.dst = cpu;
 #endif
 	if (wait && cpu != this_cpu && (unsigned int)cpu < nr_cpu_ids) {
-		arch_smp_call_function_wait_begin(cpu);
+		arch_smp_sync_wait_begin(cpu);
 		accel_wait = true;
 	}
 
 	err = generic_exec_single(cpu, csd);
 	if (accel_wait && !err)
-		arch_smp_call_function_wait_stop(cpu);
+		arch_smp_sync_wait_stop(cpu);
 
 	/*
 	 * @csd is stack-allocated when @wait is true. No concurrent access
@@ -797,7 +796,7 @@ static int __smp_call_function_single(int cpu, smp_call_func_t func,
 	if (wait) {
 		csd_lock_wait(csd);
 		if (accel_wait)
-			arch_smp_call_function_wait_end(cpu);
+			arch_smp_sync_wait_end(cpu);
 	}
 
 	return err;
@@ -993,7 +992,7 @@ static void smp_call_function_many_cond(const struct cpumask *mask,
 			run_remote = true;
 
 			if (wait)
-				arch_smp_call_function_wait_begin(cpu);
+				arch_smp_sync_wait_begin(cpu);
 			csd_lock(csd, cpu, wait);
 			if (wait)
 				csd->node.u_flags |= CSD_TYPE_SYNC;
@@ -1028,7 +1027,7 @@ static void smp_call_function_many_cond(const struct cpumask *mask,
 
 		if (wait) {
 			for_each_cpu(cpu, cpumask)
-				arch_smp_call_function_wait_stop(cpu);
+				arch_smp_sync_wait_stop(cpu);
 		}
 	}
 
@@ -1058,7 +1057,7 @@ static void smp_call_function_many_cond(const struct cpumask *mask,
 
 			csd = per_cpu_ptr(cfd->csd, cpu);
 			csd_lock_wait(csd);
-			arch_smp_call_function_wait_end(cpu);
+			arch_smp_sync_wait_end(cpu);
 		}
 	}
 }
@@ -1364,15 +1363,15 @@ int smp_call_on_cpu(unsigned int cpu, int (*func)(void *), void *par, bool phys)
 	get_cpu();
 	accel_wait = cpu != raw_smp_processor_id();
 	if (accel_wait)
-		arch_smp_call_function_wait_begin(cpu);
+		arch_smp_sync_wait_begin(cpu);
 	queue_work_on(cpu, system_percpu_wq, &sscs.work);
 	if (accel_wait)
-		arch_smp_call_function_wait_stop(cpu);
+		arch_smp_sync_wait_stop(cpu);
 	put_cpu();
 
 	wait_for_completion(&sscs.done);
 	if (accel_wait)
-		arch_smp_call_function_wait_end(cpu);
+		arch_smp_sync_wait_end(cpu);
 	destroy_work_on_stack(&sscs.work);
 
 	return sscs.ret;

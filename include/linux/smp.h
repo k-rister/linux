@@ -50,14 +50,14 @@ extern unsigned int total_cpus;
 int smp_call_function_single(int cpuid, smp_call_func_t func, void *info, bool wait);
 
 /*
- * Optional architecture hooks around waits for remote call-function work.
- * Begin runs before queueing, stop after queueing and before blocking, and end
- * after completion. Architectures without special ownership requirements may
- * use the weak no-op definitions in kernel/smp.c.
+ * Optional architecture hooks around synchronous per-CPU work. Begin runs
+ * before queueing, stop after queueing and before blocking, and end after
+ * completion. They also cover waits on work queued to the current CPU, so an
+ * accelerator owner cannot enter until that work has drained.
  */
-void arch_smp_call_function_wait_begin(int cpu);
-void arch_smp_call_function_wait_stop(int cpu);
-void arch_smp_call_function_wait_end(int cpu);
+void arch_smp_sync_wait_begin(int cpu);
+void arch_smp_sync_wait_stop(int cpu);
+void arch_smp_sync_wait_end(int cpu);
 
 void on_each_cpu_cond_mask(smp_cond_func_t cond_func, smp_call_func_t func,
 			   void *info, bool wait, const struct cpumask *mask);

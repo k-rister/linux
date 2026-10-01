@@ -4831,11 +4831,15 @@ int schedule_on_each_cpu(work_func_t func)
 		struct work_struct *work = per_cpu_ptr(works, cpu);
 
 		INIT_WORK(work, func);
+		arch_smp_sync_wait_begin(cpu);
 		schedule_work_on(cpu, work);
+		arch_smp_sync_wait_stop(cpu);
 	}
 
-	for_each_online_cpu(cpu)
+	for_each_online_cpu(cpu) {
 		flush_work(per_cpu_ptr(works, cpu));
+		arch_smp_sync_wait_end(cpu);
+	}
 
 	cpus_read_unlock();
 	free_percpu(works);
@@ -7131,15 +7135,15 @@ long work_on_cpu_key(int cpu, long (*fn)(void *),
 	get_cpu();
 	accel_wait = cpu != raw_smp_processor_id();
 	if (accel_wait)
-		arch_smp_call_function_wait_begin(cpu);
+		arch_smp_sync_wait_begin(cpu);
 	schedule_work_on(cpu, &wfc.work);
 	if (accel_wait)
-		arch_smp_call_function_wait_stop(cpu);
+		arch_smp_sync_wait_stop(cpu);
 	put_cpu();
 
 	flush_work(&wfc.work);
 	if (accel_wait)
-		arch_smp_call_function_wait_end(cpu);
+		arch_smp_sync_wait_end(cpu);
 	destroy_work_on_stack(&wfc.work);
 	return wfc.ret;
 }

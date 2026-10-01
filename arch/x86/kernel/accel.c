@@ -309,13 +309,12 @@ void x86_cpu_accel_request_stop_owner(unsigned int cpu)
 	x86_cpu_accel_request_stop_owner_gen(cpu, 0);
 }
 
-void arch_smp_call_function_wait_begin(int cpu)
+void arch_smp_sync_wait_begin(int cpu)
 {
 	struct x86_cpu_accel_request *request;
 	unsigned long flags;
 
-	if (cpu < 0 || (unsigned int)cpu >= nr_cpu_ids ||
-	    cpu == raw_smp_processor_id())
+	if (cpu < 0 || (unsigned int)cpu >= nr_cpu_ids)
 		return;
 
 	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
@@ -324,14 +323,13 @@ void arch_smp_call_function_wait_begin(int cpu)
 	raw_spin_unlock_irqrestore(&request->lock, flags);
 }
 
-void arch_smp_call_function_wait_stop(int cpu)
+void arch_smp_sync_wait_stop(int cpu)
 {
 	struct x86_cpu_accel_request *request;
 	unsigned long flags;
 	u64 owner_generation = 0;
 
-	if (cpu < 0 || (unsigned int)cpu >= nr_cpu_ids ||
-	    cpu == raw_smp_processor_id())
+	if (cpu < 0 || (unsigned int)cpu >= nr_cpu_ids)
 		return;
 
 	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
@@ -345,7 +343,7 @@ void arch_smp_call_function_wait_stop(int cpu)
 		x86_cpu_accel_request_stop_owner_gen(cpu, owner_generation);
 }
 
-void arch_smp_call_function_wait_end(int cpu)
+void arch_smp_sync_wait_end(int cpu)
 {
 	struct x86_cpu_accel_request *request;
 	unsigned long flags;

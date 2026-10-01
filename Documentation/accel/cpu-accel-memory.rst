@@ -1518,6 +1518,27 @@ The implementation checkpoints are:
     or reproduce the earlier intermittent soft lockup, so the synchronous
     completion and known-good boot fallback remain in place.
 
+    A supplied 00625 blocked-task trace also showed ``khugepaged`` waiting in
+    ``lru_add_drain_all()`` for per-CPU work queued through
+    ``mm_percpu_wq``. That path bypassed the call-function and explicit
+    ``work_on_cpu()`` owner-stop hooks. The shared architecture hooks are now
+    named ``arch_smp_sync_wait_*`` and bracket both this LRU drain and
+    ``schedule_on_each_cpu()``: reserve each target before queueing, request an
+    active registered owner to stop after queueing, and release the reservation
+    only after the work completes. LRU draining and the generic per-CPU helper
+    keep their synchronous completion semantics.
+
+    On ``7.3.0-rc3-accel-tlbfix-lru-drainwait-00640-g2e58d2e5eafa-dirty``,
+    ``test-sync-work-owner-stop.sh`` passed both focused cases. Writing
+    ``/proc/sys/vm/stat_refresh`` stopped the target owner through
+    ``schedule_on_each_cpu()`` and returned in 4 ms; writing
+    ``/proc/sys/vm/drop_caches`` stopped it through ``__lru_add_drain_all()``
+    and returned in 40 ms. Both traces paired the stop request with the same
+    owner's exit, and both controller runs reported ``state=7`` and
+    ``recovery_state=2``. No new soft-lockup, blocked-task, RCU-stall, BUG,
+    Oops, or panic records appeared. These results validate the two traced
+    waits; the wider audit of direct per-CPU workqueue waits remains open.
+
     A follow-up Phase 8 wait-path audit found two synchronous per-CPU workqueue
     APIs that bypass the call-function IPI path: ``smp_call_on_cpu()`` queues
     to ``system_percpu_wq`` directly, while ``work_on_cpu_key()`` uses

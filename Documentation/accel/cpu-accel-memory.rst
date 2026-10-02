@@ -1697,3 +1697,16 @@ The implementation checkpoints are:
     ``cleanup_srcu_struct()``, owner exit, and execution of the same work item.
     The focused test passed in 18 ms, with no new lockup or kernel-error
     records, and the VM remained online on #59.
+
+    The vmalloc follow-up probe now distinguishes the owner-stop wait after
+    the required kernel-range TLB flush from the earlier flush itself. It
+    skips sync-wait begin events inside ``flush_tlb_kernel_range()`` and gates
+    the later ``vmalloc_purge_wait`` event, so the test proves that the purge
+    caller stops the active CPU owner before waiting for its queued worker.
+    The harness also accepts either ``arch_smp_sync_wait_stop`` or
+    ``__purge_vmap_area_lazy`` as the recorded caller to account for compiler
+    tail calls. On #59, the focused test passed twice and stopped CPU 2's
+    active owner in 151 ms. The probe module was unloaded, no new soft-lockup
+    or RCU-stall message appeared, and the VM remained online. SRCU cleanup
+    and the isolated vmalloc purge wait are now both runtime-covered; the
+    broader Phase 8 wait-site audit and CPA lockup investigation remain open.

@@ -1683,7 +1683,17 @@ The implementation checkpoints are:
     reaches the asynchronous purge worker, while the later owner-stop hook
     immediately before ``flush_work()`` is not independently isolated. The
     192 MiB held-area setting did not produce a purge-worker trace; the harness
-    now uses 384 MiB and requires both queue and execution trace events. The
+    now uses 384 MiB and requires both queue and execution trace events.
     The final focused run completed in 29 ms without new lockup or kernel-error
-    records, and the VM remained online on #59. The SRCU cleanup wait still
-    needs a focused runtime trigger.
+    records, and the VM remained online on #59.
+
+    A focused SRCU cleanup probe initializes a fresh SRCU domain, completes
+    ``srcu_barrier()``, and uses ``schedule_work_on()`` to queue the initialized
+    per-CPU ``srcu_invoke_callbacks()`` work item on the target CPU's system
+    per-CPU workqueue. No readers or callbacks remain outstanding, so the
+    worker has no callbacks to invoke; this isolates cleanup's busy-work flush
+    path without triggering the missing-``srcu_barrier()`` warning. On #59, the
+    trace correlated that target-CPU work item with an owner-stop request from
+    ``cleanup_srcu_struct()``, owner exit, and execution of the same work item.
+    The focused test passed in 18 ms, with no new lockup or kernel-error
+    records, and the VM remained online on #59.

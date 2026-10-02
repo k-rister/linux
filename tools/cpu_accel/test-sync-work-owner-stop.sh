@@ -21,6 +21,8 @@ netdev_ip_a=198.18.0.1
 netdev_ip_b=198.18.0.2
 rcu_sheaf_probe=${CPU_ACCEL_RCU_SHEAF_PROBE:-$script_dir/tlb-flush-probe/cpu_accel_slub_rcu_sheaf_probe.ko}
 rcu_sheaf_module=cpu_accel_slub_rcu_sheaf_probe
+srcu_cleanup_probe=${CPU_ACCEL_SRCU_CLEANUP_PROBE:-$script_dir/tlb-flush-probe/cpu_accel_srcu_cleanup_probe.ko}
+srcu_cleanup_module=cpu_accel_srcu_cleanup_probe
 vmalloc_purge_probe=${CPU_ACCEL_VMALLOC_PURGE_PROBE:-$script_dir/tlb-flush-probe/cpu_accel_vmalloc_purge_probe.ko}
 vmalloc_purge_module=cpu_accel_vmalloc_purge_probe
 vmalloc_purge_held_mb=${CPU_ACCEL_VMALLOC_PURGE_HELD_MB:-384}
@@ -33,6 +35,7 @@ run_pid=
 ping_pid=
 netdev_created=0
 rcu_sheaf_loaded=0
+srcu_cleanup_loaded=0
 vmalloc_purge_loaded=0
 timer_cgroup="$cpuset_root/cpu-accel-timer-$$"
 timer_partition="$timer_cgroup/cpuset.cpus.partition"
@@ -90,6 +93,10 @@ cleanup()
 		timeout --kill-after=2s 8s rmmod "$rcu_sheaf_module" 2>/dev/null || true
 		rcu_sheaf_loaded=0
 	fi
+	if [ "$srcu_cleanup_loaded" -eq 1 ]; then
+		timeout --kill-after=2s 8s rmmod "$srcu_cleanup_module" 2>/dev/null || true
+		srcu_cleanup_loaded=0
+	fi
 	if [ "$vmalloc_purge_loaded" -eq 1 ]; then
 		timeout --kill-after=2s 8s rmmod "$vmalloc_purge_module" 2>/dev/null || true
 		vmalloc_purge_loaded=0
@@ -129,7 +136,7 @@ trap 'exit 1' HUP INT TERM
 
 [ "$(id -u)" -eq 0 ] || fail "run as root"
 case "$selected_case" in
-all|vmstat|lru|slub_shrink|ring_resize|timer_migration|net_backlog|rcu_sheaf|vmalloc_purge) ;;
+all|vmstat|lru|slub_shrink|ring_resize|timer_migration|net_backlog|rcu_sheaf|srcu_cleanup|vmalloc_purge) ;;
 *) fail "unknown test case: $selected_case" ;;
 esac
 [ -x "$tool" ] || fail "cpu-accelctl is not executable: $tool"
@@ -143,6 +150,16 @@ esac
 if should_run_case rcu_sheaf; then
 	[ -r "$rcu_sheaf_probe" ] || \
 		fail "SLUB RCU sheaf probe is unavailable: $rcu_sheaf_probe"
+fi
+if should_run_case srcu_cleanup; then
+	[ -r "$srcu_cleanup_probe" ] || \
+		fail "SRCU cleanup probe is unavailable: $srcu_cleanup_probe"
+	for path in "$trace_root/events/workqueue/workqueue_queue_work/enable" \
+		"$trace_root/events/workqueue/workqueue_execute_start/enable"; do
+		[ -e "$path" ] || fail "required SRCU cleanup trace event is unavailable: $path"
+	done
+	grep -qw cleanup_srcu_struct "$trace_root/available_filter_functions" || \
+		fail "SRCU cleanup function is not traceable"
 fi
 if should_run_case vmalloc_purge; then
 	[ -r "$vmalloc_purge_probe" ] || \
@@ -189,14 +206,17 @@ esac
 for event in owner_stop_request owner_exit_complete; do
 	echo 1 >"$instance/events/cpu_accel/$event/enable"
 done
-if should_run_case vmalloc_purge; then
+if should_run_case srcu_cleanup || should_run_case vmalloc_purge; then
 	echo 1 >"$instance/events/workqueue/workqueue_queue_work/enable"
 	echo 1 >"$instance/events/workqueue/workqueue_execute_start/enable"
+fi
+if should_run_case vmalloc_purge; then
 	echo 1 >"$instance/events/vmalloc/free_vmap_area_noflush/enable"
 	echo 1 >"$instance/events/vmalloc/purge_vmap_area_lazy/enable"
 fi
 printf '%s\n' x86_cpu_accel_user_enter cpuset_partition_write \
 	wait_attach_done_lock update_prstate cpuset_update_sd_hk_unlock hk_sd_workfn \
+	cleanup_srcu_struct \
 	housekeeping_update pci_probe_flush_workqueue mem_cgroup_flush_workqueue \
 	vmstat_flush_workqueue workqueue_unbound_housekeeping_update \
 	tmigr_isolated_exclude_cpumask tmigr_cpu_isolate tmigr_cpu_unisolate \
@@ -270,7 +290,11 @@ run_case()
 		if timeout --kill-after=2s 8s taskset -c "$work_cpu" \
 			rmmod "$trigger_target" >"$outdir/$name-trigger.log" 2>&1; then
 			helper_rc=0
-			rcu_sheaf_loaded=0
+			case "$trigger_target" in
+				cpu_accel_slub_rcu_sheaf_probe) rcu_sheaf_loaded=0 ;;
+				cpu_accel_srcu_cleanup_probe) srcu_cleanup_loaded=0 ;;
+				cpu_accel_vmalloc_purge_probe) vmalloc_purge_loaded=0 ;;
+			esac
 		else
 			helper_rc=$?
 		fi
@@ -359,6 +383,35 @@ END {
 		grep -Eq 'workqueue_execute_start:.*function purge_vmap_node' \
 			"$outdir/trace.log" || \
 			fail "vmalloc purge did not execute a purge_vmap_node worker"
+	fi
+	if [ "$name" = srcu_cleanup ]; then
+		if ! awk -v target="$case_cpu" '
+function field(line, name, pos, value)
+{
+	pos = index(line, name "=")
+	if (!pos)
+		return ""
+	value = substr(line, pos + length(name) + 1)
+	sub(/[^0-9].*$/, "", value)
+	return value
+}
+/workqueue_queue_work:/ && index($0, "function=srcu_invoke_callbacks") {
+	if (field($0, "req_cpu") == target) {
+		work = $0
+		sub(/^.*work struct=/, "", work)
+		sub(/[[:space:]].*$/, "", work)
+	}
+}
+/workqueue_execute_start:/ && work != "" &&
+	index($0, "work struct " work ":") &&
+	index($0, "function srcu_invoke_callbacks") {
+	executed = 1
+}
+END {
+	exit !(work != "" && executed)
+}' "$outdir/trace.log"; then
+			fail "SRCU cleanup did not execute its queued per-CPU callback worker"
+		fi
 	fi
 	echo "PASS: $name stopped CPU $case_cpu owner in ${helper_elapsed_ms} ms"
 }
@@ -485,6 +538,18 @@ if should_run_case rcu_sheaf; then
 	run_case rcu_sheaf "$rcu_sheaf_module" flush_rcu_sheaves_on_cache 1 rmmod
 fi
 
+if should_run_case srcu_cleanup; then
+	[ ! -e "/sys/module/$srcu_cleanup_module" ] || \
+		fail "SRCU cleanup probe is already loaded"
+	insmod "$srcu_cleanup_probe" target_cpu="$target_cpu" \
+		>"$outdir/srcu-cleanup-insmod.log" 2>&1 || \
+		fail "SRCU cleanup probe load failed"
+	srcu_cleanup_loaded=1
+	run_case srcu_cleanup "$srcu_cleanup_module" cleanup_srcu_struct \
+		1 rmmod "$target_cpu"
+	srcu_cleanup_loaded=0
+fi
+
 if should_run_case vmalloc_purge; then
 	[ ! -e "/sys/module/$vmalloc_purge_module" ] || \
 		fail "vmalloc purge probe is already loaded"
@@ -513,7 +578,7 @@ if [ -s "$outdir/kernel-errors.log" ]; then
 fi
 
 if [ "$selected_case" = all ]; then
-	echo "PASS: synchronous work, LRU drain, SLUB/RCU flushes, network backlog, vmalloc purge, and ring resize complete with active-owner stops"
+	echo "PASS: synchronous work, LRU drain, SLUB/RCU/SRCU flushes, network backlog, vmalloc purge, and ring resize complete with active-owner stops"
 else
 	echo "PASS: $selected_case stopped the active owner"
 fi

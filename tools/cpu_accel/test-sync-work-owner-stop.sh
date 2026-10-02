@@ -15,6 +15,8 @@ resize_instance="$trace_root/instances/cpu_accel_resize_$$"
 slab_shrink=${CPU_ACCEL_SLAB_SHRINK:-/sys/kernel/slab/kmalloc-64/shrink}
 cpuset_root=${CPU_ACCEL_CGROUP_ROOT:-/sys/fs/cgroup}
 timer_cpu=${CPU_ACCEL_TIMER_CPU:-1}
+rearm_cpu=${CPU_ACCEL_REARM_CPU:-5}
+vmalloc_trigger_cpu=${CPU_ACCEL_VMALLOC_TRIGGER_CPU:-4}
 netdev_a="ca$$_a"
 netdev_b="ca$$_b"
 netdev_ip_a=198.18.0.1
@@ -32,6 +34,7 @@ trace_pid=
 dmesg_pid=
 prime_pid=
 run_pid=
+rearm_pid=
 ping_pid=
 netdev_created=0
 rcu_sheaf_loaded=0
@@ -65,6 +68,11 @@ fail()
 
 cleanup()
 {
+	if [ -n "$rearm_pid" ]; then
+		kill -TERM "$rearm_pid" 2>/dev/null || true
+		wait "$rearm_pid" 2>/dev/null || true
+		rearm_pid=
+	fi
 	if [ -n "$run_pid" ]; then
 		kill -TERM "$run_pid" 2>/dev/null || true
 		wait "$run_pid" 2>/dev/null || true
@@ -136,7 +144,7 @@ trap 'exit 1' HUP INT TERM
 
 [ "$(id -u)" -eq 0 ] || fail "run as root"
 case "$selected_case" in
-all|vmstat|lru|slub_shrink|ring_resize|timer_migration|net_backlog|rcu_sheaf|srcu_cleanup|vmalloc_purge) ;;
+all|vmstat|lru|slub_shrink|ring_resize|timer_migration|net_backlog|rcu_sheaf|srcu_cleanup|vmalloc_purge|vmalloc_purge_wait) ;;
 *) fail "unknown test case: $selected_case" ;;
 esac
 [ -x "$tool" ] || fail "cpu-accelctl is not executable: $tool"
@@ -161,7 +169,7 @@ if should_run_case srcu_cleanup; then
 	grep -qw cleanup_srcu_struct "$trace_root/available_filter_functions" || \
 		fail "SRCU cleanup function is not traceable"
 fi
-if should_run_case vmalloc_purge; then
+if should_run_case vmalloc_purge || should_run_case vmalloc_purge_wait; then
 	[ -r "$vmalloc_purge_probe" ] || \
 		fail "vmalloc purge probe is unavailable: $vmalloc_purge_probe"
 	for path in "$trace_root/events/workqueue/workqueue_queue_work/enable" \
@@ -170,6 +178,21 @@ if should_run_case vmalloc_purge; then
 		"$trace_root/events/vmalloc/purge_vmap_area_lazy/enable"; do
 		[ -e "$path" ] || fail "required vmalloc trace event is unavailable: $path"
 	done
+fi
+if should_run_case vmalloc_purge_wait; then
+	[ -d "/sys/devices/system/cpu/cpu$rearm_cpu" ] && \
+		[ "$(cat "/sys/devices/system/cpu/cpu$rearm_cpu/online")" = 1 ] || \
+		fail "rearm CPU $rearm_cpu is offline or unavailable"
+	[ -d "/sys/devices/system/cpu/cpu$vmalloc_trigger_cpu" ] && \
+		[ "$(cat "/sys/devices/system/cpu/cpu$vmalloc_trigger_cpu/online")" = 1 ] || \
+		fail "vmalloc trigger CPU $vmalloc_trigger_cpu is offline or unavailable"
+	[ "$rearm_cpu" -ne "$target_cpu" ] && \
+		[ "$rearm_cpu" -ne "$work_cpu" ] && \
+		[ "$rearm_cpu" -ne "$vmalloc_trigger_cpu" ] || \
+		fail "rearm CPU must differ from the owner and work CPUs"
+	[ "$vmalloc_trigger_cpu" -ne "$target_cpu" ] && \
+		[ "$vmalloc_trigger_cpu" -ne "$work_cpu" ] || \
+		fail "vmalloc trigger CPU must differ from the owner and work CPUs"
 fi
 [ -d "$trace_root/events/cpu_accel" ] || fail "cpu_accel tracepoints are unavailable"
 [ -d "$trace_root/instances" ] || fail "tracefs instances are unavailable"
@@ -206,11 +229,12 @@ esac
 for event in owner_stop_request owner_exit_complete; do
 	echo 1 >"$instance/events/cpu_accel/$event/enable"
 done
-if should_run_case srcu_cleanup || should_run_case vmalloc_purge; then
+if should_run_case srcu_cleanup || should_run_case vmalloc_purge || \
+	should_run_case vmalloc_purge_wait; then
 	echo 1 >"$instance/events/workqueue/workqueue_queue_work/enable"
 	echo 1 >"$instance/events/workqueue/workqueue_execute_start/enable"
 fi
-if should_run_case vmalloc_purge; then
+if should_run_case vmalloc_purge || should_run_case vmalloc_purge_wait; then
 	echo 1 >"$instance/events/vmalloc/free_vmap_area_noflush/enable"
 	echo 1 >"$instance/events/vmalloc/purge_vmap_area_lazy/enable"
 fi
@@ -221,6 +245,10 @@ printf '%s\n' x86_cpu_accel_user_enter cpuset_partition_write \
 	vmstat_flush_workqueue workqueue_unbound_housekeeping_update \
 	tmigr_isolated_exclude_cpumask tmigr_cpu_isolate tmigr_cpu_unisolate \
 	>"$instance/set_ftrace_filter"
+if should_run_case vmalloc_purge_wait; then
+	printf '%s\n' __purge_vmap_area_lazy purge_vmap_node flush_work \
+		>>"$instance/set_ftrace_filter"
+fi
 echo function_graph >"$instance/current_tracer"
 cat "$instance/trace_pipe" >"$outdir/trace.log" &
 trace_pid=$!
@@ -259,18 +287,22 @@ run_case()
 	trigger_type=${5:-sysfs}
 	case_cpu=${6:-$target_cpu}
 	owner_cgroup=${7:-}
+	case_escape_ms=$escape_ms
+	if [ "$name" = vmalloc_purge_wait ]; then
+		case_escape_ms=100
+	fi
 	entry_count=$(grep -Fc 'x86_cpu_accel_user_enter();' "$outdir/trace.log" || true)
 
 	if [ -n "$owner_cgroup" ]; then
 		taskset -c "$work_cpu" "$tool" run --cpu "$case_cpu" \
 			--duration-ms 5000 --period-us 1000 --workload user-hang \
-			--escape-after-ms "$escape_ms" --escape-retries 1 \
+			--escape-after-ms "$case_escape_ms" --escape-retries 1 \
 			--worker-cgroup "$owner_cgroup" \
 			>"$outdir/$name-ctl.log" 2>&1 &
 	else
 		"$tool" run --cpu "$case_cpu" \
 			--duration-ms 5000 --period-us 1000 \
-			--workload user-hang --escape-after-ms "$escape_ms" \
+			--workload user-hang --escape-after-ms "$case_escape_ms" \
 			--escape-retries 1 >"$outdir/$name-ctl.log" 2>&1 &
 	fi
 	run_pid=$!
@@ -284,10 +316,33 @@ run_case()
 		sleep 0.01
 	done
 	[ "$ready" -eq 1 ] || fail "$name owner-entry trace timed out"
+	if [ "$name" = vmalloc_purge_wait ]; then
+		(
+			for attempt in $(seq 1 400); do
+				if taskset -c "$rearm_cpu" "$tool" run --cpu "$case_cpu" \
+					--duration-ms 5000 --period-us 1000 \
+					--workload user-hang --escape-after-ms 500 \
+					--escape-retries 1 \
+					>"$outdir/$name-rearm-ctl.log" 2>&1; then
+					exit 0
+				fi
+				grep -q 'open /dev/cpu_accel: Device or resource busy' \
+					"$outdir/$name-rearm-ctl.log" || exit 1
+				sleep 0.005
+			done
+			echo "rearm device open stayed busy after $attempt attempts" \
+				>>"$outdir/$name-rearm.log"
+			exit 1
+		) &
+		rearm_pid=$!
+	fi
 
 	start_ns=$(date +%s%N)
 	if [ "$trigger_type" = rmmod ]; then
-		if timeout --kill-after=2s 8s taskset -c "$work_cpu" \
+		trigger_cpu=$work_cpu
+		[ "$name" = vmalloc_purge_wait ] && \
+			trigger_cpu=$vmalloc_trigger_cpu
+		if timeout --kill-after=2s 8s taskset -c "$trigger_cpu" \
 			rmmod "$trigger_target" >"$outdir/$name-trigger.log" 2>&1; then
 			helper_rc=0
 			case "$trigger_target" in
@@ -334,6 +389,20 @@ run_case()
 		run_rc=$?
 	fi
 	run_pid=
+	if [ "$name" = vmalloc_purge_wait ]; then
+		if wait "$rearm_pid"; then
+			rearm_rc=0
+		else
+			rearm_rc=$?
+		fi
+		rearm_pid=
+		[ "$rearm_rc" -eq 0 ] || \
+			fail "vmalloc rearm owner failed (see $outdir/$name-rearm-ctl.log)"
+		grep -q 'state=7 ' "$outdir/$name-rearm-ctl.log" || \
+			fail "vmalloc rearm owner did not report ESCAPED"
+		grep -q 'recovery_state=2' "$outdir/$name-rearm-ctl.log" || \
+			fail "vmalloc rearm owner recovery did not complete"
+	fi
 
 	[ "$helper_rc" -eq 0 ] || fail "$name trigger failed or timed out"
 	[ "$run_rc" -eq 0 ] || fail "$name owner run failed"
@@ -383,6 +452,61 @@ END {
 		grep -Eq 'workqueue_execute_start:.*function purge_vmap_node' \
 			"$outdir/trace.log" || \
 			fail "vmalloc purge did not execute a purge_vmap_node worker"
+	fi
+	if [ "$name" = vmalloc_purge_wait ]; then
+		grep -q 'reentry_seen=1 reentry_timed_out=0' \
+			"$outdir/dmesg-new.log" || \
+			fail "vmalloc TLB probe did not observe owner re-entry"
+		# The compiler can tail-call the arch hook, leaving the vmalloc
+		# callsite in the stop trace's caller field.
+		if ! awk -v target="$case_cpu" '
+function field(line, name, pos, value)
+{
+	pos = index(line, name "=")
+	if (!pos)
+		return ""
+	value = substr(line, pos + length(name) + 1)
+	sub(/[^[:alnum:]_].*$/, "", value)
+	return value
+}
+/owner_stop_request:/ && field($0, "cpu") == target &&
+	(field($0, "caller") == "arch_smp_sync_wait_stop" ||
+	 field($0, "caller") == "__purge_vmap_area_lazy") &&
+	field($0, "stop_cb") == "1" && field($0, "sent") == "1" {
+	owner = field($0, "owner")
+	stop_line = NR
+}
+/owner_exit_complete:/ && field($0, "cpu") == target &&
+	field($0, "owner") == owner && field($0, "stop_requested") == "1" {
+	exit_line = NR
+}
+END { exit !(owner != "" && stop_line && exit_line > stop_line) }
+' "$outdir/trace.log"; then
+			fail "vmalloc wait did not stop and exit the rearmed owner"
+		fi
+		if ! awk -v target="$case_cpu" '
+function field(line, name, pos, value)
+{
+	pos = index(line, name "=")
+	if (!pos)
+		return ""
+	value = substr(line, pos + length(name) + 1)
+	sub(/[^[:alnum:]_].*$/, "", value)
+	return value
+}
+/workqueue_queue_work:/ && index($0, "function=purge_vmap_node") &&
+	field($0, "req_cpu") == target {
+	work = $0
+	sub(/^.*work struct=/, "", work)
+	sub(/[[:space:]].*$/, "", work)
+}
+/workqueue_execute_start:/ && work != "" &&
+	index($0, "work struct " work ":") &&
+	index($0, "function purge_vmap_node") { executed = 1 }
+END { exit !(work != "" && executed) }
+' "$outdir/trace.log"; then
+			fail "vmalloc wait did not execute the target CPU purge worker"
+		fi
 	fi
 	if [ "$name" = srcu_cleanup ]; then
 		if ! awk -v target="$case_cpu" '
@@ -563,6 +687,20 @@ if should_run_case vmalloc_purge; then
 	vmalloc_purge_loaded=0
 fi
 
+if should_run_case vmalloc_purge_wait; then
+	[ ! -e "/sys/module/$vmalloc_purge_module" ] || \
+		fail "vmalloc purge probe is already loaded"
+	insmod "$vmalloc_purge_probe" target_cpu="$target_cpu" \
+		work_cpu="$work_cpu" held_mb="$vmalloc_purge_held_mb" \
+		wait_for_reentry=1 reentry_timeout_ms=400 \
+		>"$outdir/vmalloc-purge-wait-insmod.log" 2>&1 || \
+		fail "vmalloc wait probe load failed"
+	vmalloc_purge_loaded=1
+	run_case vmalloc_purge_wait "$vmalloc_purge_module" \
+		kernel_tlb_flush_all 1 rmmod "$target_cpu"
+	vmalloc_purge_loaded=0
+fi
+
 echo 0 >"$instance/tracing_on"
 kill -TERM "$trace_pid" "$dmesg_pid" 2>/dev/null || true
 wait "$trace_pid" 2>/dev/null || true
@@ -578,7 +716,7 @@ if [ -s "$outdir/kernel-errors.log" ]; then
 fi
 
 if [ "$selected_case" = all ]; then
-	echo "PASS: synchronous work, LRU drain, SLUB/RCU/SRCU flushes, network backlog, vmalloc purge, and ring resize complete with active-owner stops"
+	echo "PASS: synchronous work, LRU drain, SLUB/RCU/SRCU flushes, network backlog, vmalloc purge and re-entry, and ring resize complete with active-owner stops"
 else
 	echo "PASS: $selected_case stopped the active owner"
 fi

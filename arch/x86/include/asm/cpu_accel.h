@@ -74,6 +74,8 @@ void x86_cpu_accel_tlb_flush_begin(struct x86_cpu_accel_tlb_flush *flush,
 void x86_cpu_accel_tlb_flush_end(struct x86_cpu_accel_tlb_flush *flush);
 /* Request a registered, nonblocking owner stop before a synchronous flush. */
 void x86_cpu_accel_request_stop_owner(unsigned int cpu);
+/* Associate the stop request with the active synchronous TLB flush. */
+void x86_cpu_accel_request_stop_owner_tlb_flush(unsigned int cpu, u64 flush_id);
 bool x86_cpu_accel_note_tlb_shootdown(unsigned int cpu,
 				      const struct mm_struct *mm, u64 tlb_gen);
 void x86_cpu_accel_note_tlb_unmap(struct mm_struct *mm, u64 tlb_gen);
@@ -197,6 +199,13 @@ x86_cpu_accel_tlb_flush_end(struct x86_cpu_accel_tlb_flush *flush)
 static inline void x86_cpu_accel_request_stop_owner(unsigned int cpu)
 {
 	(void)cpu;
+}
+
+static inline void
+x86_cpu_accel_request_stop_owner_tlb_flush(unsigned int cpu, u64 flush_id)
+{
+	(void)cpu;
+	(void)flush_id;
 }
 
 static inline bool x86_cpu_accel_note_tlb_shootdown(unsigned int cpu,

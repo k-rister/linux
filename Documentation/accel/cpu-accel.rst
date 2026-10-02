@@ -258,6 +258,39 @@ prewarmed seccomp/JIT overlap test with a small two-CPU worker set::
     CPU_ACCEL_SECCOMP_CHURN=/tmp/test-seccomp-jit-churn \
     sh tools/cpu_accel/test-call-function-owner-stop.sh
 
+The synchronous per-CPU work test also covers SLUB cache shrink, the RCU
+sheaf drain used when a cache is destroyed, and network backlog flushing.
+The network case creates a temporary veth pair, directs receive-side scaling
+to an online housekeeping CPU accepted by the kernel's RPS filter, floods it
+while the owner is active, and unregisters the device. This can be a different
+CPU from the one used by the other cases because RPS excludes isolated CPUs.
+The timer migration case temporarily creates an isolated cpuset partition and
+requires the cgroup v2 cpuset controller; the script enables it only when
+needed and restores the prior controller state after the case. The worker
+enters the test partition while its control process stays on a housekeeping
+CPU to deliver the timed escape. The script temporarily selects ``never`` in
+transparent hugepage's ``enabled`` control so ``khugepaged``'s unrelated
+``lru_add_drain_all()`` cannot stop the owner before the timer hook; cleanup
+restores the previous mode. Set ``CPU_ACCEL_TEST_CASE=timer_migration`` to run
+only this case while debugging; the default runs the complete suite. The
+owner's fallback escape defaults to 4.9 seconds, leaving margin after the
+trace-entry poll, while the timer migration operation must still finish in
+under 2 seconds.
+Build the matching probe module with the other CPU accelerator probes before
+running the test; the VM also needs ``iproute2``, ``iputils``, and the ``veth``
+module::
+
+  make -C /lib/modules/$(uname -r)/build \
+    M="$PWD/tools/cpu_accel/tlb-flush-probe" modules
+  sudo make -C tools/cpu_accel test-sync-work-owner-stop
+
+The same kernel changes also gate per-CPU callback work drained by
+``cleanup_srcu_struct()`` and online per-node workers used by vmalloc purge.
+The current script has no focused SRCU-cleanup trigger. The vmalloc worker path
+requires multiple NUMA purge nodes and enough lazy areas to select a helper;
+the single-node test VM does not meet that condition, so this path has only
+been build- and source-validated there.
+
 The focused single-call probe covers synchronous IPI delivery, reuse of a CSD
 whose earlier asynchronous callback is still pending, and the remote
 ``smp_call_on_cpu()`` and ``work_on_cpu()`` workqueue waits. Build its module

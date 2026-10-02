@@ -263,8 +263,10 @@ function number(line, name, rest, pos)
 }
 /owner_stop_request:/ {
 	if (number($0, "cpu") == target &&
+	    number($0, "tlb_flush_id") != 0 &&
 	    index($0, "stop_cb=1") && index($0, "sent=1")) {
 		stop_owner = number($0, "owner")
+		stop_flush_id = number($0, "tlb_flush_id")
 		stop_line = NR
 	}
 }
@@ -281,9 +283,11 @@ END {
 	for (id in complete_count)
 		if (begin_count[id] != 1)
 			bad_pair = 1
+	# Target flush callback can finish just before owner-exit tracing.
 	if (!bad_pair && begin_id != "" && begin_id == complete_id &&
-	    stop_owner != "" && stop_line > begin_line &&
-	    exit_line > stop_line && complete_line > exit_line)
+	    stop_owner != "" && stop_flush_id == begin_id &&
+	    stop_line > begin_line &&
+	    exit_line > stop_line && complete_line > begin_line)
 		exit 0
 	exit 1
 }' "$outdir/trace.log"; then

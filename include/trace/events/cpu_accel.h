@@ -10,11 +10,11 @@
 TRACE_EVENT(owner_stop_request,
 
 	TP_PROTO(unsigned int cpu, u64 owner_id, bool user_mm,
-		 bool callback_registered, bool callback_sent,
+		 bool callback_registered, bool callback_sent, u64 tlb_flush_id,
 		 unsigned long caller),
 
 	TP_ARGS(cpu, owner_id, user_mm, callback_registered, callback_sent,
-		caller),
+		tlb_flush_id, caller),
 
 	TP_STRUCT__entry(
 		__field(unsigned int, cpu)
@@ -22,6 +22,7 @@ TRACE_EVENT(owner_stop_request,
 		__field(bool, user_mm)
 		__field(bool, callback_registered)
 		__field(bool, callback_sent)
+		__field(u64, tlb_flush_id)
 		__field(unsigned long, caller)
 	),
 
@@ -31,13 +32,16 @@ TRACE_EVENT(owner_stop_request,
 		__entry->user_mm = user_mm;
 		__entry->callback_registered = callback_registered;
 		__entry->callback_sent = callback_sent;
+		__entry->tlb_flush_id = tlb_flush_id;
 		__entry->caller = caller;
 	),
 
-	TP_printk("cpu=%u owner=%llu user_mm=%u stop_cb=%u sent=%u caller=%pS",
+	TP_printk("cpu=%u owner=%llu user_mm=%u stop_cb=%u sent=%u tlb_flush_id=%llu caller=%pS",
 		  __entry->cpu, (unsigned long long)__entry->owner_id,
 		  __entry->user_mm, __entry->callback_registered,
-		  __entry->callback_sent, (void *)__entry->caller)
+		  __entry->callback_sent,
+		  (unsigned long long)__entry->tlb_flush_id,
+		  (void *)__entry->caller)
 );
 
 TRACE_EVENT(owner_exit_complete,

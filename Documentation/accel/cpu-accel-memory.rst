@@ -624,7 +624,10 @@ worker CPU. The stop event records whether a callback exists and whether this
 call dispatched it, along with the requesting call site. The exit event is
 emitted only after the owner's required local TLB reconciliation and reclaim
 acknowledgements complete; its generation and unscoped-flush fields describe
-the state reconciled at exit. With tracefs mounted at
+the state reconciled at exit. An owner-stop event initiated by a synchronous
+TLB flush also carries that flush's ID; zero identifies stop requests from
+other wait paths. This directly links a flush's ``begin`` record to each
+owner-stop request even when multiple flushes overlap. With tracefs mounted at
 ``/sys/kernel/tracing``, enable the events and read ``trace_pipe``::
 
   echo 1 > /sys/kernel/tracing/events/cpu_accel/tlb_flush_wait/enable
@@ -1585,3 +1588,79 @@ The implementation checkpoints are:
     flush; the RCU sheaf drain has received source review but does not yet have
     a focused runtime trigger. The remaining audit includes network backlog
     flush, timer migration, SRCU cleanup, and vmalloc purge waits.
+
+    The next two audited waits are the per-CPU backlog flush in
+    ``flush_all_backlogs()`` and the RCU sheaf drain performed during cache
+    destruction. Backlog flushing now reserves each CPU before queueing
+    ``flush_backlog``, requests an active owner to stop, and releases the
+    reservation after ``flush_work()`` completes. The focused test creates a
+    temporary veth pair, directs receive-side scaling to the owner CPU, floods
+    it, and unregisters the device. Since the kernel filters isolated CPUs
+    from RPS targets, the network case selects an online housekeeping CPU when
+    the normal target is not eligible. A new test module primes a dedicated
+    SLAB cache on the target CPU with ``kfree_rcu()`` and destroys it while the
+    owner is active, exercising ``flush_rcu_sheaves_on_cache()``.
+
+    The full 00643 kernel and modules build completed as build ``#53``. On
+    ``7.3.0-rc3-accel-tlbfix-00643-gcf377215356e-dirty``, the focused VM suite
+    passed: ``schedule_on_each_cpu()`` in 4 ms, LRU draining in 16 ms, SLUB
+    shrink in 7 ms, trace-ring resize in 12 ms, network backlog flushing in
+    116 ms, and RCU sheaf cache destruction in 38 ms. The trace paired each
+    wait's stop request with the matching owner's exit; the harness recorded
+    no new soft lockup, blocked-task, RCU-stall, BUG, Oops, or panic record.
+    The candidate booted through one-time GRUB selection, with 00603 still the
+    saved default. The remaining wait-path candidates are SRCU cleanup and
+    vmalloc purge; the intermittent CPA soft-lockup investigation remains
+    open.
+
+    A console trace from an earlier 00643 build showed a user-mode owner
+    spinning on CPU 1 while ``cpuset_partition_write()`` waited in
+    ``synchronize_rcu()`` through ``housekeeping_update()``. The housekeeping
+    update now reserves every requested isolated CPU before publishing its new
+    mask, requests active owners to stop before the RCU grace period, and
+    retains those reservations through workqueue, timer, and kthread
+    housekeeping updates. It reserves requested CPUs even while offline,
+    because cpuset drops ``cpus_read_lock()`` around this operation and CPU
+    hotplug can race it.
+
+    The 00643 kernel and modules rebuilt successfully as build ``#57``. The
+    candidate booted via one-time GRUB selection and reported ``#57`` from
+    ``uname -v``; the saved default remains 00603. The focused timer case
+    stopped its CPU 1 owner in 10 ms. A first full-suite run with a 4.5-second
+    fallback let the test owner reach its timed escape just before cpuset
+    isolation began, so its trace did not exercise the stop request. The
+    harness fallback now defaults to 4.9 seconds. With that margin, all seven
+    cases passed: vmstat in 4 ms, LRU drain in 18 ms, SLUB shrink in 7 ms,
+    ring resize in 18 ms, timer migration in 21 ms, network backlog in 117 ms,
+    and RCU sheaf destruction in 36 ms. The successful run recorded no new
+    soft-lockup, blocked-task, RCU-stall, BUG, Oops, panic, or clocksource
+    watchdog records. One remote-CPU clocksource timeout appeared during the
+    earlier run that missed the timer stop window. THP returned to its previous
+    ``always`` mode, and the one-time GRUB selection cleared without changing
+    the saved 00603 default.
+
+    The next build, ``#58``, adds owner-stop coverage to the two waits that
+    remained in that audit. ``cleanup_srcu_struct()`` now reserves and stops
+    the corresponding CPU when its per-CPU SRCU callback work is busy, and
+    keeps the reservation until ``flush_work()`` completes. Online per-node
+    vmalloc purge workers are likewise reserved before ``schedule_work_on()``;
+    the owner is asked to stop before the caller waits in ``flush_work()``.
+
+    The #58 kernel and modules build completed, and the VM booted the candidate
+    through one-time GRUB selection. It reported
+    ``7.3.0-rc3-accel-tlbfix-hkrcu-00643-gcf377215356e-dirty`` and build ``#58``;
+    the persistent GRUB default remains 00603 and the one-time entry cleared.
+    The full suite passed after moving LRU page priming to immediately before
+    ``drop_caches``. It stopped owners in vmstat (5 ms), LRU drain (17 ms),
+    SLUB shrink (7 ms), ring resize (12 ms), timer migration (10 ms), network
+    backlog flush (114 ms), and RCU sheaf destruction (44 ms). The earlier
+    attempt had failed only because a preceding case drained the primed LRU
+    pages before the LRU trigger; the updated setup removes that ordering
+    dependency. THP returned to ``always``. The run reported no soft lockup,
+    blocked task, RCU stall, BUG, Oops, panic, or clocksource watchdog alert.
+
+    The VM has one NUMA node, so vmalloc's helper-count calculation selects no
+    parallel purge worker; that path was compiled and reviewed but not reached
+    dynamically. The current suite also lacks a focused trigger for pending
+    per-CPU work during ``cleanup_srcu_struct()``. Those two paths still need
+    targeted runtime coverage on a suitable setup.

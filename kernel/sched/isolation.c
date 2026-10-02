@@ -10,6 +10,7 @@
 #include <linux/sched/isolation.h>
 #include <linux/llist.h>
 #include <linux/pci.h>
+#include <linux/smp.h>
 #include "sched.h"
 
 enum hk_flags {
@@ -123,7 +124,7 @@ EXPORT_SYMBOL_GPL(housekeeping_test_cpu);
 int housekeeping_update(struct cpumask *isol_mask)
 {
 	struct cpumask *trial, *old = NULL;
-	int err;
+	int cpu, err;
 
 	trial = kmalloc(cpumask_size(), GFP_KERNEL);
 	if (!trial)
@@ -142,7 +143,20 @@ int housekeeping_update(struct cpumask *isol_mask)
 		old = housekeeping_cpumask_dereference(HK_TYPE_DOMAIN);
 	else
 		WRITE_ONCE(housekeeping.flags, housekeeping.flags | HK_FLAG_DOMAIN);
+	/*
+	 * cpuset drops cpus_read_lock() around housekeeping_update(), so CPU
+	 * hotplug can race this update. Reserve requested CPUs even while offline
+	 * so a CPU brought online during the update remains gated.
+	 */
+	for_each_cpu(cpu, isol_mask)
+		arch_smp_sync_wait_begin(cpu);
 	rcu_assign_pointer(housekeeping.cpumasks[HK_TYPE_DOMAIN], trial);
+	/*
+	 * Publishing the new mask requires an RCU grace period below. Stop
+	 * owners on CPUs being isolated before waiting for their quiescent state.
+	 */
+	for_each_cpu(cpu, isol_mask)
+		arch_smp_sync_wait_stop(cpu);
 
 	synchronize_rcu();
 
@@ -160,6 +174,8 @@ int housekeeping_update(struct cpumask *isol_mask)
 	WARN_ON_ONCE(err < 0);
 
 	kfree(old);
+	for_each_cpu(cpu, isol_mask)
+		arch_smp_sync_wait_end(cpu);
 
 	return 0;
 }

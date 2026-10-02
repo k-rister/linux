@@ -327,7 +327,8 @@ static void reset_global_asid_space(void)
 	} else {
 		/* Do not broadcast while an accelerator CPU is owned. */
 		for_each_cpu(cpu, &accel_flush.targets)
-			x86_cpu_accel_request_stop_owner(cpu);
+			x86_cpu_accel_request_stop_owner_tlb_flush(cpu,
+								  accel_flush.id);
 		on_each_cpu(do_flush_tlb_all, NULL, 1);
 	}
 	x86_cpu_accel_tlb_flush_end(&accel_flush);
@@ -1418,7 +1419,8 @@ static bool accel_filter_tlb_shootdown(unsigned int cpu,
 }
 
 static void accel_flush_tlb_multi_slow(const struct cpumask *cpumask,
-				       const struct flush_tlb_info *info)
+				       const struct flush_tlb_info *info,
+				       u64 flush_id)
 {
 	bool flush_all = info->freed_tables || mm_in_asid_transition(info->mm);
 	unsigned int cpu;
@@ -1447,7 +1449,7 @@ static void accel_flush_tlb_multi_slow(const struct cpumask *cpumask,
 		else if (!should_flush_tlb(cpu, (void *)info))
 			continue;
 
-		x86_cpu_accel_request_stop_owner(cpu);
+		x86_cpu_accel_request_stop_owner_tlb_flush(cpu, flush_id);
 		smp_call_function_single(cpu, flush_tlb_func, (void *)info, true);
 	}
 }
@@ -1488,10 +1490,12 @@ void flush_tlb_multi(const struct cpumask *cpumask,
 		}
 	}
 	if (slow_path) {
-		accel_flush_tlb_multi_slow(&accel_flush.targets, info);
+		accel_flush_tlb_multi_slow(&accel_flush.targets, info,
+					   accel_flush.id);
 	} else {
 		for_each_cpu(cpu, flush_mask)
-			x86_cpu_accel_request_stop_owner(cpu);
+			x86_cpu_accel_request_stop_owner_tlb_flush(cpu,
+								  accel_flush.id);
 		__flush_tlb_multi(flush_mask, info);
 	}
 	if (filtered_mask_allocated)
@@ -1640,7 +1644,8 @@ void flush_tlb_all(void)
 	} else {
 		/* Fall back to the IPI-based invalidation. */
 		for_each_cpu(cpu, &accel_flush.targets)
-			x86_cpu_accel_request_stop_owner(cpu);
+			x86_cpu_accel_request_stop_owner_tlb_flush(cpu,
+								  accel_flush.id);
 		on_each_cpu(do_flush_tlb_all, NULL, 1);
 	}
 	x86_cpu_accel_tlb_flush_end(&accel_flush);
@@ -1691,7 +1696,8 @@ static void kernel_tlb_flush_all(struct flush_tlb_info *info)
 		invlpgb_flush_all();
 	else {
 		for_each_cpu(cpu, &accel_flush.targets)
-			x86_cpu_accel_request_stop_owner(cpu);
+			x86_cpu_accel_request_stop_owner_tlb_flush(cpu,
+								  accel_flush.id);
 		on_each_cpu(do_flush_tlb_all, NULL, 1);
 	}
 	x86_cpu_accel_tlb_flush_end(&accel_flush);
@@ -1714,7 +1720,8 @@ static void kernel_tlb_flush_range(struct flush_tlb_info *info)
 		note_tlb_shootdown_targets(cpu_online_mask, info->mm,
 					   info->new_tlb_gen);
 		for_each_cpu(cpu, &accel_flush.targets)
-			x86_cpu_accel_request_stop_owner(cpu);
+			x86_cpu_accel_request_stop_owner_tlb_flush(cpu,
+								  accel_flush.id);
 		on_each_cpu(do_kernel_range_flush, info, 1);
 	}
 	x86_cpu_accel_tlb_flush_end(&accel_flush);

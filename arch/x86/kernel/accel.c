@@ -63,7 +63,8 @@ static DEFINE_PER_CPU(struct x86_cpu_accel_request, x86_cpu_accel_request) = {
 };
 
 static void x86_cpu_accel_request_stop_owner_gen(unsigned int cpu,
-						u64 owner_generation);
+						u64 owner_generation,
+						u64 tlb_flush_id);
 
 /* Per-CPU request storage is permanent, so snapshot pinning is a no-op. */
 static bool x86_cpu_accel_owner_data_get(void *data)
@@ -81,7 +82,7 @@ static void x86_cpu_accel_owner_request_stop(void *data, u64 generation)
 {
 	struct x86_cpu_accel_request *request = data;
 
-	x86_cpu_accel_request_stop_owner_gen(request->cpu, generation);
+	x86_cpu_accel_request_stop_owner_gen(request->cpu, generation, 0);
 }
 
 static const struct mmu_owner_ops x86_cpu_accel_owner_ops = {
@@ -259,7 +260,8 @@ EXPORT_SYMBOL_GPL(x86_cpu_accel_tlb_flush_end);
 
 /* Generation zero selects the current active owner without an identity check. */
 static void
-x86_cpu_accel_request_stop_owner_gen(unsigned int cpu, u64 owner_generation)
+x86_cpu_accel_request_stop_owner_gen(unsigned int cpu, u64 owner_generation,
+				     u64 tlb_flush_id)
 {
 	struct x86_cpu_accel_request *request;
 	x86_cpu_accel_stop_fn stop = NULL;
@@ -295,7 +297,7 @@ x86_cpu_accel_request_stop_owner_gen(unsigned int cpu, u64 owner_generation)
 	if (active) {
 		trace_owner_stop_request(cpu, owner_id, user_mm,
 					 callback_registered, callback_sent,
-					 caller);
+					 tlb_flush_id, caller);
 		if (stop) {
 			/* This callback only publishes a stop request; it must not wait. */
 			stop(data);
@@ -306,8 +308,14 @@ x86_cpu_accel_request_stop_owner_gen(unsigned int cpu, u64 owner_generation)
 
 void x86_cpu_accel_request_stop_owner(unsigned int cpu)
 {
-	x86_cpu_accel_request_stop_owner_gen(cpu, 0);
+	x86_cpu_accel_request_stop_owner_gen(cpu, 0, 0);
 }
+
+void x86_cpu_accel_request_stop_owner_tlb_flush(unsigned int cpu, u64 flush_id)
+{
+	x86_cpu_accel_request_stop_owner_gen(cpu, 0, flush_id);
+}
+EXPORT_SYMBOL_GPL(x86_cpu_accel_request_stop_owner_tlb_flush);
 
 void arch_smp_sync_wait_begin(int cpu)
 {
@@ -340,7 +348,7 @@ void arch_smp_sync_wait_stop(int cpu)
 
 	/* Request owner exit when active ownership can block a waiter. */
 	if (owner_generation)
-		x86_cpu_accel_request_stop_owner_gen(cpu, owner_generation);
+		x86_cpu_accel_request_stop_owner_gen(cpu, owner_generation, 0);
 }
 
 void arch_smp_sync_wait_end(int cpu)

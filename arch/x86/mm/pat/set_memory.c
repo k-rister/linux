@@ -403,7 +403,7 @@ static void cpa_flush_all(unsigned long cache)
 
 	x86_cpu_accel_tlb_flush_begin(&accel_flush, cpu_online_mask);
 	for_each_cpu(cpu, &accel_flush.targets)
-		x86_cpu_accel_request_stop_owner(cpu);
+		x86_cpu_accel_request_stop_owner_tlb_flush(cpu, accel_flush.id);
 	on_each_cpu(__cpa_flush_all, (void *) cache, 1);
 	x86_cpu_accel_tlb_flush_end(&accel_flush);
 }
@@ -491,7 +491,8 @@ static void cpa_flush(struct cpa_data *cpa, int cache)
 	else {
 		x86_cpu_accel_tlb_flush_begin(&accel_flush, cpu_online_mask);
 		for_each_cpu(cpu, &accel_flush.targets)
-			x86_cpu_accel_request_stop_owner(cpu);
+			x86_cpu_accel_request_stop_owner_tlb_flush(cpu,
+								  accel_flush.id);
 		on_each_cpu(__cpa_flush_tlb, cpa, 1);
 		x86_cpu_accel_tlb_flush_end(&accel_flush);
 	}

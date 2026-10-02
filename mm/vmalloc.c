@@ -40,6 +40,7 @@
 #include <linux/pgtable.h>
 #include <linux/hugetlb.h>
 #include <linux/sched/mm.h>
+#include <linux/smp.h>
 #include <asm/tlbflush.h>
 #include <asm/shmparam.h>
 #include <linux/page_owner.h>
@@ -2360,6 +2361,7 @@ static bool __purge_vmap_area_lazy(unsigned long start, unsigned long end,
 	unsigned long nr_purged_areas = 0;
 	unsigned int nr_purge_helpers;
 	static cpumask_t purge_nodes;
+	static cpumask_t purge_waiters;
 	unsigned int nr_purge_nodes;
 	struct vmap_node *vn;
 	int i;
@@ -2370,6 +2372,7 @@ static bool __purge_vmap_area_lazy(unsigned long start, unsigned long end,
 	 * Use cpumask to mark which node has to be processed.
 	 */
 	purge_nodes = CPU_MASK_NONE;
+	cpumask_clear(&purge_waiters);
 
 	for_each_vmap_node(vn) {
 		INIT_LIST_HEAD(&vn->purge_list);
@@ -2407,10 +2410,14 @@ static bool __purge_vmap_area_lazy(unsigned long start, unsigned long end,
 			if (nr_purge_helpers > 0) {
 				INIT_WORK(&vn->purge_work, purge_vmap_node);
 
-				if (cpumask_test_cpu(i, cpu_online_mask))
+				if (cpumask_test_cpu(i, cpu_online_mask)) {
+					arch_smp_sync_wait_begin(i);
+					cpumask_set_cpu(i, &purge_waiters);
 					schedule_work_on(i, &vn->purge_work);
-				else
+					arch_smp_sync_wait_stop(i);
+				} else {
 					schedule_work(&vn->purge_work);
+				}
 
 				nr_purge_helpers--;
 			} else {
@@ -2425,6 +2432,8 @@ static bool __purge_vmap_area_lazy(unsigned long start, unsigned long end,
 
 			if (vn->purge_work.func) {
 				flush_work(&vn->purge_work);
+				if (cpumask_test_and_clear_cpu(i, &purge_waiters))
+					arch_smp_sync_wait_end(i);
 				nr_purged_areas += vn->nr_purged;
 			}
 		}

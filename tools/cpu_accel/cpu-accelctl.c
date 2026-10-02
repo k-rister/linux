@@ -570,6 +570,7 @@ static void usage(FILE *stream, const char *program)
 		"      [--work-bytes N] [--shared-entry N]\n"
 		"      [--test-reclaim-file PATH]\n"
 		"      [--escape-after-ms N] [--escape-retries N]\n"
+		"      [--worker-cgroup PATH]\n"
 		"      [--persistent] [--require-quiescent] [--quarantine-irqs]\n"
 		"  %s exit\n"
 		"  %s status\n"
@@ -593,6 +594,47 @@ static int pin_cpu(unsigned int cpu)
 	CPU_ZERO(&set);
 	CPU_SET(cpu, &set);
 	return sched_setaffinity(0, sizeof(set), &set);
+}
+
+static int move_self_to_cgroup(const char *cgroup)
+{
+	char procs_path[PATH_MAX];
+	char pid[32];
+	size_t written = 0;
+	int fd, path_len, pid_len;
+
+	if (!cgroup)
+		return 0;
+
+	path_len = snprintf(procs_path, sizeof(procs_path), "%s/cgroup.procs",
+			    cgroup);
+	if (path_len < 0 || path_len >= (int)sizeof(procs_path)) {
+		errno = ENAMETOOLONG;
+		return -1;
+	}
+	pid_len = snprintf(pid, sizeof(pid), "%ld\n", (long)getpid());
+	if (pid_len < 0 || pid_len >= (int)sizeof(pid)) {
+		errno = EOVERFLOW;
+		return -1;
+	}
+
+	fd = open(procs_path, O_WRONLY | O_CLOEXEC);
+	if (fd < 0)
+		return -1;
+	while (written < (size_t)pid_len) {
+		ssize_t ret = write(fd, pid + written, pid_len - written);
+
+		if (ret < 0 && errno == EINTR)
+			continue;
+		if (ret <= 0) {
+			if (!ret)
+				errno = EIO;
+			close(fd);
+			return -1;
+		}
+		written += ret;
+	}
+	return close(fd);
 }
 
 static int close_worker_fds(int keep_fd)
@@ -858,7 +900,8 @@ static bool user_reclaim_owner_stop_completed(
 static int run_user_workload(const struct cpu_accel_config *requested,
 			     uint64_t escape_after_ms,
 			     uint64_t escape_attempts,
-			     const char *reclaim_file)
+			     const char *reclaim_file,
+			     const char *worker_cgroup)
 {
 	struct cpu_accel_config config = *requested;
 	struct cpu_accel_handle handle;
@@ -934,6 +977,10 @@ static int run_user_workload(const struct cpu_accel_config *requested,
 		}
 		if (pin_cpu(config.cpu) < 0) {
 			perror("pin user accelerator");
+			_exit(1);
+		}
+		if (move_self_to_cgroup(worker_cgroup) < 0) {
+			perror("move user accelerator to cgroup");
 			_exit(1);
 		}
 		execve("/proc/self/exe", worker_argv, worker_env);
@@ -1037,6 +1084,7 @@ static int run_workload(const char *program, int argc, char **argv)
 	uint64_t escape_after_ms = 0;
 	uint64_t escape_attempts = 1;
 	const char *reclaim_file = NULL;
+	const char *worker_cgroup = NULL;
 	unsigned int timeout_ms;
 	int persistent = 0;
 	int require_quiescent = 0;
@@ -1115,6 +1163,13 @@ static int run_workload(const char *program, int argc, char **argv)
 				fprintf(stderr, "%s: invalid reclaim file path\n", program);
 				return 2;
 			}
+		} else if (!strcmp(argv[index], "--worker-cgroup") &&
+			   index + 1 < argc) {
+			worker_cgroup = argv[++index];
+			if (!*worker_cgroup) {
+				fprintf(stderr, "%s: invalid worker cgroup path\n", program);
+				return 2;
+			}
 		} else if (!strcmp(argv[index], "--escape-after-ms") &&
 			   index + 1 < argc) {
 			if (parse_u64(argv[++index], &escape_after_ms) ||
@@ -1169,7 +1224,12 @@ static int run_workload(const char *program, int argc, char **argv)
 	    config.workload == CPU_ACCEL_WORKLOAD_USER_HANG ||
 	    config.workload == CPU_ACCEL_WORKLOAD_USER_RECLAIM)
 		return run_user_workload(&config, escape_after_ms, escape_attempts,
-					 reclaim_file);
+					 reclaim_file, worker_cgroup);
+	if (worker_cgroup) {
+		fprintf(stderr, "%s: --worker-cgroup requires a user workload\n",
+			program);
+		return 2;
+	}
 
 	timeout_ms = (unsigned int)(config.duration_ns / 1000000ULL) + 1000;
 	if (pin_control_cpu() < 0) {

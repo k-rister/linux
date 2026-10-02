@@ -700,6 +700,7 @@ void cleanup_srcu_struct(struct srcu_struct *ssp)
 	flush_delayed_work(&sup->work);
 	for_each_possible_cpu(cpu) {
 		struct srcu_data *sdp = per_cpu_ptr(ssp->sda, cpu);
+		bool sync_wait;
 
 		// Call srcu_barrier() before this cleanup_srcu_struct()
 		// to avoid triggering this WARN_ON().
@@ -707,7 +708,18 @@ void cleanup_srcu_struct(struct srcu_struct *ssp)
 			    rcu_segcblist_n_cbs(&sdp->srcu_cblist)) &&
 		    rcu_cpu_beenfullyonline(sdp->cpu))
 			queue_work_on(sdp->cpu, rcu_gp_wq, &sdp->work);
+		/*
+		 * SRCU callback work is per-CPU. Keep an active owner from
+		 * starving a queued callback while cleanup waits for it.
+		 */
+		sync_wait = work_busy(&sdp->work);
+		if (sync_wait) {
+			arch_smp_sync_wait_begin(sdp->cpu);
+			arch_smp_sync_wait_stop(sdp->cpu);
+		}
 		flush_work(&sdp->work);
+		if (sync_wait)
+			arch_smp_sync_wait_end(sdp->cpu);
 		if (WARN_ON(rcu_segcblist_n_cbs(&sdp->srcu_cblist)))
 			return; /* Forgot srcu_barrier(), so just leak it! */
 	}

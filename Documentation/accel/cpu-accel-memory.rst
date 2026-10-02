@@ -1659,11 +1659,11 @@ The implementation checkpoints are:
     dependency. THP returned to ``always``. The run reported no soft lockup,
     blocked task, RCU stall, BUG, Oops, panic, or clocksource watchdog alert.
 
-    The VM has one NUMA node, so vmalloc's helper-count calculation selects no
-    parallel purge worker; that path was compiled and reviewed but not reached
-    dynamically. The current suite also lacks a focused trigger for pending
-    per-CPU work during ``cleanup_srcu_struct()``. Those two paths still need
-    targeted runtime coverage on a suitable setup.
+    The earlier attribution of the vmalloc coverage gap to the VM having one
+    NUMA node was incorrect. ``vmap_init_nodes()`` sizes its shards from
+    ``num_possible_cpus()``, and the purge helper count depends on accumulated
+    lazy pages. The #59 suite still lacked a focused trigger for pending
+    per-CPU work during ``cleanup_srcu_struct()``.
 
     On ``7.3.0-rc3-accel-tlbfix-00643-gcf377215356e-dirty`` (#59), the full
     synchronous-work owner-stop suite passed on 2026-10-02: vmstat (4 ms), LRU
@@ -1672,4 +1672,18 @@ The implementation checkpoints are:
     destruction (45 ms). The run found no new lockup or kernel-error records.
     THP returned to ``always``, tracefs instances were removed, and the cgroup
     subtree controls returned to ``cpu memory pids``. The SRCU cleanup wait and
-    multi-node vmalloc purge remain outside this runtime coverage.
+    vmalloc purge worker still lacked runtime coverage at that point.
+
+    A focused vmalloc probe now primes and frees 96 MiB on CPU 2, then holds
+    384 MiB allocated on CPU 3 until module removal. On #59, the trace recorded
+    ``purge_vmap_node`` queued and executed on CPU 3, and the module reported
+    that ``vm_unmap_aliases()`` completed. The active CPU 2 owner was stopped
+    by ``kernel_tlb_flush_all()`` during the required kernel-range TLB flush;
+    this occurs before vmalloc queues its purge worker. The test therefore
+    reaches the asynchronous purge worker, while the later owner-stop hook
+    immediately before ``flush_work()`` is not independently isolated. The
+    192 MiB held-area setting did not produce a purge-worker trace; the harness
+    now uses 384 MiB and requires both queue and execution trace events. The
+    The final focused run completed in 29 ms without new lockup or kernel-error
+    records, and the VM remained online on #59. The SRCU cleanup wait still
+    needs a focused runtime trigger.

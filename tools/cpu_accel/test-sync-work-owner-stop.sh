@@ -21,6 +21,9 @@ netdev_ip_a=198.18.0.1
 netdev_ip_b=198.18.0.2
 rcu_sheaf_probe=${CPU_ACCEL_RCU_SHEAF_PROBE:-$script_dir/tlb-flush-probe/cpu_accel_slub_rcu_sheaf_probe.ko}
 rcu_sheaf_module=cpu_accel_slub_rcu_sheaf_probe
+vmalloc_purge_probe=${CPU_ACCEL_VMALLOC_PURGE_PROBE:-$script_dir/tlb-flush-probe/cpu_accel_vmalloc_purge_probe.ko}
+vmalloc_purge_module=cpu_accel_vmalloc_purge_probe
+vmalloc_purge_held_mb=${CPU_ACCEL_VMALLOC_PURGE_HELD_MB:-384}
 outdir=${CPU_ACCEL_TRACE_DIR:-$(mktemp -d /tmp/cpu-accel-sync-wait.XXXXXX)}
 selected_case=${CPU_ACCEL_TEST_CASE:-all}
 trace_pid=
@@ -30,6 +33,7 @@ run_pid=
 ping_pid=
 netdev_created=0
 rcu_sheaf_loaded=0
+vmalloc_purge_loaded=0
 timer_cgroup="$cpuset_root/cpu-accel-timer-$$"
 timer_partition="$timer_cgroup/cpuset.cpus.partition"
 timer_cgroup_created=0
@@ -86,6 +90,10 @@ cleanup()
 		timeout --kill-after=2s 8s rmmod "$rcu_sheaf_module" 2>/dev/null || true
 		rcu_sheaf_loaded=0
 	fi
+	if [ "$vmalloc_purge_loaded" -eq 1 ]; then
+		timeout --kill-after=2s 8s rmmod "$vmalloc_purge_module" 2>/dev/null || true
+		vmalloc_purge_loaded=0
+	fi
 	if [ -n "$prime_pid" ]; then
 		kill -TERM "$prime_pid" 2>/dev/null || true
 		wait "$prime_pid" 2>/dev/null || true
@@ -121,7 +129,7 @@ trap 'exit 1' HUP INT TERM
 
 [ "$(id -u)" -eq 0 ] || fail "run as root"
 case "$selected_case" in
-all|vmstat|lru|slub_shrink|ring_resize|timer_migration|net_backlog|rcu_sheaf) ;;
+all|vmstat|lru|slub_shrink|ring_resize|timer_migration|net_backlog|rcu_sheaf|vmalloc_purge) ;;
 *) fail "unknown test case: $selected_case" ;;
 esac
 [ -x "$tool" ] || fail "cpu-accelctl is not executable: $tool"
@@ -135,6 +143,16 @@ esac
 if should_run_case rcu_sheaf; then
 	[ -r "$rcu_sheaf_probe" ] || \
 		fail "SLUB RCU sheaf probe is unavailable: $rcu_sheaf_probe"
+fi
+if should_run_case vmalloc_purge; then
+	[ -r "$vmalloc_purge_probe" ] || \
+		fail "vmalloc purge probe is unavailable: $vmalloc_purge_probe"
+	for path in "$trace_root/events/workqueue/workqueue_queue_work/enable" \
+		"$trace_root/events/workqueue/workqueue_execute_start/enable" \
+		"$trace_root/events/vmalloc/free_vmap_area_noflush/enable" \
+		"$trace_root/events/vmalloc/purge_vmap_area_lazy/enable"; do
+		[ -e "$path" ] || fail "required vmalloc trace event is unavailable: $path"
+	done
 fi
 [ -d "$trace_root/events/cpu_accel" ] || fail "cpu_accel tracepoints are unavailable"
 [ -d "$trace_root/instances" ] || fail "tracefs instances are unavailable"
@@ -171,6 +189,12 @@ esac
 for event in owner_stop_request owner_exit_complete; do
 	echo 1 >"$instance/events/cpu_accel/$event/enable"
 done
+if should_run_case vmalloc_purge; then
+	echo 1 >"$instance/events/workqueue/workqueue_queue_work/enable"
+	echo 1 >"$instance/events/workqueue/workqueue_execute_start/enable"
+	echo 1 >"$instance/events/vmalloc/free_vmap_area_noflush/enable"
+	echo 1 >"$instance/events/vmalloc/purge_vmap_area_lazy/enable"
+fi
 printf '%s\n' x86_cpu_accel_user_enter cpuset_partition_write \
 	wait_attach_done_lock update_prstate cpuset_update_sd_hk_unlock hk_sd_workfn \
 	housekeeping_update pci_probe_flush_workqueue mem_cgroup_flush_workqueue \
@@ -326,7 +350,15 @@ function number(line, name, rest, pos)
 END {
 	exit !(owner != "" && stop_line && exit_line > stop_line)
 }' "$outdir/trace.log"; then
-	fail "$name trace did not pair owner stop with owner exit"
+		fail "$name trace did not pair owner stop with owner exit"
+	fi
+	if [ "$name" = vmalloc_purge ]; then
+		grep -Eq 'workqueue_queue_work:.*function=purge_vmap_node .*req_cpu=' \
+			"$outdir/trace.log" || \
+			fail "vmalloc purge did not queue a purge_vmap_node worker"
+		grep -Eq 'workqueue_execute_start:.*function purge_vmap_node' \
+			"$outdir/trace.log" || \
+			fail "vmalloc purge did not execute a purge_vmap_node worker"
 	fi
 	echo "PASS: $name stopped CPU $case_cpu owner in ${helper_elapsed_ms} ms"
 }
@@ -453,6 +485,19 @@ if should_run_case rcu_sheaf; then
 	run_case rcu_sheaf "$rcu_sheaf_module" flush_rcu_sheaves_on_cache 1 rmmod
 fi
 
+if should_run_case vmalloc_purge; then
+	[ ! -e "/sys/module/$vmalloc_purge_module" ] || \
+		fail "vmalloc purge probe is already loaded"
+	insmod "$vmalloc_purge_probe" target_cpu="$target_cpu" work_cpu="$work_cpu" \
+		held_mb="$vmalloc_purge_held_mb" \
+		>"$outdir/vmalloc-purge-insmod.log" 2>&1 || \
+		fail "vmalloc purge probe load failed"
+	vmalloc_purge_loaded=1
+	run_case vmalloc_purge "$vmalloc_purge_module" \
+		kernel_tlb_flush_all 1 rmmod "$target_cpu"
+	vmalloc_purge_loaded=0
+fi
+
 echo 0 >"$instance/tracing_on"
 kill -TERM "$trace_pid" "$dmesg_pid" 2>/dev/null || true
 wait "$trace_pid" 2>/dev/null || true
@@ -468,7 +513,7 @@ if [ -s "$outdir/kernel-errors.log" ]; then
 fi
 
 if [ "$selected_case" = all ]; then
-	echo "PASS: synchronous work, LRU drain, SLUB/RCU flushes, network backlog, and ring resize stop active owners"
+	echo "PASS: synchronous work, LRU drain, SLUB/RCU flushes, network backlog, vmalloc purge, and ring resize complete with active-owner stops"
 else
 	echo "PASS: $selected_case stopped the active owner"
 fi

@@ -1710,3 +1710,14 @@ The implementation checkpoints are:
     or RCU-stall message appeared, and the VM remained online. SRCU cleanup
     and the isolated vmalloc purge wait are now both runtime-covered; the
     broader Phase 8 wait-site audit and CPA lockup investigation remain open.
+
+    A follow-up source audit found three more synchronous waits on target-CPU
+    work. VMBus SynIC setup now brackets each per-CPU initialization item
+    across its ``flush_work()``. Intel IFS image loading now brackets remote
+    package-targeted work and flushes its stack work item directly, ensuring
+    the callback has completed before the item is destroyed. FCoE teardown now
+    brackets per-CPU work flushes when ``work_busy()`` reports pending or
+    running work, avoiding owner-stop requests for idle workers. The modified
+    IFS, VMBus, and FCoE objects compile with the relevant options enabled in
+    a temporary configuration. These hardware and transport paths have not
+    been runtime-tested; the broader Phase 8 wait-site audit remains open.

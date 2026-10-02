@@ -25,6 +25,7 @@
 #include <linux/cpu.h>
 #include <linux/sched/isolation.h>
 #include <linux/sched/task_stack.h>
+#include <linux/smp.h>
 #include <linux/smpboot.h>
 
 #include <linux/delay.h>
@@ -1430,11 +1431,15 @@ static int vmbus_alloc_synic_and_connect(void)
 		struct work_struct *work = per_cpu_ptr(works, cpu);
 
 		INIT_WORK(work, vmbus_percpu_work);
+		arch_smp_sync_wait_begin(cpu);
 		schedule_work_on(cpu, work);
+		arch_smp_sync_wait_stop(cpu);
 	}
 
-	for_each_online_cpu(cpu)
+	for_each_online_cpu(cpu) {
 		flush_work(per_cpu_ptr(works, cpu));
+		arch_smp_sync_wait_end(cpu);
+	}
 
 	/* Register the callbacks for possible CPU online/offline'ing */
 	ret = cpuhp_setup_state_nocalls_cpuslocked(CPUHP_AP_ONLINE_DYN, "hyperv/vmbus:online",

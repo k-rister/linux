@@ -3,6 +3,7 @@
 
 #include <linux/firmware.h>
 #include <linux/sizes.h>
+#include <linux/smp.h>
 #include <asm/cpu.h>
 #include <asm/microcode.h>
 #include <asm/msr.h>
@@ -36,7 +37,6 @@ union meta_data {
 static  struct microcode_header_intel *ifs_header_ptr;	/* pointer to the ifs image header */
 static u64 ifs_hash_ptr;			/* Address of ifs metadata (hash) */
 static u64 ifs_test_image_ptr;			/* 256B aligned address of test pattern */
-static DECLARE_COMPLETION(ifs_done);
 
 static const char * const scan_hash_status[] = {
 	[0] = "No error reported",
@@ -139,7 +139,7 @@ static void copy_hashes_authenticate_chunks(struct work_struct *work)
 	if (!hashes_status.valid) {
 		ifsd->loading_error = true;
 		hashcopy_err_message(dev, err_code);
-		goto done;
+		return;
 	}
 
 	/* base linear address to the scan data */
@@ -159,11 +159,9 @@ static void copy_hashes_authenticate_chunks(struct work_struct *work)
 		if (err_code) {
 			ifsd->loading_error = true;
 			auth_err_message(dev, err_code);
-			goto done;
+			return;
 		}
 	}
-done:
-	complete(&ifs_done);
 }
 
 static int get_num_chunks(int gen, union ifs_scan_hashes_status_gen2 status)
@@ -326,6 +324,7 @@ static int scan_chunks_sanity_check(struct device *dev)
 	struct ifs_data *ifsd = ifs_get_data(dev);
 	struct ifs_work local_work;
 	int curr_pkg, cpu, ret;
+	bool accel_wait;
 
 	memset(ifs_pkg_auth, 0, (topology_max_packages() * sizeof(bool)));
 	ret = validate_ifs_metadata(dev);
@@ -343,11 +342,20 @@ static int scan_chunks_sanity_check(struct device *dev)
 		curr_pkg = topology_physical_package_id(cpu);
 		if (ifs_pkg_auth[curr_pkg])
 			continue;
-		reinit_completion(&ifs_done);
 		local_work.dev = dev;
 		INIT_WORK_ONSTACK(&local_work.w, copy_hashes_authenticate_chunks);
+		get_cpu();
+		accel_wait = cpu != raw_smp_processor_id();
+		if (accel_wait)
+			arch_smp_sync_wait_begin(cpu);
 		schedule_work_on(cpu, &local_work.w);
-		wait_for_completion(&ifs_done);
+		if (accel_wait)
+			arch_smp_sync_wait_stop(cpu);
+		put_cpu();
+		flush_work(&local_work.w);
+		if (accel_wait)
+			arch_smp_sync_wait_end(cpu);
+		destroy_work_on_stack(&local_work.w);
 		if (ifsd->loading_error) {
 			ret = -EIO;
 			goto out;

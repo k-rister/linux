@@ -644,6 +644,17 @@ without a matching exit event means that owner's completion has not been
 reported. Silence alone is not evidence of completion. These events do not
 replace synchronous IPI completion or impose a timeout.
 
+For a future stuck ``smp_call_function*()`` wait, the kernel's optional
+``CONFIG_CSD_LOCK_WAIT_DEBUG`` instrumentation can identify the waiting CPU,
+target CPU, callback, elapsed wait, and any CSD handler currently published on
+the target. Build with that option and boot with ``csdlock_debug=1``; the
+default report threshold is five seconds. It may resend the IPI when the target
+has no current CSD published, then continues waiting for the CSD lock to be
+released. This adds diagnosis without treating a timeout as flush completion.
+The current worktree configuration has the option disabled, so it must be
+enabled in a diagnostic build. Leave ``smp.panic_on_ipistall`` unset so this
+diagnostic does not turn the unbounded wait into a panic.
+
 Owner exit clears the runnable-owner state, then remains counted as active and
 blocks new entry on that CPU until any required local TLB flush and reclaim
 acknowledgements complete. The local flush reconciles every pending ``mm``

@@ -1664,3 +1664,12 @@ The implementation checkpoints are:
     dynamically. The current suite also lacks a focused trigger for pending
     per-CPU work during ``cleanup_srcu_struct()``. Those two paths still need
     targeted runtime coverage on a suitable setup.
+
+    On ``7.3.0-rc3-accel-tlbfix-00643-gcf377215356e-dirty`` (#59), the full
+    synchronous-work owner-stop suite passed on 2026-10-02: vmstat (4 ms), LRU
+    drain (45 ms), SLUB shrink (11 ms), trace-ring resize (17 ms), timer
+    migration (17 ms), network backlog flush (119 ms), and RCU sheaf cache
+    destruction (45 ms). The run found no new lockup or kernel-error records.
+    THP returned to ``always``, tracefs instances were removed, and the cgroup
+    subtree controls returned to ``cpu memory pids``. The SRCU cleanup wait and
+    multi-node vmalloc purge remain outside this runtime coverage.

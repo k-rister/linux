@@ -606,7 +606,7 @@ void intel_display_driver_remove(struct intel_display *display)
 	flush_workqueue(display->wq.flip);
 	flush_workqueue(display->wq.modeset);
 	flush_workqueue_with_sync_wait(display->wq.cleanup);
-	flush_workqueue(display->wq.unordered);
+	flush_workqueue_with_sync_wait(display->wq.unordered);
 
 	/*
 	 * MST topology needs to be suspended so we don't have any calls to
@@ -635,7 +635,7 @@ void intel_display_driver_remove_noirq(struct intel_display *display)
 	intel_unregister_dsm_handler();
 
 	/* flush any delayed tasks or pending work */
-	flush_workqueue(display->wq.unordered);
+	flush_workqueue_with_sync_wait(display->wq.unordered);
 
 	intel_hdcp_component_fini(display);
 

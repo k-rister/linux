@@ -1791,7 +1791,7 @@ The implementation checkpoints are:
     InfiniBand CM device removal now coordinate owners for their per-CPU
     flushes as well.
     i915 display suspend and removal now coordinate owners while flushing
-    their per-CPU atomic-cleanup workqueue.
+    their per-CPU atomic-cleanup and display-unordered workqueues.
     TLS device NETDEV_DOWN teardown also coordinates owners while flushing
     its per-CPU destruction queue after releasing device_offload_lock.
     PCI driver probes coordinate owners while waiting for their fixed-CPU

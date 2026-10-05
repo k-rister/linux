@@ -266,7 +266,7 @@ __poll_t tpm_common_poll(struct file *file, poll_table *wait)
  */
 void tpm_common_release(struct file *file, struct file_priv *priv)
 {
-	flush_work(&priv->async_work);
+	flush_work_with_sync_wait(&priv->async_work);
 	timer_delete_sync(&priv->user_read_timer);
 	flush_work(&priv->timeout_work);
 	file->private_data = NULL;

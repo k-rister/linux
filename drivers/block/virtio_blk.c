@@ -1566,7 +1566,7 @@ static void virtblk_remove(struct virtio_device *vdev)
 	struct virtio_blk *vblk = vdev->priv;
 
 	/* Make sure no work handler is accessing the device. */
-	flush_work(&vblk->config_work);
+	flush_work_with_sync_wait(&vblk->config_work);
 
 	del_gendisk(vblk->disk);
 	blk_mq_free_tag_set(&vblk->tag_set);
@@ -1602,7 +1602,7 @@ static int virtblk_freeze_priv(struct virtio_device *vdev)
 	virtio_reset_device(vdev);
 
 	/* Make sure no work handler is accessing the device. */
-	flush_work(&vblk->config_work);
+	flush_work_with_sync_wait(&vblk->config_work);
 
 	vdev->config->del_vqs(vdev);
 	kfree(vblk->vqs);

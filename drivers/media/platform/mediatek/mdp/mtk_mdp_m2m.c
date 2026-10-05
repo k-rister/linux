@@ -1139,7 +1139,7 @@ static int mtk_mdp_m2m_release(struct file *file)
 	struct mtk_mdp_ctx *ctx = file_to_ctx(file);
 	struct mtk_mdp_dev *mdp = ctx->mdp_dev;
 
-	flush_workqueue(mdp->job_wq);
+	flush_workqueue_with_sync_wait(mdp->job_wq);
 	mutex_lock(&mdp->lock);
 	v4l2_m2m_ctx_release(ctx->m2m_ctx);
 	v4l2_ctrl_handler_free(&ctx->ctrl_handler);

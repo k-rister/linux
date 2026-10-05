@@ -467,7 +467,7 @@ static void vtpm_proxy_work(struct work_struct *work)
 static void vtpm_proxy_work_stop(struct proxy_dev *proxy_dev)
 {
 	vtpm_proxy_fops_undo_open(proxy_dev);
-	flush_work(&proxy_dev->work);
+	flush_work_with_sync_wait(&proxy_dev->work);
 }
 
 /*

@@ -2732,7 +2732,7 @@ static void fcoe_vport_remove(struct fc_lport *lport)
 	}
 	spin_unlock_irqrestore(shost->host_lock, flags);
 
-	flush_workqueue(fc_host_work_q(shost));
+	flush_workqueue_with_sync_wait(fc_host_work_q(shost));
 }
 
 /**

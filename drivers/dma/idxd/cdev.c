@@ -348,7 +348,7 @@ static void idxd_cdev_evl_drain_pasid(struct idxd_wq *wq, u32 pasid)
 		h = (h + 1) % size;
 	}
 	if (wq->wq)
-		drain_workqueue(wq->wq);
+		drain_workqueue_with_sync_wait(wq->wq);
 
 	mutex_unlock(&evl->lock);
 }

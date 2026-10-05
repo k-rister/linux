@@ -1905,7 +1905,7 @@ static void flush_delete_work(struct gfs2_glock *gl)
 void gfs2_flush_delete_work(struct gfs2_sbd *sdp)
 {
 	glock_hash_walk(flush_delete_work, sdp);
-	flush_workqueue(sdp->sd_delete_wq);
+	flush_workqueue_with_sync_wait(sdp->sd_delete_wq);
 }
 
 /**

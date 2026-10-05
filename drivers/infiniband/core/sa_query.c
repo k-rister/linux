@@ -2489,7 +2489,7 @@ static void ib_sa_remove_one(struct ib_device *device, void *client_data)
 	int i;
 
 	ib_unregister_event_handler(&sa_dev->event_handler);
-	flush_workqueue(ib_wq);
+	flush_workqueue_with_sync_wait(ib_wq);
 
 	for (i = 0; i <= sa_dev->end_port - sa_dev->start_port; ++i) {
 		if (rdma_cap_ib_sa(device, i + 1)) {

@@ -2605,7 +2605,7 @@ static void anx7625_bridge_atomic_disable(struct drm_bridge *bridge,
 
 	dev_dbg(dev, "drm atomic disable\n");
 
-	flush_workqueue(ctx->hdcp_workqueue);
+	flush_workqueue_with_sync_wait(ctx->hdcp_workqueue);
 
 	if (ctx->connector &&
 	    ctx->hdcp_cp == DRM_MODE_CONTENT_PROTECTION_ENABLED) {

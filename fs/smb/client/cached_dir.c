@@ -594,7 +594,7 @@ done:
 	}
 
 	/* Flush any pending work that will drop dentries */
-	flush_workqueue(cfid_put_wq);
+	flush_workqueue_with_sync_wait(cfid_put_wq);
 }
 
 /*

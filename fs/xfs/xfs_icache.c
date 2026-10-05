@@ -475,7 +475,7 @@ xfs_inodegc_wait_all(
 	int			cpu;
 	int			error = 0;
 
-	flush_workqueue(mp->m_inodegc_wq);
+	flush_workqueue_with_sync_wait(mp->m_inodegc_wq);
 	for_each_cpu(cpu, &mp->m_inodegc_cpumask) {
 		struct xfs_inodegc	*gc;
 
@@ -2049,7 +2049,7 @@ xfs_inodegc_stop(
 	 */
 	xfs_inodegc_queue_all(mp);
 	do {
-		flush_workqueue(mp->m_inodegc_wq);
+		flush_workqueue_with_sync_wait(mp->m_inodegc_wq);
 		rerun = xfs_inodegc_queue_all(mp);
 	} while (rerun);
 

@@ -22,7 +22,7 @@ void nvmet_file_ns_disable(struct nvmet_ns *ns)
 {
 	if (ns->file) {
 		if (ns->buffered_io)
-			flush_workqueue(buffered_io_wq);
+			flush_workqueue_with_sync_wait(buffered_io_wq);
 		mempool_destroy(ns->bvec_pool);
 		ns->bvec_pool = NULL;
 		fput(ns->file);

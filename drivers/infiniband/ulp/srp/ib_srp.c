@@ -4159,7 +4159,7 @@ static void srp_remove_one(struct ib_device *device, void *client_data)
 		 * target->tl_err_work so waiting for the remove works to
 		 * finish is sufficient.
 		 */
-		flush_workqueue(srp_remove_wq);
+		flush_workqueue_with_sync_wait(srp_remove_wq);
 
 		put_device(&host->dev);
 	}

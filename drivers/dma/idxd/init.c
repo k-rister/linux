@@ -1260,7 +1260,7 @@ static void idxd_shutdown(struct pci_dev *pdev)
 	irq_entry = &idxd->ie;
 	synchronize_irq(irq_entry->vector);
 	idxd_mask_error_interrupts(idxd);
-	flush_workqueue(idxd->wq);
+	flush_workqueue_with_sync_wait(idxd->wq);
 }
 
 static void idxd_remove(struct pci_dev *pdev)

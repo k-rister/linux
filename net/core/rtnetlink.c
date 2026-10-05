@@ -284,7 +284,7 @@ void rtnl_net_queue_work(struct net *net)
 
 void rtnl_net_flush_workqueue(void)
 {
-	flush_workqueue(rtnl_net_wq);
+	flush_workqueue_with_sync_wait(rtnl_net_wq);
 }
 
 void rtnl_net_work_func(struct work_struct *work)

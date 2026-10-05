@@ -1647,11 +1647,11 @@ void ib_cache_cleanup_one(struct ib_device *device)
 	 * all clients were removed, so the cache exists but is
 	 * non-functional and shouldn't be updated anymore.
 	 */
-	flush_workqueue(ib_wq);
+	flush_workqueue_with_sync_wait(ib_wq);
 	gid_table_cleanup_one(device);
 
 	/*
 	 * Flush the wq second time for any pending GID delete work.
 	 */
-	flush_workqueue(ib_wq);
+	flush_workqueue_with_sync_wait(ib_wq);
 }

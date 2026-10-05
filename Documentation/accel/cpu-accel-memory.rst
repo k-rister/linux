@@ -1809,6 +1809,22 @@ The implementation checkpoints are:
     compile. A partial module-link attempt stopped at modpost on unresolved
     Fibre Channel and NVMe symbols in ``qla2xxx.ko``; no runtime test covers
     these subsystem call sites yet.
+    FCoE virtual-port removal also coordinates owners while flushing the
+    Fibre Channel host's ``WQ_PERCPU`` workqueue.
+    An exact queue-allocation-to-wait cross-reference found further raw
+    flushes on per-CPU workqueues. The AoE device queue, WFX bottom-half,
+    NVMe target buffered-I/O queue, GFS2 delete queue, OCFS2 DLM worker, CIFS
+    cached-file-ID queue, XFS inodegc queue, InfiniBand cache and SA-query
+    queues, and MediaTek MDP job queue now use
+    ``flush_workqueue_with_sync_wait()`` as well. Intel IDXD device teardown
+    uses that helper, and its user-workqueue drain uses
+    ``drain_workqueue_with_sync_wait()``. Whole-queue semantics are preserved;
+    these paths have not been runtime-tested. The same allocation-to-wait audit
+    found legacy per-CPU queues in SRP target removal, rtnetlink teardown (when
+    ``CONFIG_DEBUG_NET_SMALL_RTNL`` is enabled), and ANX7625 HDCP disable; their
+    flushes now coordinate accelerator owners too. TPM virtual-device teardown
+    now uses ``flush_work_with_sync_wait()`` for its work item on a legacy
+    per-CPU queue. These paths have not been runtime-tested.
     The test VM was last checked running kernel
     ``7.3.0-rc3-accel-tlbfix-00643-gcf377215356e-dirty`` with 13 GiB free on
     ``/`` and 286 MiB free on ``/boot`` after cleanup. No candidate kernel has

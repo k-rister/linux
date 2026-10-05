@@ -2627,7 +2627,7 @@ fail:
 
 	/* now that remote nodes are spinning on the MIGRATING flag,
 	 * ensure that all assert_master work is flushed. */
-	flush_workqueue(dlm->dlm_worker);
+	flush_workqueue_with_sync_wait(dlm->dlm_worker);
 
 	/* notify new node and send all lock state */
 	/* call send_one_lockres with migration flag.

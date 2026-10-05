@@ -1753,7 +1753,10 @@ The implementation checkpoints are:
     it runs away from its pool CPU; unbound queues use the ordinary flush path.
     The API retains the standard warning against flushing system-wide queues.
     vmstat, memcg, and qla2xxx full-queue waits now use it. The probe adds a
-    private per-CPU queue case, ``sync_workqueue_flush``. accelerator-dev is
+    private per-CPU queue case, ``sync_workqueue_flush``. The cgroup v1
+    ``cgroup1_pidlist_destroy_all()`` drain also uses it for its dedicated
+    per-CPU pidlist destructor queue; ``kernel/cgroup/cgroup-v1.o`` builds,
+    while runtime validation remains pending. accelerator-dev is
     still running #59, and its ``/boot`` filesystem has only 18 MiB free, so no
     candidate kernel was installed or booted. The broader Phase 8 wait-site
     audit and CPA lockup investigation remain open.

@@ -1796,6 +1796,8 @@ The implementation checkpoints are:
     its per-CPU destruction queue after releasing device_offload_lock.
     PCI driver probes coordinate owners while waiting for their fixed-CPU
     probe callback.
+    RapidIO master-port discovery coordinates owners while flushing its
+    per-CPU discovery work with the master-port list kept stable.
     The test VM was last checked running kernel
     ``7.3.0-rc3-accel-tlbfix-00643-gcf377215356e-dirty`` with 13 GiB free on
     ``/`` and 286 MiB free on ``/boot`` after cleanup. No candidate kernel has

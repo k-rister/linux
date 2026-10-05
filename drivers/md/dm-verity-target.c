@@ -828,7 +828,7 @@ static int verity_map(struct dm_target *ti, struct bio *bio)
 static void verity_postsuspend(struct dm_target *ti)
 {
 	struct dm_verity *v = ti->private;
-	flush_workqueue(v->verify_wq);
+	flush_workqueue_with_sync_wait(v->verify_wq);
 	dm_bufio_client_reset(v->bufio);
 }
 

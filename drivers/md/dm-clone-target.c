@@ -1985,7 +1985,7 @@ static void clone_postsuspend(struct dm_target *ti)
 	smp_mb__after_atomic();
 
 	wait_event(clone->hydration_stopped, !atomic_read(&clone->hydrations_in_flight));
-	flush_workqueue(clone->wq);
+	flush_workqueue_with_sync_wait(clone->wq);
 
 	(void) commit_metadata(clone, NULL);
 }

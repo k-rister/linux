@@ -258,7 +258,7 @@ static int chunk_io(struct pstore *ps, void *area, chunk_t chunk, blk_opf_t opf,
 	 */
 	INIT_WORK_ONSTACK(&req.work, do_metadata);
 	queue_work(ps->metadata_wq, &req.work);
-	flush_workqueue(ps->metadata_wq);
+	flush_workqueue_with_sync_wait(ps->metadata_wq);
 	destroy_work_on_stack(&req.work);
 
 	return req.result;

@@ -2643,7 +2643,7 @@ void dm_bufio_client_destroy(struct dm_bufio_client *c)
 	drop_buffers(c);
 
 	shrinker_free(c->shrinker);
-	flush_work(&c->shrink_work);
+	flush_work_with_sync_wait(&c->shrink_work);
 
 	mutex_lock(&dm_bufio_clients_lock);
 
@@ -2683,7 +2683,7 @@ EXPORT_SYMBOL_GPL(dm_bufio_client_destroy);
 void dm_bufio_client_reset(struct dm_bufio_client *c)
 {
 	drop_buffers(c);
-	flush_work(&c->shrink_work);
+	flush_work_with_sync_wait(&c->shrink_work);
 }
 EXPORT_SYMBOL_GPL(dm_bufio_client_reset);
 

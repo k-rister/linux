@@ -1830,7 +1830,9 @@ The implementation checkpoints are:
     runtime-tested. A follow-up inventory found virtio-blk config work and TPM
     user-device async work on per-CPU queues; their synchronous flushes now use
     the same helper. The T7xx DPMAIF BAT-release queue teardown also uses the
-    helper for its per-CPU work item. These paths have not been runtime-tested.
+    helper for its per-CPU work item. dm-bufio client destroy/reset shrink-work
+    drains on its per-CPU cache queue use the helper too. These paths have not
+    been runtime-tested.
     The test VM was last checked running kernel
     ``7.3.0-rc3-accel-tlbfix-00643-gcf377215356e-dirty`` with 13 GiB free on
     ``/`` and 286 MiB free on ``/boot`` after cleanup. No candidate kernel has

@@ -1058,7 +1058,7 @@ static void shutdown_device(struct hfi1_devdata *dd)
 		 */
 		hfi1_quiet_serdes(ppd);
 		if (ppd->hfi1_wq)
-			flush_workqueue(ppd->hfi1_wq);
+			flush_workqueue_with_sync_wait(ppd->hfi1_wq);
 		if (ppd->link_wq)
 			flush_workqueue(ppd->link_wq);
 	}

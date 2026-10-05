@@ -2292,7 +2292,7 @@ static void close_ctx(struct rtrs_srv_ctx *ctx)
 	list_for_each_entry(srv, &ctx->srv_list, ctx_list)
 		close_paths(srv);
 	mutex_unlock(&ctx->srv_mutex);
-	flush_workqueue(rtrs_wq);
+	flush_workqueue_with_sync_wait(rtrs_wq);
 }
 
 /**

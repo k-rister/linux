@@ -2726,7 +2726,7 @@ destroy_login_wq:
 
 static void __exit isert_exit(void)
 {
-	flush_workqueue(isert_login_wq);
+	flush_workqueue_with_sync_wait(isert_login_wq);
 	destroy_workqueue(isert_release_wq);
 	destroy_workqueue(isert_comp_wq);
 	iscsit_unregister_transport(&iser_target_transport);

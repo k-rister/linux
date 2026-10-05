@@ -730,14 +730,14 @@ xfs_flush_inodes(
 	struct xfs_mount	*mp)
 {
 	/*
-	 * If flush_work() returns true then that means we waited for a flush
-	 * which was already in progress.  Don't bother running another scan.
+	 * If flush_work_with_sync_wait() returns true then that means we waited
+	 * for a flush which was already in progress.  Don't run another scan.
 	 */
-	if (flush_work(&mp->m_flush_inodes_work))
+	if (flush_work_with_sync_wait(&mp->m_flush_inodes_work))
 		return;
 
 	queue_work(mp->m_sync_workqueue, &mp->m_flush_inodes_work);
-	flush_work(&mp->m_flush_inodes_work);
+	flush_work_with_sync_wait(&mp->m_flush_inodes_work);
 }
 
 /* Catch misguided souls that try to use this interface on XFS */

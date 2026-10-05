@@ -5199,7 +5199,7 @@ static void stop_sync_thread(struct mddev *mddev, bool locked)
 	 */
 	md_wakeup_thread_directly(&mddev->sync_thread);
 	if (work_pending(&mddev->sync_work))
-		flush_work(&mddev->sync_work);
+		flush_work_with_sync_wait(&mddev->sync_work);
 
 	wait_event(resync_wait,
 		   !test_bit(MD_RECOVERY_RUNNING, &mddev->recovery) ||
@@ -5283,7 +5283,7 @@ action_store(struct mddev *mddev, const char *page, size_t len)
 	}
 retry:
 	if (work_busy(&mddev->sync_work))
-		flush_work(&mddev->sync_work);
+		flush_work_with_sync_wait(&mddev->sync_work);
 
 	ret = mddev_lock(mddev);
 	if (ret) {
@@ -8394,7 +8394,7 @@ static int md_ioctl(struct block_device *bdev, blk_mode_t mode,
 	}
 
 	if (!md_is_rdwr(mddev))
-		flush_work(&mddev->sync_work);
+		flush_work_with_sync_wait(&mddev->sync_work);
 
 	suspend = md_ioctl_need_suspend(cmd);
 	err = suspend ? mddev_suspend_and_lock(mddev) : mddev_lock(mddev);

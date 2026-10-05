@@ -1801,6 +1801,14 @@ The implementation checkpoints are:
     per-CPU discovery work with the master-port list kept stable.
     Xe GGTT teardown coordinates owners before draining delayed-removal work,
     after releasing the GGTT lock.
+    A further fixed-pool audit converted the three MD ``sync_work`` waits,
+    XFS inode-flush waits, qla2xxx session deletion/free waits, and virtio-vsock
+    transport and loopback teardown waits to ``flush_work_with_sync_wait()``.
+    Their work items run on ``WQ_PERCPU`` queues, and the helper preserves the
+    existing conditional and coalescing behavior. The five affected objects
+    compile. A partial module-link attempt stopped at modpost on unresolved
+    Fibre Channel and NVMe symbols in ``qla2xxx.ko``; no runtime test covers
+    these subsystem call sites yet.
     The test VM was last checked running kernel
     ``7.3.0-rc3-accel-tlbfix-00643-gcf377215356e-dirty`` with 13 GiB free on
     ``/`` and 286 MiB free on ``/boot`` after cleanup. No candidate kernel has

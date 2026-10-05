@@ -10,6 +10,7 @@
 #include <linux/spinlock.h>
 #include <linux/module.h>
 #include <linux/list.h>
+#include <linux/workqueue.h>
 #include <linux/virtio_vsock.h>
 
 struct vsock_loopback {
@@ -174,7 +175,7 @@ static void __exit vsock_loopback_exit(void)
 
 	vsock_core_unregister(&loopback_transport.transport);
 
-	flush_work(&vsock->pkt_work);
+	flush_work_with_sync_wait(&vsock->pkt_work);
 
 	virtio_vsock_skb_queue_purge(&vsock->pkt_queue);
 

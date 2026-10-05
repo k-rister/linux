@@ -272,7 +272,7 @@ void ceph_msgr_exit(void)
 
 void ceph_msgr_flush(void)
 {
-	flush_workqueue(ceph_msgr_wq);
+	flush_workqueue_with_sync_wait(ceph_msgr_wq);
 }
 EXPORT_SYMBOL(ceph_msgr_flush);
 

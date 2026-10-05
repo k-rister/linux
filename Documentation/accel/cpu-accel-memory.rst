@@ -1775,6 +1775,10 @@ The implementation checkpoints are:
     dedicated per-CPU queues. Device Mapper suspend, kcopyd client flush, and
     dm-raid1 teardown/suspend drains, dm-clone suspend, snapshot metadata I/O,
     and dm-verity suspend now use it for their per-CPU workqueues.
+    Block integrity disk cleanup, CIFS superblock teardown, and OpenVPN module
+    shutdown, and Ceph messenger teardown now coordinate owners while
+    flushing their per-CPU queues. Prestera router teardown uses the drain
+    variant for its per-CPU queue.
     The test VM was last checked running kernel
     ``7.3.0-rc3-accel-tlbfix-00643-gcf377215356e-dirty`` with 13 GiB free on
     ``/`` and 286 MiB free on ``/boot`` after cleanup. No candidate kernel has

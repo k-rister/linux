@@ -307,9 +307,9 @@ static void cifs_kill_sb(struct super_block *sb)
 		cifs_close_all_deferred_files_sb(cifs_sb);
 
 		/* Wait for all pending oplock breaks to complete */
-		flush_workqueue(cifsoplockd_wq);
+		flush_workqueue_with_sync_wait(cifsoplockd_wq);
 		/* Wait for all opened files to release */
-		flush_workqueue(deferredclose_wq);
+		flush_workqueue_with_sync_wait(deferredclose_wq);
 
 		/*
 		 * Wait for all in-flight netfs I/O requests to finish their
@@ -320,8 +320,8 @@ static void cifs_kill_sb(struct super_block *sb)
 		 */
 		wait_var_event(&cifs_sb->outstanding_rreq,
 			       !atomic_read(&cifs_sb->outstanding_rreq));
-		flush_workqueue(serverclose_wq);
-		flush_workqueue(fileinfo_put_wq);
+		flush_workqueue_with_sync_wait(serverclose_wq);
+		flush_workqueue_with_sync_wait(fileinfo_put_wq);
 
 		/* finally release root dentry */
 		dput(cifs_sb->root);

@@ -301,7 +301,7 @@ static __exit void ovpn_cleanup(void)
 	ovpn_nl_unregister();
 	rtnl_link_unregister(&ovpn_link_ops);
 
-	flush_workqueue(ovpn_wq);
+	flush_workqueue_with_sync_wait(ovpn_wq);
 	rcu_barrier();
 
 	destroy_workqueue(ovpn_wq);

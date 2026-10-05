@@ -43,7 +43,7 @@ void prestera_queue_delayed_work(struct delayed_work *work, unsigned long delay)
 
 void prestera_queue_drain(void)
 {
-	drain_workqueue(prestera_wq);
+	drain_workqueue_with_sync_wait(prestera_wq);
 	drain_workqueue(prestera_owq);
 }
 

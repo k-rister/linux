@@ -1735,7 +1735,7 @@ void dlm_lowcomms_shutdown(void)
 				srcu_read_lock_held(&connections_srcu)) {
 			shutdown_connection(con, true);
 			stop_connection_io(con);
-			flush_workqueue(process_workqueue);
+			flush_workqueue_with_sync_wait(process_workqueue);
 			close_connection(con, true);
 
 			clean_one_writequeue(con);

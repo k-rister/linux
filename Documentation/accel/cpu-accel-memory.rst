@@ -1832,7 +1832,8 @@ The implementation checkpoints are:
     the same helper. The T7xx DPMAIF BAT-release queue teardown also uses the
     helper for its per-CPU work item. dm-bufio client destroy/reset shrink-work
     drains on its per-CPU cache queue use the helper too. These paths have not
-    been runtime-tested.
+    been runtime-tested. Device-mapper multipath, mirror, and stripe event
+    drains now use it for work queued to their per-CPU queues.
     The test VM was last checked running kernel
     ``7.3.0-rc3-accel-tlbfix-00643-gcf377215356e-dirty`` with 13 GiB free on
     ``/`` and 286 MiB free on ``/boot`` after cleanup. No candidate kernel has

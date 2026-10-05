@@ -1312,8 +1312,8 @@ static void flush_multipath_work(struct multipath *m)
 	}
 skip:
 	if (m->queue_mode == DM_TYPE_BIO_BASED)
-		flush_work(&m->process_queued_bios);
-	flush_work(&m->trigger_event);
+		flush_work_with_sync_wait(&m->process_queued_bios);
+	flush_work_with_sync_wait(&m->trigger_event);
 }
 
 static void multipath_dtr(struct dm_target *ti)

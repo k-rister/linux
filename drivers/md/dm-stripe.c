@@ -195,7 +195,7 @@ static void stripe_dtr(struct dm_target *ti)
 	for (i = 0; i < sc->stripes; i++)
 		dm_put_device(ti, sc->stripe[i].dev);
 
-	flush_work(&sc->trigger_event);
+	flush_work_with_sync_wait(&sc->trigger_event);
 	kfree(sc);
 }
 

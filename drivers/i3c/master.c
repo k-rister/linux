@@ -3771,7 +3771,7 @@ int i3c_master_register(struct i3c_master_controller *master,
 	 */
 	master->init_done = true;
 	queue_work(master->wq, &master->reg_work);
-	flush_work(&master->reg_work);
+	flush_work_with_sync_wait(&master->reg_work);
 
 	if (master->ops->set_dev_nack_retry)
 		device_create_file(&master->dev, &dev_attr_dev_nack_retry_count);

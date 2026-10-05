@@ -1103,7 +1103,7 @@ static int uas_wait_for_pending_cmnds(struct uas_dev_info *devinfo)
 
 	start_time = jiffies;
 	do {
-		flush_work(&devinfo->work);
+		flush_work_with_sync_wait(&devinfo->work);
 
 		r = usb_wait_anchor_empty_timeout(&devinfo->sense_urbs, 5000);
 		if (r == 0)

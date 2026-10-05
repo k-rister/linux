@@ -332,7 +332,7 @@ static unsigned int tegra194_calculate_speed(u32 cpu)
 	read_counters_work.c.cpu = cpu;
 	INIT_WORK_ONSTACK(&read_counters_work.work, tegra_read_counters);
 	queue_work_on(cpu, read_counters_wq, &read_counters_work.work);
-	flush_work(&read_counters_work.work);
+	flush_work_with_sync_wait(&read_counters_work.work);
 	c = read_counters_work.c;
 
 	if (c.coreclk_cnt < c.last_coreclk_cnt)

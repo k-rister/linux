@@ -1824,7 +1824,10 @@ The implementation checkpoints are:
     ``CONFIG_DEBUG_NET_SMALL_RTNL`` is enabled), and ANX7625 HDCP disable; their
     flushes now coordinate accelerator owners too. TPM virtual-device teardown
     now uses ``flush_work_with_sync_wait()`` for its work item on a legacy
-    per-CPU queue. These paths have not been runtime-tested.
+    per-CPU queue. A raw ``flush_work()`` cross-reference also found fixed-CPU
+    waits in Tegra194 counter sampling and rdmavt CQ completion teardown; both
+    now use ``flush_work_with_sync_wait()``. These paths have not been
+    runtime-tested.
     The test VM was last checked running kernel
     ``7.3.0-rc3-accel-tlbfix-00643-gcf377215356e-dirty`` with 13 GiB free on
     ``/`` and 286 MiB free on ``/boot`` after cleanup. No candidate kernel has

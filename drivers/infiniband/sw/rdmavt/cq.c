@@ -280,7 +280,7 @@ int rvt_destroy_cq(struct ib_cq *ibcq, struct ib_udata *udata)
 	struct rvt_cq *cq = ibcq_to_rvtcq(ibcq);
 	struct rvt_dev_info *rdi = cq->rdi;
 
-	flush_work(&cq->comptask);
+	flush_work_with_sync_wait(&cq->comptask);
 	spin_lock_irq(&rdi->n_cqs_lock);
 	rdi->n_cqs_allocated--;
 	spin_unlock_irq(&rdi->n_cqs_lock);

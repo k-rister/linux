@@ -1371,7 +1371,7 @@ static int tls_device_down(struct net_device *netdev)
 
 	up_write(&device_offload_lock);
 
-	flush_workqueue(destruct_wq);
+	flush_workqueue_with_sync_wait(destruct_wq);
 
 	return NOTIFY_DONE;
 }

@@ -1792,6 +1792,8 @@ The implementation checkpoints are:
     flushes as well.
     i915 display suspend and removal now coordinate owners while flushing
     their per-CPU atomic-cleanup workqueue.
+    TLS device NETDEV_DOWN teardown also coordinates owners while flushing
+    its per-CPU destruction queue after releasing device_offload_lock.
     The test VM was last checked running kernel
     ``7.3.0-rc3-accel-tlbfix-00643-gcf377215356e-dirty`` with 13 GiB free on
     ``/`` and 286 MiB free on ``/boot`` after cleanup. No candidate kernel has

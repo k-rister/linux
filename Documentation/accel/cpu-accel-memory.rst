@@ -1835,7 +1835,8 @@ The implementation checkpoints are:
     been runtime-tested. Device-mapper multipath, mirror, and stripe event
     drains now use it for work queued to their per-CPU queues. I3C master
     registration, RTRS client close, and UAS device work drains use it for
-    their per-CPU queue items as well.
+    their per-CPU queue items as well. Greybus operation cancellation uses it
+    when draining completion work on its per-CPU queue.
     The test VM was last checked running kernel
     ``7.3.0-rc3-accel-tlbfix-00643-gcf377215356e-dirty`` with 13 GiB free on
     ``/`` and 286 MiB free on ``/boot`` after cleanup. No candidate kernel has

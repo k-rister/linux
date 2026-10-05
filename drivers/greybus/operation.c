@@ -1101,7 +1101,7 @@ void gb_operation_cancel_incoming(struct gb_operation *operation, int errno)
 		 * Make sure the request handler has submitted the response
 		 * before cancelling it.
 		 */
-		flush_work(&operation->work);
+		flush_work_with_sync_wait(&operation->work);
 		if (!gb_operation_result_set(operation, errno))
 			gb_message_cancel(operation->response);
 	}

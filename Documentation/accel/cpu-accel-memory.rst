@@ -1724,9 +1724,10 @@ The implementation checkpoints are:
 
     A follow-up source audit found three more synchronous waits on target-CPU
     work. VMBus SynIC setup now brackets each per-CPU initialization item
-    across its ``flush_work()``. Intel IFS image loading now brackets remote
-    package-targeted work and flushes its stack work item directly, ensuring
-    the callback has completed before the item is destroyed. FCoE teardown now
+    across its ``flush_work()``. Intel IFS image loading now uses
+    ``flush_work_with_sync_wait()`` for remote package-targeted stack work,
+    coordinating owner stops without making the IFS module reference
+    unexported architecture hooks directly. FCoE teardown now
     brackets per-CPU work flushes when ``work_busy()`` reports pending or
     running work, avoiding owner-stop requests for idle workers. The modified
     IFS, VMBus, and FCoE objects compile with the relevant options enabled in

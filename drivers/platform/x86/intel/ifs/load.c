@@ -324,7 +324,6 @@ static int scan_chunks_sanity_check(struct device *dev)
 	struct ifs_data *ifsd = ifs_get_data(dev);
 	struct ifs_work local_work;
 	int curr_pkg, cpu, ret;
-	bool accel_wait;
 
 	memset(ifs_pkg_auth, 0, (topology_max_packages() * sizeof(bool)));
 	ret = validate_ifs_metadata(dev);
@@ -344,17 +343,8 @@ static int scan_chunks_sanity_check(struct device *dev)
 			continue;
 		local_work.dev = dev;
 		INIT_WORK_ONSTACK(&local_work.w, copy_hashes_authenticate_chunks);
-		get_cpu();
-		accel_wait = cpu != raw_smp_processor_id();
-		if (accel_wait)
-			arch_smp_sync_wait_begin(cpu);
 		schedule_work_on(cpu, &local_work.w);
-		if (accel_wait)
-			arch_smp_sync_wait_stop(cpu);
-		put_cpu();
-		flush_work(&local_work.w);
-		if (accel_wait)
-			arch_smp_sync_wait_end(cpu);
+		flush_work_with_sync_wait(&local_work.w);
 		destroy_work_on_stack(&local_work.w);
 		if (ifsd->loading_error) {
 			ret = -EIO;

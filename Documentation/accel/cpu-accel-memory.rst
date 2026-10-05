@@ -1759,7 +1759,9 @@ The implementation checkpoints are:
     while runtime validation remains pending. ACPI EC query and thermal PM
     queues also use it at suspend and teardown flush points. KVM irqfd deassign
     and VM-release waits use it for the host-wide per-CPU cleanup queue.
-    accelerator-dev is
+    Device-link removal and ACPI notification waits use it as well. The ACPI
+    GPE queue remains on the normal path because it is pinned to CPU 0, which
+    the accelerator rejects as an owner CPU. accelerator-dev is
     still running #59, and its ``/boot`` filesystem has only 18 MiB free, so no
     candidate kernel was installed or booted. The broader Phase 8 wait-site
     audit and CPA lockup investigation remain open.

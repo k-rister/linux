@@ -626,7 +626,7 @@ void device_link_wait_removal(void)
 	 * To be sure that all removal jobs are terminated, ensure that any
 	 * scheduled work has run to completion.
 	 */
-	flush_workqueue(device_link_wq);
+	flush_workqueue_with_sync_wait(device_link_wq);
 }
 EXPORT_SYMBOL_GPL(device_link_wait_removal);
 

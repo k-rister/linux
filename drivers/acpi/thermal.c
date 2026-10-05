@@ -659,7 +659,7 @@ static void acpi_thermal_zone_unregister(void *data)
 {
 	struct acpi_thermal *tz = data;
 
-	flush_workqueue(acpi_thermal_pm_queue);
+	flush_workqueue_with_sync_wait(acpi_thermal_pm_queue);
 
 	thermal_zone_device_disable(tz->thermal_zone);
 	acpi_thermal_zone_sysfs_remove(tz);
@@ -901,7 +901,7 @@ static int acpi_thermal_probe(struct platform_device *pdev)
 static int acpi_thermal_prepare(struct device *dev)
 {
 	/* Make sure the previously queued thermal check work has been done */
-	flush_workqueue(acpi_thermal_pm_queue);
+	flush_workqueue_with_sync_wait(acpi_thermal_pm_queue);
 	return 0;
 }
 

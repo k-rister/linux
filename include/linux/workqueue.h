@@ -636,6 +636,7 @@ extern bool mod_delayed_work_on(int cpu, struct workqueue_struct *wq,
 extern bool queue_rcu_work(struct workqueue_struct *wq, struct rcu_work *rwork);
 
 extern void __flush_workqueue(struct workqueue_struct *wq);
+void __flush_workqueue_with_sync_wait(struct workqueue_struct *wq);
 extern void drain_workqueue(struct workqueue_struct *wq);
 
 extern int schedule_on_each_cpu(work_func_t func);
@@ -833,6 +834,30 @@ extern void __warn_flushing_systemwide_wq(void)
 	     _wq == system_freezable_power_efficient_wq))		\
 		__warn_flushing_systemwide_wq();			\
 	__flush_workqueue(_wq);						\
+})
+
+#define flush_workqueue_with_sync_wait(wq)				\
+({									\
+	struct workqueue_struct *_wq = (wq);				\
+									\
+	if ((__builtin_constant_p(_wq == system_percpu_wq) &&		\
+	     _wq == system_percpu_wq) ||					\
+	    (__builtin_constant_p(_wq == system_highpri_wq) &&		\
+	     _wq == system_highpri_wq) ||					\
+	    (__builtin_constant_p(_wq == system_long_wq) &&		\
+	     _wq == system_long_wq) ||					\
+	    (__builtin_constant_p(_wq == system_dfl_long_wq) &&	\
+	     _wq == system_dfl_long_wq) ||				\
+	    (__builtin_constant_p(_wq == system_dfl_wq) &&		\
+	     _wq == system_dfl_wq) ||					\
+	    (__builtin_constant_p(_wq == system_freezable_wq) &&	\
+	     _wq == system_freezable_wq) ||				\
+	    (__builtin_constant_p(_wq == system_power_efficient_wq) &&	\
+	     _wq == system_power_efficient_wq) ||				\
+	    (__builtin_constant_p(_wq == system_freezable_power_efficient_wq) && \
+	     _wq == system_freezable_power_efficient_wq))		\
+		__warn_flushing_systemwide_wq();				\
+	__flush_workqueue_with_sync_wait(_wq);				\
 })
 
 /**

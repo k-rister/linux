@@ -1741,11 +1741,19 @@ The implementation checkpoints are:
     barrier completes. It skips workqueues with a rescuer and unbound pools,
     whose work may not execute on the pool's associated CPU; ordinary
     ``flush_work()`` remains unchanged. qla2xxx session teardown is the first
-    caller. The workqueue and qla2xxx objects build successfully. Runtime
-    validation remains outstanding. A focused trace-backed
+    per-item caller. The workqueue and qla2xxx objects build successfully.
+    Runtime validation remains outstanding. A focused trace-backed
     ``sync_work_flush`` case and probe module were added; the probe source
     compiles, but its module link needs refreshed ``Module.symvers`` from a
-    full kernel build. accelerator-dev is still running #59, and its ``/boot``
-    filesystem has only 18 MiB free, so no candidate kernel was installed or
-    booted. The broader Phase 8 wait-site audit and CPA lockup investigation
-    remain open.
+    full kernel build.
+
+    A separate ``flush_workqueue_with_sync_wait()`` helper handles whole
+    ``WQ_PERCPU`` queues. It holds sync-wait reservations on every possible CPU
+    across the flush so work executed by a reclaim rescuer is covered even if
+    it runs away from its pool CPU; unbound queues use the ordinary flush path.
+    The API retains the standard warning against flushing system-wide queues.
+    vmstat, memcg, and qla2xxx full-queue waits now use it. The probe adds a
+    private per-CPU queue case, ``sync_workqueue_flush``. accelerator-dev is
+    still running #59, and its ``/boot`` filesystem has only 18 MiB free, so no
+    candidate kernel was installed or booted. The broader Phase 8 wait-site
+    audit and CPA lockup investigation remain open.

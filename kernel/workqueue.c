@@ -4349,6 +4349,38 @@ out_unlock:
 EXPORT_SYMBOL(__flush_workqueue);
 
 /**
+ * __flush_workqueue_with_sync_wait - implement the sync-wait flush API
+ * @wq: workqueue to flush
+ *
+ * Like flush_workqueue(), but reserves every possible CPU and requests active
+ * owners to stop while flushing a per-CPU workqueue. This covers work that a
+ * reclaim rescuer may execute away from its pool CPU. Workqueues without
+ * WQ_PERCPU use the ordinary flush path. Because all possible CPUs are
+ * reserved for the duration, use this only when the flush may wait for
+ * per-CPU work that needs to run on an accelerator-owned CPU.
+ */
+void __flush_workqueue_with_sync_wait(struct workqueue_struct *wq)
+{
+	unsigned int cpu;
+
+	if (!(wq->flags & WQ_PERCPU)) {
+		__flush_workqueue(wq);
+		return;
+	}
+
+	for_each_possible_cpu(cpu)
+		arch_smp_sync_wait_begin(cpu);
+	for_each_possible_cpu(cpu)
+		arch_smp_sync_wait_stop(cpu);
+
+	__flush_workqueue(wq);
+
+	for_each_possible_cpu(cpu)
+		arch_smp_sync_wait_end(cpu);
+}
+EXPORT_SYMBOL_GPL(__flush_workqueue_with_sync_wait);
+
+/**
  * drain_workqueue - drain a workqueue
  * @wq: workqueue to drain
  *

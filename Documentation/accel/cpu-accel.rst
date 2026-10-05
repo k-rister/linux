@@ -306,15 +306,23 @@ target and work CPUs are 2 and 3)::
 
 The opt-in ``flush_work_with_sync_wait()`` API can be checked with a probe
 that queues work on the active owner CPU, then flushes it from another CPU.
-Build the probe against the candidate kernel and run the focused case::
+``flush_workqueue_with_sync_wait()`` covers per-CPU queues whose flush may
+include work run by a rescuer away from its originating pool. It reserves every
+possible CPU for the duration of that flush, so use it only when that broad
+owner-stop scope is acceptable. The queue-wide API retains the standard warning
+against flushing system-wide workqueues. Build the probe against the candidate
+kernel and run either focused case::
 
   make -C /lib/modules/$(uname -r)/build \
     M="$PWD/tools/cpu_accel/tlb-flush-probe" modules
   sudo env CPU_ACCEL_TEST_CASE=sync_work_flush \
     make -C tools/cpu_accel test-sync-work-owner-stop
+  sudo env CPU_ACCEL_TEST_CASE=sync_workqueue_flush \
+    make -C tools/cpu_accel test-sync-work-owner-stop
 
-The test requires an owner-stop/exit trace pair and execution of the same
-work item on the target CPU.
+Each test requires an owner-stop/exit trace pair and execution of the same
+work item on the target CPU. The queue-flush case uses a private ``WQ_PERCPU``
+workqueue.
 
 The tool prints the shared result, including the maximum observed lateness,
 selected workload, work size, completed work iterations, and lifecycle

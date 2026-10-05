@@ -1790,6 +1790,8 @@ The implementation checkpoints are:
     Ceph superblock teardown, PCI EPF MHI asynchronous DMA completion, and
     InfiniBand CM device removal now coordinate owners for their per-CPU
     flushes as well.
+    i915 display suspend and removal now coordinate owners while flushing
+    their per-CPU atomic-cleanup workqueue.
     The test VM was last checked running kernel
     ``7.3.0-rc3-accel-tlbfix-00643-gcf377215356e-dirty`` with 13 GiB free on
     ``/`` and 286 MiB free on ``/boot`` after cleanup. No candidate kernel has

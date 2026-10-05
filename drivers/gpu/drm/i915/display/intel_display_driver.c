@@ -605,7 +605,7 @@ void intel_display_driver_remove(struct intel_display *display)
 
 	flush_workqueue(display->wq.flip);
 	flush_workqueue(display->wq.modeset);
-	flush_workqueue(display->wq.cleanup);
+	flush_workqueue_with_sync_wait(display->wq.cleanup);
 	flush_workqueue(display->wq.unordered);
 
 	/*
@@ -756,7 +756,7 @@ static int __intel_display_driver_pm_suspend(struct intel_display *display, bool
 	}
 
 	/* ensure all DPT VMAs have been unpinned for intel_dpt_suspend() */
-	flush_workqueue(display->wq.cleanup);
+	flush_workqueue_with_sync_wait(display->wq.cleanup);
 
 	intel_dp_mst_suspend(display);
 

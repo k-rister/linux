@@ -843,7 +843,7 @@ static void san_remove(struct platform_device *pdev)
 	 * We have unregistered our event sources. Now we need to ensure that
 	 * all delayed works they may have spawned are run to completion.
 	 */
-	flush_workqueue(san_wq);
+	flush_workqueue_with_sync_wait(san_wq);
 }
 
 static const struct acpi_device_id san_match[] = {

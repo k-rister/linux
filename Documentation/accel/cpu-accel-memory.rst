@@ -1761,6 +1761,8 @@ The implementation checkpoints are:
     and VM-release waits use it for the host-wide per-CPU cleanup queue.
     The analogous ACRN, Hyper-V MSHV, and Xen irqfd deassign and teardown drains
     use it for their per-CPU cleanup queues as well.
+    RNBD module teardown and Surface ACPI notification removal also use it for
+    their dedicated per-CPU workqueues.
     Device-link removal and ACPI notification waits use it as well. The ACPI
     GPE queue remains on the normal path because it is pinned to CPU 0, which
     the accelerator rejects as an owner CPU. accelerator-dev is

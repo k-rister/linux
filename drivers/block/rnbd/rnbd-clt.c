@@ -1785,7 +1785,7 @@ static void rnbd_destroy_sessions(void)
 		rnbd_clt_put_sess(sess);
 	}
 	/* Wait for all scheduled unmap works */
-	flush_workqueue(rnbd_clt_wq);
+	flush_workqueue_with_sync_wait(rnbd_clt_wq);
 	WARN_ON(!list_empty(&sess_list));
 }
 

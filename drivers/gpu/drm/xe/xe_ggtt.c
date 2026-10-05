@@ -374,7 +374,7 @@ static void dev_fini_ggtt(void *arg)
 
 	scoped_guard(mutex, &ggtt->lock)
 		ggtt->flags &= ~XE_GGTT_FLAGS_ONLINE;
-	drain_workqueue(ggtt->wq);
+	drain_workqueue_with_sync_wait(ggtt->wq);
 }
 
 /**

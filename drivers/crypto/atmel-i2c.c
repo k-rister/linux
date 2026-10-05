@@ -303,7 +303,7 @@ EXPORT_SYMBOL(atmel_i2c_enqueue);
 
 void atmel_i2c_flush_queue(void)
 {
-	flush_workqueue(atmel_wq);
+	flush_workqueue_with_sync_wait(atmel_wq);
 }
 EXPORT_SYMBOL(atmel_i2c_flush_queue);
 

@@ -1361,7 +1361,7 @@ static void mmc_omap_remove_slot(struct mmc_omap_slot *slot)
 
 	cancel_work_sync(&slot->cover_bh_work);
 	timer_delete_sync(&slot->cover_timer);
-	flush_workqueue(slot->host->mmc_omap_wq);
+	flush_workqueue_with_sync_wait(slot->host->mmc_omap_wq);
 
 	mmc_remove_host(mmc);
 }

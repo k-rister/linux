@@ -1099,7 +1099,7 @@ int t7xx_dpmaif_bat_rel_wq_alloc(struct dpmaif_ctrl *dpmaif_ctrl)
 
 void t7xx_dpmaif_bat_wq_rel(struct dpmaif_ctrl *dpmaif_ctrl)
 {
-	flush_work(&dpmaif_ctrl->bat_release_work);
+	flush_work_with_sync_wait(&dpmaif_ctrl->bat_release_work);
 
 	if (dpmaif_ctrl->bat_release_wq) {
 		destroy_workqueue(dpmaif_ctrl->bat_release_wq);

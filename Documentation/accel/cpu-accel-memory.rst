@@ -1829,7 +1829,8 @@ The implementation checkpoints are:
     now use ``flush_work_with_sync_wait()``. These paths have not been
     runtime-tested. A follow-up inventory found virtio-blk config work and TPM
     user-device async work on per-CPU queues; their synchronous flushes now use
-    the same helper. These paths have not been runtime-tested.
+    the same helper. The T7xx DPMAIF BAT-release queue teardown also uses the
+    helper for its per-CPU work item. These paths have not been runtime-tested.
     The test VM was last checked running kernel
     ``7.3.0-rc3-accel-tlbfix-00643-gcf377215356e-dirty`` with 13 GiB free on
     ``/`` and 286 MiB free on ``/boot`` after cleanup. No candidate kernel has

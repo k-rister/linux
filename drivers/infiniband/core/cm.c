@@ -4485,7 +4485,7 @@ static void cm_remove_one(struct ib_device *ib_device, void *client_data)
 		 * verify that no new works will be queued in the recv handler,
 		 * after that we can call the unregister_mad_agent
 		 */
-		flush_workqueue(cm.wq);
+		flush_workqueue_with_sync_wait(cm.wq);
 		/*
 		 * The above ensures no call paths from the work are running,
 		 * the remaining paths all take the mad_agent_lock.

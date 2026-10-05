@@ -630,7 +630,7 @@ static void pci_epf_mhi_edma_flush_async(struct mhi_ep_cntrl *mhi_cntrl)
 
 	dmaengine_synchronize(epf_mhi->dma_chan_rx);
 	dmaengine_synchronize(epf_mhi->dma_chan_tx);
-	flush_workqueue(epf_mhi->dma_wq);
+	flush_workqueue_with_sync_wait(epf_mhi->dma_wq);
 }
 
 struct epf_dma_filter {

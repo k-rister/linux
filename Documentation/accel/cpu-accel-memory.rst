@@ -1757,7 +1757,9 @@ The implementation checkpoints are:
     ``cgroup1_pidlist_destroy_all()`` drain also uses it for its dedicated
     per-CPU pidlist destructor queue; ``kernel/cgroup/cgroup-v1.o`` builds,
     while runtime validation remains pending. ACPI EC query and thermal PM
-    queues also use it at suspend and teardown flush points. accelerator-dev is
+    queues also use it at suspend and teardown flush points. KVM irqfd deassign
+    and VM-release waits use it for the host-wide per-CPU cleanup queue.
+    accelerator-dev is
     still running #59, and its ``/boot`` filesystem has only 18 MiB free, so no
     candidate kernel was installed or booted. The broader Phase 8 wait-site
     audit and CPA lockup investigation remain open.

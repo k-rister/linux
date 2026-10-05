@@ -611,7 +611,7 @@ kvm_irqfd_deassign(struct kvm *kvm, struct kvm_irqfd *args)
 	 * so that we guarantee there will not be any more interrupts on this
 	 * gsi once this deassign function returns.
 	 */
-	flush_workqueue(irqfd_cleanup_wq);
+	flush_workqueue_with_sync_wait(irqfd_cleanup_wq);
 
 	return 0;
 }
@@ -648,7 +648,7 @@ kvm_irqfd_release(struct kvm *kvm)
 	 * Block until we know all outstanding shutdown jobs have completed
 	 * since we do not take a kvm* reference.
 	 */
-	flush_workqueue(irqfd_cleanup_wq);
+	flush_workqueue_with_sync_wait(irqfd_cleanup_wq);
 
 }
 

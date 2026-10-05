@@ -3879,7 +3879,7 @@ lpfc_offline_prep(struct lpfc_hba *phba, int mbx_action)
 	lpfc_sli_mbox_sys_shutdown(phba, mbx_action);
 
 	if (phba->wq)
-		flush_workqueue(phba->wq);
+		flush_workqueue_with_sync_wait(phba->wq);
 }
 
 /**
@@ -5103,7 +5103,7 @@ lpfc_stop_port(struct lpfc_hba *phba)
 	phba->lpfc_stop_port(phba);
 
 	if (phba->wq)
-		flush_workqueue(phba->wq);
+		flush_workqueue_with_sync_wait(phba->wq);
 }
 
 /**

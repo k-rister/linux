@@ -930,7 +930,7 @@ nvmet_fc_delete_target_queue(struct nvmet_fc_tgt_queue *queue)
 	}
 	spin_unlock_irqrestore(&queue->qlock, flags);
 
-	flush_workqueue(queue->work_q);
+	flush_workqueue_with_sync_wait(queue->work_q);
 
 	nvmet_sq_destroy(&queue->nvme_sq);
 	nvmet_cq_put(&queue->nvme_cq);
@@ -1217,7 +1217,7 @@ nvmet_fc_delete_target_assoc(struct nvmet_fc_tgt_assoc *assoc)
 	/* ensure all in-flight I/Os have been processed */
 	for (i = NVMET_NR_QUEUES; i >= 0; i--) {
 		if (assoc->queues[i])
-			flush_workqueue(assoc->queues[i]->work_q);
+			flush_workqueue_with_sync_wait(assoc->queues[i]->work_q);
 	}
 
 	pr_info("{%d:%d}: Association deleted\n",

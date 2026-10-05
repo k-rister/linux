@@ -2849,7 +2849,7 @@ fc_flush_work(struct Scsi_Host *shost)
 		return;
 	}
 
-	flush_workqueue(fc_host_work_q(shost));
+	flush_workqueue_with_sync_wait(fc_host_work_q(shost));
 }
 
 /**
@@ -2894,7 +2894,7 @@ fc_flush_devloss(struct Scsi_Host *shost, struct fc_rport *rport)
 		return;
 	}
 
-	flush_workqueue(rport->devloss_work_q);
+	flush_workqueue_with_sync_wait(rport->devloss_work_q);
 }
 
 

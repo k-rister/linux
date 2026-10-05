@@ -436,7 +436,7 @@ static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
 				wq = system_percpu_wq;
 			queue_work_on(cpu, wq, &arg.work);
 			rcu_read_unlock();
-			flush_work(&arg.work);
+			flush_work_with_sync_wait(&arg.work);
 			error = arg.ret;
 		} else {
 			rcu_read_unlock();

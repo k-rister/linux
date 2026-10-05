@@ -1756,9 +1756,10 @@ The implementation checkpoints are:
     these helpers only when the queue may depend on accelerator-owned CPUs.
     The flush API retains the standard warning against flushing system-wide
     queues.
-    The flush variant is used by vmstat, memcg, qla2xxx, ACPI EC query and
-    thermal PM, KVM and other hypervisor irqfd cleanup, RNBD teardown, Surface
-    ACPI notification removal, and device-link removal. The cgroup v1
+    The flush variant is used by vmstat, memcg, qla2xxx, ACPI OSL/EC and
+    thermal PM, QAT, MHI endpoint disconnect, KVM and other hypervisor irqfd
+    cleanup, RNBD teardown, Surface ACPI notification removal, and device-link
+    removal. The cgroup v1
     ``cgroup1_pidlist_destroy_all()`` drain uses the drain variant for its
     dedicated per-CPU pidlist destructor queue. The drain variant is now also
     used by dm-cache, dm-integrity, dm-writecache, and zoned block-resource

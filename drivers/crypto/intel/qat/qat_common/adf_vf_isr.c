@@ -288,7 +288,7 @@ void adf_flush_vf_wq(struct adf_accel_dev *accel_dev)
 {
 	adf_disable_pf2vf_interrupts(accel_dev);
 
-	flush_workqueue(adf_vf_stop_wq);
+	flush_workqueue_with_sync_wait(adf_vf_stop_wq);
 }
 EXPORT_SYMBOL_GPL(adf_flush_vf_wq);
 

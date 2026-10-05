@@ -1038,7 +1038,7 @@ static void mhi_ep_abort_transfer(struct mhi_ep_cntrl *mhi_cntrl)
 	}
 
 	/* Drain ring workers and in-flight transfers before notifying disconnect */
-	flush_workqueue(mhi_cntrl->wq);
+	flush_workqueue_with_sync_wait(mhi_cntrl->wq);
 	if (mhi_cntrl->flush_async)
 		mhi_cntrl->flush_async(mhi_cntrl);
 

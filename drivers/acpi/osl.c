@@ -1175,7 +1175,7 @@ void acpi_os_wait_events_complete(void)
 	 */
 	if (acpi_sci_irq_valid())
 		synchronize_hardirq(acpi_sci_irq);
-	flush_workqueue(kacpid_wq);
+	flush_workqueue_with_sync_wait(kacpid_wq);
 	flush_workqueue_with_sync_wait(kacpi_notify_wq);
 }
 EXPORT_SYMBOL(acpi_os_wait_events_complete);

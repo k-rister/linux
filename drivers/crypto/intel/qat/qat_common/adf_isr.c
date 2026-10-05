@@ -450,5 +450,5 @@ bool adf_misc_wq_queue_delayed_work(struct delayed_work *work,
 
 void adf_misc_wq_flush(void)
 {
-	flush_workqueue(adf_misc_wq);
+	flush_workqueue_with_sync_wait(adf_misc_wq);
 }

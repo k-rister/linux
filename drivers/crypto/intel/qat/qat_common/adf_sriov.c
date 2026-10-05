@@ -60,7 +60,7 @@ void adf_schedule_vf2pf_handler(struct adf_accel_vf_info *vf_info)
 static void adf_flush_pf2vf_resp_wq(void)
 {
 	if (pf2vf_resp_wq)
-		flush_workqueue(pf2vf_resp_wq);
+		flush_workqueue_with_sync_wait(pf2vf_resp_wq);
 }
 
 static int adf_enable_sriov(struct adf_accel_dev *accel_dev)

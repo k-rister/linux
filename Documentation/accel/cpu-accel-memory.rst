@@ -1759,6 +1759,8 @@ The implementation checkpoints are:
     while runtime validation remains pending. ACPI EC query and thermal PM
     queues also use it at suspend and teardown flush points. KVM irqfd deassign
     and VM-release waits use it for the host-wide per-CPU cleanup queue.
+    The analogous ACRN, Hyper-V MSHV, and Xen irqfd deassign and teardown drains
+    use it for their per-CPU cleanup queues as well.
     Device-link removal and ACPI notification waits use it as well. The ACPI
     GPE queue remains on the normal path because it is pinned to CPU 0, which
     the accelerator rejects as an owner CPU. accelerator-dev is

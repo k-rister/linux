@@ -196,7 +196,7 @@ static int acrn_irqfd_deassign(struct acrn_vm *vm,
 	eventfd_ctx_put(eventfd);
 
 	/* Wait for cleanup work to finish so the eventfd is fully detached. */
-	flush_workqueue(vm->irqfd_wq);
+	flush_workqueue_with_sync_wait(vm->irqfd_wq);
 
 	return 0;
 }
@@ -239,6 +239,6 @@ void acrn_irqfd_deinit(struct acrn_vm *vm)
 	mutex_unlock(&vm->irqfds_lock);
 
 	/* Drain all cleanup work before tearing the workqueue down. */
-	flush_workqueue(vm->irqfd_wq);
+	flush_workqueue_with_sync_wait(vm->irqfd_wq);
 	destroy_workqueue(vm->irqfd_wq);
 }

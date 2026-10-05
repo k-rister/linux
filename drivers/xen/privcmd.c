@@ -1077,7 +1077,7 @@ static int privcmd_irqfd_deassign(struct privcmd_irqfd *irqfd)
 	 * that we guarantee there will not be any more interrupts once this
 	 * deassign function returns.
 	 */
-	flush_workqueue(irqfd_cleanup_wq);
+	flush_workqueue_with_sync_wait(irqfd_cleanup_wq);
 
 	return 0;
 }
@@ -1126,6 +1126,7 @@ static void privcmd_irqfd_exit(void)
 
 	spin_unlock_irqrestore(&irqfds_lock, flags);
 
+	flush_workqueue_with_sync_wait(irqfd_cleanup_wq);
 	destroy_workqueue(irqfd_cleanup_wq);
 }
 

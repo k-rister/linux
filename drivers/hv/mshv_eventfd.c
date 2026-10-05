@@ -567,7 +567,7 @@ static int mshv_irqfd_deassign(struct mshv_partition *pt,
 	 * so that we guarantee there will not be any more interrupts on this
 	 * gsi once this deassign function returns.
 	 */
-	flush_workqueue(irqfd_cleanup_wq);
+	flush_workqueue_with_sync_wait(irqfd_cleanup_wq);
 
 	return 0;
 }
@@ -604,7 +604,7 @@ static void mshv_irqfd_release(struct mshv_partition *pt)
 	 * Block until we know all outstanding shutdown jobs have completed
 	 * since we do not take a mshv_partition* reference.
 	 */
-	flush_workqueue(irqfd_cleanup_wq);
+	flush_workqueue_with_sync_wait(irqfd_cleanup_wq);
 }
 
 int mshv_irqfd_wq_init(void)
@@ -618,6 +618,7 @@ int mshv_irqfd_wq_init(void)
 
 void mshv_irqfd_wq_cleanup(void)
 {
+	flush_workqueue_with_sync_wait(irqfd_cleanup_wq);
 	destroy_workqueue(irqfd_cleanup_wq);
 }
 

@@ -4348,6 +4348,29 @@ out_unlock:
 }
 EXPORT_SYMBOL(__flush_workqueue);
 
+static bool workqueue_sync_wait_begin(struct workqueue_struct *wq)
+{
+	unsigned int cpu;
+
+	if (!(wq->flags & WQ_PERCPU))
+		return false;
+
+	for_each_possible_cpu(cpu)
+		arch_smp_sync_wait_begin(cpu);
+	for_each_possible_cpu(cpu)
+		arch_smp_sync_wait_stop(cpu);
+
+	return true;
+}
+
+static void workqueue_sync_wait_end(void)
+{
+	unsigned int cpu;
+
+	for_each_possible_cpu(cpu)
+		arch_smp_sync_wait_end(cpu);
+}
+
 /**
  * __flush_workqueue_with_sync_wait - implement the sync-wait flush API
  * @wq: workqueue to flush
@@ -4361,22 +4384,11 @@ EXPORT_SYMBOL(__flush_workqueue);
  */
 void __flush_workqueue_with_sync_wait(struct workqueue_struct *wq)
 {
-	unsigned int cpu;
-
-	if (!(wq->flags & WQ_PERCPU)) {
-		__flush_workqueue(wq);
-		return;
-	}
-
-	for_each_possible_cpu(cpu)
-		arch_smp_sync_wait_begin(cpu);
-	for_each_possible_cpu(cpu)
-		arch_smp_sync_wait_stop(cpu);
+	bool sync_wait = workqueue_sync_wait_begin(wq);
 
 	__flush_workqueue(wq);
-
-	for_each_possible_cpu(cpu)
-		arch_smp_sync_wait_end(cpu);
+	if (sync_wait)
+		workqueue_sync_wait_end();
 }
 EXPORT_SYMBOL_GPL(__flush_workqueue_with_sync_wait);
 
@@ -4434,6 +4446,27 @@ reflush:
 	mutex_unlock(&wq->mutex);
 }
 EXPORT_SYMBOL_GPL(drain_workqueue);
+
+/**
+ * drain_workqueue_with_sync_wait - drain a workqueue with owner coordination
+ * @wq: workqueue to drain
+ *
+ * Like drain_workqueue(), but reserves every possible CPU and requests active
+ * owners to stop while draining a per-CPU workqueue. Keep the reservations
+ * across all flush rounds so chained work retains the usual drain semantics.
+ * Workqueues without WQ_PERCPU use the ordinary drain path. Because all
+ * possible CPUs are reserved for the duration, use this only when draining
+ * the queue may wait for work that needs to run on an accelerator-owned CPU.
+ */
+void drain_workqueue_with_sync_wait(struct workqueue_struct *wq)
+{
+	bool sync_wait = workqueue_sync_wait_begin(wq);
+
+	drain_workqueue(wq);
+	if (sync_wait)
+		workqueue_sync_wait_end();
+}
+EXPORT_SYMBOL_GPL(drain_workqueue_with_sync_wait);
 
 static bool start_flush_work(struct work_struct *work, struct wq_barrier *barr,
 			     bool from_cancel, bool sync_wait, int *cpu)

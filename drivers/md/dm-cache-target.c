@@ -2814,7 +2814,7 @@ static void cache_postsuspend(struct dm_target *ti)
 	BUG_ON(atomic_read(&cache->nr_io_migrations));
 
 	cancel_delayed_work_sync(&cache->waker);
-	drain_workqueue(cache->wq);
+	drain_workqueue_with_sync_wait(cache->wq);
 	WARN_ON(cache->tracker.in_flight);
 
 	/*

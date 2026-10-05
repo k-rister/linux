@@ -941,7 +941,7 @@ static void writecache_suspend(struct dm_target *ti)
 	}
 	wc_unlock(wc);
 
-	drain_workqueue(wc->writeback_wq);
+	drain_workqueue_with_sync_wait(wc->writeback_wq);
 
 	wc_lock(wc);
 	if (flush_on_suspend)
@@ -1130,7 +1130,7 @@ static int process_flush_mesg(unsigned int argc, char **argv, struct dm_writecac
 	queue_work(wc->writeback_wq, &wc->writeback_work);
 	wc_unlock(wc);
 
-	flush_workqueue(wc->writeback_wq);
+	flush_workqueue_with_sync_wait(wc->writeback_wq);
 
 	wc_lock(wc);
 	wc->writeback_all--;

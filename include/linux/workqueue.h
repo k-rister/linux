@@ -638,6 +638,7 @@ extern bool queue_rcu_work(struct workqueue_struct *wq, struct rcu_work *rwork);
 extern void __flush_workqueue(struct workqueue_struct *wq);
 void __flush_workqueue_with_sync_wait(struct workqueue_struct *wq);
 extern void drain_workqueue(struct workqueue_struct *wq);
+extern void drain_workqueue_with_sync_wait(struct workqueue_struct *wq);
 
 extern int schedule_on_each_cpu(work_func_t func);
 

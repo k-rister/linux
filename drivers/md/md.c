@@ -6331,7 +6331,7 @@ struct mddev *md_alloc(dev_t dev, char *name)
 	 * Wait for any previous instance of this device to be completely
 	 * removed (mddev_delayed_delete).
 	 */
-	flush_workqueue(md_misc_wq);
+	flush_workqueue_with_sync_wait(md_misc_wq);
 
 	mutex_lock(&disks_mutex);
 	mddev = mddev_alloc(dev);

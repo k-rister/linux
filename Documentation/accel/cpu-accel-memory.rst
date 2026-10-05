@@ -1747,23 +1747,27 @@ The implementation checkpoints are:
     compiles, but its module link needs refreshed ``Module.symvers`` from a
     full kernel build.
 
-    A separate ``flush_workqueue_with_sync_wait()`` helper handles whole
-    ``WQ_PERCPU`` queues. It holds sync-wait reservations on every possible CPU
-    across the flush so work executed by a reclaim rescuer is covered even if
-    it runs away from its pool CPU; unbound queues use the ordinary flush path.
-    The API retains the standard warning against flushing system-wide queues.
-    vmstat, memcg, and qla2xxx full-queue waits now use it. The probe adds a
-    private per-CPU queue case, ``sync_workqueue_flush``. The cgroup v1
-    ``cgroup1_pidlist_destroy_all()`` drain also uses it for its dedicated
-    per-CPU pidlist destructor queue; ``kernel/cgroup/cgroup-v1.o`` builds,
-    while runtime validation remains pending. ACPI EC query and thermal PM
-    queues also use it at suspend and teardown flush points. KVM irqfd deassign
-    and VM-release waits use it for the host-wide per-CPU cleanup queue.
-    The analogous ACRN, Hyper-V MSHV, and Xen irqfd deassign and teardown drains
-    use it for their per-CPU cleanup queues as well.
-    RNBD module teardown and Surface ACPI notification removal also use it for
-    their dedicated per-CPU workqueues.
-    Device-link removal and ACPI notification waits use it as well. The ACPI
+    The ``flush_workqueue_with_sync_wait()`` and
+    ``drain_workqueue_with_sync_wait()`` helpers handle whole ``WQ_PERCPU``
+    queues. They hold sync-wait reservations on every possible CPU while
+    flushing. The drain variant keeps them across all flush rounds, preserving
+    chained-work completion; this also covers work executed by a reclaim
+    rescuer away from its pool CPU. Unbound queues use the ordinary path. Use
+    these helpers only when the queue may depend on accelerator-owned CPUs.
+    The flush API retains the standard warning against flushing system-wide
+    queues.
+    The flush variant is used by vmstat, memcg, qla2xxx, ACPI EC query and
+    thermal PM, KVM and other hypervisor irqfd cleanup, RNBD teardown, Surface
+    ACPI notification removal, and device-link removal. The cgroup v1
+    ``cgroup1_pidlist_destroy_all()`` drain uses the drain variant for its
+    dedicated per-CPU pidlist destructor queue. The drain variant is now also
+    used by dm-cache, dm-integrity, dm-writecache, and zoned block-resource
+    cleanup. Whole-queue flush waits in dm-integrity, dm-writecache, and MD
+    device allocation use the flush variant. The probe adds a private per-CPU
+    queue case, ``sync_workqueue_flush``. The relevant cgroup and affected
+    driver objects build; runtime validation remains pending. The probe source
+    compiles, but its module link needs refreshed ``Module.symvers`` from a
+    full kernel build.
     GPE queue remains on the normal path because it is pinned to CPU 0, which
     the accelerator rejects as an owner CPU. Atmel I2C queue drains, OMAP MMC
     slot removal, and WWAN hwsim teardown now use the helper for their

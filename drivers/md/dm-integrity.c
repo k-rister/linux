@@ -2488,9 +2488,9 @@ offload_to_thread:
 			remove_range_unlocked(ic, &dio->range);
 			spin_unlock_irq(&ic->endio_wait.lock);
 			queue_work(ic->commit_wq, &ic->commit_work);
-			flush_workqueue(ic->commit_wq);
+			flush_workqueue_with_sync_wait(ic->commit_wq);
 			queue_work(ic->writer_wq, &ic->writer_work);
-			flush_workqueue(ic->writer_wq);
+			flush_workqueue_with_sync_wait(ic->writer_wq);
 			discard_retried = true;
 			goto lock_retry;
 		}
@@ -3794,7 +3794,7 @@ static void dm_integrity_enter_synchronous_mode(struct dm_integrity_c *ic)
 
 		cancel_delayed_work_sync(&ic->bitmap_flush_work);
 		queue_delayed_work(ic->commit_wq, &ic->bitmap_flush_work, 0);
-		flush_workqueue(ic->commit_wq);
+		flush_workqueue_with_sync_wait(ic->commit_wq);
 	}
 }
 
@@ -3819,17 +3819,17 @@ static void dm_integrity_postsuspend(struct dm_target *ti)
 	timer_delete_sync(&ic->autocommit_timer);
 
 	if (ic->recalc_wq)
-		drain_workqueue(ic->recalc_wq);
+		drain_workqueue_with_sync_wait(ic->recalc_wq);
 
 	if (ic->mode == 'B')
 		cancel_delayed_work_sync(&ic->bitmap_flush_work);
 
 	queue_work(ic->commit_wq, &ic->commit_work);
-	drain_workqueue(ic->commit_wq);
+	drain_workqueue_with_sync_wait(ic->commit_wq);
 
 	if (ic->mode == 'J') {
 		queue_work(ic->writer_wq, &ic->writer_work);
-		drain_workqueue(ic->writer_wq);
+		drain_workqueue_with_sync_wait(ic->writer_wq);
 		dm_integrity_flush_buffers(ic, true);
 		if (ic->wrote_to_journal) {
 			init_journal(ic, ic->free_section,

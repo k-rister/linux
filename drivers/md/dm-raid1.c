@@ -1191,7 +1191,7 @@ static void mirror_dtr(struct dm_target *ti)
 	struct mirror_set *ms = ti->private;
 
 	timer_delete_sync(&ms->timer);
-	flush_workqueue(ms->kmirrord_wq);
+	flush_workqueue_with_sync_wait(ms->kmirrord_wq);
 	flush_work(&ms->trigger_event);
 	dm_kcopyd_client_destroy(ms->kcopyd_client);
 	destroy_workqueue(ms->kmirrord_wq);
@@ -1360,7 +1360,7 @@ static void mirror_presuspend(struct dm_target *ti)
 	 * the worker thread to complete.  This way,
 	 * we know that all of our I/O has been pushed.
 	 */
-	flush_workqueue(ms->kmirrord_wq);
+	flush_workqueue_with_sync_wait(ms->kmirrord_wq);
 }
 
 static void mirror_postsuspend(struct dm_target *ti)

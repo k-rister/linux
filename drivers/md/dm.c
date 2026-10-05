@@ -3024,7 +3024,7 @@ static int __dm_suspend(struct mapped_device *md, struct dm_table *map,
 		set_bit(DMF_QUEUE_STOPPED, &md->flags);
 	}
 
-	flush_workqueue(md->wq);
+	flush_workqueue_with_sync_wait(md->wq);
 
 	/*
 	 * At this point no more requests are entering target request routines.
@@ -3272,7 +3272,7 @@ void dm_internal_suspend_fast(struct mapped_device *md)
 
 	set_bit(DMF_BLOCK_IO_FOR_SUSPEND, &md->flags);
 	synchronize_srcu(&md->io_barrier);
-	flush_workqueue(md->wq);
+	flush_workqueue_with_sync_wait(md->wq);
 	dm_wait_for_completion(md, TASK_UNINTERRUPTIBLE);
 }
 EXPORT_SYMBOL_GPL(dm_internal_suspend_fast);

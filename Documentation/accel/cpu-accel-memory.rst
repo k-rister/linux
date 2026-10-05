@@ -1767,7 +1767,9 @@ The implementation checkpoints are:
     GPE queue remains on the normal path because it is pinned to CPU 0, which
     the accelerator rejects as an owner CPU. Atmel I2C queue drains, OMAP MMC
     slot removal, and WWAN hwsim teardown now use the helper for their
-    dedicated per-CPU queues. The test VM was last checked running kernel
+    dedicated per-CPU queues. Device Mapper suspend, kcopyd client flush, and
+    dm-raid1 teardown/suspend drains now use it for their per-CPU workqueues.
+    The test VM was last checked running kernel
     ``7.3.0-rc3-accel-tlbfix-00643-gcf377215356e-dirty`` with 13 GiB free on
     ``/`` and 286 MiB free on ``/boot`` after cleanup. No candidate kernel has
     been installed or booted for this increment. The broader Phase 8 wait-site

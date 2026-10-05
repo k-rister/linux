@@ -993,6 +993,6 @@ EXPORT_SYMBOL(dm_kcopyd_client_destroy);
 
 void dm_kcopyd_client_flush(struct dm_kcopyd_client *kc)
 {
-	flush_workqueue(kc->kcopyd_wq);
+	flush_workqueue_with_sync_wait(kc->kcopyd_wq);
 }
 EXPORT_SYMBOL(dm_kcopyd_client_flush);

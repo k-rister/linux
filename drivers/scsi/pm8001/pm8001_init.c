@@ -197,7 +197,7 @@ static void pm8001_free(struct pm8001_hba_info *pm8001_ha)
 			}
 	}
 	PM8001_CHIP_DISP->chip_iounmap(pm8001_ha);
-	flush_workqueue(pm8001_wq);
+	flush_workqueue_with_sync_wait(pm8001_wq);
 	bitmap_free(pm8001_ha->rsvd_tags);
 	kfree(pm8001_ha);
 }
@@ -1339,7 +1339,7 @@ static int __maybe_unused pm8001_pci_suspend(struct device *dev)
 	struct pm8001_hba_info *pm8001_ha = sha->lldd_ha;
 
 	sas_suspend_ha(sha);
-	flush_workqueue(pm8001_wq);
+	flush_workqueue_with_sync_wait(pm8001_wq);
 	scsi_block_requests(pm8001_ha->shost);
 	if (!pdev->pm_cap) {
 		dev_err(dev, " PCI PM not supported\n");

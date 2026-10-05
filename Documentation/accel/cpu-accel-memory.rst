@@ -1782,7 +1782,9 @@ The implementation checkpoints are:
     cleanup, iSER target exit, and RTRS server close now coordinate owners for
     their per-CPU flushes. NVMe/FC association and queue teardown, SCSI FC
     host and devloss flushes, LPFC shutdown, and RapidIO CM removal now use
-    the flush helper for their per-CPU queues.
+    the flush helper for their per-CPU queues. Ath6kl USB I/O completion,
+    PM8001 event teardown/suspend, and RxRPC's rxperf socket shutdown also
+    coordinate owners while flushing their per-CPU queues.
     The test VM was last checked running kernel
     ``7.3.0-rc3-accel-tlbfix-00643-gcf377215356e-dirty`` with 13 GiB free on
     ``/`` and 286 MiB free on ``/boot`` after cleanup. No candidate kernel has

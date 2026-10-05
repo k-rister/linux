@@ -239,7 +239,7 @@ static void rxperf_close_socket(void)
 {
 	kernel_listen(rxperf_socket, 0);
 	kernel_sock_shutdown(rxperf_socket, SHUT_RDWR);
-	flush_workqueue(rxperf_workqueue);
+	flush_workqueue_with_sync_wait(rxperf_workqueue);
 	sock_release(rxperf_socket);
 }
 

@@ -1732,3 +1732,20 @@ The implementation checkpoints are:
     IFS, VMBus, and FCoE objects compile with the relevant options enabled in
     a temporary configuration. These hardware and transport paths have not
     been runtime-tested; the broader Phase 8 wait-site audit remains open.
+
+    A further audit found ``qlt_stop_phase1()`` flushing ``sess_work``, which
+    is queued through ``schedule_work()`` on ``system_percpu_wq``. The new
+    opt-in ``flush_work_with_sync_wait()`` resolves the work's pool CPU inside
+    workqueue core, reserves owner admission before exposing its flush barrier,
+    requests an active owner to stop, and releases the reservation after the
+    barrier completes. It skips workqueues with a rescuer and unbound pools,
+    whose work may not execute on the pool's associated CPU; ordinary
+    ``flush_work()`` remains unchanged. qla2xxx session teardown is the first
+    caller. The workqueue and qla2xxx objects build successfully. Runtime
+    validation remains outstanding. A focused trace-backed
+    ``sync_work_flush`` case and probe module were added; the probe source
+    compiles, but its module link needs refreshed ``Module.symvers`` from a
+    full kernel build. accelerator-dev is still running #59, and its ``/boot``
+    filesystem has only 18 MiB free, so no candidate kernel was installed or
+    booted. The broader Phase 8 wait-site audit and CPA lockup investigation
+    remain open.

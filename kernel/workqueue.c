@@ -4404,7 +4404,7 @@ reflush:
 EXPORT_SYMBOL_GPL(drain_workqueue);
 
 static bool start_flush_work(struct work_struct *work, struct wq_barrier *barr,
-			     bool from_cancel)
+			     bool from_cancel, bool sync_wait, int *cpu)
 {
 	struct worker *worker = NULL;
 	struct worker_pool *pool;
@@ -4432,7 +4432,11 @@ static bool start_flush_work(struct work_struct *work, struct wq_barrier *barr,
 	}
 
 	wq = pwq->wq;
+	/* A rescuer may execute this work away from the pool's associated CPU. */
+	*cpu = wq->rescuer ? WORK_CPU_UNBOUND : pool->cpu;
 	check_flush_dependency(wq, work, from_cancel);
+	if (sync_wait && *cpu >= 0 && *cpu < nr_cpu_ids)
+		arch_smp_sync_wait_begin(*cpu);
 
 	insert_wq_barrier(pwq, barr, work, worker);
 	raw_spin_unlock_irq(&pool->lock);
@@ -4459,9 +4463,11 @@ already_gone:
 	return false;
 }
 
-static bool __flush_work(struct work_struct *work, bool from_cancel)
+static bool __flush_work(struct work_struct *work, bool from_cancel,
+			 bool sync_wait)
 {
 	struct wq_barrier barr;
+	int cpu;
 
 	if (WARN_ON(!wq_online))
 		return false;
@@ -4469,8 +4475,11 @@ static bool __flush_work(struct work_struct *work, bool from_cancel)
 	if (WARN_ON(!work->func))
 		return false;
 
-	if (!start_flush_work(work, &barr, from_cancel))
+	if (!start_flush_work(work, &barr, from_cancel, sync_wait, &cpu))
 		return false;
+
+	if (sync_wait && cpu >= 0 && cpu < nr_cpu_ids)
+		arch_smp_sync_wait_stop(cpu);
 
 	/*
 	 * start_flush_work() returned %true. If @from_cancel is set, we know
@@ -4508,6 +4517,8 @@ static bool __flush_work(struct work_struct *work, bool from_cancel)
 	wait_for_completion(&barr.done);
 
 out_destroy:
+	if (sync_wait && cpu >= 0 && cpu < nr_cpu_ids)
+		arch_smp_sync_wait_end(cpu);
 	destroy_work_on_stack(&barr.work);
 	return true;
 }
@@ -4526,9 +4537,28 @@ out_destroy:
 bool flush_work(struct work_struct *work)
 {
 	might_sleep();
-	return __flush_work(work, false);
+	return __flush_work(work, false, false);
 }
 EXPORT_SYMBOL_GPL(flush_work);
+
+/**
+ * flush_work_with_sync_wait - flush work while coordinating with its CPU
+ * @work: the work to flush
+ *
+ * Like flush_work(), but brackets a wait on work from a fixed-CPU pool with
+ * the architecture synchronous CPU-wait hooks. Work on an unbound pool or a
+ * workqueue with a rescuer may execute away from the pool CPU and is flushed
+ * without those hooks.
+ *
+ * Return: %true if the function waited for the work to finish, %false if it
+ * was already idle.
+ */
+bool flush_work_with_sync_wait(struct work_struct *work)
+{
+	might_sleep();
+	return __flush_work(work, false, true);
+}
+EXPORT_SYMBOL_GPL(flush_work_with_sync_wait);
 
 /**
  * flush_delayed_work - wait for a dwork to finish executing the last queueing
@@ -4625,7 +4655,7 @@ static bool __cancel_work_sync(struct work_struct *work, u32 cflags)
 	 * executing. This allows canceling during early boot.
 	 */
 	if (wq_online)
-		__flush_work(work, true);
+		__flush_work(work, true, false);
 
 	if (!(cflags & WORK_CANCEL_DISABLE))
 		enable_work(work);

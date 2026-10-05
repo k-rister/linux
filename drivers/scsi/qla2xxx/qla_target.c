@@ -1501,7 +1501,7 @@ int qlt_stop_phase1(struct qla_tgt *tgt)
 	spin_lock_irqsave(&tgt->sess_work_lock, flags);
 	do {
 		spin_unlock_irqrestore(&tgt->sess_work_lock, flags);
-		flush_work(&tgt->sess_work);
+		flush_work_with_sync_wait(&tgt->sess_work);
 		spin_lock_irqsave(&tgt->sess_work_lock, flags);
 	} while (!list_empty(&tgt->sess_works_list));
 	spin_unlock_irqrestore(&tgt->sess_work_lock, flags);

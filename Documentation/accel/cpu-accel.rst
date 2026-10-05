@@ -304,6 +304,18 @@ target and work CPUs are 2 and 3)::
   sudo tools/cpu_accel/test-call-function-single-owner-stop.sh smp-call-on-cpu
   sudo tools/cpu_accel/test-call-function-single-owner-stop.sh work-on-cpu
 
+The opt-in ``flush_work_with_sync_wait()`` API can be checked with a probe
+that queues work on the active owner CPU, then flushes it from another CPU.
+Build the probe against the candidate kernel and run the focused case::
+
+  make -C /lib/modules/$(uname -r)/build \
+    M="$PWD/tools/cpu_accel/tlb-flush-probe" modules
+  sudo env CPU_ACCEL_TEST_CASE=sync_work_flush \
+    make -C tools/cpu_accel test-sync-work-owner-stop
+
+The test requires an owner-stop/exit trace pair and execution of the same
+work item on the target CPU.
+
 The tool prints the shared result, including the maximum observed lateness,
 selected workload, work size, completed work iterations, and lifecycle
 telemetry.  The generic interrupt and context-switch deltas

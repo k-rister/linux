@@ -28,6 +28,12 @@ srcu_cleanup_module=cpu_accel_srcu_cleanup_probe
 vmalloc_purge_probe=${CPU_ACCEL_VMALLOC_PURGE_PROBE:-$script_dir/tlb-flush-probe/cpu_accel_vmalloc_purge_probe.ko}
 vmalloc_purge_module=cpu_accel_vmalloc_purge_probe
 vmalloc_purge_held_mb=${CPU_ACCEL_VMALLOC_PURGE_HELD_MB:-384}
+sync_work_flush_probe=${CPU_ACCEL_SYNC_WORK_FLUSH_PROBE:-}
+[ -n "$sync_work_flush_probe" ] || \
+	sync_work_flush_probe="$script_dir/tlb-flush-probe/cpu_accel_sync_work_flush_probe.ko"
+sync_work_flush_module=cpu_accel_sync_work_flush_probe
+sync_work_flush_loaded=0
+debugfs_root=${DEBUGFS:-/sys/kernel/debug}
 outdir=${CPU_ACCEL_TRACE_DIR:-$(mktemp -d /tmp/cpu-accel-sync-wait.XXXXXX)}
 selected_case=${CPU_ACCEL_TEST_CASE:-all}
 trace_pid=
@@ -109,6 +115,10 @@ cleanup()
 		timeout --kill-after=2s 8s rmmod "$vmalloc_purge_module" 2>/dev/null || true
 		vmalloc_purge_loaded=0
 	fi
+	if [ "$sync_work_flush_loaded" -eq 1 ]; then
+		timeout --kill-after=2s 8s rmmod "$sync_work_flush_module" 2>/dev/null || true
+		sync_work_flush_loaded=0
+	fi
 	if [ -n "$prime_pid" ]; then
 		kill -TERM "$prime_pid" 2>/dev/null || true
 		wait "$prime_pid" 2>/dev/null || true
@@ -144,7 +154,7 @@ trap 'exit 1' HUP INT TERM
 
 [ "$(id -u)" -eq 0 ] || fail "run as root"
 case "$selected_case" in
-all|vmstat|lru|slub_shrink|ring_resize|timer_migration|net_backlog|rcu_sheaf|srcu_cleanup|vmalloc_purge|vmalloc_purge_wait) ;;
+all|vmstat|lru|slub_shrink|ring_resize|timer_migration|net_backlog|rcu_sheaf|srcu_cleanup|vmalloc_purge|vmalloc_purge_wait|sync_work_flush) ;;
 *) fail "unknown test case: $selected_case" ;;
 esac
 [ -x "$tool" ] || fail "cpu-accelctl is not executable: $tool"
@@ -177,6 +187,16 @@ if should_run_case vmalloc_purge || should_run_case vmalloc_purge_wait; then
 		"$trace_root/events/vmalloc/free_vmap_area_noflush/enable" \
 		"$trace_root/events/vmalloc/purge_vmap_area_lazy/enable"; do
 		[ -e "$path" ] || fail "required vmalloc trace event is unavailable: $path"
+	done
+fi
+if should_run_case sync_work_flush; then
+	[ -r "$sync_work_flush_probe" ] || \
+		fail "sync-work flush probe is unavailable: $sync_work_flush_probe"
+	[ -d "$debugfs_root" ] || fail "debugfs is unavailable: $debugfs_root"
+	for path in "$trace_root/events/workqueue/workqueue_queue_work/enable" \
+		"$trace_root/events/workqueue/workqueue_execute_start/enable"; do
+		[ -e "$path" ] || \
+			fail "required sync-work flush trace event is unavailable: $path"
 	done
 fi
 if should_run_case vmalloc_purge_wait; then
@@ -230,13 +250,27 @@ for event in owner_stop_request owner_exit_complete; do
 	echo 1 >"$instance/events/cpu_accel/$event/enable"
 done
 if should_run_case srcu_cleanup || should_run_case vmalloc_purge || \
-	should_run_case vmalloc_purge_wait; then
+	should_run_case vmalloc_purge_wait || should_run_case sync_work_flush; then
 	echo 1 >"$instance/events/workqueue/workqueue_queue_work/enable"
 	echo 1 >"$instance/events/workqueue/workqueue_execute_start/enable"
 fi
 if should_run_case vmalloc_purge || should_run_case vmalloc_purge_wait; then
 	echo 1 >"$instance/events/vmalloc/free_vmap_area_noflush/enable"
 	echo 1 >"$instance/events/vmalloc/purge_vmap_area_lazy/enable"
+fi
+if should_run_case sync_work_flush; then
+	insmod "$sync_work_flush_probe" target_cpu="$target_cpu" || \
+		fail "could not load the sync-work flush probe"
+	sync_work_flush_loaded=1
+	sync_work_flush_path="$debugfs_root/cpu_accel_sync_work_flush/run"
+	[ -w "$sync_work_flush_path" ] || \
+		fail "sync-work flush trigger is unavailable: $sync_work_flush_path"
+	grep -qw flush_work_with_sync_wait \
+		"$trace_root/available_filter_functions" || \
+		fail "flush_work_with_sync_wait is not traceable"
+	grep -qw cpu_accel_sync_work_flush_probe_fn \
+		"$trace_root/available_filter_functions" || \
+		fail "sync-work flush probe callback is not traceable"
 fi
 printf '%s\n' x86_cpu_accel_user_enter cpuset_partition_write \
 	wait_attach_done_lock update_prstate cpuset_update_sd_hk_unlock hk_sd_workfn \
@@ -248,6 +282,10 @@ printf '%s\n' x86_cpu_accel_user_enter cpuset_partition_write \
 if should_run_case vmalloc_purge_wait; then
 	printf '%s\n' __purge_vmap_area_lazy purge_vmap_node flush_work \
 		>>"$instance/set_ftrace_filter"
+fi
+if should_run_case sync_work_flush; then
+	printf '%s\n' flush_work_with_sync_wait \
+		cpu_accel_sync_work_flush_probe_fn >>"$instance/set_ftrace_filter"
 fi
 echo function_graph >"$instance/current_tracer"
 cat "$instance/trace_pipe" >"$outdir/trace.log" &
@@ -428,8 +466,17 @@ function number(line, name, rest, pos)
 	sub(/[^0-9].*$/, "", rest)
 	return rest
 }
+function caller_matches(line, expected, parts, count, i)
+{
+	count = split(expected, parts, "|")
+	for (i = 1; i <= count; i++) {
+		if (index(line, "caller=" parts[i]))
+			return 1
+	}
+	return 0
+}
 /owner_stop_request:/ {
-	if (number($0, "cpu") == target && index($0, "caller=" caller) &&
+	if (number($0, "cpu") == target && caller_matches($0, caller) &&
 	    index($0, "stop_cb=1") && index($0, "sent=1")) {
 		owner = number($0, "owner")
 		stop_line = NR
@@ -537,9 +584,41 @@ END {
 			fail "SRCU cleanup did not execute its queued per-CPU callback worker"
 		fi
 	fi
+	if [ "$name" = sync_work_flush ]; then
+		if ! awk -v target="$case_cpu" '
+function field(line, name, pos, value)
+{
+	pos = index(line, name "=")
+	if (!pos)
+		return ""
+	value = substr(line, pos + length(name) + 1)
+	sub(/[^0-9].*$/, "", value)
+	return value
+}
+/workqueue_queue_work:/ && index($0, "function=cpu_accel_sync_work_flush_probe_fn") {
+	if (field($0, "req_cpu") == target) {
+		work = $0
+		sub(/^.*work struct=/, "", work)
+		sub(/[[:space:]].*$/, "", work)
+	}
+}
+/workqueue_execute_start:/ && work != "" &&
+	index($0, "work struct " work ":") &&
+	index($0, "function cpu_accel_sync_work_flush_probe_fn") {
+	executed = 1
+}
+END { exit !(work != "" && executed) }
+' "$outdir/trace.log"; then
+			fail "sync-work flush probe did not execute on CPU $case_cpu"
+		fi
+	fi
 	echo "PASS: $name stopped CPU $case_cpu owner in ${helper_elapsed_ms} ms"
 }
 
+if should_run_case sync_work_flush; then
+	run_case sync_work_flush "$sync_work_flush_path" \
+		arch_smp_sync_wait_stop\|__flush_work\|flush_work_with_sync_wait
+fi
 if should_run_case vmstat; then
 	run_case vmstat /proc/sys/vm/stat_refresh schedule_on_each_cpu
 fi

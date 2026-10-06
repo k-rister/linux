@@ -93,7 +93,7 @@ void charlcd_poke(struct charlcd *lcd)
 	if (!lcd->ops->backlight)
 		return;
 
-	cancel_delayed_work_sync(&priv->bl_work);
+	cancel_delayed_work_sync_with_sync_wait(&priv->bl_work);
 
 	mutex_lock(&priv->bl_tempo_lock);
 	if (!priv->bl_tempo && !(priv->flags & LCD_FLAG_L))
@@ -600,7 +600,7 @@ static void charlcd_deinit(struct charlcd *lcd)
 	struct charlcd_priv *priv = charlcd_to_priv(lcd);
 
 	if (lcd->ops->backlight) {
-		cancel_delayed_work_sync(&priv->bl_work);
+		cancel_delayed_work_sync_with_sync_wait(&priv->bl_work);
 		lcd->ops->backlight(lcd, CHARLCD_OFF);
 	}
 }

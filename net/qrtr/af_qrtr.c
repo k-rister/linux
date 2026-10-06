@@ -193,7 +193,7 @@ static void __qrtr_node_release(struct kref *kref)
 	list_del(&node->item);
 	mutex_unlock(&qrtr_node_lock);
 
-	cancel_delayed_work_sync(&node->say_hello);
+	cancel_delayed_work_sync_with_sync_wait(&node->say_hello);
 
 	skb_queue_purge(&node->rx_queue);
 

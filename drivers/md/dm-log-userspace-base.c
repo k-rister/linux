@@ -333,7 +333,7 @@ static void userspace_dtr(struct dm_dirty_log *log)
 	if (lc->integrated_flush) {
 		/* flush workqueue */
 		if (atomic_read(&lc->sched_flush))
-			flush_delayed_work(&lc->flush_log_work);
+			flush_delayed_work_with_sync_wait(&lc->flush_log_work);
 
 		destroy_workqueue(lc->dmlog_wq);
 	}
@@ -370,7 +370,7 @@ static int userspace_postsuspend(struct dm_dirty_log *log)
 	 * Run planned flush earlier.
 	 */
 	if (lc->integrated_flush && atomic_read(&lc->sched_flush))
-		flush_delayed_work(&lc->flush_log_work);
+		flush_delayed_work_with_sync_wait(&lc->flush_log_work);
 
 	r = dm_consult_userspace(lc->uuid, lc->luid, DM_ULOG_POSTSUSPEND,
 				 NULL, 0, NULL, NULL);

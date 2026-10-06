@@ -1853,7 +1853,11 @@ The implementation checkpoints are:
     pending timer; these subsystem call sites remain compile-validated only.
     SCSI ALUA port-group release uses ``flush_delayed_work_with_sync_wait()``
     for ``rtpg_work`` on its ``WQ_PERCPU`` queue before releasing the group;
-    its subsystem-specific runtime path remains untested.
+    its subsystem-specific runtime path remains untested. Device-mapper cache
+    and clone targets now coordinate owners while canceling their per-CPU
+    delayed wakers during destroy or suspend. Userspace dirty-log teardown and
+    post-suspend use owner-aware delayed flushes on ``dmlogd``'s per-CPU queue.
+    These device-mapper paths remain compile-validated only.
     The test VM booted kernel ``7.3.0-rc3-accel-tlbfix-gf7c43937915f`` through a
     one-time GRUB entry while retaining ``00603`` as its saved default. The
     focused ``sync_work_flush``, ``sync_workqueue_flush``, ``vmstat``, and

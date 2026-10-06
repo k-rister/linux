@@ -162,7 +162,7 @@ static int nsim_dev_psample_disable(struct nsim_dev *nsim_dev)
 
 	psample->is_active = false;
 
-	cancel_delayed_work_sync(&psample->psample_dw);
+	cancel_delayed_work_sync_with_sync_wait(&psample->psample_dw);
 	psample_group_put(psample->group);
 
 	return 0;
@@ -258,7 +258,7 @@ void nsim_dev_psample_exit(struct nsim_dev *nsim_dev)
 {
 	debugfs_remove_recursive(nsim_dev->psample->ddir);
 	if (nsim_dev->psample->is_active) {
-		cancel_delayed_work_sync(&nsim_dev->psample->psample_dw);
+		cancel_delayed_work_sync_with_sync_wait(&nsim_dev->psample->psample_dw);
 		psample_group_put(nsim_dev->psample->group);
 	}
 	kfree(nsim_dev->psample);

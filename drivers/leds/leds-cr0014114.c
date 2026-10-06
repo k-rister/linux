@@ -267,7 +267,7 @@ static void cr0014114_remove(struct spi_device *spi)
 {
 	struct cr0014114 *priv = spi_get_drvdata(spi);
 
-	cancel_delayed_work_sync(&priv->work);
+	disable_delayed_work_sync_with_sync_wait(&priv->work);
 	mutex_destroy(&priv->lock);
 }
 

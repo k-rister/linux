@@ -643,7 +643,7 @@ if should_run_case sync_work_flush; then
 fi
 if should_run_case sync_workqueue_flush; then
 	run_case sync_workqueue_flush "$sync_workqueue_flush_path" \
-		arch_smp_sync_wait_stop\|__flush_workqueue_with_sync_wait
+		arch_smp_sync_wait_stop\|__flush_workqueue_with_sync_wait\|workqueue_sync_wait_begin
 fi
 if should_run_case vmstat; then
 	run_case vmstat /proc/sys/vm/stat_refresh schedule_on_each_cpu

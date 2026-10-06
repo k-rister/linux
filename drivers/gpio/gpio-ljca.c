@@ -468,7 +468,7 @@ static void ljca_gpio_remove(struct auxiliary_device *auxdev)
 
 	gpiochip_remove(&ljca_gpio->gc);
 	ljca_unregister_event_cb(ljca_gpio->ljca);
-	cancel_work_sync(&ljca_gpio->work);
+	cancel_work_sync_with_sync_wait(&ljca_gpio->work);
 }
 
 static const struct auxiliary_device_id ljca_gpio_id_table[] = {

@@ -927,7 +927,7 @@ void _cifsFileInfo_put(struct cifsFileInfo *cifs_file,
 	spin_unlock(&tcon->open_file_lock);
 
 	oplock_break_cancelled = wait_oplock_handler ?
-		cancel_work_sync(&cifs_file->oplock_break) : false;
+		cancel_work_sync_with_sync_wait(&cifs_file->oplock_break) : false;
 
 	if (!tcon->need_reconnect && !cifs_file->invalidHandle) {
 		struct TCP_Server_Info *server = tcon->ses->server;

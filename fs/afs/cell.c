@@ -599,7 +599,7 @@ static void afs_destroy_cell_work(struct work_struct *work)
 
 	afs_see_cell(cell, afs_cell_trace_destroy);
 	timer_delete_sync(&cell->management_timer);
-	cancel_work_sync(&cell->manager);
+	cancel_work_sync_with_sync_wait(&cell->manager);
 
 	if (test_bit(AFS_CELL_FL_HAVE_INO, &cell->flags)) {
 		down_write(&cell->net->cells_lock);

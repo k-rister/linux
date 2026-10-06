@@ -2108,7 +2108,7 @@ void br_multicast_port_ctx_deinit(struct net_bridge_mcast_port *pmctx)
 	del |= br_ip4_multicast_rport_del(pmctx);
 	br_multicast_rport_del_notify(pmctx, del);
 	spin_unlock_bh(&br->multicast_lock);
-	cancel_work_sync(&pmctx->query_queue_work);
+	cancel_work_sync_with_sync_wait(&pmctx->query_queue_work);
 	__skb_queue_purge(&pmctx->query_queue);
 }
 
@@ -2144,7 +2144,7 @@ void br_multicast_del_port(struct net_bridge_port *port)
 	hlist_for_each_entry_safe(pg, n, &port->mglist, mglist)
 		br_multicast_find_del_pg(br, pg);
 	spin_unlock_bh(&br->multicast_lock);
-	flush_work(&br->mcast_gc_work);
+	flush_work_with_sync_wait(&br->mcast_gc_work);
 	br_multicast_port_ctx_deinit(&port->multicast_ctx);
 	free_percpu(port->mcast_stats);
 }
@@ -4211,7 +4211,7 @@ void br_multicast_ctx_init(struct net_bridge *br,
 void br_multicast_ctx_deinit(struct net_bridge_mcast *brmctx)
 {
 	__br_multicast_stop(brmctx);
-	cancel_work_sync(&brmctx->query_queue_work);
+	cancel_work_sync_with_sync_wait(&brmctx->query_queue_work);
 	__skb_queue_purge(&brmctx->query_queue);
 }
 
@@ -4533,7 +4533,7 @@ void br_multicast_dev_del(struct net_bridge *br)
 
 	br_multicast_ctx_deinit(&br->multicast_ctx);
 	br_multicast_gc(&deleted_head);
-	cancel_work_sync(&br->mcast_gc_work);
+	cancel_work_sync_with_sync_wait(&br->mcast_gc_work);
 }
 
 int br_multicast_set_router(struct net_bridge_mcast *brmctx, unsigned long val)

@@ -3513,7 +3513,7 @@ static void dwc3_gadget_free_endpoints(struct dwc3 *dwc)
 		}
 
 		dwc3_debugfs_remove_endpoint_dir(dep);
-		cancel_delayed_work_sync(&dep->nostream_work);
+		cancel_delayed_work_sync_with_sync_wait(&dep->nostream_work);
 		kfree(dep);
 	}
 }

@@ -390,7 +390,7 @@ static void gpio_mpsse_stop_all_except(struct mpsse_priv *priv,
 	list_for_each_entry_safe(worker, worker_tmp,
 				 &destructors, destroy) {
 		list_del(&worker->destroy);
-		cancel_work_sync(&worker->work);
+		cancel_work_sync_with_sync_wait(&worker->work);
 		kfree(worker);
 	}
 }

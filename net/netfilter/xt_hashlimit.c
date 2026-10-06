@@ -430,7 +430,7 @@ static void htable_put(struct xt_hashlimit_htable *hinfo)
 		htable_remove_proc_entry(hinfo);
 		mutex_unlock(&hashlimit_mutex);
 
-		cancel_delayed_work_sync(&hinfo->gc_work);
+		cancel_delayed_work_sync_with_sync_wait(&hinfo->gc_work);
 		htable_selective_cleanup(hinfo, true);
 		kfree(hinfo->name);
 		kvfree(hinfo);

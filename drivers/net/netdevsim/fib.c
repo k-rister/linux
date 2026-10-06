@@ -1094,7 +1094,7 @@ static void nsim_fib_dump_inconsistent(struct notifier_block *nb)
 	struct nsim_fib_rt *fib_rt, *fib_rt_tmp;
 
 	/* Flush the work to make sure there is no race with notifications. */
-	flush_work(&data->fib_event_work);
+	flush_work_with_sync_wait(&data->fib_event_work);
 
 	/* The notifier block is still not registered, so we do not need to
 	 * take any locks here.
@@ -1505,7 +1505,7 @@ static void nsim_fib_flush_work(struct work_struct *work)
 	struct nsim_fib_rt *fib_rt, *fib_rt_tmp;
 
 	/* Process pending work. */
-	flush_work(&data->fib_event_work);
+	flush_work_with_sync_wait(&data->fib_event_work);
 
 	mutex_lock(&data->fib_lock);
 	list_for_each_entry_safe(fib_rt, fib_rt_tmp, &data->fib_rt_list, list) {
@@ -1628,8 +1628,8 @@ err_fib_notifier_unregister:
 err_nexthop_nb_unregister:
 	unregister_nexthop_notifier(devlink_net(devlink), &data->nexthop_nb);
 err_rhashtable_fib_destroy:
-	cancel_work_sync(&data->fib_flush_work);
-	flush_work(&data->fib_event_work);
+	cancel_work_sync_with_sync_wait(&data->fib_flush_work);
+	flush_work_with_sync_wait(&data->fib_event_work);
 	rhashtable_free_and_destroy(&data->fib_rt_ht, nsim_fib_rt_free,
 				    data);
 err_rhashtable_nexthop_destroy:
@@ -1657,8 +1657,8 @@ void nsim_fib_destroy(struct devlink *devlink, struct nsim_fib_data *data)
 	nsim_fib_debugfs_exit(data);
 	unregister_fib_notifier(devlink_net(devlink), &data->fib_nb);
 	unregister_nexthop_notifier(devlink_net(devlink), &data->nexthop_nb);
-	cancel_work_sync(&data->fib_flush_work);
-	flush_work(&data->fib_event_work);
+	cancel_work_sync_with_sync_wait(&data->fib_flush_work);
+	flush_work_with_sync_wait(&data->fib_event_work);
 	rhashtable_free_and_destroy(&data->fib_rt_ht, nsim_fib_rt_free,
 				    data);
 	rhashtable_free_and_destroy(&data->nexthop_ht, nsim_nexthop_free,

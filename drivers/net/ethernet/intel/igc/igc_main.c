@@ -7410,8 +7410,8 @@ static void igc_remove(struct pci_dev *pdev)
 	timer_delete_sync(&adapter->watchdog_timer);
 	timer_delete_sync(&adapter->phy_info_timer);
 
-	cancel_work_sync(&adapter->reset_task);
-	cancel_work_sync(&adapter->watchdog_task);
+	cancel_work_sync_with_sync_wait(&adapter->reset_task);
+	cancel_work_sync_with_sync_wait(&adapter->watchdog_task);
 	hrtimer_cancel(&adapter->hrtimer);
 
 	if (IS_ENABLED(CONFIG_IGC_LEDS) && adapter->leds_available)

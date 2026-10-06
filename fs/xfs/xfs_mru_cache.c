@@ -381,7 +381,7 @@ xfs_mru_cache_flush(
 	spin_lock(&mru->lock);
 	if (mru->queued) {
 		spin_unlock(&mru->lock);
-		cancel_delayed_work_sync(&mru->work);
+		cancel_delayed_work_sync_with_sync_wait(&mru->work);
 		spin_lock(&mru->lock);
 	}
 

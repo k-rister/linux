@@ -869,7 +869,7 @@ static void sk_psock_destroy(struct work_struct *work)
 
 	sk_psock_done_strp(psock);
 
-	cancel_delayed_work_sync(&psock->work);
+	cancel_delayed_work_sync_with_sync_wait(&psock->work);
 	__sk_psock_zap_ingress(psock);
 	mutex_destroy(&psock->work_mutex);
 

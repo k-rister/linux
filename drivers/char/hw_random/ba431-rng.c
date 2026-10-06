@@ -156,7 +156,7 @@ static void ba431_trng_cleanup(struct hwrng *rng)
 	struct ba431_trng *ba431 = container_of(rng, struct ba431_trng, rng);
 
 	ba431_trng_write_reg(ba431, BA431_REG_CTRL, 0);
-	cancel_work_sync(&ba431->reset_work);
+	cancel_work_sync_with_sync_wait(&ba431->reset_work);
 }
 
 static int ba431_trng_init(struct hwrng *rng)

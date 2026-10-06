@@ -795,7 +795,7 @@ err_shared_buf_unreg:
 	devl_unlock(devlink);
 	nfp_shared_buf_unregister(pf);
 err_devlink_unreg:
-	cancel_work_sync(&pf->port_refresh_work);
+	cancel_work_sync_with_sync_wait(&pf->port_refresh_work);
 	nfp_net_pf_app_clean(pf);
 err_unmap:
 	nfp_net_pci_unmap_mem(pf);
@@ -830,5 +830,5 @@ void nfp_net_pci_remove(struct nfp_pf *pf)
 	nfp_net_pf_app_clean(pf);
 	nfp_net_pci_unmap_mem(pf);
 
-	cancel_work_sync(&pf->port_refresh_work);
+	cancel_work_sync_with_sync_wait(&pf->port_refresh_work);
 }

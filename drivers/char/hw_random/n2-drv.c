@@ -786,8 +786,9 @@ static void n2rng_remove(struct platform_device *op)
 	struct n2rng *np = platform_get_drvdata(op);
 
 	np->flags |= N2RNG_FLAG_SHUTDOWN;
+	devm_hwrng_unregister(&op->dev, &np->hwrng);
 
-	cancel_delayed_work_sync(&np->work);
+	cancel_delayed_work_sync_with_sync_wait(&np->work);
 
 	sun4v_hvapi_unregister(HV_GRP_RNG);
 }

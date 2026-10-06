@@ -167,7 +167,7 @@ static void caam_cleanup(struct hwrng *rng)
 {
 	struct caam_rng_ctx *ctx = to_caam_rng_ctx(rng);
 
-	flush_work(&ctx->worker);
+	flush_work_with_sync_wait(&ctx->worker);
 	caam_jr_free(ctx->jrdev);
 	kfifo_free(&ctx->fifo);
 }

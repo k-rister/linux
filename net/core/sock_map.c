@@ -1713,7 +1713,7 @@ retry:
 		rcu_read_unlock();
 		sk_psock_stop(psock);
 		release_sock(sk);
-		cancel_delayed_work_sync(&psock->work);
+		cancel_delayed_work_sync_with_sync_wait(&psock->work);
 		sk_psock_put(sk, psock);
 
 		/* Make sure we do not recurse. This is a bug.

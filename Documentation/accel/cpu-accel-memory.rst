@@ -1857,7 +1857,10 @@ The implementation checkpoints are:
     and clone targets now coordinate owners while canceling their per-CPU
     delayed wakers during destroy or suspend. Userspace dirty-log teardown and
     post-suspend use owner-aware delayed flushes on ``dmlogd``'s per-CPU queue.
-    These device-mapper paths remain compile-validated only.
+    These device-mapper paths remain compile-validated only. IPv6 MLD report
+    teardown now uses owner-aware cancellation for delayed report work on the
+    legacy per-CPU ``mld`` queue, after releasing ``mc_lock``; its subsystem
+    runtime path remains untested.
     The test VM booted kernel ``7.3.0-rc3-accel-tlbfix-gf7c43937915f`` through a
     one-time GRUB entry while retaining ``00603`` as its saved default. The
     focused ``sync_work_flush``, ``sync_workqueue_flush``, ``vmstat``, and

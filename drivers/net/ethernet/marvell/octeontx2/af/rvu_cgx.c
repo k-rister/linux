@@ -446,6 +446,8 @@ int rvu_cgx_exit(struct rvu *rvu)
 	/* Ensure event handler unregister is completed */
 	mb();
 
+	if (rvu->cgx_evh_wq)
+		drain_workqueue_with_sync_wait(rvu->cgx_evh_wq);
 	rvu_cgx_wq_destroy(rvu);
 	return 0;
 }

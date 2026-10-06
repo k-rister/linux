@@ -2728,7 +2728,7 @@ static int mlxsw_reg_trans_wait(struct mlxsw_reg_trans *trans)
 	int err;
 
 	wait_for_completion(&trans->completion);
-	cancel_delayed_work_sync(&trans->timeout_dw);
+	cancel_delayed_work_sync_with_sync_wait(&trans->timeout_dw);
 	err = trans->err;
 
 	if (trans->retries)

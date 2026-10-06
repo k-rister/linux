@@ -912,7 +912,7 @@ void igb_ptp_tx_hang(struct igb_adapter *adapter)
 	 * timestamp bit when this occurs.
 	 */
 	if (timeout) {
-		cancel_work_sync(&adapter->ptp_tx_work);
+		cancel_work_sync_with_sync_wait(&adapter->ptp_tx_work);
 		dev_kfree_skb_any(adapter->ptp_tx_skb);
 		adapter->ptp_tx_skb = NULL;
 		clear_bit_unlock(__IGB_PTP_TX_IN_PROGRESS, &adapter->state);
@@ -1432,9 +1432,9 @@ void igb_ptp_suspend(struct igb_adapter *adapter)
 		return;
 
 	if (adapter->ptp_flags & IGB_PTP_OVERFLOW_CHECK)
-		cancel_delayed_work_sync(&adapter->ptp_overflow_work);
+		cancel_delayed_work_sync_with_sync_wait(&adapter->ptp_overflow_work);
 
-	cancel_work_sync(&adapter->ptp_tx_work);
+	cancel_work_sync_with_sync_wait(&adapter->ptp_tx_work);
 	if (adapter->ptp_tx_skb) {
 		dev_kfree_skb_any(adapter->ptp_tx_skb);
 		adapter->ptp_tx_skb = NULL;

@@ -3809,7 +3809,7 @@ static int virtnet_close(struct net_device *dev)
 	/* Stop getting status/speed updates: we don't care until next
 	 * open
 	 */
-	cancel_work_sync(&vi->config_work);
+	cancel_work_sync_with_sync_wait(&vi->config_work);
 
 	for (i = 0; i < vi->max_queue_pairs; i++) {
 		virtnet_disable_queue_pair(vi, i);
@@ -5729,9 +5729,9 @@ static void virtnet_freeze_down(struct virtio_device *vdev)
 	struct virtnet_info *vi = vdev->priv;
 
 	/* Make sure no work handler is accessing the device */
-	flush_work(&vi->config_work);
+	flush_work_with_sync_wait(&vi->config_work);
 	disable_rx_mode_work(vi);
-	flush_work(&vi->rx_mode_work);
+	flush_work_with_sync_wait(&vi->rx_mode_work);
 
 	if (netif_running(vi->dev)) {
 		rtnl_lock();
@@ -7182,9 +7182,9 @@ static void virtnet_remove(struct virtio_device *vdev)
 	virtnet_cpu_notif_remove(vi);
 
 	/* Make sure no work handler is accessing the device. */
-	flush_work(&vi->config_work);
+	flush_work_with_sync_wait(&vi->config_work);
 	disable_rx_mode_work(vi);
-	flush_work(&vi->rx_mode_work);
+	flush_work_with_sync_wait(&vi->rx_mode_work);
 
 	virtnet_free_irq_moder(vi);
 

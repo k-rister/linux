@@ -177,7 +177,7 @@ int qtnf_del_virtual_intf(struct wiphy *wiphy, struct wireless_dev *wdev)
 	while ((skb = skb_dequeue(&vif->high_pri_tx_queue)))
 		dev_kfree_skb_any(skb);
 
-	cancel_work_sync(&vif->high_pri_tx_work);
+	cancel_work_sync_with_sync_wait(&vif->high_pri_tx_work);
 
 	if (netdev->reg_state == NETREG_REGISTERED)
 		cfg80211_unregister_netdevice(netdev);

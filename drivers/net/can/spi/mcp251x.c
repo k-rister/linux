@@ -1458,6 +1458,7 @@ static int mcp251x_can_probe(struct spi_device *spi)
 
 out_unregister_candev:
 	unregister_candev(net);
+	flush_workqueue_with_sync_wait(priv->wq);
 
 error_probe:
 	destroy_workqueue(priv->wq);
@@ -1479,6 +1480,7 @@ static void mcp251x_can_remove(struct spi_device *spi)
 	struct net_device *net = priv->net;
 
 	unregister_candev(net);
+	flush_workqueue_with_sync_wait(priv->wq);
 
 	mcp251x_power_enable(priv->power, 0);
 

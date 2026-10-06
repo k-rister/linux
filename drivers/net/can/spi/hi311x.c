@@ -961,6 +961,7 @@ static void hi3110_can_remove(struct spi_device *spi)
 	struct net_device *net = priv->net;
 
 	unregister_candev(net);
+	flush_workqueue_with_sync_wait(priv->wq);
 
 	hi3110_power_enable(priv->power, 0);
 

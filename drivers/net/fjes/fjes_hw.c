@@ -390,8 +390,8 @@ void fjes_hw_exit(struct fjes_hw *hw)
 
 	fjes_hw_cleanup(hw);
 
-	cancel_work_sync(&hw->update_zone_task);
-	cancel_work_sync(&hw->epstop_task);
+	cancel_work_sync_with_sync_wait(&hw->update_zone_task);
+	cancel_work_sync_with_sync_wait(&hw->epstop_task);
 }
 
 static enum fjes_dev_command_response_e

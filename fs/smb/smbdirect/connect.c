@@ -261,7 +261,7 @@ static int smbdirect_connect_rdma_event_handler(struct rdma_cm_id *id,
 	 */
 	WARN_ON_ONCE(in_interrupt());
 	sc->idle.keepalive = SMBDIRECT_KEEPALIVE_NONE;
-	cancel_delayed_work_sync(&sc->idle.timer_work);
+	cancel_delayed_work_sync_with_sync_wait(&sc->idle.timer_work);
 
 	if (event->status || event->event != sc->rdma.expected_event) {
 		int lvl = SMBDIRECT_LOG_ERR;

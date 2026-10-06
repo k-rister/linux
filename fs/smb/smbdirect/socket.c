@@ -533,11 +533,11 @@ static void smbdirect_socket_destroy(struct smbdirect_socket *sc)
 	 */
 	smbdirect_socket_wake_up_all(sc);
 
-	disable_work_sync(&sc->disconnect_work);
-	disable_work_sync(&sc->connect.work);
-	disable_work_sync(&sc->recv_io.posted.refill_work);
-	disable_work_sync(&sc->idle.immediate_work);
-	disable_delayed_work_sync(&sc->idle.timer_work);
+	disable_work_sync_with_sync_wait(&sc->disconnect_work);
+	disable_work_sync_with_sync_wait(&sc->connect.work);
+	disable_work_sync_with_sync_wait(&sc->recv_io.posted.refill_work);
+	disable_work_sync_with_sync_wait(&sc->idle.immediate_work);
+	disable_delayed_work_sync_with_sync_wait(&sc->idle.timer_work);
 
 	if (sc->rdma.cm_id)
 		rdma_lock_handler(sc->rdma.cm_id);
@@ -673,7 +673,7 @@ void smbdirect_socket_destroy_sync(struct smbdirect_socket *sc)
 
 	smbdirect_log_rdma_event(sc, SMBDIRECT_LOG_INFO,
 		"cancelling and disable disconnect_work\n");
-	disable_work_sync(&sc->disconnect_work);
+	disable_work_sync_with_sync_wait(&sc->disconnect_work);
 
 	smbdirect_log_rdma_event(sc, SMBDIRECT_LOG_INFO,
 		"destroying rdma session\n");

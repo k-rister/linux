@@ -1103,7 +1103,7 @@ static void rtl8139_remove_one(struct pci_dev *pdev)
 
 	assert (dev != NULL);
 
-	cancel_delayed_work_sync(&tp->thread);
+	cancel_delayed_work_sync_with_sync_wait(&tp->thread);
 
 	unregister_netdev (dev);
 

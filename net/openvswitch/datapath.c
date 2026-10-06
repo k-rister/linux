@@ -2776,8 +2776,8 @@ static void __net_exit ovs_exit_net(struct net *dnet)
 
 	ovs_unlock();
 
-	cancel_delayed_work_sync(&ovs_net->masks_rebalance);
-	cancel_work_sync(&ovs_net->dp_notify_work);
+	cancel_delayed_work_sync_with_sync_wait(&ovs_net->masks_rebalance);
+	cancel_work_sync_with_sync_wait(&ovs_net->dp_notify_work);
 }
 
 static struct pernet_operations ovs_net_ops = {

@@ -2455,7 +2455,7 @@ void nf_conntrack_cleanup_start(void)
 void nf_conntrack_cleanup_end(void)
 {
 	RCU_INIT_POINTER(nf_ct_hook, NULL);
-	cancel_delayed_work_sync(&conntrack_gc_work.dwork);
+	cancel_delayed_work_sync_with_sync_wait(&conntrack_gc_work.dwork);
 	kvfree(nf_conntrack_hash);
 
 	nf_conntrack_proto_fini();
@@ -2691,7 +2691,7 @@ int nf_conntrack_init_start(void)
 	return 0;
 
 err_kfunc:
-	cancel_delayed_work_sync(&conntrack_gc_work.dwork);
+	cancel_delayed_work_sync_with_sync_wait(&conntrack_gc_work.dwork);
 	nf_conntrack_proto_fini();
 err_proto:
 	nf_conntrack_helper_fini();

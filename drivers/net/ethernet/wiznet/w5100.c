@@ -823,8 +823,8 @@ void w5100_remove(struct device *dev)
 	w5100_hw_reset(priv);
 	free_irq(priv->irq, ndev);
 
-	flush_work(&priv->setrx_work);
-	flush_work(&priv->restart_work);
+	flush_work_with_sync_wait(&priv->setrx_work);
+	flush_work_with_sync_wait(&priv->restart_work);
 	destroy_workqueue(priv->xfer_wq);
 
 	unregister_netdev(ndev);

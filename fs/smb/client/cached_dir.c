@@ -634,7 +634,7 @@ void invalidate_all_cached_dirs(struct cifs_tcon *tcon, bool sync)
 	/* run laundromat unconditionally now as there might have been previously queued work */
 	mod_delayed_work(cfid_put_wq, &cfids->laundromat_work, 0);
 	if (sync)
-		flush_delayed_work(&cfids->laundromat_work);
+		flush_delayed_work_with_sync_wait(&cfids->laundromat_work);
 }
 
 static void
@@ -851,7 +851,7 @@ void free_cached_dirs(struct cached_fids *cfids)
 	if (cfids == NULL)
 		return;
 
-	cancel_delayed_work_sync(&cfids->laundromat_work);
+	cancel_delayed_work_sync_with_sync_wait(&cfids->laundromat_work);
 
 	spin_lock(&cfids->cfid_list_lock);
 	list_for_each_entry_safe(cfid, q, &cfids->entries, entry) {

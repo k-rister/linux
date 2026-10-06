@@ -74,7 +74,7 @@ static int rawsock_release(struct socket *sock)
 		 * rawsock_tx_work runs after the NCI device has been freed.
 		 */
 		sk->sk_shutdown |= SEND_SHUTDOWN;
-		cancel_work_sync(&nfc_rawsock(sk)->tx_work);
+		cancel_work_sync_with_sync_wait(&nfc_rawsock(sk)->tx_work);
 		rawsock_write_queue_purge(sk);
 	}
 

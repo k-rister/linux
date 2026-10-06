@@ -189,7 +189,7 @@ static void nci_uart_tty_close(struct tty_struct *tty)
 	nu->tty = NULL;
 	module_put(nu->owner);
 
-	cancel_work_sync(&nu->write_work);
+	cancel_work_sync_with_sync_wait(&nu->write_work);
 
 	kfree(nu);
 }

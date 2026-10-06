@@ -1057,9 +1057,9 @@ void nfc_hci_unregister_device(struct nfc_hci_dev *hdev)
 	mutex_unlock(&hdev->msg_tx_mutex);
 
 	timer_delete_sync(&hdev->cmd_timer);
-	cancel_work_sync(&hdev->msg_tx_work);
+	cancel_work_sync_with_sync_wait(&hdev->msg_tx_work);
 
-	cancel_work_sync(&hdev->msg_rx_work);
+	cancel_work_sync_with_sync_wait(&hdev->msg_rx_work);
 
 	nfc_unregister_device(hdev->ndev);
 

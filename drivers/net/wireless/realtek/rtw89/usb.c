@@ -617,11 +617,17 @@ static void rtw89_usb_read_port_complete(struct urb *urb)
 static void rtw89_usb_cancel_rx_bufs(struct rtw89_usb *rtwusb)
 {
 	struct rtw89_usb_rx_ctrl_block *rxcb;
-	int i;
+	int i, pass;
 
-	for (i = 0; i < RTW89_USB_RXCB_NUM; i++) {
-		rxcb = &rtwusb->rx_cb[i];
-		usb_kill_urb(rxcb->rx_urb);
+	for (pass = 0; pass < 2; pass++) {
+		for (i = 0; i < RTW89_USB_RXCB_NUM; i++) {
+			rxcb = &rtwusb->rx_cb[i];
+			usb_kill_urb(rxcb->rx_urb);
+		}
+
+		/* Stop the retry worker before the second pass catches its URBs. */
+		if (!pass)
+			cancel_work_sync_with_sync_wait(&rtwusb->rx_urb_work);
 	}
 }
 
@@ -691,6 +697,7 @@ static void rtw89_usb_deinit_rx(struct rtw89_dev *rtwdev)
 {
 	struct rtw89_usb *rtwusb = rtw89_usb_priv(rtwdev);
 
+	drain_workqueue_with_sync_wait(rtwusb->rxwq);
 	skb_queue_purge(&rtwusb->rx_queue);
 
 	destroy_workqueue(rtwusb->rxwq);
@@ -1310,9 +1317,9 @@ void rtw89_usb_disconnect(struct usb_interface *intf)
 	rtw89_usb_cancel_tx_bufs(rtwusb);
 
 	rtw89_core_unregister(rtwdev);
-	rtw89_core_deinit(rtwdev);
 	rtw89_usb_deinit_rx(rtwdev);
 	rtw89_usb_free_rx_bufs(rtwusb);
+	rtw89_core_deinit(rtwdev);
 	rtw89_usb_deinit_tx(rtwdev);
 	rtw89_usb_intf_deinit(rtwdev, intf);
 	rtw89_free_ieee80211_hw(rtwdev);

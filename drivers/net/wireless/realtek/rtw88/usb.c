@@ -791,11 +791,17 @@ static void rtw_usb_read_port_complete(struct urb *urb)
 static void rtw_usb_cancel_rx_bufs(struct rtw_usb *rtwusb)
 {
 	struct rx_usb_ctrl_block *rxcb;
-	int i;
+	int i, pass;
 
-	for (i = 0; i < RTW_USB_RXCB_NUM; i++) {
-		rxcb = &rtwusb->rx_cb[i];
-		usb_kill_urb(rxcb->rx_urb);
+	for (pass = 0; pass < 2; pass++) {
+		for (i = 0; i < RTW_USB_RXCB_NUM; i++) {
+			rxcb = &rtwusb->rx_cb[i];
+			usb_kill_urb(rxcb->rx_urb);
+		}
+
+		/* Stop the retry worker before the second pass catches its URBs. */
+		if (!pass)
+			cancel_work_sync_with_sync_wait(&rtwusb->rx_urb_work);
 	}
 }
 
@@ -1015,6 +1021,7 @@ static void rtw_usb_deinit_rx(struct rtw_dev *rtwdev)
 {
 	struct rtw_usb *rtwusb = rtw_get_usb_priv(rtwdev);
 
+	drain_workqueue_with_sync_wait(rtwusb->rxwq);
 	skb_queue_purge(&rtwusb->rx_queue);
 
 	destroy_workqueue(rtwusb->rxwq);

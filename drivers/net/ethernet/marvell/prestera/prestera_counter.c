@@ -462,7 +462,7 @@ void prestera_counter_fini(struct prestera_switch *sw)
 	struct prestera_counter *counter = sw->counter;
 	u32 i;
 
-	cancel_delayed_work_sync(&counter->stats_dw);
+	cancel_delayed_work_sync_with_sync_wait(&counter->stats_dw);
 
 	for (i = 0; i < counter->block_list_len; i++)
 		WARN_ON(counter->block_list[i]);

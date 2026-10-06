@@ -1540,7 +1540,7 @@ static int prestera_neigh_work_init(struct prestera_switch *sw)
 
 static void prestera_neigh_work_fini(struct prestera_switch *sw)
 {
-	cancel_delayed_work_sync(&sw->router->neighs_update.dw);
+	cancel_delayed_work_sync_with_sync_wait(&sw->router->neighs_update.dw);
 }
 
 int prestera_router_init(struct prestera_switch *sw)

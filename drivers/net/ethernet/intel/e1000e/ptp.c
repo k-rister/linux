@@ -345,7 +345,7 @@ void e1000e_ptp_remove(struct e1000_adapter *adapter)
 	if (!(adapter->flags & FLAG_HAS_HW_TIMESTAMP))
 		return;
 
-	cancel_delayed_work_sync(&adapter->systim_overflow_work);
+	cancel_delayed_work_sync_with_sync_wait(&adapter->systim_overflow_work);
 
 	if (adapter->ptp_clock) {
 		ptp_clock_unregister(adapter->ptp_clock);

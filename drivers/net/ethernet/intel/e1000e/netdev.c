@@ -7765,14 +7765,14 @@ static void e1000_remove(struct pci_dev *pdev)
 	timer_delete_sync(&adapter->watchdog_timer);
 	timer_delete_sync(&adapter->phy_info_timer);
 
-	cancel_work_sync(&adapter->reset_task);
-	cancel_work_sync(&adapter->watchdog_task);
-	cancel_work_sync(&adapter->downshift_task);
-	cancel_work_sync(&adapter->update_phy_task);
-	cancel_work_sync(&adapter->print_hang_task);
+	cancel_work_sync_with_sync_wait(&adapter->reset_task);
+	cancel_work_sync_with_sync_wait(&adapter->watchdog_task);
+	cancel_work_sync_with_sync_wait(&adapter->downshift_task);
+	cancel_work_sync_with_sync_wait(&adapter->update_phy_task);
+	cancel_work_sync_with_sync_wait(&adapter->print_hang_task);
 
 	if (adapter->flags & FLAG_HAS_HW_TIMESTAMP) {
-		cancel_work_sync(&adapter->tx_hwtstamp_work);
+		cancel_work_sync_with_sync_wait(&adapter->tx_hwtstamp_work);
 		if (adapter->tx_hwtstamp_skb) {
 			dev_consume_skb_any(adapter->tx_hwtstamp_skb);
 			adapter->tx_hwtstamp_skb = NULL;

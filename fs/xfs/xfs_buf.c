@@ -1509,7 +1509,7 @@ xfs_buftarg_wait(
 	 */
 	while (percpu_counter_sum(&btp->bt_readahead_count))
 		delay(100);
-	flush_workqueue(btp->bt_mount->m_buf_workqueue);
+	flush_workqueue_with_sync_wait(btp->bt_mount->m_buf_workqueue);
 }
 
 void

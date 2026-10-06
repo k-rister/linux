@@ -754,7 +754,8 @@ static void prestera_port_destroy(struct prestera_port *port)
 {
 	struct net_device *dev = port->dev;
 
-	cancel_delayed_work_sync(&port->cached_hw_stats.caching_dw);
+	cancel_delayed_work_sync_with_sync_wait(
+		&port->cached_hw_stats.caching_dw);
 	unregister_netdev(dev);
 	prestera_port_list_del(port);
 	prestera_devlink_port_unregister(port);

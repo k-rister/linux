@@ -422,11 +422,11 @@ static void br_mrp_del_impl(struct net_bridge *br, struct br_mrp *mrp)
 	u8 state;
 
 	/* Stop sending MRP_Test frames */
-	cancel_delayed_work_sync(&mrp->test_work);
+	cancel_delayed_work_sync_with_sync_wait(&mrp->test_work);
 	br_mrp_switchdev_send_ring_test(br, mrp, 0, 0, 0, 0);
 
 	/* Stop sending MRP_InTest frames if has an interconnect role */
-	cancel_delayed_work_sync(&mrp->in_test_work);
+	cancel_delayed_work_sync_with_sync_wait(&mrp->in_test_work);
 	br_mrp_switchdev_send_in_test(br, mrp, 0, 0, 0);
 
 	/* Disable the roles */
@@ -767,7 +767,7 @@ int br_mrp_set_in_role(struct net_bridge *br, struct br_mrp_in_role *role)
 			return -EINVAL;
 
 		/* Stop the generating MRP_InTest frames */
-		cancel_delayed_work_sync(&mrp->in_test_work);
+		cancel_delayed_work_sync_with_sync_wait(&mrp->in_test_work);
 		br_mrp_switchdev_send_in_test(br, mrp, 0, 0, 0);
 
 		/* Remove the port */

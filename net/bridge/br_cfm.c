@@ -155,7 +155,7 @@ static void cc_peer_enable(struct br_cfm_peer_mep *peer_mep)
 
 static void cc_peer_disable(struct br_cfm_peer_mep *peer_mep)
 {
-	cancel_delayed_work_sync(&peer_mep->ccm_rx_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&peer_mep->ccm_rx_dwork);
 }
 
 static struct sk_buff *ccm_frame_build(struct br_cfm_mep *mep,
@@ -571,12 +571,12 @@ static void mep_delete_implementation(struct net_bridge *br,
 
 	/* Empty and free peer MEP list */
 	hlist_for_each_entry_safe(peer_mep, n_store, &mep->peer_mep_list, head) {
-		disable_delayed_work_sync(&peer_mep->ccm_rx_dwork);
+		disable_delayed_work_sync_with_sync_wait(&peer_mep->ccm_rx_dwork);
 		hlist_del_rcu(&peer_mep->head);
 		kfree_rcu(peer_mep, rcu);
 	}
 
-	cancel_delayed_work_sync(&mep->ccm_tx_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&mep->ccm_tx_dwork);
 
 	RCU_INIT_POINTER(mep->b_port, NULL);
 	hlist_del_rcu(&mep->head);
@@ -727,7 +727,7 @@ int br_cfm_cc_peer_mep_remove(struct net_bridge *br, const u32 instance,
 		return -ENOENT;
 	}
 
-	disable_delayed_work_sync(&peer_mep->ccm_rx_dwork);
+	disable_delayed_work_sync_with_sync_wait(&peer_mep->ccm_rx_dwork);
 
 	hlist_del_rcu(&peer_mep->head);
 	kfree_rcu(peer_mep, rcu);
@@ -796,7 +796,7 @@ int br_cfm_cc_ccm_tx(struct net_bridge *br, const u32 instance,
 	}
 
 	if (tx_info->period == 0 && mep->cc_ccm_tx_info.period != 0) {
-		cancel_delayed_work_sync(&mep->ccm_tx_dwork);
+		cancel_delayed_work_sync_with_sync_wait(&mep->ccm_tx_dwork);
 		goto save;
 	}
 

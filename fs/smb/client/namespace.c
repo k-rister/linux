@@ -43,7 +43,7 @@ void cifs_release_automount_timer(void)
 {
 	if (WARN_ON(!list_empty(&cifs_automount_list)))
 		return;
-	cancel_delayed_work_sync(&cifs_automount_task);
+	cancel_delayed_work_sync_with_sync_wait(&cifs_automount_task);
 }
 
 /**

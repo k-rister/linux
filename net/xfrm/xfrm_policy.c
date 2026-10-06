@@ -4282,8 +4282,8 @@ out_byidx:
 
 static void __net_exit xfrm_net_pre_exit(struct net *net)
 {
-	disable_work_sync(&net->xfrm.policy_hthresh.work);
-	flush_work(&net->xfrm.policy_hash_work);
+	disable_work_sync_with_sync_wait(&net->xfrm.policy_hthresh.work);
+	flush_work_with_sync_wait(&net->xfrm.policy_hash_work);
 #ifdef CONFIG_XFRM_SUB_POLICY
 	xfrm_policy_flush(net, XFRM_POLICY_TYPE_SUB, false);
 #endif

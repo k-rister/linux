@@ -3147,7 +3147,7 @@ struct xfrm_state_afinfo *xfrm_state_get_afinfo(unsigned int family)
 
 void xfrm_flush_gc(void)
 {
-	flush_work(&xfrm_state_gc_work);
+	flush_work_with_sync_wait(&xfrm_state_gc_work);
 }
 EXPORT_SYMBOL(xfrm_flush_gc);
 
@@ -3392,9 +3392,9 @@ void xfrm_state_fini(struct net *net)
 	unsigned int sz;
 	int i;
 
-	flush_work(&net->xfrm.state_hash_work);
+	flush_work_with_sync_wait(&net->xfrm.state_hash_work);
 	xfrm_state_flush(net, 0, false);
-	flush_work(&xfrm_state_gc_work);
+	flush_work_with_sync_wait(&xfrm_state_gc_work);
 
 	WARN_ON(!list_empty(&net->xfrm.state_all));
 

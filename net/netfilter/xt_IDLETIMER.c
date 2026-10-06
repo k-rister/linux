@@ -400,7 +400,7 @@ static void idletimer_tg_destroy(const struct xt_tgdtor_param *par)
 	mutex_unlock(&list_mutex);
 
 	timer_shutdown_sync(&info->timer->timer);
-	cancel_work_sync(&info->timer->work);
+	cancel_work_sync_with_sync_wait(&info->timer->work);
 	sysfs_remove_file(idletimer_tg_kobj, &info->timer->attr.attr);
 	kfree(info->timer->attr.attr.name);
 	kfree(info->timer);
@@ -425,7 +425,7 @@ static void idletimer_tg_destroy_v1(const struct xt_tgdtor_param *par)
 	} else {
 		timer_shutdown_sync(&info->timer->timer);
 	}
-	cancel_work_sync(&info->timer->work);
+	cancel_work_sync_with_sync_wait(&info->timer->work);
 	sysfs_remove_file(idletimer_tg_kobj, &info->timer->attr.attr);
 	kfree(info->timer->attr.attr.name);
 	kfree(info->timer);

@@ -298,7 +298,7 @@ void hinic3_pf_to_mgmt_free(struct hinic3_hwdev *hwdev)
 void hinic3_flush_mgmt_workq(struct hinic3_hwdev *hwdev)
 {
 	if (hwdev->aeqs)
-		flush_workqueue(hwdev->aeqs->workq);
+		flush_workqueue_with_sync_wait(hwdev->aeqs->workq);
 
 	if (HINIC3_IS_PF(hwdev) && hwdev->pf_to_mgmt)
 		flush_workqueue(hwdev->pf_to_mgmt->workq);

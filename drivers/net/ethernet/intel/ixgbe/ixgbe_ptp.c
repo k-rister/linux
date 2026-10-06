@@ -789,7 +789,7 @@ void ixgbe_ptp_tx_hang(struct ixgbe_adapter *adapter)
 	 * timestamp bit when this occurs.
 	 */
 	if (timeout) {
-		cancel_work_sync(&adapter->ptp_tx_work);
+		cancel_work_sync_with_sync_wait(&adapter->ptp_tx_work);
 		ixgbe_ptp_clear_tx_timestamp(adapter);
 		adapter->tx_hwtstamp_timeouts++;
 		e_warn(drv, "clearing Tx timestamp hang\n");
@@ -1506,7 +1506,7 @@ void ixgbe_ptp_suspend(struct ixgbe_adapter *adapter)
 		adapter->ptp_setup_sdp(adapter);
 
 	/* ensure that we cancel any pending PTP Tx work item in progress */
-	cancel_work_sync(&adapter->ptp_tx_work);
+	cancel_work_sync_with_sync_wait(&adapter->ptp_tx_work);
 	ixgbe_ptp_clear_tx_timestamp(adapter);
 }
 

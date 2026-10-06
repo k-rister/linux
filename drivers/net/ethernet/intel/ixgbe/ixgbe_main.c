@@ -12099,7 +12099,7 @@ static void ixgbe_remove(struct pci_dev *pdev)
 	ixgbe_dbg_adapter_exit(adapter);
 
 	set_bit(__IXGBE_REMOVING, &adapter->state);
-	cancel_work_sync(&adapter->service_task);
+	cancel_work_sync_with_sync_wait(&adapter->service_task);
 
 	if (adapter->hw.mac.type == ixgbe_mac_e610)
 		ixgbe_disable_link_status_events(adapter);

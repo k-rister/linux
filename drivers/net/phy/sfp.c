@@ -1943,7 +1943,7 @@ static int sfp_hwmon_insert(struct sfp *sfp)
 
 static void sfp_hwmon_remove(struct sfp *sfp)
 {
-	cancel_delayed_work_sync(&sfp->hwmon_probe);
+	cancel_delayed_work_sync_with_sync_wait(&sfp->hwmon_probe);
 	if (!IS_ERR_OR_NULL(sfp->hwmon_dev)) {
 		hwmon_device_unregister(sfp->hwmon_dev);
 		sfp->hwmon_dev = NULL;
@@ -1964,7 +1964,7 @@ static int sfp_hwmon_init(struct sfp *sfp)
 
 static void sfp_hwmon_exit(struct sfp *sfp)
 {
-	cancel_delayed_work_sync(&sfp->hwmon_probe);
+	cancel_delayed_work_sync_with_sync_wait(&sfp->hwmon_probe);
 }
 #else
 static int sfp_hwmon_insert(struct sfp *sfp)
@@ -3266,8 +3266,8 @@ static void sfp_cleanup(void *data)
 
 	sfp_hwmon_exit(sfp);
 
-	cancel_delayed_work_sync(&sfp->poll);
-	cancel_delayed_work_sync(&sfp->timeout);
+	cancel_delayed_work_sync_with_sync_wait(&sfp->poll);
+	cancel_delayed_work_sync_with_sync_wait(&sfp->timeout);
 	if (sfp->i2c_mii) {
 		mdiobus_unregister(sfp->i2c_mii);
 		mdiobus_free(sfp->i2c_mii);
@@ -3481,8 +3481,8 @@ static void sfp_shutdown(struct platform_device *pdev)
 		devm_free_irq(sfp->dev, sfp->gpio_irq[i], sfp);
 	}
 
-	cancel_delayed_work_sync(&sfp->poll);
-	cancel_delayed_work_sync(&sfp->timeout);
+	cancel_delayed_work_sync_with_sync_wait(&sfp->poll);
+	cancel_delayed_work_sync_with_sync_wait(&sfp->timeout);
 }
 
 static struct platform_driver sfp_driver = {

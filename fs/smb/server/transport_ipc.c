@@ -1003,16 +1003,18 @@ void ksmbd_rpc_id_free(int handle)
 
 void ksmbd_ipc_release(void)
 {
-	cancel_delayed_work_sync(&ipc_timer_work);
+	cancel_delayed_work_sync_with_sync_wait(&ipc_timer_work);
 	genl_unregister_family(&ksmbd_genl_family);
 }
 
 void ksmbd_ipc_soft_reset(void)
 {
 	mutex_lock(&startup_lock);
+	WRITE_ONCE(server_conf.state, SERVER_STATE_RESETTING);
 	ksmbd_tools_pid = 0;
-	cancel_delayed_work_sync(&ipc_timer_work);
 	mutex_unlock(&startup_lock);
+	/* Prevent startup from rearming the timer while we wait for it. */
+	cancel_delayed_work_sync_with_sync_wait(&ipc_timer_work);
 }
 
 int ksmbd_ipc_init(void)
@@ -1025,7 +1027,7 @@ int ksmbd_ipc_init(void)
 	ret = genl_register_family(&ksmbd_genl_family);
 	if (ret) {
 		pr_err("Failed to register KSMBD netlink interface %d\n", ret);
-		cancel_delayed_work_sync(&ipc_timer_work);
+		cancel_delayed_work_sync_with_sync_wait(&ipc_timer_work);
 	}
 
 	return ret;

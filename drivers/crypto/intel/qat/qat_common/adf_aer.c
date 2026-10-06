@@ -190,7 +190,7 @@ static void adf_device_reset_worker(struct work_struct *work)
 	if (wait_for_completion_timeout(&sriov_data.compl, wait_jiffies))
 		adf_pf2vf_notify_restarted(accel_dev);
 	else
-		cancel_work_sync(&sriov_data.sriov_work);
+		cancel_work_sync_with_sync_wait(&sriov_data.sriov_work);
 
 	adf_dev_restarted_notify(accel_dev);
 	clear_bit(ADF_STATUS_RESTARTING, &accel_dev->status);
@@ -232,7 +232,7 @@ static int adf_dev_aer_schedule_reset(struct adf_accel_dev *accel_dev,
 		if (!timeout) {
 			dev_err(&GET_DEV(accel_dev),
 				"Reset device timeout expired\n");
-			cancel_work_sync(&reset_data->reset_work);
+			cancel_work_sync_with_sync_wait(&reset_data->reset_work);
 			ret = -EFAULT;
 		}
 		kfree(reset_data);

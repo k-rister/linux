@@ -1841,8 +1841,16 @@ The implementation checkpoints are:
     NVMe TCP I/O, UAS teardown, FC rport scans, and dm-integrity bitmap work.
     Owner-aware disable helpers now cover bio completion and vmstat CPU
     hotplug, OVPN teardown, Hinic3 work shutdown, and PCI endpoint NTB cleanup.
-    The test VM was last checked running kernel
-    ``7.3.0-rc3-accel-tlbfix-00643-gcf377215356e-dirty`` with 13 GiB free on
-    ``/`` and 286 MiB free on ``/boot`` after cleanup. No candidate kernel has
-    been installed or booted for this increment. The broader Phase 8 wait-site
-    audit and CPA lockup investigation remain open.
+    QAT AER reset and SR-IOV timeout cleanup also use
+    ``cancel_work_sync_with_sync_wait()`` for work on explicit ``WQ_PERCPU``
+    queues; synchronous cancellation still protects the work state released
+    immediately afterward. This driver path has not been runtime-tested.
+    The test VM booted kernel ``7.3.0-rc3-accel-tlbfix-gf7c43937915f`` through a
+    one-time GRUB entry while retaining ``00603`` as its saved default. The
+    focused ``sync_work_flush``, ``sync_workqueue_flush``, ``vmstat``, and
+    ``lru`` owner-stop tests passed in 10, 4, 4, and 47 ms respectively, with
+    no lockup, RCU stall, oops, panic, or initramfs error reported. The
+    whole-workqueue test assertion now accepts the traced
+    ``workqueue_sync_wait_begin`` caller symbol. The broader Phase 8 wait-site
+    audit and CPA lockup investigation remain open; INVLPGB testing remains
+    deferred until suitable AMD hardware is available.

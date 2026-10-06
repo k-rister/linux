@@ -752,7 +752,7 @@ void nf_flow_table_gc_cleanup(struct nf_flowtable *flowtable,
 			      struct net_device *dev)
 {
 	nf_flow_table_iterate(flowtable, nf_flow_table_do_cleanup, dev);
-	flush_delayed_work(&flowtable->gc_work);
+	flush_delayed_work_with_sync_wait(&flowtable->gc_work);
 	nf_flow_table_offload_flush(flowtable);
 }
 
@@ -773,7 +773,7 @@ void nf_flow_table_free(struct nf_flowtable *flow_table)
 	list_del(&flow_table->list);
 	mutex_unlock(&flowtable_lock);
 
-	cancel_delayed_work_sync(&flow_table->gc_work);
+	cancel_delayed_work_sync_with_sync_wait(&flow_table->gc_work);
 	nf_flow_table_offload_flush(flow_table);
 	/* ... no more pending work after this stage ... */
 	nf_flow_table_iterate(flow_table, nf_flow_table_do_cleanup, NULL);

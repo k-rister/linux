@@ -83,8 +83,9 @@ static void seg_led_remove(struct platform_device *pdev)
 {
 	struct seg_led_priv *priv = platform_get_drvdata(pdev);
 
-	cancel_delayed_work_sync(&priv->work);
+	/* Stop the timer and sysfs callbacks before canceling the work. */
 	linedisp_unregister(&priv->linedisp);
+	cancel_delayed_work_sync_with_sync_wait(&priv->work);
 }
 
 static const struct of_device_id seg_led_of_match[] = {

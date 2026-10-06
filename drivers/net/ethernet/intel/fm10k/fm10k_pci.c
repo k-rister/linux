@@ -115,7 +115,7 @@ static void fm10k_stop_macvlan_task(struct fm10k_intfc *interface)
 	set_bit(__FM10K_MACVLAN_DISABLE, interface->state);
 
 	/* Make sure we waited until any current invocations have stopped */
-	cancel_delayed_work_sync(&interface->macvlan_task);
+	cancel_delayed_work_sync_with_sync_wait(&interface->macvlan_task);
 
 	/* We set the __FM10K_MACVLAN_SCHED bit when we schedule the task.
 	 * However, it may not be unset of the MAC/VLAN task never actually
@@ -175,9 +175,9 @@ static void fm10k_service_event_complete(struct fm10k_intfc *interface)
 static void fm10k_stop_service_event(struct fm10k_intfc *interface)
 {
 	set_bit(__FM10K_SERVICE_DISABLE, interface->state);
-	cancel_work_sync(&interface->service_task);
+	cancel_work_sync_with_sync_wait(&interface->service_task);
 
-	/* It's possible that cancel_work_sync stopped the service task from
+	/* It's possible that synchronous cancellation stopped the service task from
 	 * running before it could actually start. In this case the
 	 * __FM10K_SERVICE_SCHED bit will never be cleared. Since we know that
 	 * the service task cannot be running at this point, we need to clear

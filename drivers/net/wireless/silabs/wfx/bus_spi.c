@@ -205,7 +205,7 @@ static int wfx_spi_suspend(struct device *dev)
 
 	if (!device_may_wakeup(dev))
 		return 0;
-	flush_work(&bus->core->hif.bh);
+	flush_work_with_sync_wait(&bus->core->hif.bh);
 	return enable_irq_wake(func->irq);
 }
 

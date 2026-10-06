@@ -320,5 +320,5 @@ void wfx_bh_register(struct wfx_dev *wdev)
 
 void wfx_bh_unregister(struct wfx_dev *wdev)
 {
-	flush_work(&wdev->hif.bh);
+	flush_work_with_sync_wait(&wdev->hif.bh);
 }

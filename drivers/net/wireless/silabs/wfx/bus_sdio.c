@@ -209,7 +209,7 @@ static int wfx_sdio_suspend(struct device *dev)
 	if (!device_may_wakeup(dev))
 		return 0;
 
-	flush_work(&bus->core->hif.bh);
+	flush_work_with_sync_wait(&bus->core->hif.bh);
 	/* Either "wakeup-source" attribute or out-of-band IRQ is required for
 	 * WoWLAN
 	 */

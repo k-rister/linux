@@ -2919,7 +2919,7 @@ static __net_exit void devinet_exit_net(struct net *net)
 	const struct ctl_table *tbl;
 #endif
 
-	cancel_delayed_work_sync(&net->ipv4.addr_chk_work);
+	cancel_delayed_work_sync_with_sync_wait(&net->ipv4.addr_chk_work);
 
 #ifdef CONFIG_SYSCTL
 	tbl = net->ipv4.forw_hdr->ctl_table_arg;

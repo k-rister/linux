@@ -1851,6 +1851,9 @@ The implementation checkpoints are:
     teardown also uses owner-aware synchronous cancellation for dispatch work
     queued on ``kthrotld`` (``WQ_MEM_RECLAIM | WQ_PERCPU``), after deleting its
     pending timer; these subsystem call sites remain compile-validated only.
+    SCSI ALUA port-group release uses ``flush_delayed_work_with_sync_wait()``
+    for ``rtpg_work`` on its ``WQ_PERCPU`` queue before releasing the group;
+    its subsystem-specific runtime path remains untested.
     The test VM booted kernel ``7.3.0-rc3-accel-tlbfix-gf7c43937915f`` through a
     one-time GRUB entry while retaining ``00603`` as its saved default. The
     focused ``sync_work_flush``, ``sync_workqueue_flush``, ``vmstat``, and

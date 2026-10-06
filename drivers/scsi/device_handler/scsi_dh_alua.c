@@ -113,7 +113,7 @@ static void release_port_group(struct kref *kref)
 
 	pg = container_of(kref, struct alua_port_group, kref);
 	if (pg->rtpg_sdev)
-		flush_delayed_work(&pg->rtpg_work);
+		flush_delayed_work_with_sync_wait(&pg->rtpg_work);
 	spin_lock(&port_group_lock);
 	list_del(&pg->node);
 	spin_unlock(&port_group_lock);

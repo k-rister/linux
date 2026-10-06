@@ -1083,7 +1083,7 @@ err_module_put:
 		struct sk_buff *skb;
 
 		timer_shutdown_sync(&hw_data->send_timer);
-		cancel_work_sync(&hw_data->dm_alert_work);
+		cancel_work_sync_with_sync_wait(&hw_data->dm_alert_work);
 		while ((skb = __skb_dequeue(&hw_data->drop_queue))) {
 			struct devlink_trap_metadata *hw_metadata;
 
@@ -1117,7 +1117,7 @@ static void net_dm_hw_monitor_stop(struct netlink_ext_ack *extack)
 		struct sk_buff *skb;
 
 		timer_shutdown_sync(&hw_data->send_timer);
-		cancel_work_sync(&hw_data->dm_alert_work);
+		cancel_work_sync_with_sync_wait(&hw_data->dm_alert_work);
 		while ((skb = __skb_dequeue(&hw_data->drop_queue))) {
 			struct devlink_trap_metadata *hw_metadata;
 
@@ -1179,7 +1179,7 @@ err_module_put:
 		struct sk_buff *skb;
 
 		timer_shutdown_sync(&data->send_timer);
-		cancel_work_sync(&data->dm_alert_work);
+		cancel_work_sync_with_sync_wait(&data->dm_alert_work);
 		while ((skb = __skb_dequeue(&data->drop_queue)))
 			consume_skb(skb);
 	}
@@ -1207,7 +1207,7 @@ static void net_dm_trace_off_set(void)
 		struct sk_buff *skb;
 
 		timer_shutdown_sync(&data->send_timer);
-		cancel_work_sync(&data->dm_alert_work);
+		cancel_work_sync_with_sync_wait(&data->dm_alert_work);
 		while ((skb = __skb_dequeue(&data->drop_queue)))
 			consume_skb(skb);
 	}

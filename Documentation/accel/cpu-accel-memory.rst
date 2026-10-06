@@ -1861,6 +1861,10 @@ The implementation checkpoints are:
     teardown now uses owner-aware cancellation for delayed report work on the
     legacy per-CPU ``mld`` queue, after releasing ``mc_lock``; its subsystem
     runtime path remains untested.
+    NVMe/TCP queue release now coordinates owners across both synchronous
+    cancellations of ``io_work`` on its per-CPU transport queue, retaining the
+    second cancellation after SQ/CQ teardown to cover work requeued during
+    teardown. This transport-specific runtime path remains untested.
     The test VM booted kernel ``7.3.0-rc3-accel-tlbfix-gf7c43937915f`` through a
     one-time GRUB entry while retaining ``00603`` as its saved default. The
     focused ``sync_work_flush``, ``sync_workqueue_flush``, ``vmstat``, and

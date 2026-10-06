@@ -84,7 +84,7 @@ void br_stp_disable_bridge(struct net_bridge *br)
 	timer_delete_sync(&br->hello_timer);
 	timer_delete_sync(&br->topology_change_timer);
 	timer_delete_sync(&br->tcn_timer);
-	cancel_delayed_work_sync(&br->gc_work);
+	cancel_delayed_work_sync_with_sync_wait(&br->gc_work);
 }
 
 /* called under bridge lock */

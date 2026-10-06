@@ -632,7 +632,7 @@ void *rds_ib_get_mr(struct scatterlist *sg, unsigned long nents,
 
 void rds_ib_destroy_mr_pool(struct rds_ib_mr_pool *pool)
 {
-	cancel_delayed_work_sync(&pool->flush_worker);
+	cancel_delayed_work_sync_with_sync_wait(&pool->flush_worker);
 	rds_ib_flush_mr_pool(pool, 1, NULL);
 	WARN_ON(atomic_read(&pool->item_count));
 	WARN_ON(atomic_read(&pool->free_pinned));

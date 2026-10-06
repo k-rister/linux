@@ -515,8 +515,8 @@ void ivpu_prepare_for_reset(struct ivpu_device *vdev)
 {
 	ivpu_hw_irq_disable(vdev);
 	disable_irq(vdev->irq);
-	flush_work(&vdev->irq_dct_work);
-	flush_work(&vdev->context_abort_work);
+	flush_work_with_sync_wait(&vdev->irq_dct_work);
+	flush_work_with_sync_wait(&vdev->context_abort_work);
 	flush_work(&vdev->job_destroy_work);
 	ivpu_ipc_disable(vdev);
 	ivpu_mmu_disable(vdev);

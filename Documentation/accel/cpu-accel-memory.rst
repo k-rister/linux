@@ -1873,6 +1873,12 @@ The implementation checkpoints are:
     its monitor timer, which is queued and requeued on ``system_percpu_wq``;
     ``ceph_monc_stop()`` releases the callback's mutex before waiting. This
     filesystem-specific runtime path remains untested.
+    Intel IVPU job-timeout cancellation and reset-time waits for DCT and
+    context-abort work now coordinate owners on ``system_percpu_wq``; device
+    teardown also uses owner-aware disable for recovery work on bound
+    ``system_dfl_wq``. Its private job-destroy queue is unbound and unchanged.
+    These IVPU paths have compile-only validation; no matching NPU hardware is
+    available in the test VM.
     The test VM booted kernel ``7.3.0-rc3-accel-tlbfix-gf7c43937915f`` through a
     one-time GRUB entry while retaining ``00603`` as its saved default. The
     focused ``sync_work_flush``, ``sync_workqueue_flush``, ``vmstat``, and

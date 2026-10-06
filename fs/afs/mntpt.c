@@ -222,5 +222,5 @@ void afs_mntpt_kill_timer(void)
 	_enter("");
 
 	ASSERT(list_empty(&afs_vfsmounts));
-	cancel_delayed_work_sync(&afs_mntpt_expiry_timer);
+	cancel_delayed_work_sync_with_sync_wait(&afs_mntpt_expiry_timer);
 }

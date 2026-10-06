@@ -1248,7 +1248,7 @@ void ceph_monc_stop(struct ceph_mon_client *monc)
 	monc->cur_mon = -1;
 	mutex_unlock(&monc->mutex);
 
-	cancel_delayed_work_sync(&monc->delayed_work);
+	cancel_delayed_work_sync_with_sync_wait(&monc->delayed_work);
 
 	/*
 	 * flush msgr queue before we destroy ourselves to ensure that:

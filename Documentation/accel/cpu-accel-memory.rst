@@ -1869,6 +1869,10 @@ The implementation checkpoints are:
     ``ka_work``: ordinary keep-alive scheduling uses unbound ``nvmet_wq``, but
     the admin keep-alive command can move the same delayed work to
     ``system_percpu_wq``. The target-specific runtime path remains untested.
+    Ceph monitor shutdown now uses owner-aware delayed-work cancellation for
+    its monitor timer, which is queued and requeued on ``system_percpu_wq``;
+    ``ceph_monc_stop()`` releases the callback's mutex before waiting. This
+    filesystem-specific runtime path remains untested.
     The test VM booted kernel ``7.3.0-rc3-accel-tlbfix-gf7c43937915f`` through a
     one-time GRUB entry while retaining ``00603`` as its saved default. The
     focused ``sync_work_flush``, ``sync_workqueue_flush``, ``vmstat``, and

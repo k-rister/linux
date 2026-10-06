@@ -354,7 +354,7 @@ static void wwan_hwsim_port_del(struct wwan_hwsim_port *port)
 
 	/* Make sure that there is no pending deletion work */
 	if (current_work() != &port->del_work)
-		cancel_work_sync(&port->del_work);
+		cancel_work_sync_with_sync_wait(&port->del_work);
 
 	wwan_remove_port(port->wwan);
 	kfree(port);
@@ -462,7 +462,7 @@ static void wwan_hwsim_dev_del(struct wwan_hwsim_dev *dev)
 
 	/* Make sure that there is no pending deletion work */
 	if (current_work() != &dev->del_work)
-		cancel_work_sync(&dev->del_work);
+		cancel_work_sync_with_sync_wait(&dev->del_work);
 
 	device_unregister(&dev->dev);
 	/* Memory will be freed in the device release callback */

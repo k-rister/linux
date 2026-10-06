@@ -639,7 +639,7 @@ void tls_strp_done(struct tls_strparser *strp)
 {
 	WARN_ON(!strp->stopped);
 
-	cancel_work_sync(&strp->work);
+	cancel_work_sync_with_sync_wait(&strp->work);
 	__tls_strp_done(strp);
 }
 

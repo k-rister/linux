@@ -1844,7 +1844,10 @@ The implementation checkpoints are:
     QAT AER reset and SR-IOV timeout cleanup also use
     ``cancel_work_sync_with_sync_wait()`` for work on explicit ``WQ_PERCPU``
     queues; synchronous cancellation still protects the work state released
-    immediately afterward. This driver path has not been runtime-tested.
+    immediately afterward.
+    TLS strparser shutdown uses the same helper after stopping new receives and
+    without holding the socket lock needed by its work callback. Neither
+    subsystem-specific call site has been runtime-tested.
     The test VM booted kernel ``7.3.0-rc3-accel-tlbfix-gf7c43937915f`` through a
     one-time GRUB entry while retaining ``00603`` as its saved default. The
     focused ``sync_work_flush``, ``sync_workqueue_flush``, ``vmstat``, and

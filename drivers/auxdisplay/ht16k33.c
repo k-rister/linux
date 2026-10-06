@@ -722,13 +722,9 @@ static void ht16k33_remove(struct i2c_client *client)
 	struct ht16k33_priv *priv = i2c_get_clientdata(client);
 	struct ht16k33_fbdev *fbdev = &priv->fbdev;
 
-	cancel_delayed_work_sync(&priv->work);
-
 	switch (priv->type) {
 	case DISP_MATRIX:
 		unregister_framebuffer(fbdev->info);
-		framebuffer_release(fbdev->info);
-		free_page((unsigned long)fbdev->buffer);
 		break;
 
 	case DISP_QUAD_7SEG:
@@ -738,6 +734,14 @@ static void ht16k33_remove(struct i2c_client *client)
 
 	default:
 		break;
+	}
+
+	/* The matrix refresh work requeues itself until it is disabled. */
+	disable_delayed_work_sync_with_sync_wait(&priv->work);
+
+	if (priv->type == DISP_MATRIX) {
+		framebuffer_release(fbdev->info);
+		free_page((unsigned long)fbdev->buffer);
 	}
 }
 

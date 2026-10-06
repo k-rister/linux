@@ -374,5 +374,5 @@ void nf_conntrack_ecache_pernet_fini(struct net *net)
 {
 	struct nf_conntrack_net *cnet = nf_ct_pernet(net);
 
-	cancel_delayed_work_sync(&cnet->ecache.dwork);
+	cancel_delayed_work_sync_with_sync_wait(&cnet->ecache.dwork);
 }

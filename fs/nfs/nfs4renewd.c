@@ -130,7 +130,7 @@ nfs4_schedule_state_renewal(struct nfs_client *clp)
 void
 nfs4_kill_renewd(struct nfs_client *clp)
 {
-	cancel_delayed_work_sync(&clp->cl_renewd);
+	cancel_delayed_work_sync_with_sync_wait(&clp->cl_renewd);
 }
 
 #define MAX_LEASE_PERIOD (60 * 60)	/* 1 hour */

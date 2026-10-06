@@ -16178,7 +16178,7 @@ static void i40e_remove(struct pci_dev *pdev)
 	if (pf->service_timer.function)
 		timer_shutdown_sync(&pf->service_timer);
 	if (pf->service_task.func)
-		cancel_work_sync(&pf->service_task);
+		cancel_work_sync_with_sync_wait(&pf->service_task);
 
 	if (test_bit(__I40E_RECOVERY_MODE, pf->state)) {
 		struct i40e_vsi *vsi = pf->vsi[0];
@@ -16336,7 +16336,7 @@ static int i40e_io_suspend(struct i40e_pf *pf)
 
 	/* Ensure service task will not be running */
 	timer_delete_sync(&pf->service_timer);
-	cancel_work_sync(&pf->service_task);
+	cancel_work_sync_with_sync_wait(&pf->service_task);
 
 	/* Client close must be called explicitly here because the timer
 	 * has been stopped.
@@ -16534,7 +16534,7 @@ static void i40e_shutdown(struct pci_dev *pdev)
 	set_bit(__I40E_DOWN, pf->state);
 
 	timer_delete_sync(&pf->service_timer);
-	cancel_work_sync(&pf->service_task);
+	cancel_work_sync_with_sync_wait(&pf->service_task);
 	i40e_cloud_filter_exit(pf);
 	i40e_fdir_teardown(pf);
 

@@ -1093,8 +1093,8 @@ static void vdc_port_remove(struct vio_dev *vdev)
 	if (port) {
 		blk_mq_stop_hw_queues(port->disk->queue);
 
-		flush_work(&port->ldc_reset_work);
-		cancel_delayed_work_sync(&port->ldc_reset_timer_work);
+		flush_work_with_sync_wait(&port->ldc_reset_work);
+		cancel_delayed_work_sync_with_sync_wait(&port->ldc_reset_timer_work);
 		timer_delete_sync(&port->vio.timer);
 
 		del_gendisk(port->disk);

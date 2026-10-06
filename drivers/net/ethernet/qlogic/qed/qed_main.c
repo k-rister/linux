@@ -1156,14 +1156,16 @@ static void qed_slowpath_wq_stop(struct qed_dev *cdev)
 		return;
 
 	for_each_hwfn(cdev, i) {
-		if (!cdev->hwfns[i].slowpath_wq)
+		struct qed_hwfn *hwfn = &cdev->hwfns[i];
+
+		if (!hwfn->slowpath_wq)
 			continue;
 
 		/* Stop queuing new delayed works */
-		cdev->hwfns[i].slowpath_wq_active = false;
+		hwfn->slowpath_wq_active = false;
 
-		cancel_delayed_work(&cdev->hwfns[i].slowpath_task);
-		destroy_workqueue(cdev->hwfns[i].slowpath_wq);
+		cancel_delayed_work_sync_with_sync_wait(&hwfn->slowpath_task);
+		destroy_workqueue(hwfn->slowpath_wq);
 	}
 }
 

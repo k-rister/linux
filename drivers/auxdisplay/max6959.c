@@ -144,8 +144,9 @@ static void max6959_i2c_remove(struct i2c_client *client)
 {
 	struct max6959_priv *priv = i2c_get_clientdata(client);
 
-	cancel_delayed_work_sync(&priv->work);
+	/* Stop the timer and sysfs callbacks before canceling the work. */
 	linedisp_unregister(&priv->linedisp);
+	cancel_delayed_work_sync_with_sync_wait(&priv->work);
 }
 
 static int max6959_suspend(struct device *dev)

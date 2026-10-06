@@ -228,7 +228,7 @@ static void rfkill_global_led_trigger_unregister(void)
 {
 	led_trigger_unregister(&rfkill_none_led_trigger);
 	led_trigger_unregister(&rfkill_any_led_trigger);
-	cancel_work_sync(&rfkill_global_led_trigger_work);
+	cancel_work_sync_with_sync_wait(&rfkill_global_led_trigger_work);
 }
 #else
 static void rfkill_led_trigger_event(struct rfkill *rfkill)
@@ -1151,7 +1151,7 @@ void rfkill_unregister(struct rfkill *rfkill)
 	if (rfkill->ops->poll)
 		cancel_delayed_work_sync(&rfkill->poll_work);
 
-	cancel_work_sync(&rfkill->uevent_work);
+	cancel_work_sync_with_sync_wait(&rfkill->uevent_work);
 	cancel_work_sync(&rfkill->sync_work);
 
 	rfkill->registered = false;

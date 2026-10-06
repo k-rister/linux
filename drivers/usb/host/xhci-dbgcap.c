@@ -753,7 +753,7 @@ static void xhci_dbc_stop(struct xhci_dbc *dbc)
 		break;
 	}
 
-	cancel_delayed_work_sync(&dbc->event_work);
+	cancel_delayed_work_sync_with_sync_wait(&dbc->event_work);
 
 	spin_lock_irqsave(&dbc->lock, flags);
 	writel(0, &dbc->regs->control);

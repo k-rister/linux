@@ -2696,6 +2696,7 @@ static int rvu_mbox_init(struct rvu *rvu, struct mbox_wq_info *mw,
 	return 0;
 
 exit:
+	drain_workqueue_with_sync_wait(mw->mbox_wq);
 	destroy_workqueue(mw->mbox_wq);
 unmap_regions:
 	while (num--)
@@ -2722,6 +2723,7 @@ static void rvu_mbox_destroy(struct mbox_wq_info *mw)
 	int devid;
 
 	if (mw->mbox_wq) {
+		drain_workqueue_with_sync_wait(mw->mbox_wq);
 		destroy_workqueue(mw->mbox_wq);
 		mw->mbox_wq = NULL;
 	}

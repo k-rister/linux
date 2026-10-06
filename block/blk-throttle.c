@@ -1633,7 +1633,7 @@ static void throtl_shutdown_wq(struct request_queue *q)
 {
 	struct throtl_data *td = q->td;
 
-	cancel_work_sync(&td->dispatch_work);
+	cancel_work_sync_with_sync_wait(&td->dispatch_work);
 }
 
 static void tg_flush_bios(struct throtl_grp *tg)

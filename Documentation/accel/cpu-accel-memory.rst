@@ -1847,7 +1847,10 @@ The implementation checkpoints are:
     immediately afterward.
     TLS strparser shutdown uses the same helper after stopping new receives and
     without holding the socket lock needed by its work callback. Neither
-    subsystem-specific call site has been runtime-tested.
+    subsystem-specific call site has been runtime-tested. Block-throttling disk
+    teardown also uses owner-aware synchronous cancellation for dispatch work
+    queued on ``kthrotld`` (``WQ_MEM_RECLAIM | WQ_PERCPU``), after deleting its
+    pending timer; these subsystem call sites remain compile-validated only.
     The test VM booted kernel ``7.3.0-rc3-accel-tlbfix-gf7c43937915f`` through a
     one-time GRUB entry while retaining ``00603`` as its saved default. The
     focused ``sync_work_flush``, ``sync_workqueue_flush``, ``vmstat``, and

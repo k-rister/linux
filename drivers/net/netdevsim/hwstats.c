@@ -472,7 +472,7 @@ void nsim_dev_hwstats_exit(struct nsim_dev *nsim_dev)
 	struct nsim_dev_hwstats *hwstats = &nsim_dev->hwstats;
 	struct net *net = nsim_dev_net(nsim_dev);
 
-	cancel_delayed_work_sync(&hwstats->traffic_dw);
+	cancel_delayed_work_sync_with_sync_wait(&hwstats->traffic_dw);
 	debugfs_remove_recursive(hwstats->ddir);
 	unregister_netdevice_notifier_net(net, &hwstats->netdevice_nb);
 	nsim_dev_hwsdev_list_wipe(hwstats, NETDEV_OFFLOAD_XSTATS_TYPE_L3);

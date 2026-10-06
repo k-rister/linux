@@ -970,7 +970,7 @@ xfs_log_quiesce(
 	"Failed to clear log incompat features on quiesce");
 	}
 
-	cancel_delayed_work_sync(&mp->m_log->l_work);
+	cancel_delayed_work_sync_with_sync_wait(&mp->m_log->l_work);
 	xfs_log_force(mp, XFS_LOG_SYNC);
 
 	/*

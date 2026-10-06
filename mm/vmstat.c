@@ -2186,7 +2186,7 @@ static void __init start_shepherd_timer(void)
 		 * symmetrically during CPU hotplug events.
 		 */
 		if (!cpu_online(cpu))
-			disable_delayed_work_sync(&per_cpu(vmstat_work, cpu));
+			disable_delayed_work_sync_with_sync_wait(&per_cpu(vmstat_work, cpu));
 	}
 
 	schedule_delayed_work(&shepherd,
@@ -2218,7 +2218,7 @@ static int vmstat_cpu_online(unsigned int cpu)
 
 static int vmstat_cpu_down_prep(unsigned int cpu)
 {
-	disable_delayed_work_sync(&per_cpu(vmstat_work, cpu));
+	disable_delayed_work_sync_with_sync_wait(&per_cpu(vmstat_work, cpu));
 	return 0;
 }
 

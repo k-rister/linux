@@ -514,7 +514,7 @@ static void hinic3_free_ppf_work(struct hinic3_hwdev *hwdev)
 	if (hinic3_ppf_idx(hwdev) != hinic3_global_func_id(hwdev))
 		return;
 
-	disable_delayed_work_sync(&hwdev->sync_time_task);
+	disable_delayed_work_sync_with_sync_wait(&hwdev->sync_time_task);
 }
 
 static DEFINE_IDA(hinic3_adev_ida);

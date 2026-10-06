@@ -1012,8 +1012,8 @@ err_config_interrupt:
  */
 static void epf_ntb_epc_cleanup(struct epf_ntb *ntb)
 {
-	disable_delayed_work_sync(&ntb->cmd_handler);
-	disable_work_sync(&ntb->peer_db_work);
+	disable_delayed_work_sync_with_sync_wait(&ntb->cmd_handler);
+	disable_work_sync_with_sync_wait(&ntb->peer_db_work);
 	atomic64_set(&ntb->peer_db_pending, 0);
 	epf_ntb_mw_bar_clear(ntb, ntb->num_mws);
 	epf_ntb_db_bar_clear(ntb);

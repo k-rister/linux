@@ -631,7 +631,7 @@ static void remove_eq(struct hinic3_eq *eq)
 			      eq->q_id);
 
 	if (eq->type == HINIC3_AEQ) {
-		disable_work_sync(&eq->aeq_work);
+		disable_work_sync_with_sync_wait(&eq->aeq_work);
 		/* clear eq_len to avoid hw access host memory */
 		hinic3_hwif_write_reg(eq->hwdev->hwif,
 				      HINIC3_CSR_AEQ_CTRL_1_ADDR, 0);

@@ -2011,7 +2011,7 @@ static void __nvme_tcp_stop_queue(struct nvme_tcp_queue *queue)
 {
 	kernel_sock_shutdown(queue->sock, SHUT_RDWR);
 	nvme_tcp_restore_sock_ops(queue);
-	cancel_work_sync(&queue->io_work);
+	cancel_work_sync_with_sync_wait(&queue->io_work);
 }
 
 static void nvme_tcp_stop_queue_nowait(struct nvme_ctrl *nctrl, int qid)

@@ -2135,7 +2135,7 @@ static int bio_complete_batch_cpu_online(unsigned int cpu)
  */
 static int bio_complete_batch_cpu_down_prep(unsigned int cpu)
 {
-	disable_work_sync(&per_cpu(bio_complete_batch, cpu).work);
+	disable_work_sync_with_sync_wait(&per_cpu(bio_complete_batch, cpu).work);
 	return 0;
 }
 
@@ -2165,7 +2165,7 @@ static void __init bio_complete_batch_init(int cpu)
 	batch->cpu = cpu;
 
 	if (!cpu_online(cpu))
-		disable_work_sync(&batch->work);
+		disable_work_sync_with_sync_wait(&batch->work);
 }
 
 static int __init init_bio(void)

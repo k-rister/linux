@@ -3028,7 +3028,7 @@ fc_rport_final_delete(struct work_struct *work)
 			fc_flush_devloss(shost, rport);
 		if (!cancel_delayed_work(&rport->dev_loss_work))
 			fc_flush_devloss(shost, rport);
-		cancel_work_sync(&rport->scan_work);
+		cancel_work_sync_with_sync_wait(&rport->scan_work);
 		spin_lock_irqsave(shost->host_lock, flags);
 		rport->flags &= ~FC_RPORT_DEVLOSS_PENDING;
 	}

@@ -1221,7 +1221,7 @@ static void uas_disconnect(struct usb_interface *intf)
 	devinfo->resetting = 1;
 	spin_unlock_irqrestore(&devinfo->lock, flags);
 
-	cancel_work_sync(&devinfo->work);
+	cancel_work_sync_with_sync_wait(&devinfo->work);
 	usb_kill_anchored_urbs(&devinfo->cmd_urbs);
 	usb_kill_anchored_urbs(&devinfo->sense_urbs);
 	usb_kill_anchored_urbs(&devinfo->data_urbs);

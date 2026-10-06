@@ -874,8 +874,8 @@ static void i3c_master_shutdown(struct i3c_master_controller *master)
 	master->shutting_down = true;
 	i3c_bus_maintenance_unlock(&master->bus);
 
-	cancel_work_sync(&master->hj_work);
-	cancel_work_sync(&master->reg_work);
+	cancel_work_sync_with_sync_wait(&master->hj_work);
+	cancel_work_sync_with_sync_wait(&master->reg_work);
 }
 
 static void i3c_device_shutdown(struct device *dev)

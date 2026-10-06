@@ -647,19 +647,24 @@ int execute_in_process_context(work_func_t fn, struct execute_work *);
 extern bool flush_work(struct work_struct *work);
 /* Flush work and notify architecture CPU-wait hooks when its CPU is fixed. */
 extern bool flush_work_with_sync_wait(struct work_struct *work);
+bool cancel_work_sync_with_sync_wait(struct work_struct *work);
 extern bool cancel_work(struct work_struct *work);
 extern bool cancel_work_sync(struct work_struct *work);
 
 extern bool flush_delayed_work(struct delayed_work *dwork);
+bool flush_delayed_work_with_sync_wait(struct delayed_work *dwork);
 extern bool cancel_delayed_work(struct delayed_work *dwork);
 extern bool cancel_delayed_work_sync(struct delayed_work *dwork);
+bool cancel_delayed_work_sync_with_sync_wait(struct delayed_work *dwork);
 
 extern bool disable_work(struct work_struct *work);
 extern bool disable_work_sync(struct work_struct *work);
+bool disable_work_sync_with_sync_wait(struct work_struct *work);
 extern bool enable_work(struct work_struct *work);
 
 extern bool disable_delayed_work(struct delayed_work *dwork);
 extern bool disable_delayed_work_sync(struct delayed_work *dwork);
+bool disable_delayed_work_sync_with_sync_wait(struct delayed_work *dwork);
 extern bool enable_delayed_work(struct delayed_work *dwork);
 
 extern bool flush_rcu_work(struct rcu_work *rwork);

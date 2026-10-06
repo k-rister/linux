@@ -2342,8 +2342,8 @@ static void rtrs_clt_close_work(struct work_struct *work)
 
 	clt_path = container_of(work, struct rtrs_clt_path, close_work);
 
-	cancel_work_sync(&clt_path->err_recovery_work);
-	cancel_delayed_work_sync(&clt_path->reconnect_dwork);
+	cancel_work_sync_with_sync_wait(&clt_path->err_recovery_work);
+	cancel_delayed_work_sync_with_sync_wait(&clt_path->reconnect_dwork);
 	rtrs_clt_stop_and_destroy_conns(clt_path);
 	rtrs_clt_change_state_get_old(clt_path, RTRS_CLT_CLOSED, NULL);
 }
@@ -2937,7 +2937,7 @@ int rtrs_clt_reconnect_from_sysfs(struct rtrs_clt_path *clt_path)
 		 * execution, so do the flush if we have queued something
 		 * right now or work is pending.
 		 */
-		flush_delayed_work(&clt_path->reconnect_dwork);
+		flush_delayed_work_with_sync_wait(&clt_path->reconnect_dwork);
 		err = (READ_ONCE(clt_path->state) ==
 		       RTRS_CLT_CONNECTED ? 0 : -ENOTCONN);
 	}

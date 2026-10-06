@@ -3792,7 +3792,7 @@ static void dm_integrity_enter_synchronous_mode(struct dm_integrity_c *ic)
 		ic->bitmap_flush_interval = msecs_to_jiffies(10) + 1;
 		ic->synchronous_mode = 1;
 
-		cancel_delayed_work_sync(&ic->bitmap_flush_work);
+		cancel_delayed_work_sync_with_sync_wait(&ic->bitmap_flush_work);
 		queue_delayed_work(ic->commit_wq, &ic->bitmap_flush_work, 0);
 		flush_workqueue_with_sync_wait(ic->commit_wq);
 	}
@@ -3822,7 +3822,7 @@ static void dm_integrity_postsuspend(struct dm_target *ti)
 		drain_workqueue_with_sync_wait(ic->recalc_wq);
 
 	if (ic->mode == 'B')
-		cancel_delayed_work_sync(&ic->bitmap_flush_work);
+		cancel_delayed_work_sync_with_sync_wait(&ic->bitmap_flush_work);
 
 	queue_work(ic->commit_wq, &ic->commit_work);
 	drain_workqueue_with_sync_wait(ic->commit_wq);
@@ -5471,7 +5471,7 @@ static void dm_integrity_dtr(struct dm_target *ti)
 	BUG_ON(!list_empty(&ic->wait_list));
 
 	if (ic->mode == 'B' && ic->bitmap_flush_work.work.func)
-		cancel_delayed_work_sync(&ic->bitmap_flush_work);
+		cancel_delayed_work_sync_with_sync_wait(&ic->bitmap_flush_work);
 	if (ic->metadata_wq)
 		destroy_workqueue(ic->metadata_wq);
 	if (ic->wait_wq)

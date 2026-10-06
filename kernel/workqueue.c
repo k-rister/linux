@@ -4625,6 +4625,16 @@ bool flush_work_with_sync_wait(struct work_struct *work)
 }
 EXPORT_SYMBOL_GPL(flush_work_with_sync_wait);
 
+static bool __flush_delayed_work(struct delayed_work *dwork, bool sync_wait)
+{
+	local_irq_disable();
+	if (timer_delete_sync(&dwork->timer))
+		__queue_work(dwork->cpu, dwork->wq, &dwork->work);
+	local_irq_enable();
+	might_sleep();
+	return __flush_work(&dwork->work, false, sync_wait);
+}
+
 /**
  * flush_delayed_work - wait for a dwork to finish executing the last queueing
  * @dwork: the delayed work to flush
@@ -4639,13 +4649,25 @@ EXPORT_SYMBOL_GPL(flush_work_with_sync_wait);
  */
 bool flush_delayed_work(struct delayed_work *dwork)
 {
-	local_irq_disable();
-	if (timer_delete_sync(&dwork->timer))
-		__queue_work(dwork->cpu, dwork->wq, &dwork->work);
-	local_irq_enable();
-	return flush_work(&dwork->work);
+	return __flush_delayed_work(dwork, false);
 }
 EXPORT_SYMBOL(flush_delayed_work);
+
+/**
+ * flush_delayed_work_with_sync_wait - flush delayed work and coordinate with its CPU
+ * @dwork: the delayed work to flush
+ *
+ * Like flush_delayed_work(), but brackets a wait for work from a fixed-CPU
+ * pool with the architecture synchronous CPU-wait hooks.
+ *
+ * Return: %true if the flush waited for the work to finish, %false if it was
+ * already idle.
+ */
+bool flush_delayed_work_with_sync_wait(struct delayed_work *dwork)
+{
+	return __flush_delayed_work(dwork, true);
+}
+EXPORT_SYMBOL_GPL(flush_delayed_work_with_sync_wait);
 
 /**
  * flush_rcu_work - wait for a rwork to finish executing the last queueing
@@ -4704,7 +4726,8 @@ static bool __cancel_work(struct work_struct *work, u32 cflags)
 	return ret;
 }
 
-static bool __cancel_work_sync(struct work_struct *work, u32 cflags)
+static bool __cancel_work_sync(struct work_struct *work, u32 cflags,
+			       bool sync_wait)
 {
 	bool ret;
 
@@ -4720,7 +4743,7 @@ static bool __cancel_work_sync(struct work_struct *work, u32 cflags)
 	 * executing. This allows canceling during early boot.
 	 */
 	if (wq_online)
-		__flush_work(work, true, false);
+		__flush_work(work, true, sync_wait);
 
 	if (!(cflags & WORK_CANCEL_DISABLE))
 		enable_work(work);
@@ -4757,9 +4780,24 @@ EXPORT_SYMBOL(cancel_work);
  */
 bool cancel_work_sync(struct work_struct *work)
 {
-	return __cancel_work_sync(work, 0);
+	return __cancel_work_sync(work, 0, false);
 }
 EXPORT_SYMBOL_GPL(cancel_work_sync);
+
+/**
+ * cancel_work_sync_with_sync_wait - cancel work and coordinate with its CPU
+ * @work: the work to cancel
+ *
+ * Like cancel_work_sync(), but brackets a wait for running work from a
+ * fixed-CPU pool with the architecture synchronous CPU-wait hooks.
+ *
+ * Return: %true if @work was pending, %false otherwise.
+ */
+bool cancel_work_sync_with_sync_wait(struct work_struct *work)
+{
+	return __cancel_work_sync(work, 0, true);
+}
+EXPORT_SYMBOL_GPL(cancel_work_sync_with_sync_wait);
 
 /**
  * cancel_delayed_work - cancel a delayed work
@@ -4794,9 +4832,25 @@ EXPORT_SYMBOL(cancel_delayed_work);
  */
 bool cancel_delayed_work_sync(struct delayed_work *dwork)
 {
-	return __cancel_work_sync(&dwork->work, WORK_CANCEL_DELAYED);
+	return __cancel_work_sync(&dwork->work, WORK_CANCEL_DELAYED, false);
 }
 EXPORT_SYMBOL(cancel_delayed_work_sync);
+
+/**
+ * cancel_delayed_work_sync_with_sync_wait - cancel delayed work and coordinate
+ * with its CPU
+ * @dwork: the delayed work to cancel
+ *
+ * Like cancel_delayed_work_sync(), but brackets a wait for running work from a
+ * fixed-CPU pool with the architecture synchronous CPU-wait hooks.
+ *
+ * Return: %true if @dwork was pending, %false otherwise.
+ */
+bool cancel_delayed_work_sync_with_sync_wait(struct delayed_work *dwork)
+{
+	return __cancel_work_sync(&dwork->work, WORK_CANCEL_DELAYED, true);
+}
+EXPORT_SYMBOL_GPL(cancel_delayed_work_sync_with_sync_wait);
 
 /**
  * disable_work - Disable and cancel a work item
@@ -4831,9 +4885,24 @@ EXPORT_SYMBOL_GPL(disable_work);
  */
 bool disable_work_sync(struct work_struct *work)
 {
-	return __cancel_work_sync(work, WORK_CANCEL_DISABLE);
+	return __cancel_work_sync(work, WORK_CANCEL_DISABLE, false);
 }
 EXPORT_SYMBOL_GPL(disable_work_sync);
+
+/**
+ * disable_work_sync_with_sync_wait - disable work and coordinate with its CPU
+ * @work: work item to disable
+ *
+ * Like disable_work_sync(), but brackets a wait for running work from a
+ * fixed-CPU pool with the architecture synchronous CPU-wait hooks.
+ *
+ * Returns %true if @work was pending, %false otherwise.
+ */
+bool disable_work_sync_with_sync_wait(struct work_struct *work)
+{
+	return __cancel_work_sync(work, WORK_CANCEL_DISABLE, true);
+}
+EXPORT_SYMBOL_GPL(disable_work_sync_with_sync_wait);
 
 /**
  * enable_work - Enable a work item
@@ -4884,9 +4953,26 @@ EXPORT_SYMBOL_GPL(disable_delayed_work);
 bool disable_delayed_work_sync(struct delayed_work *dwork)
 {
 	return __cancel_work_sync(&dwork->work,
-				  WORK_CANCEL_DELAYED | WORK_CANCEL_DISABLE);
+				  WORK_CANCEL_DELAYED | WORK_CANCEL_DISABLE, false);
 }
 EXPORT_SYMBOL_GPL(disable_delayed_work_sync);
+
+/**
+ * disable_delayed_work_sync_with_sync_wait - disable delayed work and
+ * coordinate with its CPU
+ * @dwork: delayed work item to disable
+ *
+ * Like disable_delayed_work_sync(), but brackets a wait for running work from
+ * a fixed-CPU pool with the architecture synchronous CPU-wait hooks.
+ *
+ * Returns %true if @dwork was pending, %false otherwise.
+ */
+bool disable_delayed_work_sync_with_sync_wait(struct delayed_work *dwork)
+{
+	return __cancel_work_sync(&dwork->work,
+				  WORK_CANCEL_DELAYED | WORK_CANCEL_DISABLE, true);
+}
+EXPORT_SYMBOL_GPL(disable_delayed_work_sync_with_sync_wait);
 
 /**
  * enable_delayed_work - Enable a delayed work item

@@ -1836,7 +1836,11 @@ The implementation checkpoints are:
     drains now use it for work queued to their per-CPU queues. I3C master
     registration, RTRS client close, and UAS device work drains use it for
     their per-CPU queue items as well. Greybus operation cancellation uses it
-    when draining completion work on its per-CPU queue.
+    when draining completion work on its per-CPU queue. New synchronous
+    cancel and delayed-flush helpers now cover I3C shutdown, RTRS reconnect,
+    NVMe TCP I/O, UAS teardown, FC rport scans, and dm-integrity bitmap work.
+    Owner-aware disable helpers now cover bio completion and vmstat CPU
+    hotplug, OVPN teardown, Hinic3 work shutdown, and PCI endpoint NTB cleanup.
     The test VM was last checked running kernel
     ``7.3.0-rc3-accel-tlbfix-00643-gcf377215356e-dirty`` with 13 GiB free on
     ``/`` and 286 MiB free on ``/boot`` after cleanup. No candidate kernel has

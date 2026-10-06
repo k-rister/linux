@@ -476,7 +476,7 @@ void ceph_metric_destroy(struct ceph_client_metric *m)
 	if (!m)
 		return;
 
-	cancel_delayed_work_sync(&m->delayed_work);
+	cancel_delayed_work_sync_with_sync_wait(&m->delayed_work);
 
 	percpu_counter_destroy(&m->total_inodes);
 	percpu_counter_destroy(&m->opened_inodes);

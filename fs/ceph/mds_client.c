@@ -6834,9 +6834,9 @@ void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc)
 	ceph_cleanup_snapid_map(mdsc);
 	ceph_cleanup_global_and_empty_realms(mdsc);
 
-	cancel_work_sync(&mdsc->cap_reclaim_work);
-	cancel_work_sync(&mdsc->cap_unlink_work);
-	cancel_delayed_work_sync(&mdsc->delayed_work); /* cancel timer */
+	cancel_work_sync_with_sync_wait(&mdsc->cap_reclaim_work);
+	cancel_work_sync_with_sync_wait(&mdsc->cap_unlink_work);
+	cancel_delayed_work_sync_with_sync_wait(&mdsc->delayed_work);
 
 	doutc(cl, "done\n");
 }
@@ -6886,7 +6886,7 @@ static void ceph_mdsc_stop(struct ceph_mds_client *mdsc)
 	 * guarantee that the work finishes executing. But the
 	 * delayed work will re-arm itself again after that.
 	 */
-	flush_delayed_work(&mdsc->delayed_work);
+	flush_delayed_work_with_sync_wait(&mdsc->delayed_work);
 
 	if (mdsc->mdsmap)
 		ceph_mdsmap_destroy(mdsc->mdsmap);

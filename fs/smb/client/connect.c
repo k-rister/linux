@@ -1072,8 +1072,8 @@ clean_demultiplex_info(struct TCP_Server_Info *server)
 	list_del_init(&server->tcp_ses_list);
 	spin_unlock(&server->srv_lock);
 
-	cancel_delayed_work_sync(&server->echo);
-	cancel_delayed_work_sync(&server->reconnect);
+	cancel_delayed_work_sync_with_sync_wait(&server->echo);
+	cancel_delayed_work_sync_with_sync_wait(&server->reconnect);
 
 	spin_lock(&server->srv_lock);
 	server->tcpStatus = CifsExiting;
@@ -1716,7 +1716,7 @@ cifs_put_tcp_session(struct TCP_Server_Info *server, int from_reconnect)
 	list_del_init(&server->tcp_ses_list);
 	spin_unlock(&cifs_tcp_ses_lock);
 
-	cancel_delayed_work_sync(&server->echo);
+	cancel_delayed_work_sync_with_sync_wait(&server->echo);
 
 	if (from_reconnect)
 		/*
@@ -1727,7 +1727,7 @@ cifs_put_tcp_session(struct TCP_Server_Info *server, int from_reconnect)
 		 */
 		cancel_delayed_work(&server->reconnect);
 	else
-		cancel_delayed_work_sync(&server->reconnect);
+		cancel_delayed_work_sync_with_sync_wait(&server->reconnect);
 
 	/* For secondary channels, we pick up ref-count on the primary server */
 	if (SERVER_IS_CHAN(server))
@@ -2636,7 +2636,7 @@ cifs_put_tcon(struct cifs_tcon *tcon, enum smb3_tcon_ref_trace trace)
 	spin_unlock(&cifs_tcp_ses_lock);
 
 	/* cancel polling of interfaces */
-	cancel_delayed_work_sync(&tcon->query_interfaces);
+	cancel_delayed_work_sync_with_sync_wait(&tcon->query_interfaces);
 #ifdef CONFIG_CIFS_DFS_UPCALL
 	cancel_delayed_work_sync(&tcon->dfs_cache_work);
 	list_replace_init(&tcon->dfs_ses_list, &ses_list);
@@ -3988,7 +3988,7 @@ cifs_umount(struct cifs_sb_info *cifs_sb)
 	struct tcon_link *tlink;
 	struct cifs_tcon *tcon = NULL;
 
-	cancel_delayed_work_sync(&cifs_sb->prune_tlinks);
+	cancel_delayed_work_sync_with_sync_wait(&cifs_sb->prune_tlinks);
 
 	if (cifs_sb->master_tlink) {
 		tcon = cifs_sb->master_tlink->tl_tcon;

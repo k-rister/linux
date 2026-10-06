@@ -319,7 +319,7 @@ static void cleanup_link_status_change_wq(struct net_device *netdev)
 	struct lio *lio = GET_LIO(netdev);
 
 	if (lio->link_status_wq.wq) {
-		cancel_delayed_work_sync(&lio->link_status_wq.wk.work);
+		cancel_delayed_work_sync_with_sync_wait(&lio->link_status_wq.wk.work);
 		destroy_workqueue(lio->link_status_wq.wq);
 	}
 }

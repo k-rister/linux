@@ -542,7 +542,7 @@ static inline void cleanup_link_status_change_wq(struct net_device *netdev)
 	struct lio *lio = GET_LIO(netdev);
 
 	if (lio->link_status_wq.wq) {
-		cancel_delayed_work_sync(&lio->link_status_wq.wk.work);
+		cancel_delayed_work_sync_with_sync_wait(&lio->link_status_wq.wk.work);
 		destroy_workqueue(lio->link_status_wq.wq);
 	}
 }
@@ -688,7 +688,7 @@ static inline void cleanup_sync_octeon_time_wq(struct net_device *netdev)
 	struct cavium_wq *time_wq = &lio->sync_octeon_time_wq;
 
 	if (time_wq->wq) {
-		cancel_delayed_work_sync(&time_wq->wk.work);
+		cancel_delayed_work_sync_with_sync_wait(&time_wq->wk.work);
 		destroy_workqueue(time_wq->wq);
 	}
 }
@@ -1752,7 +1752,7 @@ static inline void cleanup_tx_poll_fn(struct net_device *netdev)
 	struct lio *lio = GET_LIO(netdev);
 
 	if (lio->txq_status_wq.wq) {
-		cancel_delayed_work_sync(&lio->txq_status_wq.wk.work);
+		cancel_delayed_work_sync_with_sync_wait(&lio->txq_status_wq.wk.work);
 		destroy_workqueue(lio->txq_status_wq.wq);
 	}
 }

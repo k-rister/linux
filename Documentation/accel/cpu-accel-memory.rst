@@ -1865,6 +1865,10 @@ The implementation checkpoints are:
     cancellations of ``io_work`` on its per-CPU transport queue, retaining the
     second cancellation after SQ/CQ teardown to cover work requeued during
     teardown. This transport-specific runtime path remains untested.
+    NVMe target controller shutdown also coordinates owners while canceling
+    ``ka_work``: ordinary keep-alive scheduling uses unbound ``nvmet_wq``, but
+    the admin keep-alive command can move the same delayed work to
+    ``system_percpu_wq``. The target-specific runtime path remains untested.
     The test VM booted kernel ``7.3.0-rc3-accel-tlbfix-gf7c43937915f`` through a
     one-time GRUB entry while retaining ``00603`` as its saved default. The
     focused ``sync_work_flush``, ``sync_workqueue_flush``, ``vmstat``, and

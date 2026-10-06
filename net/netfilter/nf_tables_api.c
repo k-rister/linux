@@ -10297,7 +10297,7 @@ void nf_tables_trans_destroy_flush_work(struct net *net)
 {
 	struct nftables_pernet *nft_net = nft_pernet(net);
 
-	flush_work(&nft_net->destroy_work);
+	flush_work_with_sync_wait(&nft_net->destroy_work);
 }
 EXPORT_SYMBOL_GPL(nf_tables_trans_destroy_flush_work);
 
@@ -12198,7 +12198,7 @@ static void __net_exit nf_tables_exit_net(struct net *net)
 	if (!list_empty(&nft_net->module_list))
 		nf_tables_module_autoload_cleanup(net);
 
-	cancel_work_sync(&nft_net->destroy_work);
+	cancel_work_sync_with_sync_wait(&nft_net->destroy_work);
 	__nft_release_tables(net);
 
 	nft_gc_seq_end(nft_net, gc_seq);
@@ -12214,7 +12214,7 @@ static void __net_exit nf_tables_exit_net(struct net *net)
 
 static void nf_tables_exit_batch(struct list_head *net_exit_list)
 {
-	flush_work(&trans_gc_work);
+	flush_work_with_sync_wait(&trans_gc_work);
 }
 
 static struct pernet_operations nf_tables_net_ops = {
@@ -12295,7 +12295,7 @@ static void __exit nf_tables_module_exit(void)
 	nft_chain_filter_fini();
 	nft_chain_route_fini();
 	unregister_pernet_subsys(&nf_tables_net_ops);
-	cancel_work_sync(&trans_gc_work);
+	cancel_work_sync_with_sync_wait(&trans_gc_work);
 	rcu_barrier();
 	nf_tables_core_module_exit();
 }

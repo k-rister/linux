@@ -5094,6 +5094,7 @@ static void dpaa2_eth_remove(struct fsl_mc_device *ls_dev)
 #endif
 
 	unregister_netdev(net_dev);
+	flush_workqueue_with_sync_wait(priv->dpaa2_ptp_wq);
 
 	dpaa2_eth_dl_port_del(priv);
 	dpaa2_eth_dl_traps_unregister(priv);

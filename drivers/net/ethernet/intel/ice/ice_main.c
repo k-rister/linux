@@ -7210,8 +7210,8 @@ static void ice_napi_disable_all(struct ice_vsi *vsi)
 		if (q_vector->rx.rx_ring || q_vector->tx.tx_ring)
 			napi_disable(&q_vector->napi);
 
-		cancel_work_sync(&q_vector->tx.dim.work);
-		cancel_work_sync(&q_vector->rx.dim.work);
+		cancel_work_sync_with_sync_wait(&q_vector->tx.dim.work);
+		cancel_work_sync_with_sync_wait(&q_vector->rx.dim.work);
 	}
 }
 

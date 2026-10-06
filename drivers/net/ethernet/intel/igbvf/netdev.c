@@ -2901,8 +2901,8 @@ static void igbvf_remove(struct pci_dev *pdev)
 	set_bit(__IGBVF_DOWN, &adapter->state);
 	timer_delete_sync(&adapter->watchdog_timer);
 
-	cancel_work_sync(&adapter->reset_task);
-	cancel_work_sync(&adapter->watchdog_task);
+	cancel_work_sync_with_sync_wait(&adapter->reset_task);
+	cancel_work_sync_with_sync_wait(&adapter->watchdog_task);
 
 	unregister_netdev(netdev);
 

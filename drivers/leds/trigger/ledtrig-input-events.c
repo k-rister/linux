@@ -152,7 +152,7 @@ static int __init input_events_init(void)
 static void __exit input_events_exit(void)
 {
 	input_unregister_handler(&input_events_handler);
-	cancel_delayed_work_sync(&input_events_data.work);
+	cancel_delayed_work_sync_with_sync_wait(&input_events_data.work);
 	led_trigger_unregister_simple(input_events_led_trigger);
 }
 

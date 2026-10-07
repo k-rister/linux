@@ -3177,7 +3177,7 @@ void r5l_exit_log(struct r5conf *conf)
 	 */
 	WRITE_ONCE(conf->log, NULL);
 	wake_up(&conf->mddev->sb_wait);
-	flush_work(&log->disable_writeback_work);
+	flush_work_with_sync_wait(&log->disable_writeback_work);
 
 	mempool_exit(&log->meta_pool);
 	bioset_exit(&log->bs);

@@ -276,7 +276,7 @@ static void virtscsi_cancel_event_work(struct virtio_scsi *vscsi)
 	spin_unlock_irq(&vscsi->event_vq.vq_lock);
 
 	for (i = 0; i < VIRTIO_SCSI_EVENT_LEN; i++)
-		cancel_work_sync(&vscsi->event_list[i].work);
+		cancel_work_sync_with_sync_wait(&vscsi->event_list[i].work);
 }
 
 static void virtscsi_handle_transport_reset(struct virtio_scsi *vscsi,

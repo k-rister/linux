@@ -1757,7 +1757,7 @@ static CLOSURE_CALLBACK(cache_set_flush)
 		kthread_stop(ca->alloc_thread);
 
 	if (c->journal.cur) {
-		cancel_delayed_work_sync(&c->journal.work);
+		cancel_delayed_work_sync_with_sync_wait(&c->journal.work);
 		/* flush last journal entry if needed */
 		c->journal.work.work.func(&c->journal.work.work);
 	}

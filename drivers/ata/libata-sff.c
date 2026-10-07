@@ -1196,7 +1196,7 @@ void ata_sff_flush_pio_task(struct ata_port *ap)
 {
 	trace_ata_sff_flush_pio_task(ap);
 
-	cancel_delayed_work_sync(&ap->sff_pio_task);
+	cancel_delayed_work_sync_with_sync_wait(&ap->sff_pio_task);
 
 	/*
 	 * We wanna reset the HSM state to IDLE.  If we do so without

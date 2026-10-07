@@ -2056,7 +2056,7 @@ nvme_fc_port_template nvfnic_port = {
 void nvfnic_flush_nvme_io_list(struct fnic *fnic)
 {
 	queue_work(fnic_cmpl_queue, &fnic->nvme_io_cmpl_work);
-	flush_work(&fnic->nvme_io_cmpl_work);
+	flush_work_with_sync_wait(&fnic->nvme_io_cmpl_work);
 }
 
 void nvfnic_nvme_iodone_work(struct work_struct *work)

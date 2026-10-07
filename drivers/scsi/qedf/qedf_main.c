@@ -950,7 +950,7 @@ void qedf_ctx_soft_reset(struct fc_lport *lport)
 		return;
 	}
 	/* Flush and wait to make sure link down is processed */
-	flush_delayed_work(&qedf->link_update);
+	flush_delayed_work_with_sync_wait(&qedf->link_update);
 	msleep(500);
 
 	atomic_set(&qedf->link_state, QEDF_LINK_UP);
@@ -3780,7 +3780,7 @@ stag_in_prog:
 #endif
 
 	/* Stop any link update handling */
-	cancel_delayed_work_sync(&qedf->link_update);
+	cancel_delayed_work_sync_with_sync_wait(&qedf->link_update);
 	destroy_workqueue(qedf->link_update_wq);
 	qedf->link_update_wq = NULL;
 

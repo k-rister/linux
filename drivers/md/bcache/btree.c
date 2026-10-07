@@ -784,7 +784,7 @@ void bch_btree_cache_free(struct cache_set *c)
 		b = list_first_entry(&c->btree_cache_freed,
 				     struct btree, list);
 		list_del(&b->list);
-		cancel_delayed_work_sync(&b->work);
+		cancel_delayed_work_sync_with_sync_wait(&b->work);
 		kfree(b);
 	}
 

@@ -1135,7 +1135,7 @@ static void cancel_writeback_rate_update_dwork(struct cached_dev *dc)
 	if (time_out == 0)
 		pr_warn("give up waiting for dc->writeback_write_update to quit\n");
 
-	cancel_delayed_work_sync(&dc->writeback_rate_update);
+	cancel_delayed_work_sync_with_sync_wait(&dc->writeback_rate_update);
 }
 
 static void cached_dev_detach_finish(struct work_struct *w)

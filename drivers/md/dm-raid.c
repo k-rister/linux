@@ -3334,7 +3334,7 @@ static void raid_dtr(struct dm_target *ti)
 	mddev_unlock(&rs->md);
 
 	if (work_pending(&rs->md.event_work))
-		flush_work(&rs->md.event_work);
+		flush_work_with_sync_wait(&rs->md.event_work);
 	raid_set_free(rs);
 }
 

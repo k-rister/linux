@@ -465,7 +465,7 @@ static void scsi_device_dev_release(struct device *dev)
 	list_del(&sdev->starved_entry);
 	spin_unlock_irqrestore(sdev->host->host_lock, flags);
 
-	cancel_work_sync(&sdev->event_work);
+	cancel_work_sync_with_sync_wait(&sdev->event_work);
 
 	list_for_each_safe(this, tmp, &sdev->event_list) {
 		struct scsi_event *evt;
@@ -1511,7 +1511,7 @@ void __scsi_remove_device(struct scsi_device *sdev)
 
 	blk_mq_destroy_queue(sdev->request_queue);
 	kref_put(&sdev->host->tagset_refcnt, scsi_mq_free_tags);
-	cancel_work_sync(&sdev->requeue_work);
+	cancel_work_sync_with_sync_wait(&sdev->requeue_work);
 
 	if (!scsi_device_is_pseudo_dev(sdev) && sdev->host->hostt->sdev_destroy)
 		sdev->host->hostt->sdev_destroy(sdev);

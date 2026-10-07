@@ -1123,7 +1123,7 @@ static void virtballoon_quiesce(struct virtio_balloon *vb)
 	cancel_work_sync(&vb->update_balloon_stats_work);
 
 	if (virtio_has_feature(vdev, VIRTIO_BALLOON_F_FREE_PAGE_HINT))
-		cancel_work_sync(&vb->report_free_page_work);
+		cancel_work_sync_with_sync_wait(&vb->report_free_page_work);
 }
 
 static void virtballoon_remove(struct virtio_device *vdev)

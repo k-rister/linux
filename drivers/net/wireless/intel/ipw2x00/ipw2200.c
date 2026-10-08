@@ -11763,29 +11763,29 @@ static void ipw_pci_remove(struct pci_dev *pdev)
 	}
 
 	/* make sure all works are inactive */
-	cancel_delayed_work_sync(&priv->adhoc_check);
-	cancel_work_sync(&priv->associate);
-	cancel_work_sync(&priv->disassociate);
-	cancel_work_sync(&priv->system_config);
-	cancel_work_sync(&priv->rx_replenish);
-	cancel_work_sync(&priv->adapter_restart);
-	cancel_delayed_work_sync(&priv->rf_kill);
-	cancel_work_sync(&priv->up);
-	cancel_work_sync(&priv->down);
-	cancel_delayed_work_sync(&priv->request_scan);
-	cancel_delayed_work_sync(&priv->request_direct_scan);
-	cancel_delayed_work_sync(&priv->request_passive_scan);
-	cancel_delayed_work_sync(&priv->scan_event);
-	cancel_delayed_work_sync(&priv->gather_stats);
-	cancel_work_sync(&priv->abort_scan);
-	cancel_work_sync(&priv->roam);
-	cancel_delayed_work_sync(&priv->scan_check);
-	cancel_work_sync(&priv->link_up);
-	cancel_work_sync(&priv->link_down);
-	cancel_delayed_work_sync(&priv->led_link_on);
-	cancel_delayed_work_sync(&priv->led_link_off);
-	cancel_delayed_work_sync(&priv->led_act_off);
-	cancel_work_sync(&priv->merge_networks);
+	cancel_delayed_work_sync_with_sync_wait(&priv->adhoc_check);
+	cancel_work_sync_with_sync_wait(&priv->associate);
+	cancel_work_sync_with_sync_wait(&priv->disassociate);
+	cancel_work_sync_with_sync_wait(&priv->system_config);
+	cancel_work_sync_with_sync_wait(&priv->rx_replenish);
+	cancel_work_sync_with_sync_wait(&priv->adapter_restart);
+	cancel_delayed_work_sync_with_sync_wait(&priv->rf_kill);
+	cancel_work_sync_with_sync_wait(&priv->up);
+	cancel_work_sync_with_sync_wait(&priv->down);
+	cancel_delayed_work_sync_with_sync_wait(&priv->request_scan);
+	cancel_delayed_work_sync_with_sync_wait(&priv->request_direct_scan);
+	cancel_delayed_work_sync_with_sync_wait(&priv->request_passive_scan);
+	cancel_delayed_work_sync_with_sync_wait(&priv->scan_event);
+	cancel_delayed_work_sync_with_sync_wait(&priv->gather_stats);
+	cancel_work_sync_with_sync_wait(&priv->abort_scan);
+	cancel_work_sync_with_sync_wait(&priv->roam);
+	cancel_delayed_work_sync_with_sync_wait(&priv->scan_check);
+	cancel_work_sync_with_sync_wait(&priv->link_up);
+	cancel_work_sync_with_sync_wait(&priv->link_down);
+	cancel_delayed_work_sync_with_sync_wait(&priv->led_link_on);
+	cancel_delayed_work_sync_with_sync_wait(&priv->led_link_off);
+	cancel_delayed_work_sync_with_sync_wait(&priv->led_act_off);
+	cancel_work_sync_with_sync_wait(&priv->merge_networks);
 
 	/* Free MAC hash list for ADHOC */
 	for (i = 0; i < IPW_IBSS_MAC_HASH_SIZE; i++) {

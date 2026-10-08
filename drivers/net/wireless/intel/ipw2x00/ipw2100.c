@@ -4386,12 +4386,12 @@ static void ipw2100_kill_works(struct ipw2100_priv *priv)
 {
 	priv->stop_rf_kill = 1;
 	priv->stop_hang_check = 1;
-	cancel_delayed_work_sync(&priv->reset_work);
-	cancel_delayed_work_sync(&priv->security_work);
-	cancel_delayed_work_sync(&priv->wx_event_work);
-	cancel_delayed_work_sync(&priv->hang_check);
-	cancel_delayed_work_sync(&priv->rf_kill);
-	cancel_delayed_work_sync(&priv->scan_event);
+	cancel_delayed_work_sync_with_sync_wait(&priv->reset_work);
+	cancel_delayed_work_sync_with_sync_wait(&priv->security_work);
+	cancel_delayed_work_sync_with_sync_wait(&priv->wx_event_work);
+	cancel_delayed_work_sync_with_sync_wait(&priv->hang_check);
+	cancel_delayed_work_sync_with_sync_wait(&priv->rf_kill);
+	cancel_delayed_work_sync_with_sync_wait(&priv->scan_event);
 }
 
 static int ipw2100_tx_allocate(struct ipw2100_priv *priv)

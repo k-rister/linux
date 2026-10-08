@@ -1225,15 +1225,15 @@ void ssh_rtl_shutdown(struct ssh_rtl *rtl)
 	 * We have now guaranteed that the queue is empty and no more new
 	 * requests can be submitted (i.e. it will stay empty). This means that
 	 * calling ssh_rtl_tx_schedule() will not schedule tx.work any more. So
-	 * we can simply call cancel_work_sync() on tx.work here and when that
-	 * returns, we've locked it down. This also means that after this call,
+	 * we can simply cancel tx.work here and when that returns, we've locked
+	 * it down. This also means that after this call,
 	 * we don't submit any more packets to the underlying packet layer, so
 	 * we can also shut that down.
 	 */
 
-	cancel_work_sync(&rtl->tx.work);
+	cancel_work_sync_with_sync_wait(&rtl->tx.work);
 	ssh_ptl_shutdown(&rtl->ptl);
-	cancel_delayed_work_sync(&rtl->rtx_timeout.reaper);
+	cancel_delayed_work_sync_with_sync_wait(&rtl->rtx_timeout.reaper);
 
 	/*
 	 * Shutting down the packet layer should also have canceled all

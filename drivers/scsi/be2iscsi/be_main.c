@@ -5388,12 +5388,12 @@ static void beiscsi_disable_port(struct beiscsi_hba *phba, int unload)
 		pbe_eq = &phwi_context->be_eq[i];
 		irq_poll_disable(&pbe_eq->iopoll);
 	}
-	cancel_delayed_work_sync(&phba->eqd_update);
-	cancel_work_sync(&phba->boot_work);
+	cancel_delayed_work_sync_with_sync_wait(&phba->eqd_update);
+	cancel_work_sync_with_sync_wait(&phba->boot_work);
 	/* WQ might be running cancel queued mcc_work if we are not exiting */
 	if (!unload && beiscsi_hba_in_error(phba)) {
 		pbe_eq = &phwi_context->be_eq[i];
-		cancel_work_sync(&pbe_eq->mcc_work);
+		cancel_work_sync_with_sync_wait(&pbe_eq->mcc_work);
 	}
 	hwi_cleanup_port(phba);
 	beiscsi_cleanup_port(phba);
@@ -5434,7 +5434,7 @@ static pci_ers_result_t beiscsi_eeh_err_detected(struct pci_dev *pdev,
 
 	/* first stop UE detection when PCI error detected */
 	timer_delete_sync(&phba->hw_check);
-	cancel_delayed_work_sync(&phba->recover_port);
+	cancel_delayed_work_sync_with_sync_wait(&phba->recover_port);
 
 	/* sessions are no longer valid, so first fail the sessions */
 	iscsi_host_for_each_session(phba->shost, beiscsi_session_fail);
@@ -5733,8 +5733,8 @@ static void beiscsi_remove(struct pci_dev *pcidev)
 
 	/* first stop UE detection before unloading */
 	timer_delete_sync(&phba->hw_check);
-	cancel_delayed_work_sync(&phba->recover_port);
-	cancel_work_sync(&phba->sess_work);
+	cancel_delayed_work_sync_with_sync_wait(&phba->recover_port);
+	cancel_work_sync_with_sync_wait(&phba->sess_work);
 
 	beiscsi_iface_destroy_default(phba);
 	iscsi_host_remove(phba->shost, false);

@@ -3315,8 +3315,8 @@ lpfc_stop_hba_timers(struct lpfc_hba *phba)
 {
 	if (phba->pport)
 		lpfc_stop_vport_timers(phba->pport);
-	cancel_delayed_work_sync(&phba->eq_delay_work);
-	cancel_delayed_work_sync(&phba->idle_stat_delay_work);
+	cancel_delayed_work_sync_with_sync_wait(&phba->eq_delay_work);
+	cancel_delayed_work_sync_with_sync_wait(&phba->idle_stat_delay_work);
 	timer_delete_sync(&phba->sli.mbox_tmo);
 	timer_delete_sync(&phba->fabric_block_timer);
 	timer_delete_sync(&phba->eratt_poll);

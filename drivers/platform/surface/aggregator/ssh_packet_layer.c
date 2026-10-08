@@ -1941,7 +1941,7 @@ void ssh_ptl_shutdown(struct ssh_ptl *ptl)
 	if (status)
 		ptl_err(ptl, "ptl: failed to stop transmitter thread\n");
 
-	cancel_delayed_work_sync(&ptl->rtx_timeout.reaper);
+	cancel_delayed_work_sync_with_sync_wait(&ptl->rtx_timeout.reaper);
 
 	/*
 	 * At this point, all threads have been stopped. This means that the

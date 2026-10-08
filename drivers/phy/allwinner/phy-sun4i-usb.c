@@ -707,7 +707,7 @@ static void sun4i_usb_phy_remove(struct platform_device *pdev)
 	if (data->vbus_det_irq > 0)
 		devm_free_irq(dev, data->vbus_det_irq, data);
 
-	cancel_delayed_work_sync(&data->detect);
+	cancel_delayed_work_sync_with_sync_wait(&data->detect);
 }
 
 static const unsigned int sun4i_usb_phy0_cable[] = {

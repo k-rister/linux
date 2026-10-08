@@ -535,7 +535,7 @@ static void cs_handle_tdr(struct hl_device *hdev, struct hl_cs *cs)
 		return;
 
 	if (cs->tdr_active)
-		cancel_delayed_work_sync(&cs->work_tdr);
+		cancel_delayed_work_sync_with_sync_wait(&cs->work_tdr);
 
 	spin_lock(&hdev->cs_mirror_lock);
 

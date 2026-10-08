@@ -1217,7 +1217,7 @@ void drm_sched_fini(struct drm_gpu_scheduler *sched)
 	wake_up_all(&sched->job_scheduled);
 
 	/* Confirm no work left behind accessing device structures */
-	cancel_delayed_work_sync(&sched->work_tdr);
+	cancel_delayed_work_sync_with_sync_wait(&sched->work_tdr);
 
 	/* Avoid memory leaks if supported by the driver. */
 	if (sched->ops->cancel_job)

@@ -1211,7 +1211,7 @@ static int __maybe_unused rk817_suspend(struct device *dev)
 {
 	struct rk817_charger *charger = dev_get_drvdata(dev);
 
-	cancel_delayed_work_sync(&charger->work);
+	cancel_delayed_work_sync_with_sync_wait(&charger->work);
 
 	return 0;
 }

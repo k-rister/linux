@@ -2452,11 +2452,11 @@ void ddb_ports_release(struct ddb *dev)
 	for (i = 0; i < dev->port_num; i++) {
 		port = &dev->port[i];
 		if (port->input[0] && port->input[0]->dma)
-			cancel_work_sync(&port->input[0]->dma->work);
+			cancel_work_sync_with_sync_wait(&port->input[0]->dma->work);
 		if (port->input[1] && port->input[1]->dma)
-			cancel_work_sync(&port->input[1]->dma->work);
+			cancel_work_sync_with_sync_wait(&port->input[1]->dma->work);
 		if (port->output && port->output->dma)
-			cancel_work_sync(&port->output->dma->work);
+			cancel_work_sync_with_sync_wait(&port->output->dma->work);
 	}
 }
 

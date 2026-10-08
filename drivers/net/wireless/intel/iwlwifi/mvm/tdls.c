@@ -600,7 +600,7 @@ out:
 				vif->bss_conf.beacon_int));
 
 	/* flush the channel switch state */
-	flush_delayed_work(&mvm->tdls_cs.dwork);
+	flush_delayed_work_with_sync_wait(&mvm->tdls_cs.dwork);
 
 	IWL_DEBUG_TDLS(mvm, "TDLS ending channel switch with %pM\n", sta->addr);
 }

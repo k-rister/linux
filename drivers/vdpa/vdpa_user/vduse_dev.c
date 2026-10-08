@@ -542,12 +542,12 @@ static void vduse_dev_reset(struct vduse_dev *dev)
 		}
 	}
 
-	flush_work(&dev->inject);
+	flush_work_with_sync_wait(&dev->inject);
 	for (i = 0; i < dev->vq_num; i++) {
 		struct vduse_virtqueue *vq = dev->vqs[i];
 
-		flush_work(&vq->inject);
-		flush_work(&vq->kick);
+		flush_work_with_sync_wait(&vq->inject);
+		flush_work_with_sync_wait(&vq->kick);
 	}
 }
 
@@ -964,9 +964,9 @@ static int vduse_vdpa_suspend(struct vdpa_device *vdpa)
 			spin_unlock(&dev->vqs[i]->kick_lock);
 		}
 
-		cancel_work_sync(&dev->inject);
+		cancel_work_sync_with_sync_wait(&dev->inject);
 		for (u32 i = 0; i < dev->vq_num; i++)
-			cancel_work_sync(&dev->vqs[i]->inject);
+			cancel_work_sync_with_sync_wait(&dev->vqs[i]->inject);
 	}
 
 	return ret;

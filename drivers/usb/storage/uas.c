@@ -1231,7 +1231,7 @@ static void uas_disconnect(struct usb_interface *intf)
 	 * Prevent SCSI scanning (if it hasn't started yet)
 	 * or wait for the SCSI-scanning routine to stop.
 	 */
-	cancel_work_sync(&devinfo->scan_work);
+	cancel_work_sync_with_sync_wait(&devinfo->scan_work);
 
 	scsi_remove_host(shost);
 	uas_free_streams(devinfo);

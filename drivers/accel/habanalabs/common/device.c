@@ -1285,7 +1285,7 @@ static void cleanup_resources(struct hl_device *hdev, bool hard_reset, bool fw_r
 {
 	if (hard_reset) {
 		if (hdev->heartbeat)
-			cancel_delayed_work_sync(&hdev->work_heartbeat);
+			cancel_delayed_work_sync_with_sync_wait(&hdev->work_heartbeat);
 
 		device_late_fini(hdev);
 	}
@@ -1700,7 +1700,7 @@ do_reset:
 
 			hdev->reset_info.watchdog_active = 0;
 			if (!from_watchdog_thread)
-				cancel_delayed_work_sync(&watchdog_work->reset_work);
+				cancel_delayed_work_sync_with_sync_wait(&watchdog_work->reset_work);
 
 			if (from_dev_release && (watchdog_work->flags & HL_DRV_RESET_HARD)) {
 				hdev->reset_info.in_compute_reset = 0;
@@ -2527,7 +2527,7 @@ void hl_device_fini(struct hl_device *hdev)
 		}
 	}
 
-	cancel_delayed_work_sync(&hdev->device_release_watchdog_work.reset_work);
+	cancel_delayed_work_sync_with_sync_wait(&hdev->device_release_watchdog_work.reset_work);
 
 	/* Disable PCI access from device F/W so it won't send us additional
 	 * interrupts. We disable MSI/MSI-X at the halt_engines function and we

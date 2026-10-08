@@ -919,7 +919,7 @@ void goya_late_fini(struct hl_device *hdev)
 {
 	struct goya_device *goya = hdev->asic_specific;
 
-	cancel_delayed_work_sync(&goya->goya_work->work_freq);
+	cancel_delayed_work_sync_with_sync_wait(&goya->goya_work->work_freq);
 
 	hl_hwmon_release_resources(hdev);
 }

@@ -290,7 +290,7 @@ static ssize_t pm_mng_profile_store(struct device *dev,
 			 * knowing that he is the only one changing frequencies
 			 */
 			if (goya->goya_work)
-				flush_delayed_work(&goya->goya_work->work_freq);
+				flush_delayed_work_with_sync_wait(&goya->goya_work->work_freq);
 
 			return count;
 		}

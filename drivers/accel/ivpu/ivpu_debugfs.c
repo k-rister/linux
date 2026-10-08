@@ -347,7 +347,7 @@ ivpu_force_recovery_fn(struct file *file, const char __user *user_buf, size_t si
 		return ret;
 
 	ivpu_pm_trigger_recovery(vdev, "debugfs");
-	flush_work(&vdev->pm->recovery_work);
+	flush_work_with_sync_wait(&vdev->pm->recovery_work);
 	ivpu_rpm_put(vdev);
 	return size;
 }

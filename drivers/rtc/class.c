@@ -33,7 +33,7 @@ static void rtc_device_release(struct device *dev)
 		timerqueue_del(head, node);
 	mutex_unlock(&rtc->ops_lock);
 
-	cancel_work_sync(&rtc->irqwork);
+	cancel_work_sync_with_sync_wait(&rtc->irqwork);
 
 	ida_free(&rtc_ida, rtc->id);
 	mutex_destroy(&rtc->ops_lock);

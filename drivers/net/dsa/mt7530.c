@@ -3311,7 +3311,7 @@ mt753x_teardown(struct dsa_switch *ds)
 	struct mt7530_priv *priv = ds->priv;
 
 	if (priv->bus)
-		cancel_delayed_work_sync(&priv->stats_work);
+		cancel_delayed_work_sync_with_sync_wait(&priv->stats_work);
 }
 
 static int mt753x_set_mac_eee(struct dsa_switch *ds, int port,

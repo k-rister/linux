@@ -959,7 +959,7 @@ static void netc_teardown(struct dsa_switch *ds)
 {
 	struct netc_switch *priv = ds->priv;
 
-	disable_delayed_work_sync(&priv->fdbt_ageing_work);
+	disable_delayed_work_sync_with_sync_wait(&priv->fdbt_ageing_work);
 	netc_destroy_all_lists(priv);
 	netc_free_host_flood_rules(priv);
 	netc_free_ntmp_user(priv);
@@ -2061,7 +2061,7 @@ static void netc_port_bridge_leave(struct dsa_switch *ds, int port,
 	np->pvid = NETC_STANDALONE_PVID;
 
 	if (atomic_dec_and_test(&priv->br_cnt))
-		cancel_delayed_work_sync(&priv->fdbt_ageing_work);
+		cancel_delayed_work_sync_with_sync_wait(&priv->fdbt_ageing_work);
 
 	netc_port_remove_dynamic_entries(np);
 	uc = ndev->flags & IFF_PROMISC;

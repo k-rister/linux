@@ -276,7 +276,7 @@ void drm_self_refresh_helper_cleanup(struct drm_crtc *crtc)
 
 	crtc->self_refresh_data = NULL;
 
-	cancel_delayed_work_sync(&sr_data->entry_work);
+	cancel_delayed_work_sync_with_sync_wait(&sr_data->entry_work);
 	kfree(sr_data);
 }
 EXPORT_SYMBOL(drm_self_refresh_helper_cleanup);

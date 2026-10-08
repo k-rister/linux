@@ -2989,7 +2989,7 @@ static void tb_deinit(struct tb *tb)
 
 	/* Cancel all the release bandwidth workers */
 	for (i = 0; i < ARRAY_SIZE(tcm->groups); i++)
-		cancel_delayed_work_sync(&tcm->groups[i].release_work);
+		cancel_delayed_work_sync_with_sync_wait(&tcm->groups[i].release_work);
 }
 
 static int tb_scan_finalize_switch(struct device *dev, void *data)

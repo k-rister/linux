@@ -631,7 +631,7 @@ struct tb_cfg_result tb_cfg_request_sync(struct tb_ctl *ctl,
 	if (!wait_for_completion_timeout(&done, timeout))
 		tb_cfg_request_cancel(req, -ETIMEDOUT);
 
-	flush_work(&req->work);
+	flush_work_with_sync_wait(&req->work);
 
 	return req->result;
 }

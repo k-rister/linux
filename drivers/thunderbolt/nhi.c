@@ -794,7 +794,7 @@ err:
 	 * schedule ring->work to invoke callbacks on all remaining frames.
 	 */
 	schedule_work(&ring->work);
-	flush_work(&ring->work);
+	flush_work_with_sync_wait(&ring->work);
 }
 EXPORT_SYMBOL_GPL(tb_ring_stop);
 
@@ -847,7 +847,7 @@ void tb_ring_free(struct tb_ring *ring)
 	 * by nhi_interrupt_work, ring_stop and ring_msix). Wait for it
 	 * to finish before freeing the ring.
 	 */
-	flush_work(&ring->work);
+	flush_work_with_sync_wait(&ring->work);
 	kfree(ring);
 }
 EXPORT_SYMBOL_GPL(tb_ring_free);

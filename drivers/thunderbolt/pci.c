@@ -261,7 +261,7 @@ static void nhi_pci_release_irq(struct tb_nhi *nhi)
 	 */
 	if (!pdev->msix_enabled) {
 		devm_free_irq(nhi->dev, pdev->irq, nhi);
-		flush_work(&nhi->interrupt_work);
+		flush_work_with_sync_wait(&nhi->interrupt_work);
 	}
 	ida_destroy(&nhi_pci->msix_ida);
 }

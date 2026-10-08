@@ -3767,7 +3767,7 @@ int ipmi_add_smi(struct module         *owner,
 	list_del(&intf->link);
 	mutex_unlock(&ipmi_interfaces_mutex);
 	mutex_unlock(&smi_watchers_mutex);
-	cancel_work_sync(&intf->smi_work);
+	cancel_work_sync_with_sync_wait(&intf->smi_work);
 	kref_put(&intf->refcount, intf_free);
 
 	return rv;
@@ -3839,7 +3839,7 @@ void ipmi_unregister_smi(struct ipmi_smi *intf)
 
 	intf_num = intf->intf_num;
 	mutex_lock(&ipmi_interfaces_mutex);
-	cancel_work_sync(&intf->smi_work);
+	cancel_work_sync_with_sync_wait(&intf->smi_work);
 	/* smi_work() can no longer be in progress after this. */
 
 	intf->intf_num = -1;
@@ -5679,7 +5679,7 @@ static void __exit cleanup_ipmi(void)
 		 */
 		atomic_set(&stop_operation, 1);
 		timer_delete_sync(&ipmi_timer);
-		cancel_work_sync(&ipmi_timer_work);
+		cancel_work_sync_with_sync_wait(&ipmi_timer_work);
 
 		initialized = false;
 

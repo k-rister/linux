@@ -225,7 +225,7 @@ static void max8997_haptic_close(struct input_dev *dev)
 {
 	struct max8997_haptic *chip = input_get_drvdata(dev);
 
-	cancel_work_sync(&chip->work);
+	cancel_work_sync_with_sync_wait(&chip->work);
 	max8997_haptic_disable(chip);
 }
 

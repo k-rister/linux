@@ -231,7 +231,7 @@ static void __tsc200x_disable(struct tsc200x *ts)
 	guard(disable_irq)(&ts->irq);
 
 	timer_delete_sync(&ts->penup_timer);
-	cancel_delayed_work_sync(&ts->esd_work);
+	cancel_delayed_work_sync_with_sync_wait(&ts->esd_work);
 }
 
 /* must be called with ts->mutex held */

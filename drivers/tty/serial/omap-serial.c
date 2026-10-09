@@ -1381,7 +1381,7 @@ static int serial_omap_suspend(struct device *dev)
 	struct uart_omap_port *up = dev_get_drvdata(dev);
 
 	uart_suspend_port(&serial_omap_reg, &up->port);
-	flush_work(&up->qos_work);
+	flush_work_with_sync_wait(&up->qos_work);
 
 	if (device_may_wakeup(dev))
 		serial_omap_enable_wakeup(up, true);

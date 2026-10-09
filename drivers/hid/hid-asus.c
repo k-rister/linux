@@ -830,7 +830,7 @@ static void asus_worker_stop(struct asus_worker *worker)
 	}
 	spin_unlock_irqrestore(&worker->lock, flags);
 
-	cancel_work_sync(&worker->work);
+	cancel_work_sync_with_sync_wait(&worker->work);
 }
 
 /*

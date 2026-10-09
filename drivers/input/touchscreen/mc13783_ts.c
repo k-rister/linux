@@ -159,7 +159,7 @@ static void mc13783_ts_close(struct input_dev *dev)
 	mc13xxx_irq_free(priv->mc13xxx, MC13XXX_IRQ_TS, priv);
 	mc13xxx_unlock(priv->mc13xxx);
 
-	cancel_delayed_work_sync(&priv->work);
+	cancel_delayed_work_sync_with_sync_wait(&priv->work);
 }
 
 static int __init mc13783_ts_probe(struct platform_device *pdev)

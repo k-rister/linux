@@ -94,7 +94,7 @@ static void gpio_vibrator_close(struct input_dev *input)
 {
 	struct gpio_vibrator *vibrator = input_get_drvdata(input);
 
-	cancel_work_sync(&vibrator->play_work);
+	cancel_work_sync_with_sync_wait(&vibrator->play_work);
 	gpio_vibrator_stop(vibrator);
 	vibrator->running = false;
 }
@@ -154,7 +154,7 @@ static int gpio_vibrator_suspend(struct device *dev)
 	struct platform_device *pdev = to_platform_device(dev);
 	struct gpio_vibrator *vibrator = platform_get_drvdata(pdev);
 
-	cancel_work_sync(&vibrator->play_work);
+	cancel_work_sync_with_sync_wait(&vibrator->play_work);
 	if (vibrator->running)
 		gpio_vibrator_stop(vibrator);
 

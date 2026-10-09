@@ -106,7 +106,7 @@ static void sc27xx_vibra_close(struct input_dev *input)
 {
 	struct vibra_info *info = input_get_drvdata(input);
 
-	cancel_work_sync(&info->play_work);
+	cancel_work_sync_with_sync_wait(&info->play_work);
 	if (info->enabled)
 		sc27xx_vibra_set(info, false);
 }

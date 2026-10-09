@@ -693,7 +693,7 @@ static void da7280_haptic_stop(struct da7280_haptic *haptics)
 {
 	int error;
 
-	cancel_work_sync(&haptics->work);
+	cancel_work_sync_with_sync_wait(&haptics->work);
 
 
 	da7280_haptic_deactivate(haptics);

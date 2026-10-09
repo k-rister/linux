@@ -86,7 +86,7 @@ static void qnap_mcu_input_close(struct input_dev *input)
 {
 	struct qnap_mcu_input_dev *idev = input_get_drvdata(input);
 
-	cancel_work_sync(&idev->beep_work);
+	cancel_work_sync_with_sync_wait(&idev->beep_work);
 }
 
 static int qnap_mcu_input_probe(struct platform_device *pdev)

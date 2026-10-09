@@ -63,7 +63,7 @@ void input_dev_poller_start(struct input_dev_poller *poller)
 
 void input_dev_poller_stop(struct input_dev_poller *poller)
 {
-	cancel_delayed_work_sync(&poller->work);
+	cancel_delayed_work_sync_with_sync_wait(&poller->work);
 }
 
 int input_setup_polling(struct input_dev *dev,
@@ -168,7 +168,7 @@ static ssize_t input_dev_set_poll_interval(struct device *dev,
 	poller->poll_interval = interval;
 
 	if (input_device_enabled(input)) {
-		cancel_delayed_work_sync(&poller->work);
+		cancel_delayed_work_sync_with_sync_wait(&poller->work);
 		if (poller->poll_interval > 0)
 			input_dev_poller_queue_work(poller);
 	}

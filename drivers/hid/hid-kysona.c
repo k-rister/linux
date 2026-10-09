@@ -264,7 +264,7 @@ static void kysona_remove(struct hid_device *hdev)
 	struct kysona_drvdata *drv_data = hid_get_drvdata(hdev);
 
 	if (drv_data->battery)
-		cancel_delayed_work_sync(&drv_data->battery_work);
+		cancel_delayed_work_sync_with_sync_wait(&drv_data->battery_work);
 
 	hid_hw_stop(hdev);
 }

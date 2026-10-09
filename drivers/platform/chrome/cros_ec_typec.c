@@ -1429,7 +1429,7 @@ static void cros_typec_remove(struct platform_device *pdev)
 	struct cros_typec_data *typec = platform_get_drvdata(pdev);
 
 	cros_usbpd_unregister_notify(&typec->nb);
-	cancel_work_sync(&typec->port_work);
+	cancel_work_sync_with_sync_wait(&typec->port_work);
 	cros_unregister_ports(typec);
 }
 

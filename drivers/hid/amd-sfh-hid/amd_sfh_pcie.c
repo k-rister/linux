@@ -470,7 +470,7 @@ static void amd_sfh_remove(struct pci_dev *pdev)
 {
 	struct amd_mp2_dev *mp2 = pci_get_drvdata(pdev);
 
-	flush_work(&mp2->work);
+	flush_work_with_sync_wait(&mp2->work);
 	amd_sfh_unregister_tm(mp2);
 	if (mp2->init_done)
 		mp2->mp2_ops->remove(mp2);
@@ -554,7 +554,7 @@ static void amd_sfh_shutdown(struct pci_dev *pdev)
 	struct amd_mp2_dev *mp2 = pci_get_drvdata(pdev);
 
 	if (mp2) {
-		flush_work(&mp2->work);
+		flush_work_with_sync_wait(&mp2->work);
 		if (mp2->init_done)
 			mp2->mp2_ops->stop_all(mp2);
 	}
@@ -564,7 +564,7 @@ static int __maybe_unused amd_mp2_pci_resume(struct device *dev)
 {
 	struct amd_mp2_dev *mp2 = dev_get_drvdata(dev);
 
-	flush_work(&mp2->work);
+	flush_work_with_sync_wait(&mp2->work);
 	if (mp2->init_done)
 		mp2->mp2_ops->resume(mp2);
 
@@ -575,7 +575,7 @@ static int __maybe_unused amd_mp2_pci_suspend(struct device *dev)
 {
 	struct amd_mp2_dev *mp2 = dev_get_drvdata(dev);
 
-	flush_work(&mp2->work);
+	flush_work_with_sync_wait(&mp2->work);
 	if (mp2->init_done)
 		mp2->mp2_ops->suspend(mp2);
 

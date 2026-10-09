@@ -4818,7 +4818,7 @@ static int hidpp_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	/* Check for connected devices now that incoming packets will not be disabled again */
 	hid_device_io_start(hdev);
 	schedule_work(&hidpp->work);
-	flush_work(&hidpp->work);
+	flush_work_with_sync_wait(&hidpp->work);
 
 	/*
 	 * This relies on logi_dj_ll_close() being a no-op so that DJ connection
@@ -4833,7 +4833,7 @@ hid_hw_open_fail:
 	hid_hw_stop(hdev);
 hid_hw_start_fail:
 	sysfs_remove_group(&hdev->dev.kobj, &ps_attribute_group);
-	cancel_work_sync(&hidpp->work);
+	cancel_work_sync_with_sync_wait(&hidpp->work);
 	mutex_destroy(&hidpp->send_mutex);
 	return ret;
 }
@@ -4848,8 +4848,8 @@ static void hidpp_remove(struct hid_device *hdev)
 	sysfs_remove_group(&hdev->dev.kobj, &ps_attribute_group);
 
 	hid_hw_stop(hdev);
-	cancel_work_sync(&hidpp->work);
-	cancel_work_sync(&hidpp->reset_hi_res_work);
+	cancel_work_sync_with_sync_wait(&hidpp->work);
+	cancel_work_sync_with_sync_wait(&hidpp->reset_hi_res_work);
 	mutex_destroy(&hidpp->send_mutex);
 }
 

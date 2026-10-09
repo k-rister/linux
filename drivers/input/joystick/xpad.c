@@ -1873,7 +1873,7 @@ static void xpad360w_stop_input(struct usb_xpad *xpad)
 	usb_kill_urb(xpad->irq_in);
 
 	/* Make sure we are done with presence work if it was scheduled */
-	flush_work(&xpad->work);
+	flush_work_with_sync_wait(&xpad->work);
 }
 
 static int xpad_open(struct input_dev *dev)

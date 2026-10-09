@@ -136,7 +136,7 @@ static irqreturn_t stmpe_ts_handler(int irq, void *data)
 	 * Cancel scheduled polling for release if we have new value
 	 * available. Wait if the polling is already running.
 	 */
-	cancel_delayed_work_sync(&ts->work);
+	cancel_delayed_work_sync_with_sync_wait(&ts->work);
 
 	/*
 	 * The FIFO sometimes just crashes and stops generating interrupts. This
@@ -250,7 +250,7 @@ static void stmpe_ts_close(struct input_dev *dev)
 {
 	struct stmpe_touch *ts = input_get_drvdata(dev);
 
-	cancel_delayed_work_sync(&ts->work);
+	cancel_delayed_work_sync_with_sync_wait(&ts->work);
 
 	stmpe_set_bits(ts->stmpe, STMPE_REG_TSC_CTRL,
 			STMPE_TSC_CTRL_TSC_EN, 0);

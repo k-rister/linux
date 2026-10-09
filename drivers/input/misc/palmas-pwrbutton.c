@@ -230,8 +230,8 @@ static int palmas_pwron_probe(struct platform_device *pdev)
 	return 0;
 
 err_free_irq:
-	cancel_delayed_work_sync(&pwron->input_work);
 	free_irq(pwron->irq, pwron);
+	cancel_delayed_work_sync_with_sync_wait(&pwron->input_work);
 err_free_input:
 	input_free_device(input_dev);
 err_free_mem:
@@ -250,7 +250,7 @@ static void palmas_pwron_remove(struct platform_device *pdev)
 	struct palmas_pwron *pwron = platform_get_drvdata(pdev);
 
 	free_irq(pwron->irq, pwron);
-	cancel_delayed_work_sync(&pwron->input_work);
+	cancel_delayed_work_sync_with_sync_wait(&pwron->input_work);
 
 	input_unregister_device(pwron->input_dev);
 	kfree(pwron);
@@ -269,7 +269,7 @@ static int palmas_pwron_suspend(struct device *dev)
 	struct platform_device *pdev = to_platform_device(dev);
 	struct palmas_pwron *pwron = platform_get_drvdata(pdev);
 
-	cancel_delayed_work_sync(&pwron->input_work);
+	cancel_delayed_work_sync_with_sync_wait(&pwron->input_work);
 
 	if (device_may_wakeup(dev))
 		enable_irq_wake(pwron->irq);

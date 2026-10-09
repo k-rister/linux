@@ -390,8 +390,8 @@ static void mtdoops_notify_remove(struct mtd_info *mtd)
 		pr_warn("could not unregister kmsg_dumper\n");
 
 	cxt->mtd = NULL;
-	flush_work(&cxt->work_erase);
-	flush_work(&cxt->work_write);
+	flush_work_with_sync_wait(&cxt->work_erase);
+	flush_work_with_sync_wait(&cxt->work_write);
 	vfree(cxt->oops_page_used);
 	cxt->oops_page_used = NULL;
 	cxt->oops_pages = 0;

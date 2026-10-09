@@ -115,7 +115,7 @@ static void drv2665_close(struct input_dev *input)
 	struct drv2665_data *haptics = input_get_drvdata(input);
 	int error;
 
-	cancel_work_sync(&haptics->work);
+	cancel_work_sync_with_sync_wait(&haptics->work);
 
 	error = regmap_update_bits(haptics->regmap, DRV2665_CTRL_2,
 				   DRV2665_STANDBY, DRV2665_STANDBY);

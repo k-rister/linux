@@ -971,7 +971,7 @@ static void atkbd_disconnect(struct serio *serio)
 	 * rescheduling itself until it gets canceled and will not try
 	 * accessing freed input device or serio port.
 	 */
-	cancel_delayed_work_sync(&atkbd->event_work);
+	cancel_delayed_work_sync_with_sync_wait(&atkbd->event_work);
 
 	serio_close(serio);
 	serio_set_drvdata(serio, NULL);

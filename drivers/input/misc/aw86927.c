@@ -408,7 +408,7 @@ static void aw86927_close(struct input_dev *input)
 	struct device *dev = &haptics->client->dev;
 	int err;
 
-	cancel_work_sync(&haptics->play_work);
+	cancel_work_sync_with_sync_wait(&haptics->play_work);
 
 	err = aw86927_stop(haptics);
 	if (err)

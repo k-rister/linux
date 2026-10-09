@@ -108,7 +108,7 @@ static int pwm_beeper_event(struct input_dev *input,
 
 static void pwm_beeper_stop(struct pwm_beeper *beeper)
 {
-	cancel_work_sync(&beeper->work);
+	cancel_work_sync_with_sync_wait(&beeper->work);
 	pwm_beeper_off(beeper);
 }
 

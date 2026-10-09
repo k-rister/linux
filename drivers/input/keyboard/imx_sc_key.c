@@ -105,7 +105,7 @@ static void imx_sc_key_action(void *data)
 
 	imx_scu_irq_group_enable(SC_IRQ_GROUP_WAKE, SC_IRQ_BUTTON, false);
 	imx_scu_irq_unregister_notifier(&priv->key_notifier);
-	cancel_delayed_work_sync(&priv->check_work);
+	cancel_delayed_work_sync_with_sync_wait(&priv->check_work);
 }
 
 static int imx_sc_key_probe(struct platform_device *pdev)

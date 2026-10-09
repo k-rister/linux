@@ -185,7 +185,7 @@ static int ssam_tablet_sw_probe(struct ssam_device *sdev)
 
 err:
 	ssam_device_notifier_unregister(sdev, &sw->notif);
-	cancel_work_sync(&sw->update_work);
+	cancel_work_sync_with_sync_wait(&sw->update_work);
 	return status;
 }
 
@@ -196,7 +196,7 @@ static void ssam_tablet_sw_remove(struct ssam_device *sdev)
 	sysfs_remove_group(&sdev->dev.kobj, &ssam_tablet_sw_group);
 
 	ssam_device_notifier_unregister(sdev, &sw->notif);
-	cancel_work_sync(&sw->update_work);
+	cancel_work_sync_with_sync_wait(&sw->update_work);
 }
 
 

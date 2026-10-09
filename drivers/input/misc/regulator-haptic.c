@@ -108,7 +108,7 @@ static void regulator_haptic_close(struct input_dev *input)
 {
 	struct regulator_haptic *haptic = input_get_drvdata(input);
 
-	cancel_work_sync(&haptic->work);
+	cancel_work_sync_with_sync_wait(&haptic->work);
 	regulator_haptic_set_voltage(haptic, 0);
 }
 

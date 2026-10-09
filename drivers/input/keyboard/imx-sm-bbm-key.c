@@ -84,7 +84,7 @@ static void scmi_imx_bbm_pwrkey_act(void *pdata)
 {
 	struct scmi_imx_bbm *bbnsm = pdata;
 
-	cancel_delayed_work_sync(&bbnsm->check_work);
+	cancel_delayed_work_sync_with_sync_wait(&bbnsm->check_work);
 }
 
 static int scmi_imx_bbm_key_notifier(struct notifier_block *nb, unsigned long event, void *data)

@@ -289,7 +289,7 @@ static void max77693_haptic_close(struct input_dev *dev)
 	struct max77693_haptic *haptic = input_get_drvdata(dev);
 	int error;
 
-	cancel_work_sync(&haptic->work);
+	cancel_work_sync_with_sync_wait(&haptic->work);
 	max77693_haptic_disable(haptic);
 
 	error = regulator_disable(haptic->motor_reg);

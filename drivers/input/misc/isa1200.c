@@ -293,7 +293,7 @@ static void isa1200_vibrator_close(struct input_dev *input)
 {
 	struct isa1200 *isa = input_get_drvdata(input);
 
-	cancel_work_sync(&isa->play_work);
+	cancel_work_sync_with_sync_wait(&isa->play_work);
 	isa1200_stop(isa);
 	isa->level = 0;
 }
@@ -487,7 +487,7 @@ static int isa1200_suspend(struct device *dev)
 
 	if (input_device_enabled(isa->input)) {
 		WRITE_ONCE(isa->suspended, true);
-		cancel_work_sync(&isa->play_work);
+		cancel_work_sync_with_sync_wait(&isa->play_work);
 		isa1200_stop(isa);
 	}
 

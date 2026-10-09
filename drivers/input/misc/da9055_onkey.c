@@ -125,7 +125,7 @@ static int da9055_onkey_probe(struct platform_device *pdev)
 
 err_free_irq:
 	free_irq(irq, onkey);
-	cancel_delayed_work_sync(&onkey->work);
+	cancel_delayed_work_sync_with_sync_wait(&onkey->work);
 err_free_input:
 	input_free_device(input_dev);
 
@@ -139,7 +139,7 @@ static void da9055_onkey_remove(struct platform_device *pdev)
 
 	irq = regmap_irq_get_virq(onkey->da9055->irq_data, irq);
 	free_irq(irq, onkey);
-	cancel_delayed_work_sync(&onkey->work);
+	cancel_delayed_work_sync_with_sync_wait(&onkey->work);
 	input_unregister_device(onkey->input);
 }
 

@@ -729,7 +729,7 @@ static void ds1305_remove(struct spi_device *spi)
 	if (spi->irq) {
 		set_bit(FLAG_EXITING, &ds1305->flags);
 		devm_free_irq(&spi->dev, spi->irq, ds1305);
-		cancel_work_sync(&ds1305->work);
+		cancel_work_sync_with_sync_wait(&ds1305->work);
 	}
 }
 

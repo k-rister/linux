@@ -292,7 +292,7 @@ static void gt683r_led_remove(struct hid_device *hdev)
 
 	for (i = 0; i < GT683R_LED_COUNT; i++)
 		led_classdev_unregister(&led->led_devs[i]);
-	flush_work(&led->work);
+	flush_work_with_sync_wait(&led->work);
 	hid_hw_stop(hdev);
 }
 

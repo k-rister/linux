@@ -247,7 +247,7 @@ static void drv2667_close(struct input_dev *input)
 	struct drv2667_data *haptics = input_get_drvdata(input);
 	int error;
 
-	cancel_work_sync(&haptics->work);
+	cancel_work_sync_with_sync_wait(&haptics->work);
 
 	error = regmap_update_bits(haptics->regmap, DRV2667_CTRL_2,
 				   DRV2667_STANDBY, DRV2667_STANDBY);

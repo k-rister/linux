@@ -1445,7 +1445,7 @@ void zd_chip_disable_int(struct zd_chip *chip)
 	mutex_unlock(&chip->mutex);
 
 	/* cancel pending interrupt work */
-	cancel_work_sync(&zd_chip_to_mac(chip)->process_intr);
+	cancel_work_sync_with_sync_wait(&zd_chip_to_mac(chip)->process_intr);
 }
 
 int zd_chip_enable_rxtx(struct zd_chip *chip)

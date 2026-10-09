@@ -3283,7 +3283,7 @@ static void toshiba_acpi_remove(struct platform_device *pdev)
 
 	if (dev->ntfy_supported) {
 		i8042_remove_filter(toshiba_acpi_i8042_filter);
-		cancel_work_sync(&dev->hotkey_work);
+		cancel_work_sync_with_sync_wait(&dev->hotkey_work);
 	}
 
 	if (dev->hotkey_dev)

@@ -172,7 +172,7 @@ static void pm8xxx_vib_close(struct input_dev *dev)
 {
 	struct pm8xxx_vib *vib = input_get_drvdata(dev);
 
-	cancel_work_sync(&vib->work);
+	cancel_work_sync_with_sync_wait(&vib->work);
 	if (vib->active)
 		pm8xxx_vib_set(vib, false);
 }

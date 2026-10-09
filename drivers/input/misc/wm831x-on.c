@@ -31,6 +31,7 @@ struct wm831x_on {
 	struct input_dev *dev;
 	struct delayed_work work;
 	struct wm831x *wm831x;
+	int irq;
 };
 
 /*
@@ -72,8 +73,15 @@ static int wm831x_on_probe(struct platform_device *pdev)
 {
 	struct wm831x *wm831x = dev_get_drvdata(pdev->dev.parent);
 	struct wm831x_on *wm831x_on;
-	int irq = wm831x_irq(wm831x, platform_get_irq(pdev, 0));
+	int irq = platform_get_irq(pdev, 0);
 	int ret;
+
+	if (irq < 0)
+		return irq;
+
+	irq = wm831x_irq(wm831x, irq);
+	if (!irq)
+		return -EINVAL;
 
 	wm831x_on = devm_kzalloc(&pdev->dev, sizeof(struct wm831x_on),
 				 GFP_KERNEL);
@@ -83,6 +91,7 @@ static int wm831x_on_probe(struct platform_device *pdev)
 	}
 
 	wm831x_on->wm831x = wm831x;
+	wm831x_on->irq = irq;
 	INIT_DELAYED_WORK(&wm831x_on->work, wm831x_poll_on);
 
 	wm831x_on->dev = devm_input_allocate_device(&pdev->dev);
@@ -126,10 +135,9 @@ err:
 static void wm831x_on_remove(struct platform_device *pdev)
 {
 	struct wm831x_on *wm831x_on = platform_get_drvdata(pdev);
-	int irq = platform_get_irq(pdev, 0);
 
-	free_irq(irq, wm831x_on);
-	cancel_delayed_work_sync(&wm831x_on->work);
+	free_irq(wm831x_on->irq, wm831x_on);
+	cancel_delayed_work_sync_with_sync_wait(&wm831x_on->work);
 }
 
 static struct platform_driver wm831x_on_driver = {

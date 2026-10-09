@@ -139,7 +139,7 @@ static void arizona_haptics_close(struct input_dev *input)
 	struct arizona_haptics *haptics = input_get_drvdata(input);
 	struct snd_soc_dapm_context *dapm = haptics->arizona->dapm;
 
-	cancel_work_sync(&haptics->work);
+	cancel_work_sync_with_sync_wait(&haptics->work);
 
 	if (dapm)
 		snd_soc_dapm_disable_pin(dapm, "HAPTICS");

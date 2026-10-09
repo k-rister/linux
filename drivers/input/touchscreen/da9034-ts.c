@@ -281,7 +281,7 @@ static void da9034_touch_close(struct input_dev *dev)
 	da903x_unregister_notifier(touch->da9034_dev, &touch->notifier,
 			DA9034_EVENT_PEN_DOWN | DA9034_EVENT_TSI_READY);
 
-	cancel_delayed_work_sync(&touch->tsi_work);
+	cancel_delayed_work_sync_with_sync_wait(&touch->tsi_work);
 
 	touch->state = STATE_IDLE;
 	stop_tsi(touch);

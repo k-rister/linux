@@ -54,7 +54,7 @@ static void gpio_beeper_close(struct input_dev *input)
 {
 	struct gpio_beeper *beep = input_get_drvdata(input);
 
-	cancel_work_sync(&beep->work);
+	cancel_work_sync_with_sync_wait(&beep->work);
 	gpio_beeper_toggle(beep, false);
 }
 

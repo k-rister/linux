@@ -540,7 +540,7 @@ static void ds1374_remove(struct i2c_client *client)
 		mutex_unlock(&ds1374->mutex);
 
 		devm_free_irq(&client->dev, client->irq, client);
-		cancel_work_sync(&ds1374->work);
+		cancel_work_sync_with_sync_wait(&ds1374->work);
 	}
 }
 

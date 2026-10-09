@@ -203,7 +203,7 @@ static void da9052_ts_input_close(struct input_dev *input_dev)
 	tsi->stopped = true;
 	mb();
 	da9052_disable_irq(tsi->da9052, DA9052_IRQ_PENDOWN);
-	cancel_delayed_work_sync(&tsi->ts_pen_work);
+	cancel_delayed_work_sync_with_sync_wait(&tsi->ts_pen_work);
 
 	if (tsi->adc_on) {
 		da9052_disable_irq(tsi->da9052, DA9052_IRQ_TSIREADY);

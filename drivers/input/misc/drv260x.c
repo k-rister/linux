@@ -263,7 +263,7 @@ static void drv260x_close(struct input_dev *input)
 	struct drv260x_data *haptics = input_get_drvdata(input);
 	int error;
 
-	cancel_work_sync(&haptics->work);
+	cancel_work_sync_with_sync_wait(&haptics->work);
 
 	error = regmap_write(haptics->regmap, DRV260X_MODE, DRV260X_STANDBY);
 	if (error)

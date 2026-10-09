@@ -362,7 +362,7 @@ static void bigben_remove(struct hid_device *hid)
 	bigben->removed = true;
 	spin_unlock_irqrestore(&bigben->lock, flags);
 
-	cancel_work_sync(&bigben->worker);
+	cancel_work_sync_with_sync_wait(&bigben->worker);
 	hid_hw_stop(hid);
 }
 

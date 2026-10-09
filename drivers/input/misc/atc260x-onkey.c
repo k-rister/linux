@@ -184,7 +184,7 @@ static void atc260x_onkey_close(struct input_dev *dev)
 	struct atc260x_onkey *onkey = input_get_drvdata(dev);
 
 	disable_irq(onkey->irq);
-	cancel_delayed_work_sync(&onkey->work);
+	cancel_delayed_work_sync_with_sync_wait(&onkey->work);
 }
 
 static int atc260x_onkey_probe(struct platform_device *pdev)

@@ -121,7 +121,7 @@ static void pwm_vibrator_close(struct input_dev *input)
 {
 	struct pwm_vibrator *vibrator = input_get_drvdata(input);
 
-	cancel_work_sync(&vibrator->play_work);
+	cancel_work_sync_with_sync_wait(&vibrator->play_work);
 	pwm_vibrator_stop(vibrator);
 }
 
@@ -230,7 +230,7 @@ static int pwm_vibrator_suspend(struct device *dev)
 {
 	struct pwm_vibrator *vibrator = dev_get_drvdata(dev);
 
-	cancel_work_sync(&vibrator->play_work);
+	cancel_work_sync_with_sync_wait(&vibrator->play_work);
 	if (vibrator->level)
 		pwm_vibrator_stop(vibrator);
 

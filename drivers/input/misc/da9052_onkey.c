@@ -119,7 +119,7 @@ static int da9052_onkey_probe(struct platform_device *pdev)
 
 err_free_irq:
 	da9052_free_irq(onkey->da9052, DA9052_IRQ_NONKEY, onkey);
-	cancel_delayed_work_sync(&onkey->work);
+	cancel_delayed_work_sync_with_sync_wait(&onkey->work);
 err_free_mem:
 	input_free_device(input_dev);
 	kfree(onkey);
@@ -132,7 +132,7 @@ static void da9052_onkey_remove(struct platform_device *pdev)
 	struct da9052_onkey *onkey = platform_get_drvdata(pdev);
 
 	da9052_free_irq(onkey->da9052, DA9052_IRQ_NONKEY, onkey);
-	cancel_delayed_work_sync(&onkey->work);
+	cancel_delayed_work_sync_with_sync_wait(&onkey->work);
 
 	input_unregister_device(onkey->input);
 	kfree(onkey);

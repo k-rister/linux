@@ -18,6 +18,7 @@
 #include <linux/errno.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/workqueue.h>
 #include <linux/usb/input.h>
 
 /*
@@ -807,7 +808,7 @@ static void atp_close(struct input_dev *input)
 	struct atp *dev = input_get_drvdata(input);
 
 	usb_kill_urb(dev->urb);
-	cancel_work_sync(&dev->work);
+	cancel_work_sync_with_sync_wait(&dev->work);
 }
 
 static int atp_handle_geyser(struct atp *dev)

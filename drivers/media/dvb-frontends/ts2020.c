@@ -11,6 +11,7 @@
 #include "ts2020.h"
 #include <linux/regmap.h>
 #include <linux/math64.h>
+#include <linux/workqueue.h>
 
 #define TS2020_XTAL_FREQ   27000 /* in kHz */
 #define FREQ_OFFSET_LOW_SYM_RATE 3000
@@ -71,7 +72,7 @@ static int ts2020_sleep(struct dvb_frontend *fe)
 
 	/* stop statistics polling */
 	if (!priv->dont_poll)
-		cancel_delayed_work_sync(&priv->stat_work);
+		cancel_delayed_work_sync_with_sync_wait(&priv->stat_work);
 	return 0;
 }
 
@@ -709,7 +710,7 @@ static void ts2020_remove(struct i2c_client *client)
 
 	/* stop statistics polling */
 	if (!dev->dont_poll)
-		cancel_delayed_work_sync(&dev->stat_work);
+		cancel_delayed_work_sync_with_sync_wait(&dev->stat_work);
 
 	regmap_exit(dev->regmap);
 	kfree(dev);

@@ -309,7 +309,7 @@ error:
 	if (pdata) {
 		if (pdata->urb) {
 			usb_kill_urb(pdata->urb);
-			cancel_delayed_work_sync(&pdata->work);
+			cancel_delayed_work_sync_with_sync_wait(&pdata->work);
 			usb_free_coherent(pdata->udev, ACD_URB_BUFFER_LEN,
 					pdata->urbdata, pdata->urb->transfer_dma);
 			usb_free_urb(pdata->urb);
@@ -329,7 +329,7 @@ static void appledisplay_disconnect(struct usb_interface *iface)
 
 	if (pdata) {
 		usb_kill_urb(pdata->urb);
-		cancel_delayed_work_sync(&pdata->work);
+		cancel_delayed_work_sync_with_sync_wait(&pdata->work);
 		backlight_device_unregister(pdata->bd);
 		usb_free_coherent(pdata->udev, ACD_URB_BUFFER_LEN,
 			pdata->urbdata, pdata->urb->transfer_dma);

@@ -227,7 +227,7 @@ static int __pegasus_open(struct pegasus *pegasus)
 	error = pegasus_set_mode(pegasus, PEN_MODE_XY, NOTETAKER_LED_MOUSE);
 	if (error) {
 		usb_kill_urb(pegasus->irq);
-		cancel_work_sync(&pegasus->init);
+		cancel_work_sync_with_sync_wait(&pegasus->init);
 		return error;
 	}
 
@@ -260,7 +260,7 @@ static void pegasus_close(struct input_dev *dev)
 
 	scoped_guard(mutex, &pegasus->pm_mutex) {
 		usb_kill_urb(pegasus->irq);
-		cancel_work_sync(&pegasus->init);
+		cancel_work_sync_with_sync_wait(&pegasus->init);
 
 		pegasus->is_open = false;
 	}
@@ -428,7 +428,7 @@ static int pegasus_suspend(struct usb_interface *intf, pm_message_t message)
 	guard(mutex)(&pegasus->pm_mutex);
 
 	usb_kill_urb(pegasus->irq);
-	cancel_work_sync(&pegasus->init);
+	cancel_work_sync_with_sync_wait(&pegasus->init);
 
 	return 0;
 }

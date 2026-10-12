@@ -22,6 +22,7 @@
 #include <linux/power_supply.h>
 #include <linux/property.h>
 #include <linux/regmap.h>
+#include <linux/workqueue.h>
 
 #include <linux/gpio/consumer.h>
 #include <linux/usb/phy_companion.h>
@@ -949,8 +950,8 @@ static void cpcap_charger_shutdown(struct platform_device *pdev)
 			 error);
 	}
 	cpcap_charger_update_state(ddata, POWER_SUPPLY_STATUS_DISCHARGING);
-	cancel_delayed_work_sync(&ddata->vbus_work);
-	cancel_delayed_work_sync(&ddata->detect_work);
+	cancel_delayed_work_sync_with_sync_wait(&ddata->vbus_work);
+	cancel_delayed_work_sync_with_sync_wait(&ddata->detect_work);
 }
 
 static void cpcap_charger_remove(struct platform_device *pdev)

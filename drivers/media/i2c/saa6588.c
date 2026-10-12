@@ -489,7 +489,7 @@ static void saa6588_remove(struct i2c_client *client)
 
 	v4l2_device_unregister_subdev(sd);
 
-	cancel_delayed_work_sync(&s->work);
+	cancel_delayed_work_sync_with_sync_wait(&s->work);
 }
 
 /* ----------------------------------------------------------------------- */

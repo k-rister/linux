@@ -18,6 +18,7 @@
 #include <linux/wait.h>
 #include <linux/sched.h>
 #include <linux/rmi.h>
+#include <linux/workqueue.h>
 #include "hid-ids.h"
 
 #define RMI_MOUSE_REPORT_ID		0x01 /* Mouse emulation Report */
@@ -783,7 +784,7 @@ static void rmi_remove(struct hid_device *hdev)
 	if ((hdata->device_flags & RMI_DEVICE)
 	    && test_bit(RMI_STARTED, &hdata->flags)) {
 		clear_bit(RMI_STARTED, &hdata->flags);
-		cancel_work_sync(&hdata->reset_work);
+		cancel_work_sync_with_sync_wait(&hdata->reset_work);
 		rmi_unregister_transport_device(&hdata->xport);
 	}
 

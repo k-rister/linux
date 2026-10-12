@@ -19,6 +19,7 @@
 #include <linux/ptp_classify.h>
 #include <linux/ptp_clock_kernel.h>
 #include <linux/stddef.h>
+#include <linux/workqueue.h>
 
 MODULE_DESCRIPTION("Driver for the ZHAW InES PTP time stamping IP core");
 MODULE_AUTHOR("Richard Cochran <richardcochran@gmail.com>");
@@ -184,7 +185,7 @@ static void ines_clock_cleanup(struct ines_clock *clock)
 
 	for (i = 0; i < INES_N_PORTS; i++) {
 		port = &clock->port[i];
-		cancel_delayed_work_sync(&port->ts_work);
+		cancel_delayed_work_sync_with_sync_wait(&port->ts_work);
 	}
 }
 

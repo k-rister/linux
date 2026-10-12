@@ -15,6 +15,7 @@
 #include <linux/timekeeping.h>
 #include <linux/string.h>
 #include <linux/of.h>
+#include <linux/workqueue.h>
 #include <linux/mfd/rsmu.h>
 #include <linux/mfd/idt8a340_reg.h>
 #include <linux/unaligned.h>
@@ -2453,7 +2454,7 @@ static void idtcm_remove(struct platform_device *pdev)
 
 	idtcm->extts_mask = 0;
 	ptp_clock_unregister_all(idtcm);
-	cancel_delayed_work_sync(&idtcm->extts_work);
+	cancel_delayed_work_sync_with_sync_wait(&idtcm->extts_work);
 }
 
 static struct platform_driver idtcm_driver = {

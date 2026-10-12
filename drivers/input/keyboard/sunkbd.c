@@ -246,7 +246,7 @@ static void sunkbd_enable(struct sunkbd *sunkbd, bool enable)
 
 	if (!enable) {
 		wake_up_interruptible(&sunkbd->wait);
-		cancel_work_sync(&sunkbd->tq);
+		cancel_work_sync_with_sync_wait(&sunkbd->tq);
 	}
 }
 

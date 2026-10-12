@@ -44,6 +44,7 @@
 #include <linux/usb.h>
 #include <linux/timer.h>
 #include <linux/unaligned.h>
+#include <linux/workqueue.h>
 
 #include "hid-ids.h"
 
@@ -2122,7 +2123,7 @@ static inline void sony_cancel_work_sync(struct sony_sc *sc)
 		scoped_guard(spinlock_irqsave, &sc->lock) {
 			sc->state_worker_initialized = 0;
 		}
-		cancel_work_sync(&sc->state_worker);
+		cancel_work_sync_with_sync_wait(&sc->state_worker);
 	}
 }
 

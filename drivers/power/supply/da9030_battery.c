@@ -394,7 +394,7 @@ static int da9030_battery_event(struct notifier_block *nb, unsigned long event,
 
 	switch (event) {
 	case DA9030_EVENT_CHDET:
-		cancel_delayed_work_sync(&charger->work);
+		cancel_delayed_work_sync_with_sync_wait(&charger->work);
 		schedule_work(&charger->work.work);
 		break;
 	case DA9030_EVENT_VBATMON:
@@ -562,7 +562,7 @@ static void da9030_battery_remove(struct platform_device *dev)
 	da903x_unregister_notifier(charger->master, &charger->nb,
 				   DA9030_EVENT_CHDET | DA9030_EVENT_VBATMON |
 				   DA9030_EVENT_CHIOVER | DA9030_EVENT_TBAT);
-	cancel_delayed_work_sync(&charger->work);
+	cancel_delayed_work_sync_with_sync_wait(&charger->work);
 	da9030_set_charge(charger, 0);
 }
 

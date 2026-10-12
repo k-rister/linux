@@ -24,6 +24,7 @@
 #include <linux/property.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/workqueue.h>
 
 #include <linux/iio/events.h>
 #include <linux/iio/iio.h>
@@ -313,7 +314,7 @@ static int tsl2563_get_adc(struct tsl2563_chip *chip)
 		goto out;
 
 	if (!chip->int_enabled) {
-		cancel_delayed_work_sync(&chip->poweroff_work);
+		cancel_delayed_work_sync_with_sync_wait(&chip->poweroff_work);
 
 		if (!tsl2563_get_power(chip)) {
 			ret = tsl2563_set_power(chip, 1);
@@ -637,7 +638,7 @@ static int tsl2563_write_interrupt_config(struct iio_dev *indio_dev,
 	mutex_lock(&chip->lock);
 	if (state && !(chip->intr & TSL2563_INT_MASK)) {
 		/* ensure the chip is actually on */
-		cancel_delayed_work_sync(&chip->poweroff_work);
+		cancel_delayed_work_sync_with_sync_wait(&chip->poweroff_work);
 		if (!tsl2563_get_power(chip)) {
 			ret = tsl2563_set_power(chip, 1);
 			if (ret)
@@ -775,7 +776,7 @@ static int tsl2563_probe(struct i2c_client *client)
 	return 0;
 
 fail:
-	cancel_delayed_work_sync(&chip->poweroff_work);
+	cancel_delayed_work_sync_with_sync_wait(&chip->poweroff_work);
 	return err;
 }
 
@@ -786,7 +787,7 @@ static void tsl2563_remove(struct i2c_client *client)
 
 	iio_device_unregister(indio_dev);
 	if (!chip->int_enabled)
-		cancel_delayed_work_sync(&chip->poweroff_work);
+		cancel_delayed_work_sync_with_sync_wait(&chip->poweroff_work);
 	/* Ensure that interrupts are disabled - then flush any bottom halves */
 	tsl2563_configure_irq(chip, false);
 	tsl2563_set_power(chip, 0);

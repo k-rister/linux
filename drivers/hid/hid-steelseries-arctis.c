@@ -571,7 +571,7 @@ static void steelseries_arctis_remove(struct hid_device *hdev)
 		sd->battery = NULL;
 		spin_unlock_irqrestore(&sd->lock, flags);
 
-		cancel_delayed_work_sync(&sd->status_work);
+		cancel_delayed_work_sync_with_sync_wait(&sd->status_work);
 
 		if (battery)
 			power_supply_unregister(battery);

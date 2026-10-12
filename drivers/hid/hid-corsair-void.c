@@ -727,12 +727,12 @@ static void corsair_void_remove(struct hid_device *hid_dev)
 	struct corsair_void_drvdata *drvdata = hid_get_drvdata(hid_dev);
 
 	hid_hw_stop(hid_dev);
-	cancel_work_sync(&drvdata->battery_work);
+	cancel_work_sync_with_sync_wait(&drvdata->battery_work);
 	if (drvdata->battery)
 		power_supply_unregister(drvdata->battery);
 
-	cancel_delayed_work_sync(&drvdata->delayed_status_work);
-	cancel_delayed_work_sync(&drvdata->delayed_firmware_work);
+	cancel_delayed_work_sync_with_sync_wait(&drvdata->delayed_status_work);
+	cancel_delayed_work_sync_with_sync_wait(&drvdata->delayed_firmware_work);
 	sysfs_remove_group(&hid_dev->dev.kobj, &corsair_void_attr_group);
 }
 

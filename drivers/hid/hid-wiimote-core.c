@@ -14,6 +14,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/spinlock.h>
+#include <linux/workqueue.h>
 #include "hid-ids.h"
 #include "hid-wiimote.h"
 
@@ -1770,7 +1771,7 @@ static void wiimote_destroy(struct wiimote_data *wdata)
 	wdata->state.flags |= WIIPROTO_FLAG_EXITING;
 	spin_unlock_irqrestore(&wdata->state.lock, flags);
 
-	cancel_work_sync(&wdata->init_worker);
+	cancel_work_sync_with_sync_wait(&wdata->init_worker);
 	timer_shutdown_sync(&wdata->timer);
 
 	device_remove_file(&wdata->hdev->dev, &dev_attr_devtype);
@@ -1779,7 +1780,7 @@ static void wiimote_destroy(struct wiimote_data *wdata)
 	wiimote_mp_unload(wdata);
 	wiimote_ext_unload(wdata);
 	wiimote_modules_unload(wdata);
-	cancel_work_sync(&wdata->queue.worker);
+	cancel_work_sync_with_sync_wait(&wdata->queue.worker);
 	hid_hw_close(wdata->hdev);
 	hid_hw_stop(wdata->hdev);
 

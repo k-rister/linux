@@ -34,6 +34,7 @@
 #include <linux/hid.h>
 #include <linux/input.h>
 #include <linux/spinlock.h>
+#include <linux/workqueue.h>
 #include "hid-wiimote.h"
 
 /*
@@ -169,7 +170,7 @@ static void wiimod_rumble_remove(const struct wiimod_ops *ops,
 {
 	unsigned long flags;
 
-	cancel_work_sync(&wdata->rumble_worker);
+	cancel_work_sync_with_sync_wait(&wdata->rumble_worker);
 
 	spin_lock_irqsave(&wdata->state.lock, flags);
 	wiiproto_req_rumble(wdata, 0);
@@ -1948,7 +1949,7 @@ static void wiimod_pro_remove(const struct wiimod_ops *ops,
 
 	input_unregister_device(wdata->extension.input);
 	wdata->extension.input = NULL;
-	cancel_work_sync(&wdata->rumble_worker);
+	cancel_work_sync_with_sync_wait(&wdata->rumble_worker);
 	device_remove_file(&wdata->hdev->dev,
 			   &dev_attr_pro_calib);
 

@@ -13,6 +13,7 @@
 #include <linux/kdev_t.h>
 #include <linux/idr.h>
 #include <linux/pm_runtime.h>
+#include <linux/workqueue.h>
 #include <linux/greybus.h>
 
 struct gb_vibrator_device {
@@ -49,7 +50,7 @@ static int turn_on(struct gb_vibrator_device *vib, u16 timeout_ms)
 		return ret;
 
 	/* Vibrator was switched ON earlier */
-	if (cancel_delayed_work_sync(&vib->delayed_work))
+	if (cancel_delayed_work_sync_with_sync_wait(&vib->delayed_work))
 		turn_off(vib);
 
 	ret = gb_operation_sync(vib->connection, GB_VIBRATOR_TYPE_ON,
@@ -193,7 +194,7 @@ static void gb_vibrator_disconnect(struct gb_bundle *bundle)
 	if (ret)
 		gb_pm_runtime_get_noresume(bundle);
 
-	if (cancel_delayed_work_sync(&vib->delayed_work))
+	if (cancel_delayed_work_sync_with_sync_wait(&vib->delayed_work))
 		turn_off(vib);
 
 	device_unregister(vib->dev);

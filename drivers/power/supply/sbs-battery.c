@@ -657,7 +657,7 @@ static int sbs_get_battery_property(struct i2c_client *client,
 		if (chip->poll_time == 0)
 			chip->last_state = val->intval;
 		else if (chip->last_state != val->intval) {
-			cancel_delayed_work_sync(&chip->work);
+			cancel_delayed_work_sync_with_sync_wait(&chip->work);
 			power_supply_changed(chip->power_supply);
 			chip->poll_time = 0;
 		}
@@ -1073,7 +1073,7 @@ static void sbs_external_power_changed(struct power_supply *psy)
 	struct sbs_info *chip = power_supply_get_drvdata(psy);
 
 	/* cancel outstanding work */
-	cancel_delayed_work_sync(&chip->work);
+	cancel_delayed_work_sync_with_sync_wait(&chip->work);
 
 	schedule_delayed_work(&chip->work, HZ);
 	chip->poll_time = chip->poll_retry_count;
@@ -1241,7 +1241,7 @@ static int sbs_suspend(struct device *dev)
 	int ret;
 
 	if (chip->poll_time > 0)
-		cancel_delayed_work_sync(&chip->work);
+		cancel_delayed_work_sync_with_sync_wait(&chip->work);
 
 	if (chip->flags & SBS_FLAGS_TI_BQ20ZX5) {
 		/* Write to manufacturer access with sleep command. */

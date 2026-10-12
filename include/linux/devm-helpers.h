@@ -28,7 +28,7 @@
 
 static inline void devm_delayed_work_drop(void *res)
 {
-	cancel_delayed_work_sync(res);
+	cancel_delayed_work_sync_with_sync_wait(res);
 }
 
 /**
@@ -53,7 +53,7 @@ static inline int devm_delayed_work_autocancel(struct device *dev,
 
 static inline void devm_work_drop(void *res)
 {
-	cancel_work_sync(res);
+	cancel_work_sync_with_sync_wait(res);
 }
 
 /**

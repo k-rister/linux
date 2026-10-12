@@ -1028,7 +1028,7 @@ static void magicmouse_remove(struct hid_device *hdev)
 	struct magicmouse_sc *msc = hid_get_drvdata(hdev);
 
 	if (msc) {
-		cancel_delayed_work_sync(&msc->work);
+		cancel_delayed_work_sync_with_sync_wait(&msc->work);
 		if (is_usb_magicmouse2(hdev->vendor, hdev->product) ||
 		    is_usb_magictrackpad2(hdev->vendor, hdev->product))
 			timer_delete_sync(&msc->battery_timer);

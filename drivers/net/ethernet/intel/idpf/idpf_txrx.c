@@ -4164,8 +4164,8 @@ static void idpf_vport_intr_dis_dim_all(struct idpf_q_vec_rsrc *rsrc)
 	for (u16 v_idx = 0; v_idx < rsrc->num_q_vectors; v_idx++) {
 		struct idpf_q_vector *q_vector = &rsrc->q_vectors[v_idx];
 
-		disable_work_sync(&q_vector->tx_dim.work);
-		disable_work_sync(&q_vector->rx_dim.work);
+		disable_work_sync_with_sync_wait(&q_vector->tx_dim.work);
+		disable_work_sync_with_sync_wait(&q_vector->rx_dim.work);
 	}
 }
 

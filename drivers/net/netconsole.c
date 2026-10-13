@@ -366,7 +366,7 @@ static void netconsole_skb_pool_init(struct netconsole_target *nt)
 
 static void netconsole_skb_pool_flush(struct netconsole_target *nt)
 {
-	cancel_work_sync(&nt->refill_wq);
+	cancel_work_sync_with_sync_wait(&nt->refill_wq);
 	skb_queue_purge_reason(&nt->skb_pool, SKB_CONSUMED);
 }
 

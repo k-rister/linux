@@ -1037,7 +1037,7 @@ static void bcm5974_disconnect(struct usb_interface *iface)
 {
 	struct bcm5974 *dev = usb_get_intfdata(iface);
 
-	disable_work_sync(&dev->mode_reset_work);
+	disable_work_sync_with_sync_wait(&dev->mode_reset_work);
 	usb_set_intfdata(iface, NULL);
 
 	input_unregister_device(dev->input);

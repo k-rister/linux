@@ -1456,7 +1456,7 @@ static void psmouse_disconnect(struct serio *serio)
 	struct psmouse *psmouse = psmouse_from_serio(serio);
 	struct psmouse *parent = NULL;
 
-	disable_work_sync(&psmouse->resync_work);
+	disable_work_sync_with_sync_wait(&psmouse->resync_work);
 
 	guard(mutex)(&psmouse_mutex);
 

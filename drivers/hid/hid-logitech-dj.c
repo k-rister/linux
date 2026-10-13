@@ -14,6 +14,7 @@
 #include <linux/delay.h>
 #include <linux/usb.h> /* For to_usb_interface for kvm extra intf check */
 #include <linux/unaligned.h>
+#include <linux/workqueue.h>
 #include "hid-ids.h"
 
 #define DJ_MAX_PAIRED_DEVICES			7
@@ -2066,7 +2067,7 @@ static void logi_dj_remove(struct hid_device *hdev)
 	djrcv_dev->ready = false;
 	spin_unlock_irqrestore(&djrcv_dev->lock, flags);
 
-	cancel_work_sync(&djrcv_dev->work);
+	cancel_work_sync_with_sync_wait(&djrcv_dev->work);
 
 	hid_hw_close(hdev);
 	hid_hw_stop(hdev);

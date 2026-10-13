@@ -4425,7 +4425,7 @@ static void cnic_free_irq(struct cnic_dev *dev)
 
 	if (ethdev->drv_state & CNIC_DRV_STATE_USING_MSIX) {
 		cp->disable_int_sync(dev);
-		cancel_work_sync(&cp->cnic_irq_bh_work);
+		cancel_work_sync_with_sync_wait(&cp->cnic_irq_bh_work);
 		free_irq(ethdev->irq_arr[0].vector, dev);
 	}
 }
@@ -4438,7 +4438,7 @@ static int cnic_request_irq(struct cnic_dev *dev)
 
 	err = request_irq(ethdev->irq_arr[0].vector, cnic_irq, 0, "cnic", dev);
 	if (err)
-		disable_work_sync(&cp->cnic_irq_bh_work);
+		disable_work_sync_with_sync_wait(&cp->cnic_irq_bh_work);
 
 	return err;
 }

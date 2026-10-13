@@ -211,7 +211,7 @@ static void amd_sfh_suspend(struct amd_mp2_dev *mp2)
 		}
 	}
 
-	cancel_delayed_work_sync(&cl_data->work_buffer);
+	cancel_delayed_work_sync_with_sync_wait(&cl_data->work_buffer);
 	amd_sfh_clear_intr(mp2);
 }
 
@@ -377,8 +377,8 @@ int amd_sfh_hid_client_deinit(struct amd_mp2_dev *privdata)
 		}
 	}
 
-	cancel_delayed_work_sync(&cl_data->work);
-	cancel_delayed_work_sync(&cl_data->work_buffer);
+	cancel_delayed_work_sync_with_sync_wait(&cl_data->work);
+	cancel_delayed_work_sync_with_sync_wait(&cl_data->work_buffer);
 	amdtp_hid_remove(cl_data);
 
 	return 0;

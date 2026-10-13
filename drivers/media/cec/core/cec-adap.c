@@ -993,7 +993,7 @@ int cec_transmit_msg_fh(struct cec_adapter *adap, struct cec_msg *msg,
 	 */
 	mutex_unlock(&adap->lock);
 	err = wait_for_completion_killable(&data->c);
-	disable_delayed_work_sync(&data->work);
+	disable_delayed_work_sync_with_sync_wait(&data->work);
 	mutex_lock(&adap->lock);
 
 	if (err)
@@ -1298,7 +1298,7 @@ void cec_received_msg_ts(struct cec_adapter *adap,
 			/* Cancel the pending timeout work */
 			if (!cancel_delayed_work(&data->work)) {
 				mutex_unlock(&adap->lock);
-				cancel_delayed_work_sync(&data->work);
+				cancel_delayed_work_sync_with_sync_wait(&data->work);
 				mutex_lock(&adap->lock);
 			}
 			/*

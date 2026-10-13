@@ -1119,8 +1119,8 @@ static void virtballoon_quiesce(struct virtio_balloon *vb)
 	spin_lock_irq(&vb->stop_update_lock);
 	vb->stop_update = true;
 	spin_unlock_irq(&vb->stop_update_lock);
-	cancel_work_sync(&vb->update_balloon_size_work);
-	cancel_work_sync(&vb->update_balloon_stats_work);
+	cancel_work_sync_with_sync_wait(&vb->update_balloon_size_work);
+	cancel_work_sync_with_sync_wait(&vb->update_balloon_stats_work);
 
 	if (virtio_has_feature(vdev, VIRTIO_BALLOON_F_FREE_PAGE_HINT))
 		cancel_work_sync_with_sync_wait(&vb->report_free_page_work);

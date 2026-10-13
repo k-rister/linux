@@ -684,7 +684,7 @@ static int slcan_netdev_close(struct net_device *dev)
 
 	/* TTY discipline is running. */
 	clear_bit(TTY_DO_WRITE_WAKEUP, &sl->tty->flags);
-	flush_work(&sl->tx_work);
+	flush_work_with_sync_wait(&sl->tx_work);
 
 	netif_stop_queue(dev);
 	sl->rcount   = 0;
@@ -883,7 +883,7 @@ static void slcan_close(struct tty_struct *tty)
 	 * The netdev needn't be UP (so .ndo_stop() is not called). Hence make
 	 * sure this is not running before freeing it up.
 	 */
-	flush_work(&sl->tx_work);
+	flush_work_with_sync_wait(&sl->tx_work);
 
 	/* Mark channel as dead */
 	spin_lock_bh(&sl->lock);

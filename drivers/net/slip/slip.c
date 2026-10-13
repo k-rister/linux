@@ -902,7 +902,7 @@ static void slip_close(struct tty_struct *tty)
 	spin_unlock_bh(&sl->lock);
 
 	synchronize_rcu();
-	flush_work(&sl->tx_work);
+	flush_work_with_sync_wait(&sl->tx_work);
 
 	/* VSV = very important to remove timers */
 #ifdef CONFIG_SLIP_SMART

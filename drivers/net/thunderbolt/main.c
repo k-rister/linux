@@ -322,8 +322,8 @@ static void start_login(struct tbnet *net)
 
 static void stop_login(struct tbnet *net)
 {
-	cancel_delayed_work_sync(&net->login_work);
-	cancel_work_sync(&net->connected_work);
+	cancel_delayed_work_sync_with_sync_wait(&net->login_work);
+	cancel_work_sync_with_sync_wait(&net->connected_work);
 
 	netdev_dbg(net->dev, "login stopped\n");
 }
@@ -999,7 +999,7 @@ static int tbnet_stop(struct net_device *dev)
 
 	napi_disable(&net->napi);
 
-	cancel_work_sync(&net->disconnect_work);
+	cancel_work_sync_with_sync_wait(&net->disconnect_work);
 	tbnet_tear_down(net, true);
 
 	tb_ring_free(net->rx_ring.ring);

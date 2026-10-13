@@ -3394,9 +3394,9 @@ static void enic_remove(struct pci_dev *pdev)
 	if (netdev) {
 		struct enic *enic = netdev_priv(netdev);
 
-		disable_work_sync(&enic->reset);
-		disable_work_sync(&enic->tx_hang_reset);
-		disable_work_sync(&enic->change_mtu_work);
+		disable_work_sync_with_sync_wait(&enic->reset);
+		disable_work_sync_with_sync_wait(&enic->tx_hang_reset);
+		disable_work_sync_with_sync_wait(&enic->change_mtu_work);
 
 		/* Close the admin channel and unregister from the PF before
 		 * unregister_netdev() to prevent a late PF notification from

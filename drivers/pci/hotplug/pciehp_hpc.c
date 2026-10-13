@@ -1095,7 +1095,7 @@ struct controller *pcie_init(struct pcie_device *dev)
 
 void pciehp_release_ctrl(struct controller *ctrl)
 {
-	cancel_delayed_work_sync(&ctrl->button_work);
+	cancel_delayed_work_sync_with_sync_wait(&ctrl->button_work);
 	kfree(ctrl);
 }
 

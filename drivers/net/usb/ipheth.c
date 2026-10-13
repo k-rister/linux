@@ -504,7 +504,7 @@ static int ipheth_close(struct net_device *net)
 	 * try to re-arm the carrier work. Disable it instead of cancelling
 	 * it, so that such a schedule_delayed_work() is a no-op.
 	 */
-	disable_delayed_work_sync(&dev->carrier_work);
+	disable_delayed_work_sync_with_sync_wait(&dev->carrier_work);
 	return 0;
 }
 

@@ -995,7 +995,7 @@ static void tifm_sd_remove(struct tifm_dev *sock)
 	writel(0, sock->addr + SOCK_MMCSD_INT_ENABLE);
 	spin_unlock_irqrestore(&sock->lock, flags);
 
-	cancel_work_sync(&host->finish_bh_work);
+	cancel_work_sync_with_sync_wait(&host->finish_bh_work);
 
 	spin_lock_irqsave(&sock->lock, flags);
 	if (host->req) {

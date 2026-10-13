@@ -1049,7 +1049,7 @@ static int mmc_sdio_suspend(struct mmc_host *host)
 
 	/* Prevent processing of SDIO IRQs in suspended state. */
 	mmc_card_set_suspended(host->card);
-	cancel_work_sync(&host->sdio_irq_work);
+	cancel_work_sync_with_sync_wait(&host->sdio_irq_work);
 
 	mmc_claim_host(host);
 

@@ -530,7 +530,7 @@ int mei_cldev_register_rx_cb(struct mei_cl_device *cldev, mei_cldev_cb_t rx_cb)
 		ret = -ENODEV;
 	mutex_unlock(&bus->device_lock);
 	if (ret && ret != -EBUSY) {
-		cancel_work_sync(&cldev->rx_work);
+		cancel_work_sync_with_sync_wait(&cldev->rx_work);
 		cldev->rx_cb = NULL;
 		return ret;
 	}
@@ -568,7 +568,7 @@ int mei_cldev_register_notif_cb(struct mei_cl_device *cldev,
 	ret = mei_cl_notify_request(cldev->cl, NULL, 1);
 	mutex_unlock(&bus->device_lock);
 	if (ret) {
-		cancel_work_sync(&cldev->notif_work);
+		cancel_work_sync_with_sync_wait(&cldev->notif_work);
 		cldev->notif_cb = NULL;
 		return ret;
 	}
@@ -864,12 +864,12 @@ EXPORT_SYMBOL_GPL(mei_cldev_enable);
 static void mei_cldev_unregister_callbacks(struct mei_cl_device *cldev)
 {
 	if (cldev->rx_cb) {
-		cancel_work_sync(&cldev->rx_work);
+		cancel_work_sync_with_sync_wait(&cldev->rx_work);
 		cldev->rx_cb = NULL;
 	}
 
 	if (cldev->notif_cb) {
-		cancel_work_sync(&cldev->notif_work);
+		cancel_work_sync_with_sync_wait(&cldev->notif_work);
 		cldev->notif_cb = NULL;
 	}
 }

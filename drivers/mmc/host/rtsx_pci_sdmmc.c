@@ -1516,7 +1516,7 @@ static void rtsx_pci_sdmmc_drv_remove(struct platform_device *pdev)
 	pcr->slots[RTSX_SD_CARD].card_event = NULL;
 	mmc = host->mmc;
 
-	cancel_work_sync(&host->work);
+	cancel_work_sync_with_sync_wait(&host->work);
 
 	mutex_lock(&host->host_mutex);
 	if (host->mrq) {
@@ -1536,7 +1536,7 @@ static void rtsx_pci_sdmmc_drv_remove(struct platform_device *pdev)
 	mmc_remove_host(mmc);
 	host->eject = true;
 
-	flush_work(&host->work);
+	flush_work_with_sync_wait(&host->work);
 
 	pm_runtime_dont_use_autosuspend(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);

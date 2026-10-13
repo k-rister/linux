@@ -530,7 +530,7 @@ static int vsc_tp_probe(struct spi_device *spi)
 err_destroy_lock:
 	free_irq(spi->irq, tp);
 
-	cancel_work_sync(&tp->event_work);
+	cancel_work_sync_with_sync_wait(&tp->event_work);
 	mutex_destroy(&tp->event_notify_mutex);
 	mutex_destroy(&tp->mutex);
 
@@ -546,7 +546,7 @@ static void vsc_tp_remove(struct spi_device *spi)
 
 	free_irq(spi->irq, tp);
 
-	cancel_work_sync(&tp->event_work);
+	cancel_work_sync_with_sync_wait(&tp->event_work);
 	mutex_destroy(&tp->event_notify_mutex);
 	mutex_destroy(&tp->mutex);
 }

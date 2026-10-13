@@ -1160,7 +1160,7 @@ static int via_sd_probe(struct pci_dev *pcidev,
 free_irq:
 	writeb(0x0, sdhost->pcictrl_mmiobase + VIA_CRDR_PCIINTCTRL);
 	free_irq(pcidev->irq, sdhost);
-	cancel_work_sync(&sdhost->carddet_work);
+	cancel_work_sync_with_sync_wait(&sdhost->carddet_work);
 	/* carddet_work may re-enable the interrupt via via_reset_pcictrl(). */
 	writeb(0x0, sdhost->pcictrl_mmiobase + VIA_CRDR_PCIINTCTRL);
 unmap:
@@ -1205,13 +1205,13 @@ static void via_sd_remove(struct pci_dev *pcidev)
 
 	free_irq(pcidev->irq, sdhost);
 
-	cancel_work_sync(&sdhost->carddet_work);
+	cancel_work_sync_with_sync_wait(&sdhost->carddet_work);
 	/* carddet_work may re-enable the interrupt via via_reset_pcictrl(). */
 	writeb(0x0, sdhost->pcictrl_mmiobase + VIA_CRDR_PCIINTCTRL);
 
 	timer_delete_sync(&sdhost->timer);
 
-	cancel_work_sync(&sdhost->finish_bh_work);
+	cancel_work_sync_with_sync_wait(&sdhost->finish_bh_work);
 
 	/* switch off power */
 	gatt = readb(sdhost->pcictrl_mmiobase + VIA_CRDR_PCICLKGATT);

@@ -513,7 +513,7 @@ void mmc_cleanup_queue(struct mmc_queue *mq)
 	 * the queue, and the card has been removed, we could end up here with
 	 * the recovery not quite finished yet, so cancel it.
 	 */
-	cancel_work_sync(&mq->recovery_work);
+	cancel_work_sync_with_sync_wait(&mq->recovery_work);
 
 	blk_mq_free_tag_set(&mq->tag_set);
 

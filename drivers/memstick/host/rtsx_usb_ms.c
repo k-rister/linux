@@ -816,8 +816,8 @@ static void rtsx_usb_ms_drv_remove(struct platform_device *pdev)
 
 	host->eject = true;
 	msh->removing = true;
-	cancel_work_sync(&host->handle_req);
-	cancel_delayed_work_sync(&host->poll_card);
+	cancel_work_sync_with_sync_wait(&host->handle_req);
+	cancel_delayed_work_sync_with_sync_wait(&host->poll_card);
 
 	mutex_lock(&host->host_mutex);
 	if (host->req) {

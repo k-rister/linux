@@ -1103,7 +1103,7 @@ static void cs42l43_dev_remove(void *data)
 {
 	struct cs42l43 *cs42l43 = data;
 
-	cancel_work_sync(&cs42l43->boot_work);
+	cancel_work_sync_with_sync_wait(&cs42l43->boot_work);
 
 	cs42l43_power_down(cs42l43);
 }

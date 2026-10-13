@@ -336,7 +336,7 @@ void mmc_regulator_unregister_undervoltage_notifier(struct mmc_host *host)
 		return;
 
 	regulator_unregister_notifier(host->supply.vmmc, &host->supply.vmmc_nb);
-	cancel_work_sync(&host->supply.uv_work);
+	cancel_work_sync_with_sync_wait(&host->supply.uv_work);
 }
 
 /**

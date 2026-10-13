@@ -763,7 +763,7 @@ static void cb710_mmc_exit(struct platform_device *pdev)
 	cb710_write_port_32(slot, CB710_MMC_CONFIG_PORT, 0);
 	cb710_write_port_16(slot, CB710_MMC_CONFIGB_PORT, 0);
 
-	cancel_work_sync(&reader->finish_req_bh_work);
+	cancel_work_sync_with_sync_wait(&reader->finish_req_bh_work);
 }
 
 static struct platform_driver cb710_mmc_driver = {

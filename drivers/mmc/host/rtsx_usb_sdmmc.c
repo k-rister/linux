@@ -1455,7 +1455,7 @@ static void rtsx_usb_sdmmc_drv_remove(struct platform_device *pdev)
 	mmc_remove_host(mmc);
 
 #ifdef RTSX_USB_USE_LEDS_CLASS
-	cancel_work_sync(&host->led_work);
+	cancel_work_sync_with_sync_wait(&host->led_work);
 	led_classdev_unregister(&host->led);
 #endif
 

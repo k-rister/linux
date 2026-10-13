@@ -37,6 +37,7 @@
 #include <linux/hid.h>
 #include <linux/mutex.h>
 #include <linux/unaligned.h>
+#include <linux/workqueue.h>
 
 #include <drm/drm_panel.h>
 
@@ -1176,7 +1177,7 @@ static int i2c_hid_core_panel_follower_suspend(struct drm_panel_follower *follow
 {
 	struct i2c_hid *ihid = container_of(follower, struct i2c_hid, panel_follower);
 
-	cancel_work_sync(&ihid->panel_follower_work);
+	cancel_work_sync_with_sync_wait(&ihid->panel_follower_work);
 
 	/* Match with ihid_core_panel_follower_work() */
 	smp_rmb();

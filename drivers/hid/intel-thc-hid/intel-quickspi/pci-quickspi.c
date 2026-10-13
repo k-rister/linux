@@ -10,6 +10,7 @@
 #include <linux/irqreturn.h>
 #include <linux/pci.h>
 #include <linux/pm_runtime.h>
+#include <linux/workqueue.h>
 
 #include <linux/gpio/consumer.h>
 
@@ -462,7 +463,7 @@ static struct quickspi_device *quickspi_dev_init(struct pci_dev *pdev, void __io
 static void quickspi_dev_deinit(struct quickspi_device *qsdev)
 {
 	WRITE_ONCE(qsdev->recovery_disabled, true);
-	cancel_work_sync(&qsdev->recover_work);
+	cancel_work_sync_with_sync_wait(&qsdev->recover_work);
 
 	thc_interrupt_quiesce(qsdev->thc_hw, true);
 	thc_interrupt_enable(qsdev->thc_hw, false);
@@ -770,7 +771,7 @@ static int quickspi_suspend(struct device *device)
 	}
 
 	WRITE_ONCE(qsdev->recovery_disabled, true);
-	cancel_work_sync(&qsdev->recover_work);
+	cancel_work_sync_with_sync_wait(&qsdev->recover_work);
 
 	ret = thc_interrupt_quiesce(qsdev->thc_hw, true);
 	if (ret)
@@ -880,7 +881,7 @@ static int quickspi_freeze(struct device *device)
 		return -ENODEV;
 
 	WRITE_ONCE(qsdev->recovery_disabled, true);
-	cancel_work_sync(&qsdev->recover_work);
+	cancel_work_sync_with_sync_wait(&qsdev->recover_work);
 
 	ret = thc_interrupt_quiesce(qsdev->thc_hw, true);
 	if (ret)

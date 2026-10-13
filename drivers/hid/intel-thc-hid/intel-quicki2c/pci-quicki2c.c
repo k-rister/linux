@@ -10,6 +10,7 @@
 #include <linux/pci.h>
 #include <linux/sizes.h>
 #include <linux/pm_runtime.h>
+#include <linux/workqueue.h>
 
 #include <linux/gpio/consumer.h>
 
@@ -453,7 +454,7 @@ static struct quicki2c_device *quicki2c_dev_init(struct pci_dev *pdev, void __io
 static void quicki2c_dev_deinit(struct quicki2c_device *qcdev)
 {
 	WRITE_ONCE(qcdev->recovery_disabled, true);
-	cancel_work_sync(&qcdev->recover_work);
+	cancel_work_sync_with_sync_wait(&qcdev->recover_work);
 
 	thc_interrupt_quiesce(qcdev->thc_hw, true);
 	thc_interrupt_enable(qcdev->thc_hw, false);
@@ -842,7 +843,7 @@ static int quicki2c_suspend(struct device *device)
 		return ret;
 
 	WRITE_ONCE(qcdev->recovery_disabled, true);
-	cancel_work_sync(&qcdev->recover_work);
+	cancel_work_sync_with_sync_wait(&qcdev->recover_work);
 
 	ret = thc_interrupt_quiesce(qcdev->thc_hw, true);
 	if (ret)
@@ -904,7 +905,7 @@ static int quicki2c_freeze(struct device *device)
 		return -ENODEV;
 
 	WRITE_ONCE(qcdev->recovery_disabled, true);
-	cancel_work_sync(&qcdev->recover_work);
+	cancel_work_sync_with_sync_wait(&qcdev->recover_work);
 
 	ret = thc_interrupt_quiesce(qcdev->thc_hw, true);
 	if (ret)

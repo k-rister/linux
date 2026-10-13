@@ -1287,7 +1287,7 @@ free_shadow:
 	gnttab_cancel_free_callback(&rinfo->callback);
 
 	/* Flush gnttab callback work. Must be done with no locks held. */
-	flush_work(&rinfo->work);
+	flush_work_with_sync_wait(&rinfo->work);
 
 	/* Free resources associated with old device channel. */
 	xenbus_teardown_ring((void **)&rinfo->ring.sring, info->nr_ring_pages,
@@ -2148,7 +2148,7 @@ static void blkfront_closing(struct blkfront_info *info)
 		gnttab_cancel_free_callback(&rinfo->callback);
 
 		/* Flush gnttab callback work. Must be done with no locks held. */
-		flush_work(&rinfo->work);
+		flush_work_with_sync_wait(&rinfo->work);
 	}
 
 	xenbus_frontend_closed(xbdev);

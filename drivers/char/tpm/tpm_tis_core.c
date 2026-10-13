@@ -1048,7 +1048,7 @@ void tpm_tis_remove(struct tpm_chip *chip)
 
 	tpm_tis_write32(priv, reg, ~TPM_GLOBAL_INT_ENABLE & interrupt);
 	if (priv->free_irq_work.func)
-		flush_work(&priv->free_irq_work);
+		flush_work_with_sync_wait(&priv->free_irq_work);
 
 	tpm_tis_clkrun_enable(chip, false);
 

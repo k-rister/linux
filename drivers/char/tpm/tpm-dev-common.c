@@ -161,7 +161,7 @@ out:
 	if (!priv->response_length) {
 		*off = 0;
 		timer_delete_sync(&priv->user_read_timer);
-		flush_work(&priv->timeout_work);
+		flush_work_with_sync_wait(&priv->timeout_work);
 	}
 	mutex_unlock(&priv->buffer_mutex);
 	return ret_size;
@@ -268,7 +268,7 @@ void tpm_common_release(struct file *file, struct file_priv *priv)
 {
 	flush_work_with_sync_wait(&priv->async_work);
 	timer_delete_sync(&priv->user_read_timer);
-	flush_work(&priv->timeout_work);
+	flush_work_with_sync_wait(&priv->timeout_work);
 	file->private_data = NULL;
 	priv->response_length = 0;
 }

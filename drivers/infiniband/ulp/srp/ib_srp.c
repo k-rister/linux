@@ -1059,7 +1059,7 @@ static void srp_remove_target(struct srp_target_port *target)
 		ch = &target->ch[i];
 		srp_free_ch_ib(target, ch);
 	}
-	cancel_work_sync(&target->tl_err_work);
+	cancel_work_sync_with_sync_wait(&target->tl_err_work);
 	srp_remove_host(target->scsi_host);
 	scsi_remove_host(target->scsi_host);
 	kfree(target->ch);

@@ -777,7 +777,7 @@ static void bnxt_re_db_fifo_check(struct work_struct *work)
 	pacing_data = rdev->qplib_res.pacing_data;
 	pacing_save = rdev->pacing.do_pacing_save;
 	__wait_for_fifo_occupancy_below_th(rdev);
-	cancel_delayed_work_sync(&rdev->dbq_pacing_work);
+	cancel_delayed_work_sync_with_sync_wait(&rdev->dbq_pacing_work);
 	if (pacing_save > rdev->pacing.dbr_def_do_pacing) {
 		/* Double the do_pacing value during the congestion */
 		pacing_save = pacing_save << 1;
@@ -858,7 +858,7 @@ void bnxt_re_pacing_alert(struct bnxt_re_dev *rdev)
 	 */
 	pacing_data->alarm_th = pacing_data->fifo_max_depth;
 	pacing_data->do_pacing = BNXT_RE_MAX_DBR_DO_PACING;
-	cancel_work_sync(&rdev->dbq_fifo_check_work);
+	cancel_work_sync_with_sync_wait(&rdev->dbq_fifo_check_work);
 	schedule_work(&rdev->dbq_fifo_check_work);
 	mutex_unlock(&rdev->pacing.dbq_lock);
 }
@@ -908,8 +908,8 @@ static int bnxt_re_initialize_dbr_pacing(struct bnxt_re_dev *rdev)
 
 static void bnxt_re_deinitialize_dbr_pacing(struct bnxt_re_dev *rdev)
 {
-	cancel_work_sync(&rdev->dbq_fifo_check_work);
-	cancel_delayed_work_sync(&rdev->dbq_pacing_work);
+	cancel_work_sync_with_sync_wait(&rdev->dbq_fifo_check_work);
+	cancel_delayed_work_sync_with_sync_wait(&rdev->dbq_pacing_work);
 	if (rdev->pacing.dbr_page)
 		free_page((u64)rdev->pacing.dbr_page);
 

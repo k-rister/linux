@@ -1481,7 +1481,7 @@ static void lenovo_remove_tp10ubkbd(struct hid_device *hdev)
 	led_classdev_unregister(&data->led_mute);
 
 	sysfs_remove_group(&hdev->dev.kobj, &lenovo_attr_group_tp10ubkbd);
-	cancel_work_sync(&data->fn_lock_sync_work);
+	cancel_work_sync_with_sync_wait(&data->fn_lock_sync_work);
 }
 
 static void lenovo_remove(struct hid_device *hdev)

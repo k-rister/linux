@@ -3011,7 +3011,7 @@ static void ublk_stop_dev(struct ublk_device *ub)
 	mutex_lock(&ub->mutex);
 	ublk_stop_dev_unlocked(ub);
 	mutex_unlock(&ub->mutex);
-	cancel_work_sync(&ub->partition_scan_work);
+	cancel_work_sync_with_sync_wait(&ub->partition_scan_work);
 	ublk_cancel_dev(ub);
 }
 

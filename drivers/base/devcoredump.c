@@ -171,7 +171,7 @@ static int devcd_free(struct device *dev, void *data)
 	 * devcd->mutex here guards against multiple parallel invocations
 	 * of devcd_free().
 	 */
-	disable_delayed_work_sync(&devcd->del_wk);
+	disable_delayed_work_sync_with_sync_wait(&devcd->del_wk);
 	mutex_lock(&devcd->mutex);
 	if (!devcd->deleted)
 		__devcd_del(devcd);

@@ -34,7 +34,7 @@ static void sysctrl_fini(void *arg)
 	struct xe_device *xe = arg;
 	struct xe_sysctrl *sc = &xe->sc;
 
-	disable_work_sync(&sc->work);
+	disable_work_sync_with_sync_wait(&sc->work);
 	xe->soc_remapper.set_sysctrl_region(xe, 0);
 }
 

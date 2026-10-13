@@ -2998,7 +2998,7 @@ static void virtio_mem_deinit_hotplug(struct virtio_mem *vm)
 	mutex_unlock(&vm->hotplug_mutex);
 
 	/* wait until the workqueue stopped */
-	cancel_work_sync(&vm->wq);
+	cancel_work_sync_with_sync_wait(&vm->wq);
 	hrtimer_cancel(&vm->retry_timer);
 
 	if (vm->in_sbm) {

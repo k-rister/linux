@@ -237,7 +237,7 @@ static void bcm203x_disconnect(struct usb_interface *intf)
 	BT_DBG("intf %p", intf);
 
 	atomic_inc(&data->shutdown);
-	cancel_work_sync(&data->work);
+	cancel_work_sync_with_sync_wait(&data->work);
 
 	usb_kill_urb(data->urb);
 

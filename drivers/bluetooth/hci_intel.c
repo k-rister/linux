@@ -408,7 +408,7 @@ static int intel_close(struct hci_uart *hu)
 
 	BT_DBG("hu %p", hu);
 
-	cancel_work_sync(&intel->busy_work);
+	cancel_work_sync_with_sync_wait(&intel->busy_work);
 
 	intel_set_power(hu, false);
 

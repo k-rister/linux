@@ -531,7 +531,7 @@ static inline ssize_t vhci_get_user(struct vhci_data *data,
 		break;
 
 	case HCI_VENDOR_PKT:
-		cancel_delayed_work_sync(&data->open_timeout);
+		cancel_delayed_work_sync_with_sync_wait(&data->open_timeout);
 
 		opcode = *((__u8 *) skb->data);
 		skb_pull(skb, 1);
@@ -689,8 +689,8 @@ static int vhci_release(struct inode *inode, struct file *file)
 	struct vhci_data *data = file->private_data;
 	struct hci_dev *hdev;
 
-	cancel_delayed_work_sync(&data->open_timeout);
-	flush_work(&data->suspend_work);
+	cancel_delayed_work_sync_with_sync_wait(&data->open_timeout);
+	flush_work_with_sync_wait(&data->suspend_work);
 
 	hdev = data->hdev;
 

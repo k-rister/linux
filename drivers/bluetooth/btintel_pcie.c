@@ -3085,8 +3085,9 @@ static void btintel_pcie_remove(struct pci_dev *pdev)
 	}
 
 	/* Permanently block all dump triggers and drain the workers before
-	 * tearing down. Must run before disable_work_sync(&reset_work) so
-	 * the disable counters stay >= 1 even after reset_work()'s
+	 * tearing down. Must run before
+	 * disable_work_sync_with_sync_wait(&reset_work) so the disable counters
+	 * stay >= 1 even after reset_work()'s
 	 * balanced enable_work() (counter 2 -> 1, never reaching 0).
 	 */
 	disable_work_sync(&data->coredump_work);
@@ -3099,7 +3100,7 @@ static void btintel_pcie_remove(struct pci_dev *pdev)
 	 * we are in a workqueue context.
 	 */
 	if (current_work() != &data->reset_work)
-		disable_work_sync(&data->reset_work);
+		disable_work_sync_with_sync_wait(&data->reset_work);
 
 	btintel_pcie_disable_interrupts(data);
 

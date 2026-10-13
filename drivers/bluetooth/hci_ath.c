@@ -125,7 +125,7 @@ static int ath_close(struct hci_uart *hu)
 
 	kfree_skb(ath->rx_skb);
 
-	cancel_work_sync(&ath->ctxtsw);
+	cancel_work_sync_with_sync_wait(&ath->ctxtsw);
 
 	hu->priv = NULL;
 	kfree(ath);

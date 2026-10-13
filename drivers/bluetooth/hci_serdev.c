@@ -396,12 +396,12 @@ void hci_uart_unregister_device(struct hci_uart *hu)
 {
 	struct hci_dev *hdev = hu->hdev;
 
-	cancel_work_sync(&hu->init_ready);
+	cancel_work_sync_with_sync_wait(&hu->init_ready);
 	if (test_bit(HCI_UART_REGISTERED, &hu->flags))
 		hci_unregister_dev(hdev);
 	hci_free_dev(hdev);
 
-	cancel_work_sync(&hu->write_work);
+	cancel_work_sync_with_sync_wait(&hu->write_work);
 
 	hu->proto->close(hu);
 

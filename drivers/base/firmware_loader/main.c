@@ -1314,7 +1314,7 @@ void request_firmware_nowait_cancel(struct device *device, void *context,
 
 	if (!fw_work)
 		return;
-	cancel_work_sync(&fw_work->work);
+	cancel_work_sync_with_sync_wait(&fw_work->work);
 	firmware_work_free(fw_work);
 }
 EXPORT_SYMBOL_GPL(request_firmware_nowait_cancel);

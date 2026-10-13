@@ -2597,8 +2597,8 @@ static void lm90_stop_work(void *_data)
 	scoped_guard(hwmon_lock, data->hwmon_dev) {
 		data->shutdown = true;
 	}
-	cancel_delayed_work_sync(&data->alert_work);
-	cancel_work_sync(&data->report_work);
+	cancel_delayed_work_sync_with_sync_wait(&data->alert_work);
+	cancel_work_sync_with_sync_wait(&data->report_work);
 }
 
 static int lm90_init_client(struct i2c_client *client, struct lm90_data *data)

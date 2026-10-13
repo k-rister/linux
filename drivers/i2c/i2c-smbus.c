@@ -216,7 +216,7 @@ static void smbalert_remove(struct i2c_client *ara)
 {
 	struct i2c_smbus_alert *alert = i2c_get_clientdata(ara);
 
-	cancel_work_sync(&alert->alert);
+	cancel_work_sync_with_sync_wait(&alert->alert);
 }
 
 static const struct i2c_device_id smbalert_ids[] = {

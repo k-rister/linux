@@ -226,7 +226,7 @@ void hid_sensor_remove_trigger(struct iio_dev *indio_dev,
 
 	pm_runtime_set_suspended(&attrb->pdev->dev);
 
-	cancel_work_sync(&attrb->work);
+	cancel_work_sync_with_sync_wait(&attrb->work);
 	iio_trigger_unregister(attrb->trigger);
 	iio_trigger_free(attrb->trigger);
 }

@@ -2480,7 +2480,7 @@ static int wacom_parse_and_register(struct wacom *wacom, bool wireless)
 	/* touch only Bamboo doesn't support pen */
 	if ((features->type == BAMBOO_TOUCH) &&
 	    (features->device_type & WACOM_DEVICETYPE_PEN)) {
-		cancel_delayed_work_sync(&wacom->init_work);
+		cancel_delayed_work_sync_with_sync_wait(&wacom->init_work);
 		_wacom_query_tablet_data(wacom);
 		error = -ENODEV;
 		goto fail_hw_stop;
@@ -2909,7 +2909,7 @@ static void wacom_remove(struct hid_device *hdev)
 
 	hid_hw_stop(hdev);
 
-	cancel_delayed_work_sync(&wacom->init_work);
+	cancel_delayed_work_sync_with_sync_wait(&wacom->init_work);
 	cancel_delayed_work_sync(&wacom->aes_battery_work);
 	cancel_work_sync(&wacom->wireless_work);
 	cancel_work_sync(&wacom->battery_work);

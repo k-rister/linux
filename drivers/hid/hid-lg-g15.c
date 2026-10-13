@@ -1384,7 +1384,7 @@ static void lg_g15_remove(struct hid_device *hdev)
 	 * cancel it when it was set up.
 	 */
 	if (g15 && g15->work.func)
-		cancel_work_sync(&g15->work);
+		cancel_work_sync_with_sync_wait(&g15->work);
 
 	hid_hw_stop(hdev);
 }

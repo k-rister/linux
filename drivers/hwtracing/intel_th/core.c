@@ -599,7 +599,7 @@ static int intel_th_request_hub_module(struct intel_th *th)
 
 static void intel_th_request_hub_module_flush(struct intel_th *th)
 {
-	flush_work(&th->request_module_work);
+	flush_work_with_sync_wait(&th->request_module_work);
 }
 #else
 static inline int intel_th_request_hub_module(struct intel_th *th)

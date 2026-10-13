@@ -581,7 +581,7 @@ static int uhid_dev_destroy(struct uhid_device *uhid)
 	WRITE_ONCE(uhid->running, false);
 	wake_up_interruptible(&uhid->report_wait);
 
-	cancel_work_sync(&uhid->worker);
+	cancel_work_sync_with_sync_wait(&uhid->worker);
 
 	hid_destroy_device(uhid->hid);
 	uhid->hid = NULL;

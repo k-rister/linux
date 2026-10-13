@@ -860,16 +860,16 @@ int usbnet_stop(struct net_device *net)
 	/* deferred work (timer, softirq, task) must also stop */
 	dev->flags = 0;
 	timer_delete_sync(&dev->delay);
-	cancel_work_sync(&dev->bh_work);
-	cancel_work_sync(&dev->kevent);
+	cancel_work_sync_with_sync_wait(&dev->bh_work);
+	cancel_work_sync_with_sync_wait(&dev->kevent);
 
 	/* We have cyclic dependencies. Those calls are needed
 	 * to break a cycle. We cannot fall into the gaps because
 	 * we have a flag
 	 */
-	cancel_work_sync(&dev->bh_work);
+	cancel_work_sync_with_sync_wait(&dev->bh_work);
 	timer_delete_sync(&dev->delay);
-	cancel_work_sync(&dev->kevent);
+	cancel_work_sync_with_sync_wait(&dev->kevent);
 
 	netdev_reset_queue(net);
 
@@ -1680,7 +1680,7 @@ void usbnet_disconnect(struct usb_interface *intf)
 	net = dev->net;
 	unregister_netdev(net);
 
-	cancel_work_sync(&dev->kevent);
+	cancel_work_sync_with_sync_wait(&dev->kevent);
 
 	while ((urb = usb_get_from_anchor(&dev->deferred))) {
 		dev_kfree_skb(urb->context);
@@ -1921,7 +1921,7 @@ out1:
 	 * schedule a timer. So we kill it all just in case.
 	 */
 	usbnet_mark_going_away(dev);
-	cancel_work_sync(&dev->kevent);
+	cancel_work_sync_with_sync_wait(&dev->kevent);
 	timer_delete_sync(&dev->delay);
 	free_netdev(net);
 out:

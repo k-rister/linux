@@ -1483,7 +1483,7 @@ static void usbhid_disconnect(struct usb_interface *intf)
 static void hid_cancel_delayed_stuff(struct usbhid_device *usbhid)
 {
 	timer_delete_sync(&usbhid->io_retry);
-	cancel_work_sync(&usbhid->reset_work);
+	cancel_work_sync_with_sync_wait(&usbhid->reset_work);
 }
 
 static void hid_cease_io(struct usbhid_device *usbhid)

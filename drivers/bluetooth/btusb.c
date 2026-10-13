@@ -2114,8 +2114,8 @@ static int btusb_close(struct hci_dev *hdev)
 
 	BT_DBG("%s", hdev->name);
 
-	cancel_work_sync(&data->work);
-	cancel_work_sync(&data->waker);
+	cancel_work_sync_with_sync_wait(&data->work);
+	cancel_work_sync_with_sync_wait(&data->waker);
 
 	clear_bit(BTUSB_ISOC_RUNNING, &data->flags);
 	clear_bit(BTUSB_BULK_RUNNING, &data->flags);
@@ -2128,7 +2128,7 @@ static int btusb_close(struct hci_dev *hdev)
 	 * gone, and it must be canceled synchronously since btusb_disconnect()
 	 * frees the btusb_data it dereferences right after hci_unregister_dev().
 	 */
-	cancel_delayed_work_sync(&data->rx_work);
+	cancel_delayed_work_sync_with_sync_wait(&data->rx_work);
 
 	skb_queue_purge(&data->acl_q);
 
@@ -2157,7 +2157,7 @@ static int btusb_flush(struct hci_dev *hdev)
 
 	BT_DBG("%s", hdev->name);
 
-	cancel_delayed_work_sync(&data->rx_work);
+	cancel_delayed_work_sync_with_sync_wait(&data->rx_work);
 
 	skb_queue_purge(&data->acl_q);
 
@@ -4687,7 +4687,7 @@ static int btusb_suspend(struct usb_interface *intf, pm_message_t message)
 		return -EBUSY;
 	}
 
-	cancel_work_sync(&data->work);
+	cancel_work_sync_with_sync_wait(&data->work);
 
 	if (data->suspend)
 		data->suspend(data->hdev);

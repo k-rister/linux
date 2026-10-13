@@ -340,7 +340,7 @@ static void xgbe_i2c_stop(struct xgbe_prv_data *pdata)
 
 	if (pdata->dev_irq != pdata->i2c_irq) {
 		devm_free_irq(pdata->dev, pdata->i2c_irq, pdata);
-		cancel_work_sync(&pdata->i2c_bh_work);
+		cancel_work_sync_with_sync_wait(&pdata->i2c_bh_work);
 	}
 }
 

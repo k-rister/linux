@@ -1489,7 +1489,7 @@ static void mhi_pci_remove(struct pci_dev *pdev)
 
 	if (!pdev->is_virtfn)
 		timer_delete_sync(&mhi_pdev->health_check_timer);
-	cancel_work_sync(&mhi_pdev->recovery_work);
+	cancel_work_sync_with_sync_wait(&mhi_pdev->recovery_work);
 
 	if (test_and_clear_bit(MHI_PCI_DEV_STARTED, &mhi_pdev->status)) {
 		mhi_power_down(mhi_cntrl, true);
@@ -1634,7 +1634,7 @@ static int  __maybe_unused mhi_pci_runtime_suspend(struct device *dev)
 	if (!pdev->is_virtfn)
 		timer_delete(&mhi_pdev->health_check_timer);
 
-	cancel_work_sync(&mhi_pdev->recovery_work);
+	cancel_work_sync_with_sync_wait(&mhi_pdev->recovery_work);
 
 	if (!test_bit(MHI_PCI_DEV_STARTED, &mhi_pdev->status) ||
 			mhi_cntrl->ee != MHI_EE_AMSS)
@@ -1733,7 +1733,7 @@ static int __maybe_unused mhi_pci_freeze(struct device *dev)
 	 * the intermediate restore kernel reinitializes MHI device with new
 	 * context.
 	 */
-	flush_work(&mhi_pdev->recovery_work);
+	flush_work_with_sync_wait(&mhi_pdev->recovery_work);
 	if (test_and_clear_bit(MHI_PCI_DEV_STARTED, &mhi_pdev->status)) {
 		mhi_power_down(mhi_cntrl, true);
 		mhi_unprepare_after_power_down(mhi_cntrl);

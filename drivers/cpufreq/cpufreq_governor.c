@@ -569,7 +569,7 @@ void cpufreq_dbs_governor_stop(struct cpufreq_policy *policy)
 
 	gov_clear_update_util(policy_dbs->policy);
 	irq_work_sync(&policy_dbs->irq_work);
-	cancel_work_sync(&policy_dbs->work);
+	cancel_work_sync_with_sync_wait(&policy_dbs->work);
 	atomic_set(&policy_dbs->work_count, 0);
 	policy_dbs->work_in_progress = false;
 }

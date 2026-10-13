@@ -1345,7 +1345,7 @@ static void cpufreq_policy_free(struct cpufreq_policy *policy)
 				 &policy->nb_min);
 
 	/* Cancel any pending policy->update work before freeing the policy. */
-	cancel_work_sync(&policy->update);
+	cancel_work_sync_with_sync_wait(&policy->update);
 
 	if (freq_qos_request_active(&policy->max_freq_req)) {
 		/*

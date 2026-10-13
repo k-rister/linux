@@ -21,6 +21,7 @@
 #include <linux/string.h>
 #include <linux/unaligned.h>
 #include <linux/string_choices.h>
+#include <linux/workqueue.h>
 
 /**
  * uclogic_params_pen_inrange_to_str() - Convert a pen in-range reporting type
@@ -632,7 +633,7 @@ static void uclogic_params_cleanup_event_hooks(struct uclogic_params *params)
 		return;
 
 	list_for_each_entry_safe(curr, n, &params->event_hooks->list, list) {
-		cancel_work_sync(&curr->work);
+		cancel_work_sync_with_sync_wait(&curr->work);
 		list_del(&curr->list);
 		kfree(curr->event);
 		kfree(curr);

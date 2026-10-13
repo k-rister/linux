@@ -206,7 +206,7 @@ void hci_uart_init_work(struct work_struct *work)
 		percpu_up_write(&hu->proto_lock);
 
 		/* Safely cancel work after clearing flags */
-		cancel_work_sync(&hu->write_work);
+		cancel_work_sync_with_sync_wait(&hu->write_work);
 
 		/* Close protocol before freeing hdev */
 		hu->proto->close(hu);
@@ -245,7 +245,7 @@ static int hci_uart_flush(struct hci_dev *hdev)
 
 	BT_DBG("hdev %p tty %p", hdev, tty);
 
-	disable_work_sync(&hu->write_work);
+	disable_work_sync_with_sync_wait(&hu->write_work);
 
 	if (hu->tx_skb) {
 		kfree_skb(hu->tx_skb); hu->tx_skb = NULL;
@@ -566,7 +566,7 @@ static void hci_uart_tty_close(struct tty_struct *tty)
 		return;
 
 	/* Wait for init_ready to finish to prevent registration races */
-	cancel_work_sync(&hu->init_ready);
+	cancel_work_sync_with_sync_wait(&hu->init_ready);
 
 	proto_ready = test_bit(HCI_UART_PROTO_READY, &hu->flags);
 	if (proto_ready) {
@@ -581,7 +581,7 @@ static void hci_uart_tty_close(struct tty_struct *tty)
 	 * write_work via hci_uart_tx_wakeup(), permanently preventing
 	 * double-free races and UAFs.
 	 */
-	cancel_work_sync(&hu->write_work);
+	cancel_work_sync_with_sync_wait(&hu->write_work);
 
 	hdev = hu->hdev;
 	if (hdev)
@@ -736,7 +736,7 @@ static int hci_uart_register_dev(struct hci_uart *hu)
 		clear_bit(HCI_UART_PROTO_INIT, &hu->flags);
 		percpu_up_write(&hu->proto_lock);
 		/* Cancel work after clearing flags */
-		cancel_work_sync(&hu->write_work);
+		cancel_work_sync_with_sync_wait(&hu->write_work);
 
 		/* Close protocol before freeing hdev */
 		hu->proto->close(hu);

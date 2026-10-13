@@ -2085,7 +2085,7 @@ static void sd_stop0(struct gspca_dev *gspca_dev)
 	struct sd *sd = (struct sd *) gspca_dev;
 
 	mutex_unlock(&gspca_dev->usb_lock);
-	flush_work(&sd->work);
+	flush_work_with_sync_wait(&sd->work);
 	mutex_lock(&gspca_dev->usb_lock);
 }
 

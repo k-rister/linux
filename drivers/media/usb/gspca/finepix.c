@@ -225,7 +225,7 @@ static void sd_stop0(struct gspca_dev *gspca_dev)
 
 	/* wait for the work queue to terminate */
 	mutex_unlock(&gspca_dev->usb_lock);
-	flush_work(&dev->work_struct);
+	flush_work_with_sync_wait(&dev->work_struct);
 	mutex_lock(&gspca_dev->usb_lock);
 }
 

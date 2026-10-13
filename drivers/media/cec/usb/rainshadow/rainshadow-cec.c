@@ -190,7 +190,7 @@ static void rain_disconnect(struct serio *serio)
 {
 	struct rain *rain = serio_get_drvdata(serio);
 
-	cancel_work_sync(&rain->work);
+	cancel_work_sync_with_sync_wait(&rain->work);
 	cec_unregister_adapter(rain->adap);
 	dev_info(&serio->dev, "disconnected\n");
 	serio_close(serio);

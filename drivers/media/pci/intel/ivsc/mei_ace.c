@@ -520,7 +520,7 @@ static void mei_ace_remove(struct mei_cl_device *cldev)
 {
 	struct mei_ace *ace = mei_cldev_get_drvdata(cldev);
 
-	cancel_work_sync(&ace->work);
+	cancel_work_sync_with_sync_wait(&ace->work);
 
 	device_link_del(ace->csi_link);
 

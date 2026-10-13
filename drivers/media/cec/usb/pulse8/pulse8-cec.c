@@ -641,9 +641,9 @@ static void pulse8_cec_adap_free(struct cec_adapter *adap)
 {
 	struct pulse8 *pulse8 = cec_get_drvdata(adap);
 
-	cancel_delayed_work_sync(&pulse8->ping_eeprom_work);
-	cancel_work_sync(&pulse8->irq_work);
-	cancel_work_sync(&pulse8->tx_work);
+	cancel_delayed_work_sync_with_sync_wait(&pulse8->ping_eeprom_work);
+	cancel_work_sync_with_sync_wait(&pulse8->irq_work);
+	cancel_work_sync_with_sync_wait(&pulse8->tx_work);
 	kfree(pulse8);
 }
 
@@ -658,7 +658,7 @@ static void pulse8_disconnect(struct serio *serio)
 {
 	struct pulse8 *pulse8 = serio_get_drvdata(serio);
 
-	cancel_delayed_work_sync(&pulse8->ping_eeprom_work);
+	cancel_delayed_work_sync_with_sync_wait(&pulse8->ping_eeprom_work);
 	mutex_lock(&pulse8->lock);
 	pulse8->serio = NULL;
 	mutex_unlock(&pulse8->lock);

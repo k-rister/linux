@@ -435,7 +435,7 @@ void dev_coredumpm_timeout(struct device *dev, struct module *owner,
 	return;
  put_device:
 	mutex_unlock(&devcd->mutex);
-	cancel_delayed_work_sync(&devcd->del_wk);
+	cancel_delayed_work_sync_with_sync_wait(&devcd->del_wk);
 	put_device(&devcd->devcd_dev);
 
  put_module:

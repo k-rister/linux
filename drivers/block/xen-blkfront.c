@@ -2636,7 +2636,7 @@ module_init(xlblk_init);
 
 static void __exit xlblk_exit(void)
 {
-	cancel_delayed_work_sync(&blkfront_work);
+	cancel_delayed_work_sync_with_sync_wait(&blkfront_work);
 
 	xenbus_unregister_driver(&blkfront_driver);
 	unregister_blkdev(XENVBD_MAJOR, DEV_NAME);

@@ -5003,7 +5003,7 @@ static int r8169_phy_connect(struct rtl8169_private *tp)
 
 static void rtl8169_down(struct rtl8169_private *tp)
 {
-	disable_work_sync(&tp->wk.work);
+	disable_work_sync_with_sync_wait(&tp->wk.work);
 	/* Clear all task flags */
 	bitmap_zero(tp->wk.flags, RTL_FLAG_MAX);
 
@@ -5282,7 +5282,7 @@ static void rtl_remove_one(struct pci_dev *pdev)
 	if (pci_dev_run_wake(pdev))
 		pm_runtime_get_noresume(&pdev->dev);
 
-	disable_work_sync(&tp->wk.work);
+	disable_work_sync_with_sync_wait(&tp->wk.work);
 
 	if (IS_ENABLED(CONFIG_R8169_LEDS))
 		r8169_remove_leds(tp->leds);

@@ -984,7 +984,7 @@ static void edge_detector_stop(struct line *line)
 		hte_ts_put(&line->hdesc);
 #endif
 
-	cancel_delayed_work_sync(&line->work);
+	cancel_delayed_work_sync_with_sync_wait(&line->work);
 	WRITE_ONCE(line->sw_debounced, 0);
 	WRITE_ONCE(line->edflags, 0);
 	if (line->desc)

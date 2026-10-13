@@ -63,7 +63,7 @@ module_init(cxl_dax_region_init);
 
 static void __exit cxl_dax_region_exit(void)
 {
-	flush_work(&cxl_dax_region_driver_work);
+	flush_work_with_sync_wait(&cxl_dax_region_driver_work);
 	cxl_driver_unregister(&cxl_dax_region_driver);
 }
 module_exit(cxl_dax_region_exit);

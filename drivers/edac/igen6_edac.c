@@ -1966,7 +1966,7 @@ static void igen6_remove(struct pci_dev *pdev)
 	errcmd_enable_error_reporting(false);
 	unregister_err_handler();
 	irq_work_sync(&ecclog_irq_work);
-	flush_work(&ecclog_work);
+	flush_work_with_sync_wait(&ecclog_work);
 	gen_pool_destroy(ecclog_pool);
 	igen6_unregister_mcis();
 	igen6_pvt_release(igen6_pvt);

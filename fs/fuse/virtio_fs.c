@@ -311,8 +311,8 @@ static void virtio_fs_drain_queue(struct virtio_fs_vq *fsvq)
 		spin_unlock(&fsvq->lock);
 	}
 
-	flush_work(&fsvq->done_work);
-	flush_work(&fsvq->dispatch_work);
+	flush_work_with_sync_wait(&fsvq->done_work);
+	flush_work_with_sync_wait(&fsvq->dispatch_work);
 }
 
 static void virtio_fs_drain_all_queues_locked(struct virtio_fs *fs)

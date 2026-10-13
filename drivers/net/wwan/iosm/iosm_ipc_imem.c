@@ -1241,7 +1241,7 @@ void ipc_imem_cleanup(struct iosm_imem *ipc_imem)
 	hrtimer_cancel(&ipc_imem->startup_timer);
 
 	/* cancel the workqueue */
-	cancel_work_sync(&ipc_imem->run_state_worker);
+	cancel_work_sync_with_sync_wait(&ipc_imem->run_state_worker);
 
 	if (test_and_clear_bit(FULLY_FUNCTIONAL, &ipc_imem->flag)) {
 		ipc_mux_deinit(ipc_imem->mux);
@@ -1423,7 +1423,7 @@ imem_config_fail:
 	hrtimer_cancel(&ipc_imem->tdupdate_timer);
 	hrtimer_cancel(&ipc_imem->startup_timer);
 protocol_init_fail:
-	cancel_work_sync(&ipc_imem->run_state_worker);
+	cancel_work_sync_with_sync_wait(&ipc_imem->run_state_worker);
 	ipc_task_deinit(ipc_imem->ipc_task);
 	if (ipc_imem->ipc_protocol)
 		ipc_protocol_deinit(ipc_imem->ipc_protocol);

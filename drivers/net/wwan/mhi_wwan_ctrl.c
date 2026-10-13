@@ -133,7 +133,7 @@ static void mhi_wwan_ctrl_stop(struct wwan_port *port)
 	clear_bit(MHI_WWAN_RX_REFILL, &mhiwwan->flags);
 	spin_unlock_bh(&mhiwwan->rx_lock);
 
-	cancel_work_sync(&mhiwwan->rx_refill);
+	cancel_work_sync_with_sync_wait(&mhiwwan->rx_refill);
 
 	mhi_unprepare_from_transfer(mhiwwan->mhi_dev);
 }

@@ -286,7 +286,7 @@ static int parport_prologue(struct parport *pp)
 
 	/* ensure writes from restore are submitted before new requests */
 	if (work_pending(&mos_parport->work))
-		flush_work(&mos_parport->work);
+		flush_work_with_sync_wait(&mos_parport->work);
 
 	mutex_lock(&mos_parport->serial->disc_mutex);
 	if (mos_parport->serial->disconnected) {
@@ -1687,7 +1687,7 @@ static void mos7720_release(struct usb_serial *serial)
 		 * complete. This also implies barriers that ensure the
 		 * below serial clearing is not hoisted above the ->work.
 		 */
-		cancel_work_sync(&mos_parport->work);
+		cancel_work_sync_with_sync_wait(&mos_parport->work);
 
 		parport_remove_port(mos_parport->pp);
 		usb_set_serial_data(serial, NULL);

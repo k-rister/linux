@@ -1234,8 +1234,8 @@ static void wdm_disconnect(struct usb_interface *intf)
 	mutex_lock(&desc->rlock);
 	mutex_lock(&desc->wlock);
 	poison_urbs(desc);
-	cancel_work_sync(&desc->rxwork);
-	cancel_work_sync(&desc->service_outs_intr);
+	cancel_work_sync_with_sync_wait(&desc->rxwork);
+	cancel_work_sync_with_sync_wait(&desc->service_outs_intr);
 	mutex_unlock(&desc->wlock);
 	mutex_unlock(&desc->rlock);
 
@@ -1277,8 +1277,8 @@ static int wdm_suspend(struct usb_interface *intf, pm_message_t message)
 		spin_unlock_irq(&desc->iuspin);
 		/* callback submits work - order is essential */
 		poison_urbs(desc);
-		cancel_work_sync(&desc->rxwork);
-		cancel_work_sync(&desc->service_outs_intr);
+		cancel_work_sync_with_sync_wait(&desc->rxwork);
+		cancel_work_sync_with_sync_wait(&desc->service_outs_intr);
 		unpoison_urbs(desc);
 	}
 	if (!PMSG_IS_AUTO(message)) {
@@ -1338,8 +1338,8 @@ static int wdm_pre_reset(struct usb_interface *intf)
 	mutex_lock(&desc->rlock);
 	mutex_lock(&desc->wlock);
 	poison_urbs(desc);
-	cancel_work_sync(&desc->rxwork);
-	cancel_work_sync(&desc->service_outs_intr);
+	cancel_work_sync_with_sync_wait(&desc->rxwork);
+	cancel_work_sync_with_sync_wait(&desc->service_outs_intr);
 	return 0;
 }
 

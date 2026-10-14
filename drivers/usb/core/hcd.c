@@ -3052,7 +3052,7 @@ void usb_remove_hcd(struct usb_hcd *hcd)
 #ifdef CONFIG_PM
 	cancel_work_sync(&hcd->wakeup_work);
 #endif
-	cancel_work_sync(&hcd->died_work);
+	cancel_work_sync_with_sync_wait(&hcd->died_work);
 
 	mutex_lock(&usb_bus_idr_lock);
 	if (rh_registered)

@@ -1190,7 +1190,7 @@ static void usb_serial_disconnect(struct usb_interface *interface)
 		tty_port_tty_vhangup(&port->port);
 		usb_serial_port_poison_urbs(port);
 		wake_up_interruptible(&port->port.delta_msr_wait);
-		cancel_work_sync(&port->work);
+		cancel_work_sync_with_sync_wait(&port->work);
 		if (device_is_registered(&port->dev))
 			device_del(&port->dev);
 	}

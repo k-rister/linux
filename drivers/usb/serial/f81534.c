@@ -1418,7 +1418,7 @@ static void f81534_port_remove(struct usb_serial_port *port)
 {
 	struct f81534_port_private *port_priv = usb_get_serial_port_data(port);
 
-	flush_work(&port_priv->lsr_work);
+	flush_work_with_sync_wait(&port_priv->lsr_work);
 }
 
 static int f81534_tiocmget(struct tty_struct *tty)

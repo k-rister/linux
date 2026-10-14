@@ -624,7 +624,7 @@ static void keyspan_pda_close(struct usb_serial_port *port)
 	usb_kill_urb(port->interrupt_in_urb);
 	usb_kill_urb(port->write_urb);
 
-	cancel_work_sync(&priv->unthrottle_work);
+	cancel_work_sync_with_sync_wait(&priv->unthrottle_work);
 
 	spin_lock_irq(&port->lock);
 	kfifo_reset(&port->write_fifo);

@@ -250,7 +250,7 @@ static void __exit dell_lis3lv02d_module_exit(void)
 		return;
 
 	bus_unregister_notifier(&i2c_bus_type, &i2c_nb);
-	cancel_work_sync(&i2c_work);
+	cancel_work_sync_with_sync_wait(&i2c_work);
 	i2c_unregister_device(i2c_dev);
 }
 module_exit(dell_lis3lv02d_module_exit);

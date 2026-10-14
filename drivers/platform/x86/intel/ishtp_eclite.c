@@ -633,8 +633,8 @@ static void ecl_ishtp_cl_remove(struct ishtp_cl_device *cl_device)
 	ishtp_cl_disconnect(ecl_ishtp_cl);
 	ecl_ishtp_cl_deinit(ecl_ishtp_cl);
 
-	cancel_work_sync(&opr_dev->reset_work);
-	cancel_work_sync(&opr_dev->event_work);
+	cancel_work_sync_with_sync_wait(&opr_dev->reset_work);
+	cancel_work_sync_with_sync_wait(&opr_dev->event_work);
 }
 
 static int ecl_ishtp_cl_reset(struct ishtp_cl_device *cl_device)

@@ -1010,7 +1010,7 @@ static void sysrq_disconnect(struct input_handle *handle)
 	struct sysrq_state *sysrq = handle->private;
 
 	input_close_device(handle);
-	cancel_work_sync(&sysrq->reinject_work);
+	cancel_work_sync_with_sync_wait(&sysrq->reinject_work);
 	timer_shutdown_sync(&sysrq->keyreset_timer);
 	input_unregister_handle(handle);
 	kfree(sysrq);

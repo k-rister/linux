@@ -161,7 +161,7 @@ static void kgdboc_unregister_kbd(void)
 		}
 	}
 	irq_work_sync(&kgdboc_restore_input_irq_work);
-	flush_work(&kgdboc_restore_input_work);
+	flush_work_with_sync_wait(&kgdboc_restore_input_work);
 }
 #else /* ! CONFIG_KDB_KEYBOARD */
 #define kgdboc_register_kbd(x) 0

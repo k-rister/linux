@@ -199,7 +199,7 @@ static void n_hdlc_tty_close(struct tty_struct *tty)
 	wake_up_interruptible(&tty->read_wait);
 	wake_up_interruptible(&tty->write_wait);
 
-	cancel_work_sync(&n_hdlc->write_work);
+	cancel_work_sync_with_sync_wait(&n_hdlc->write_work);
 
 	n_hdlc_free_buf_list(&n_hdlc->rx_free_buf_list);
 	n_hdlc_free_buf_list(&n_hdlc->tx_free_buf_list);

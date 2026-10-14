@@ -412,7 +412,7 @@ static void hvc_close(struct tty_struct *tty, struct file * filp)
 			hp->ops->notifier_del(hp, hp->data);
 
 		/* cancel pending tty resize work */
-		cancel_work_sync(&hp->tty_resize);
+		cancel_work_sync_with_sync_wait(&hp->tty_resize);
 
 		/*
 		 * Chain calls chars_in_buffer() and returns immediately if
@@ -445,7 +445,7 @@ static void hvc_hangup(struct tty_struct *tty)
 		return;
 
 	/* cancel pending tty resize work */
-	cancel_work_sync(&hp->tty_resize);
+	cancel_work_sync_with_sync_wait(&hp->tty_resize);
 
 	spin_lock_irqsave(&hp->port.lock, flags);
 

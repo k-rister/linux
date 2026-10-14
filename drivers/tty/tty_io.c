@@ -1461,11 +1461,11 @@ EXPORT_SYMBOL_GPL(tty_save_termios);
  */
 static void tty_flush_works(struct tty_struct *tty)
 {
-	flush_work(&tty->SAK_work);
-	flush_work(&tty->hangup_work);
+	flush_work_with_sync_wait(&tty->SAK_work);
+	flush_work_with_sync_wait(&tty->hangup_work);
 	if (tty->link) {
-		flush_work(&tty->link->SAK_work);
-		flush_work(&tty->link->hangup_work);
+		flush_work_with_sync_wait(&tty->link->SAK_work);
+		flush_work_with_sync_wait(&tty->link->hangup_work);
 	}
 }
 

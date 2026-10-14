@@ -330,7 +330,7 @@ static void gpio_vbus_remove(struct platform_device *pdev)
 	struct gpio_vbus_data *gpio_vbus = platform_get_drvdata(pdev);
 
 	device_init_wakeup(&pdev->dev, 0);
-	cancel_delayed_work_sync(&gpio_vbus->work);
+	cancel_delayed_work_sync_with_sync_wait(&gpio_vbus->work);
 
 	usb_remove_phy(&gpio_vbus->phy);
 }

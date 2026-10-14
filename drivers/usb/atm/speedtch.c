@@ -710,7 +710,7 @@ static void speedtch_atm_stop(struct usbatm_data *usbatm, struct atm_dev *atm_de
 	timer_delete_sync(&instance->resubmit_timer);
 	usb_free_urb(int_urb);
 
-	flush_work(&instance->status_check_work);
+	flush_work_with_sync_wait(&instance->status_check_work);
 }
 
 static int speedtch_pre_reset(struct usb_interface *intf)

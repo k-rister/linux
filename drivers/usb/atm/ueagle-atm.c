@@ -2184,7 +2184,7 @@ static void uea_stop(struct uea_softc *sc)
 	usb_free_urb(sc->urb_int);
 
 	/* flush the work item, when no one can schedule it */
-	flush_work(&sc->task);
+	flush_work_with_sync_wait(&sc->task);
 
 	release_firmware(sc->dsp_firm);
 }

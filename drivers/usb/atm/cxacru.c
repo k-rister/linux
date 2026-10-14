@@ -1247,7 +1247,7 @@ static void cxacru_unbind(struct usbatm_data *usbatm_instance,
 	instance->poll_state = CXPOLL_SHUTDOWN;
 	mutex_unlock(&instance->poll_state_serialize);
 
-	cancel_delayed_work_sync(&instance->poll_work);
+	cancel_delayed_work_sync_with_sync_wait(&instance->poll_work);
 
 	usb_kill_urb(instance->snd_urb);
 	usb_kill_urb(instance->rcv_urb);

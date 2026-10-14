@@ -969,7 +969,7 @@ static void ab8500_usb_remove(struct platform_device *pdev)
 {
 	struct ab8500_usb *ab = platform_get_drvdata(pdev);
 
-	cancel_work_sync(&ab->phy_dis_work);
+	cancel_work_sync_with_sync_wait(&ab->phy_dis_work);
 
 	usb_remove_phy(&ab->phy);
 

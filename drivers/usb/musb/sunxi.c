@@ -280,7 +280,7 @@ static int sunxi_musb_exit(struct musb *musb)
 
 	pm_runtime_put(musb->controller);
 
-	cancel_work_sync(&glue->work);
+	cancel_work_sync_with_sync_wait(&glue->work);
 	if (test_bit(SUNXI_MUSB_FL_PHY_ON, &glue->flags))
 		phy_power_off(glue->phy);
 

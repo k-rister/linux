@@ -1542,7 +1542,7 @@ static void tegra_xusb_deinit_usb_phy(struct tegra_xusb *tegra)
 {
 	unsigned int i;
 
-	cancel_work_sync(&tegra->id_work);
+	cancel_work_sync_with_sync_wait(&tegra->id_work);
 
 	for (i = 0; i < tegra->num_usb_phys; i++)
 		if (tegra->usbphy[i])

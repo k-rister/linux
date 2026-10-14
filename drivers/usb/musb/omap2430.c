@@ -277,7 +277,7 @@ static int omap2430_musb_exit(struct musb *musb)
 	phy_power_off(musb->phy);
 	phy_exit(musb->phy);
 	musb->phy = NULL;
-	cancel_work_sync(&glue->omap_musb_mailbox_work);
+	cancel_work_sync_with_sync_wait(&glue->omap_musb_mailbox_work);
 
 	return 0;
 }

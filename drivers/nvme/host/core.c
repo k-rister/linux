@@ -212,7 +212,7 @@ static inline void nvme_stop_failfast_work(struct nvme_ctrl *ctrl)
 	if (!ctrl->opts)
 		return;
 
-	cancel_delayed_work_sync(&ctrl->failfast_work);
+	cancel_delayed_work_sync_with_sync_wait(&ctrl->failfast_work);
 	clear_bit(NVME_CTRL_FAILFAST_EXPIRED, &ctrl->flags);
 }
 

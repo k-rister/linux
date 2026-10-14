@@ -1467,7 +1467,7 @@ void mlx5e_deactivate_rq(struct mlx5e_rq *rq)
 void mlx5e_close_rq(struct mlx5e_rq *rq)
 {
 	if (rq->dim)
-		cancel_work_sync(&rq->dim->work);
+		cancel_work_sync_with_sync_wait(&rq->dim->work);
 	cancel_work_sync(&rq->recover_work);
 	cancel_work_sync(&rq->rx_timeout_work);
 	mlx5e_destroy_rq(rq);
@@ -1984,7 +1984,7 @@ void mlx5e_close_txqsq(struct mlx5e_txqsq *sq)
 	struct mlx5_rate_limit rl = {0};
 
 	if (sq->dim)
-		cancel_work_sync(&sq->dim->work);
+		cancel_work_sync_with_sync_wait(&sq->dim->work);
 	cancel_work_sync(&sq->recover_work);
 	mlx5e_destroy_sq(mdev, sq->sqn);
 	if (sq->rate_limit) {

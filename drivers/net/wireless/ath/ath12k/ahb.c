@@ -163,7 +163,7 @@ static void ath12k_ahb_cancel_workqueue(struct ath12k_base *ab)
 		if (ath12k_ce_get_attr_flags(ab, i) & CE_ATTR_DIS_INTR)
 			continue;
 
-		cancel_work_sync(&ce_pipe->intr_wq);
+		cancel_work_sync_with_sync_wait(&ce_pipe->intr_wq);
 	}
 }
 

@@ -944,8 +944,8 @@ static void brcmf_del_if(struct brcmf_pub *drvr, s32 bsscfgidx,
 		}
 
 		if (ifp->ndev->netdev_ops == &brcmf_netdev_ops_pri) {
-			cancel_work_sync(&ifp->multicast_work);
-			cancel_work_sync(&ifp->ndoffload_work);
+			cancel_work_sync_with_sync_wait(&ifp->multicast_work);
+			cancel_work_sync_with_sync_wait(&ifp->ndoffload_work);
 		}
 		brcmf_net_detach(ifp->ndev, locked);
 	} else {

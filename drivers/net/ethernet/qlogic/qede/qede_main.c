@@ -1081,7 +1081,7 @@ static void qede_sp_task(struct work_struct *work)
 	if (test_and_clear_bit(QEDE_SP_RECOVERY, &edev->sp_flags)) {
 		bool reloaded;
 
-		cancel_delayed_work_sync(&edev->periodic_task);
+		cancel_delayed_work_sync_with_sync_wait(&edev->periodic_task);
 #ifdef CONFIG_QED_SRIOV
 		/* SRIOV must be disabled outside the lock to avoid a deadlock.
 		 * The recovery of the active VFs is currently not supported.
@@ -1377,8 +1377,8 @@ static void __qede_remove(struct pci_dev *pdev, enum qede_remove_mode mode)
 		set_bit(QEDE_SP_DISABLE, &edev->sp_flags);
 		unregister_netdev(ndev);
 
-		cancel_delayed_work_sync(&edev->sp_task);
-		cancel_delayed_work_sync(&edev->periodic_task);
+		cancel_delayed_work_sync_with_sync_wait(&edev->sp_task);
+		cancel_delayed_work_sync_with_sync_wait(&edev->periodic_task);
 
 		edev->ops->common->set_power_state(cdev, PCI_D0);
 

@@ -392,7 +392,7 @@ void qede_ptp_disable(struct qede_dev *edev)
 	/* Cancel PTP work queue. Should be done after the Tx queues are
 	 * drained to prevent additional scheduling.
 	 */
-	cancel_work_sync(&ptp->work);
+	cancel_work_sync_with_sync_wait(&ptp->work);
 	if (ptp->tx_skb) {
 		dev_kfree_skb_any(ptp->tx_skb);
 		ptp->tx_skb = NULL;

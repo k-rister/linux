@@ -830,7 +830,7 @@ int qede_set_coalesce(struct net_device *dev, struct ethtool_coalesce *coal,
 			DP_INFO(edev, "Configured stats coal ticks=%lu jiffies\n",
 				edev->stats_coal_ticks);
 		} else {
-			cancel_delayed_work_sync(&edev->periodic_task);
+			cancel_delayed_work_sync_with_sync_wait(&edev->periodic_task);
 		}
 	}
 

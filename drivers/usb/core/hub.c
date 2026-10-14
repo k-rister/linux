@@ -1418,7 +1418,7 @@ static void hub_quiesce(struct usb_hub *hub, enum hub_quiescing_type type)
 	if (hub->has_indicators)
 		cancel_delayed_work_sync(&hub->leds);
 	if (hub->tt.hub)
-		flush_work(&hub->tt.clear_work);
+		flush_work_with_sync_wait(&hub->tt.clear_work);
 }
 
 static void hub_pm_barrier_for_all_ports(struct usb_hub *hub)

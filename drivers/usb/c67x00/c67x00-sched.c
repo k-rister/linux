@@ -1144,5 +1144,5 @@ int c67x00_sched_start_scheduler(struct c67x00_hcd *c67x00)
 
 void c67x00_sched_stop_scheduler(struct c67x00_hcd *c67x00)
 {
-	cancel_work_sync(&c67x00->work);
+	cancel_work_sync_with_sync_wait(&c67x00->work);
 }

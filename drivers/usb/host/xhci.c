@@ -1173,7 +1173,7 @@ int xhci_resume(struct xhci_hcd *xhci, bool power_lost, bool is_auto_resume)
 		if (retval)
 			return retval;
 
-		cancel_delayed_work_sync(&xhci->cmd_timer);
+		cancel_delayed_work_sync_with_sync_wait(&xhci->cmd_timer);
 
 		/* Delete all remaining commands */
 		xhci_cleanup_command_queue(xhci);

@@ -1931,7 +1931,7 @@ void xhci_mem_cleanup(struct xhci_hcd *xhci)
 	struct xhci_device_context_array *dcbaa;
 	int i;
 
-	cancel_delayed_work_sync(&xhci->cmd_timer);
+	cancel_delayed_work_sync_with_sync_wait(&xhci->cmd_timer);
 
 	for (i = 0; xhci->interrupters && i < xhci->max_interrupters; i++) {
 		if (xhci->interrupters[i]) {

@@ -1749,7 +1749,7 @@ static int hellcreek_port_set_schedule(struct dsa_switch *ds, int port,
 		port);
 
 	/* First cancel delayed work */
-	cancel_delayed_work_sync(&hellcreek_port->schedule_work);
+	cancel_delayed_work_sync_with_sync_wait(&hellcreek_port->schedule_work);
 
 	mutex_lock(&hellcreek->reg_lock);
 
@@ -1805,7 +1805,7 @@ static int hellcreek_port_del_schedule(struct dsa_switch *ds, int port)
 	dev_dbg(hellcreek->dev, "Remove traffic schedule on port %d\n", port);
 
 	/* First cancel delayed work */
-	cancel_delayed_work_sync(&hellcreek_port->schedule_work);
+	cancel_delayed_work_sync_with_sync_wait(&hellcreek_port->schedule_work);
 
 	mutex_lock(&hellcreek->reg_lock);
 

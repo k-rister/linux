@@ -465,7 +465,7 @@ void hellcreek_ptp_free(struct hellcreek *hellcreek)
 {
 	led_classdev_unregister(&hellcreek->led_is_gm);
 	led_classdev_unregister(&hellcreek->led_sync_good);
-	cancel_delayed_work_sync(&hellcreek->overflow_work);
+	cancel_delayed_work_sync_with_sync_wait(&hellcreek->overflow_work);
 	if (hellcreek->ptp_clock)
 		ptp_clock_unregister(hellcreek->ptp_clock);
 	hellcreek->ptp_clock = NULL;

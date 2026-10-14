@@ -700,7 +700,7 @@ static void mxl862xx_teardown(struct dsa_switch *ds)
 	struct mxl862xx_priv *priv = ds->priv;
 
 	set_bit(MXL862XX_FLAG_WORK_STOPPED, &priv->flags);
-	disable_delayed_work_sync(&priv->stats_work);
+	disable_delayed_work_sync_with_sync_wait(&priv->stats_work);
 }
 
 static int mxl862xx_port_state(struct dsa_switch *ds, int port, bool enable)
@@ -2144,7 +2144,7 @@ static int mxl862xx_probe(struct mdio_device *mdiodev)
 		set_bit(MXL862XX_FLAG_WORK_STOPPED, &priv->flags);
 		mxl862xx_host_shutdown(priv);
 		for (i = 0; i < MXL862XX_MAX_PORTS; i++)
-			cancel_work_sync(&priv->ports[i].host_flood_work);
+			cancel_work_sync_with_sync_wait(&priv->ports[i].host_flood_work);
 	}
 
 	return err;
@@ -2173,7 +2173,7 @@ static void mxl862xx_remove(struct mdio_device *mdiodev)
 	 * are now outside RTNL, cancel_work_sync() will not deadlock.
 	 */
 	for (i = 0; i < MXL862XX_MAX_PORTS; i++)
-		cancel_work_sync(&priv->ports[i].host_flood_work);
+		cancel_work_sync_with_sync_wait(&priv->ports[i].host_flood_work);
 }
 
 static void mxl862xx_shutdown(struct mdio_device *mdiodev)
@@ -2190,12 +2190,12 @@ static void mxl862xx_shutdown(struct mdio_device *mdiodev)
 	dsa_switch_shutdown(ds);
 
 	set_bit(MXL862XX_FLAG_WORK_STOPPED, &priv->flags);
-	disable_delayed_work_sync(&priv->stats_work);
+	disable_delayed_work_sync_with_sync_wait(&priv->stats_work);
 
 	mxl862xx_host_shutdown(priv);
 
 	for (i = 0; i < MXL862XX_MAX_PORTS; i++)
-		cancel_work_sync(&priv->ports[i].host_flood_work);
+		cancel_work_sync_with_sync_wait(&priv->ports[i].host_flood_work);
 
 	dev_set_drvdata(&mdiodev->dev, NULL);
 }

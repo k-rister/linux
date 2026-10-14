@@ -554,7 +554,7 @@ static void ar9331_sw_phylink_mac_link_down(struct phylink_config *config,
 	if (ret)
 		dev_err_ratelimited(priv->dev, "%s: %i\n", __func__, ret);
 
-	cancel_delayed_work_sync(&priv->port[port].mib_read);
+	cancel_delayed_work_sync_with_sync_wait(&priv->port[port].mib_read);
 }
 
 static void ar9331_sw_phylink_mac_link_up(struct phylink_config *config,
@@ -1099,7 +1099,7 @@ static void ar9331_sw_remove(struct mdio_device *mdiodev)
 	for (i = 0; i < ARRAY_SIZE(priv->port); i++) {
 		struct ar9331_sw_port *port = &priv->port[i];
 
-		cancel_delayed_work_sync(&port->mib_read);
+		cancel_delayed_work_sync_with_sync_wait(&port->mib_read);
 	}
 
 	irq_domain_remove(priv->irqdomain);

@@ -438,7 +438,7 @@ static void xrs700x_teardown(struct dsa_switch *ds)
 {
 	struct xrs700x *priv = ds->priv;
 
-	cancel_delayed_work_sync(&priv->mib_work);
+	cancel_delayed_work_sync_with_sync_wait(&priv->mib_work);
 }
 
 static void xrs700x_phylink_get_caps(struct dsa_switch *ds, int port,

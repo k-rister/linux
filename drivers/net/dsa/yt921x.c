@@ -4889,7 +4889,7 @@ static void yt921x_mdio_remove(struct mdio_device *mdiodev)
 	for (size_t i = ARRAY_SIZE(priv->ports); i-- > 0; ) {
 		struct yt921x_port *pp = &priv->ports[i];
 
-		disable_delayed_work_sync(&pp->mib_read);
+		disable_delayed_work_sync_with_sync_wait(&pp->mib_read);
 	}
 
 	dsa_unregister_switch(&priv->ds);

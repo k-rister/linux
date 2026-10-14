@@ -231,7 +231,7 @@ static void mv88e6xxx_phy_ppu_state_destroy(struct mv88e6xxx_chip *chip)
 {
 	mutex_lock(&chip->ppu_mutex);
 	timer_delete_sync(&chip->ppu_timer);
-	cancel_work_sync(&chip->ppu_work);
+	cancel_work_sync_with_sync_wait(&chip->ppu_work);
 	mutex_unlock(&chip->ppu_mutex);
 }
 

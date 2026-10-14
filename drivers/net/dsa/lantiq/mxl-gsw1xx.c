@@ -150,7 +150,7 @@ static void gsw1xx_pcs_disable(struct phylink_pcs *pcs)
 {
 	struct gsw1xx_priv *priv = pcs_to_gsw1xx(pcs);
 
-	cancel_delayed_work_sync(&priv->clear_raneg);
+	cancel_delayed_work_sync_with_sync_wait(&priv->clear_raneg);
 
 	/* Assert SGMII shell reset (will also clear RANEG bit) */
 	regmap_set_bits(priv->shell, GSW1XX_SHELL_RST_REQ,
@@ -463,7 +463,7 @@ static void gsw1xx_pcs_an_restart(struct phylink_pcs *pcs)
 {
 	struct gsw1xx_priv *priv = pcs_to_gsw1xx(pcs);
 
-	cancel_delayed_work_sync(&priv->clear_raneg);
+	cancel_delayed_work_sync_with_sync_wait(&priv->clear_raneg);
 
 	regmap_set_bits(priv->sgmii, GSW1XX_SGMII_TBI_ANEGCTL,
 			GSW1XX_SGMII_TBI_ANEGCTL_RANEG);
@@ -797,7 +797,7 @@ static void gsw1xx_remove(struct mdio_device *mdiodev)
 	dsa_unregister_switch(priv->ds);
 
 	gsw1xx_priv = container_of(priv, struct gsw1xx_priv, gswip);
-	cancel_delayed_work_sync(&gsw1xx_priv->clear_raneg);
+	cancel_delayed_work_sync_with_sync_wait(&gsw1xx_priv->clear_raneg);
 }
 
 static void gsw1xx_shutdown(struct mdio_device *mdiodev)
@@ -813,7 +813,7 @@ static void gsw1xx_shutdown(struct mdio_device *mdiodev)
 	dev_set_drvdata(&mdiodev->dev, NULL);
 
 	gsw1xx_priv = container_of(priv, struct gsw1xx_priv, gswip);
-	cancel_delayed_work_sync(&gsw1xx_priv->clear_raneg);
+	cancel_delayed_work_sync_with_sync_wait(&gsw1xx_priv->clear_raneg);
 }
 
 static const struct gswip_hw_info gsw12x_data = {

@@ -886,7 +886,7 @@ void sja1105_tas_teardown(struct dsa_switch *ds)
 	struct tc_taprio_qopt_offload *offload;
 	int port;
 
-	cancel_work_sync(&priv->tas_data.tas_work);
+	cancel_work_sync_with_sync_wait(&priv->tas_data.tas_work);
 
 	for (port = 0; port < ds->num_ports; port++) {
 		offload = priv->tas_data.offload[port];

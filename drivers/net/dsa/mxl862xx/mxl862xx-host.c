@@ -502,5 +502,5 @@ void mxl862xx_host_init(struct mxl862xx_priv *priv)
 
 void mxl862xx_host_shutdown(struct mxl862xx_priv *priv)
 {
-	cancel_work_sync(&priv->crc_err_work);
+	cancel_work_sync_with_sync_wait(&priv->crc_err_work);
 }

@@ -1726,7 +1726,7 @@ static void rtl8365mb_phylink_mac_link_down(struct phylink_config *config,
 
 	mb = priv->chip_data;
 	p = &mb->ports[port];
-	cancel_delayed_work_sync(&p->mib_work);
+	cancel_delayed_work_sync_with_sync_wait(&p->mib_work);
 
 	/* phylink has no pcs_link_down callback, so on the SerDes path only the
 	 * MAC external interface force is reset here. Clearing the MAC force is
@@ -2609,7 +2609,7 @@ static void rtl8365mb_stats_teardown(struct realtek_priv *priv)
 	dsa_switch_for_each_available_port(dp, ds) {
 		struct rtl8365mb_port *p = &mb->ports[dp->index];
 
-		cancel_delayed_work_sync(&p->mib_work);
+		cancel_delayed_work_sync_with_sync_wait(&p->mib_work);
 	}
 }
 

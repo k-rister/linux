@@ -3648,7 +3648,7 @@ int ksz_suspend(struct dsa_switch *ds)
 {
 	struct ksz_device *dev = ds->priv;
 
-	cancel_delayed_work_sync(&dev->mib_read);
+	cancel_delayed_work_sync_with_sync_wait(&dev->mib_read);
 	return 0;
 }
 
@@ -4044,7 +4044,7 @@ void ksz_switch_remove(struct ksz_device *dev)
 	/* timer started */
 	if (dev->mib_read_interval) {
 		dev->mib_read_interval = 0;
-		cancel_delayed_work_sync(&dev->mib_read);
+		cancel_delayed_work_sync_with_sync_wait(&dev->mib_read);
 	}
 
 	dsa_unregister_switch(dev->ds);

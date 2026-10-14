@@ -1327,7 +1327,7 @@ EXPORT_SYMBOL_GPL(phy_start_machine);
  */
 void phy_stop_machine(struct phy_device *phydev)
 {
-	cancel_delayed_work_sync(&phydev->state_queue);
+	cancel_delayed_work_sync_with_sync_wait(&phydev->state_queue);
 
 	mutex_lock(&phydev->lock);
 	if (phy_is_started(phydev))

@@ -636,7 +636,7 @@ static void tja1102_p0_remove(struct phy_device *phydev)
 {
 	struct tja11xx_priv *priv = phydev->priv;
 
-	cancel_work_sync(&priv->phy_register_work);
+	cancel_work_sync_with_sync_wait(&priv->phy_register_work);
 }
 
 static int tja1102_match_phy_device(struct phy_device *phydev, bool port0)

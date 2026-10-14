@@ -1746,7 +1746,7 @@ static void phylink_run_resolve_and_disable(struct phylink *pl, int bit)
 	set_bit(bit, &pl->phylink_disable_state);
 	if (state == 0) {
 		queue_work(system_power_efficient_wq, &pl->resolve);
-		flush_work(&pl->resolve);
+		flush_work_with_sync_wait(&pl->resolve);
 	}
 }
 
@@ -1952,7 +1952,7 @@ void phylink_destroy(struct phylink *pl)
 	if (pl->link_gpio)
 		gpiod_put(pl->link_gpio);
 
-	cancel_work_sync(&pl->resolve);
+	cancel_work_sync_with_sync_wait(&pl->resolve);
 	kfree(pl);
 }
 EXPORT_SYMBOL_GPL(phylink_destroy);
@@ -2361,7 +2361,7 @@ void phylink_disconnect_phy(struct phylink *pl)
 	mutex_unlock(&pl->phydev_mutex);
 
 	if (phy) {
-		flush_work(&pl->resolve);
+		flush_work_with_sync_wait(&pl->resolve);
 		phy_disconnect(phy);
 	}
 }
@@ -4415,7 +4415,7 @@ void phylink_replay_link_end(struct phylink *pl)
 
 	pl->force_major_config = true;
 	phylink_enable_and_run_resolve(pl, PHYLINK_DISABLE_REPLAY);
-	flush_work(&pl->resolve);
+	flush_work_with_sync_wait(&pl->resolve);
 }
 EXPORT_SYMBOL_GPL(phylink_replay_link_end);
 

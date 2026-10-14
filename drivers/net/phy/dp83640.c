@@ -1426,7 +1426,7 @@ static void dp83640_remove(struct phy_device *phydev)
 	phydev->mii_ts = NULL;
 
 	enable_status_frames(phydev, false);
-	cancel_delayed_work_sync(&dp83640->ts_work);
+	cancel_delayed_work_sync_with_sync_wait(&dp83640->ts_work);
 
 	skb_queue_purge(&dp83640->rx_queue);
 	skb_queue_purge(&dp83640->tx_queue);

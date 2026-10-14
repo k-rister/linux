@@ -396,7 +396,7 @@ void brcmf_btcoex_detach(struct brcmf_cfg80211_info *cfg)
 	timer_shutdown_sync(&cfg->btcoex->timer);
 	cfg->btcoex->timer_on = false;
 
-	cancel_work_sync(&cfg->btcoex->work);
+	cancel_work_sync_with_sync_wait(&cfg->btcoex->work);
 
 	brcmf_btcoex_boost_wifi(cfg->btcoex, false);
 	brcmf_btcoex_restore_part1(cfg->btcoex);

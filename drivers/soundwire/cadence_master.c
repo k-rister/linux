@@ -1263,7 +1263,7 @@ update_masks:
 	 * from being queued.
 	 */
 	if (!state)
-		cancel_work_sync(&cdns->work);
+		cancel_work_sync_with_sync_wait(&cdns->work);
 
 	cdns_writel(cdns, CDNS_MCP_SLAVE_INTMASK0, slave_intmask0);
 	cdns_writel(cdns, CDNS_MCP_SLAVE_INTMASK1, slave_intmask1);

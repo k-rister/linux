@@ -90,7 +90,7 @@ static struct dim *mlx5e_dim_enable(struct mlx5_core_dev *mdev,
 
 static void mlx5e_dim_disable(struct dim *dim)
 {
-	cancel_work_sync(&dim->work);
+	cancel_work_sync_with_sync_wait(&dim->work);
 	kvfree(dim);
 }
 

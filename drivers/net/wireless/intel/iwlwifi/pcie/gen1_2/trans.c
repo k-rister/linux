@@ -4386,7 +4386,7 @@ void iwl_pcie_gen1_2_remove(struct iwl_trans *trans)
 {
 	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
 
-	cancel_delayed_work_sync(&trans_pcie->me_recheck_wk);
+	cancel_delayed_work_sync_with_sync_wait(&trans_pcie->me_recheck_wk);
 
 	iwl_drv_stop(trans->drv);
 

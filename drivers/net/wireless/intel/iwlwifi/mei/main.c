@@ -2170,10 +2170,10 @@ static void iwl_mei_remove(struct mei_cl_device *cldev)
 	 * includes a call to synchronize_net() so that we know there won't be
 	 * any new Rx that will trigger the following workers.
 	 */
-	cancel_work_sync(&mei->send_csa_msg_wk);
-	cancel_delayed_work_sync(&mei->csa_throttle_end_wk);
-	cancel_work_sync(&mei->netdev_work);
-	cancel_delayed_work_sync(&mei->ownership_dwork);
+	cancel_work_sync_with_sync_wait(&mei->send_csa_msg_wk);
+	cancel_delayed_work_sync_with_sync_wait(&mei->csa_throttle_end_wk);
+	cancel_work_sync_with_sync_wait(&mei->netdev_work);
+	cancel_delayed_work_sync_with_sync_wait(&mei->ownership_dwork);
 
 	/*
 	 * If someone waits for the ownership, let him know that we are going

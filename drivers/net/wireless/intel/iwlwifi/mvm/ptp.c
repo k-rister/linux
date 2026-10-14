@@ -328,7 +328,7 @@ void iwl_mvm_ptp_remove(struct iwl_mvm *mvm)
 			       mvm->ptp_data.ptp_clock_info.name,
 			       ptp_clock_index(mvm->ptp_data.ptp_clock));
 
-		cancel_delayed_work_sync(&mvm->ptp_data.dwork);
+		cancel_delayed_work_sync_with_sync_wait(&mvm->ptp_data.dwork);
 		ptp_clock_unregister(mvm->ptp_data.ptp_clock);
 		mvm->ptp_data.ptp_clock = NULL;
 		memset(&mvm->ptp_data.ptp_clock_info, 0,

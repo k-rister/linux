@@ -378,7 +378,7 @@ void brcmf_fweh_detach(struct brcmf_pub *drvr)
 
 	/* cancel the worker if initialized */
 	if (fweh->event_work.func) {
-		cancel_work_sync(&fweh->event_work);
+		cancel_work_sync_with_sync_wait(&fweh->event_work);
 		WARN_ON(!list_empty(&fweh->event_q));
 	}
 	drvr->fweh = NULL;

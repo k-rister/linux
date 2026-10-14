@@ -1697,7 +1697,7 @@ void brcmf_proto_msgbuf_detach(struct brcmf_pub *drvr)
 	brcmf_dbg(TRACE, "Enter\n");
 	if (drvr->proto->pd) {
 		msgbuf = (struct brcmf_msgbuf *)drvr->proto->pd;
-		cancel_work_sync(&msgbuf->flowring_work);
+		cancel_work_sync_with_sync_wait(&msgbuf->flowring_work);
 		while (!list_empty(&msgbuf->work_queue)) {
 			work = list_first_entry(&msgbuf->work_queue,
 						struct brcmf_msgbuf_work_item,

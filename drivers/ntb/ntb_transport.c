@@ -929,7 +929,7 @@ static void ntb_qp_link_cleanup(struct ntb_transport_qp *qp)
 
 	dev_info(&pdev->dev, "qp %d: Link Cleanup\n", qp->qp_num);
 
-	cancel_delayed_work_sync(&qp->link_work);
+	cancel_delayed_work_sync_with_sync_wait(&qp->link_work);
 	ntb_qp_link_down_reset(qp);
 
 	if (qp->event_handler)
@@ -968,12 +968,12 @@ static void ntb_transport_link_cleanup(struct ntb_transport_ctx *nt)
 		if (qp_bitmap_alloc & BIT_ULL(i)) {
 			qp = &nt->qp_vec[i];
 			ntb_qp_link_cleanup(qp);
-			cancel_work_sync(&qp->link_cleanup);
-			cancel_delayed_work_sync(&qp->link_work);
+			cancel_work_sync_with_sync_wait(&qp->link_cleanup);
+			cancel_delayed_work_sync_with_sync_wait(&qp->link_work);
 		}
 
 	if (!nt->link_is_up)
-		cancel_delayed_work_sync(&nt->link_work);
+		cancel_delayed_work_sync_with_sync_wait(&nt->link_work);
 
 	for (i = 0; i < nt->mw_count; i++)
 		ntb_free_mw(nt, i);
@@ -1402,8 +1402,8 @@ static void ntb_transport_free(struct ntb_client *self, struct ntb_dev *ndev)
 	int i;
 
 	ntb_transport_link_cleanup(nt);
-	cancel_work_sync(&nt->link_cleanup);
-	cancel_delayed_work_sync(&nt->link_work);
+	cancel_work_sync_with_sync_wait(&nt->link_cleanup);
+	cancel_delayed_work_sync_with_sync_wait(&nt->link_work);
 
 	qp_bitmap_alloc = nt->qp_bitmap & ~nt->qp_bitmap_free;
 
@@ -2219,7 +2219,7 @@ void ntb_transport_free_queue(struct ntb_transport_qp *qp)
 	ntb_db_set_mask(qp->ndev, qp_bit);
 	tasklet_kill(&qp->rxc_db_work);
 
-	cancel_delayed_work_sync(&qp->link_work);
+	cancel_delayed_work_sync_with_sync_wait(&qp->link_work);
 
 	qp->cb_data = NULL;
 	qp->rx_handler = NULL;
@@ -2414,7 +2414,7 @@ void ntb_transport_link_down(struct ntb_transport_qp *qp)
 	if (qp->link_is_up)
 		ntb_send_link_down(qp);
 	else
-		cancel_delayed_work_sync(&qp->link_work);
+		cancel_delayed_work_sync_with_sync_wait(&qp->link_work);
 }
 EXPORT_SYMBOL_GPL(ntb_transport_link_down);
 

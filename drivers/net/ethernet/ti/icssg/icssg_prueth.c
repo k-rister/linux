@@ -1151,7 +1151,7 @@ static int emac_ndo_stop(struct net_device *ndev)
 	prueth_destroy_txq(emac);
 	prueth_destroy_rxq(emac);
 
-	cancel_work_sync(&emac->rx_mode_work);
+	cancel_work_sync_with_sync_wait(&emac->rx_mode_work);
 
 	/* Destroying the queued work in ndo_stop() */
 	cancel_delayed_work_sync(&emac->stats_work);
@@ -2460,7 +2460,7 @@ netdev_unregister:
 			prueth->emac[i]->ndev->phydev = NULL;
 		}
 		unregister_netdev(prueth->registered_netdevs[i]);
-		disable_work_sync(&prueth->emac[i]->rx_mode_work);
+		disable_work_sync_with_sync_wait(&prueth->emac[i]->rx_mode_work);
 	}
 
 netdev_exit:
@@ -2520,7 +2520,7 @@ static void prueth_remove(struct platform_device *pdev)
 		phy_disconnect(prueth->emac[i]->ndev->phydev);
 		prueth->emac[i]->ndev->phydev = NULL;
 		unregister_netdev(prueth->registered_netdevs[i]);
-		disable_work_sync(&prueth->emac[i]->rx_mode_work);
+		disable_work_sync_with_sync_wait(&prueth->emac[i]->rx_mode_work);
 	}
 
 	for (i = 0; i < PRUETH_NUM_MACS; i++) {

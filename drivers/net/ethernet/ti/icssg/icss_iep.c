@@ -579,6 +579,7 @@ static int icss_iep_pps_enable(struct icss_iep *iep, int on)
 {
 	struct ptp_clock_request rq;
 	struct timespec64 ts;
+	bool cancel_work = false;
 	int ret = 0;
 	u64 ns;
 
@@ -606,8 +607,7 @@ static int icss_iep_pps_enable(struct icss_iep *iep, int on)
 		ret = icss_iep_perout_enable_hw(iep, &rq.perout, on);
 	} else {
 		ret = icss_iep_perout_enable_hw(iep, &rq.perout, on);
-		if (iep->cap_cmp_irq)
-			cancel_work_sync(&iep->work);
+		cancel_work = iep->cap_cmp_irq;
 	}
 
 	if (!ret)
@@ -615,6 +615,8 @@ static int icss_iep_pps_enable(struct icss_iep *iep, int on)
 
 exit:
 	mutex_unlock(&iep->ptp_clk_mutex);
+	if (cancel_work)
+		cancel_work_sync_with_sync_wait(&iep->work);
 
 	return ret;
 }

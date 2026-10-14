@@ -1387,8 +1387,8 @@ void iwl_mvm_mac_stop(struct ieee80211_hw *hw, bool suspend)
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
 
 	wiphy_work_flush(mvm->hw->wiphy, &mvm->async_handlers_wiphy_wk);
-	flush_work(&mvm->async_handlers_wk);
-	flush_work(&mvm->add_stream_wk);
+	flush_work_with_sync_wait(&mvm->async_handlers_wk);
+	flush_work_with_sync_wait(&mvm->add_stream_wk);
 
 	/*
 	 * Lock and clear the firmware running bit here already, so that
@@ -1400,14 +1400,14 @@ void iwl_mvm_mac_stop(struct ieee80211_hw *hw, bool suspend)
 	 */
 	clear_bit(IWL_MVM_STATUS_FIRMWARE_RUNNING, &mvm->status);
 
-	cancel_delayed_work_sync(&mvm->cs_tx_unblock_dwork);
-	cancel_delayed_work_sync(&mvm->scan_timeout_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&mvm->cs_tx_unblock_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&mvm->scan_timeout_dwork);
 
 	/*
 	 * The work item could be running or queued if the
 	 * ROC time event stops just as we get here.
 	 */
-	flush_work(&mvm->roc_done_wk);
+	flush_work_with_sync_wait(&mvm->roc_done_wk);
 
 	iwl_mvm_mei_set_sw_rfkill_state(mvm);
 
@@ -1419,7 +1419,7 @@ void iwl_mvm_mac_stop(struct ieee80211_hw *hw, bool suspend)
 	 * The worker might have been waiting for the mutex, let it run and
 	 * discover that its list is now empty.
 	 */
-	cancel_work_sync(&mvm->async_handlers_wk);
+	cancel_work_sync_with_sync_wait(&mvm->async_handlers_wk);
 	wiphy_work_cancel(hw->wiphy, &mvm->async_handlers_wiphy_wk);
 }
 
@@ -1815,10 +1815,10 @@ void iwl_mvm_prepare_mac_removal(struct iwl_mvm *mvm,
 		 * We assume here that all the packets sent to the OFFCHANNEL
 		 * queue are sent in ROC session.
 		 */
-		flush_work(&mvm->roc_done_wk);
+		flush_work_with_sync_wait(&mvm->roc_done_wk);
 	}
 
-	cancel_delayed_work_sync(&mvmvif->csa_work);
+	cancel_delayed_work_sync_with_sync_wait(&mvmvif->csa_work);
 }
 
 static void iwl_mvm_mac_remove_interface(struct ieee80211_hw *hw,
@@ -3980,7 +3980,7 @@ int iwl_mvm_mac_sta_state_common(struct ieee80211_hw *hw,
 	 */
 	if (old_state == IEEE80211_STA_NONE &&
 	    new_state == IEEE80211_STA_NOTEXIST) {
-		flush_work(&mvm->add_stream_wk);
+		flush_work_with_sync_wait(&mvm->add_stream_wk);
 
 		/*
 		 * No need to make sure deferred TX indication is off since the
@@ -4785,7 +4785,7 @@ int iwl_mvm_roc_common(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	 * Flush the done work, just in case it's still pending, so that
 	 * the work it does can complete and we can accept new frames.
 	 */
-	flush_work(&mvm->roc_done_wk);
+	flush_work_with_sync_wait(&mvm->roc_done_wk);
 
 	guard(mvm)(mvm);
 
@@ -5697,7 +5697,7 @@ void iwl_mvm_mac_flush(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	}
 
 	/* Make sure we're done with the deferred traffic before flushing */
-	flush_work(&mvm->add_stream_wk);
+	flush_work_with_sync_wait(&mvm->add_stream_wk);
 
 	mutex_lock(&mvm->mutex);
 

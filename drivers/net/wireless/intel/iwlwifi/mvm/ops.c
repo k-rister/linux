@@ -1563,7 +1563,7 @@ static void iwl_op_mode_mvm_stop(struct iwl_op_mode *op_mode)
 	 * After we unregister from mei, the worker can't be scheduled
 	 * anymore.
 	 */
-	cancel_work_sync(&mvm->sap_connected_wk);
+	cancel_work_sync_with_sync_wait(&mvm->sap_connected_wk);
 
 	iwl_mvm_leds_exit(mvm);
 
@@ -1602,7 +1602,7 @@ static void iwl_op_mode_mvm_stop(struct iwl_op_mode *op_mode)
 		kfree(mvm->nvm_sections[i].data);
 	kfree(mvm->acs_survey);
 
-	cancel_delayed_work_sync(&mvm->tcm.work);
+	cancel_delayed_work_sync_with_sync_wait(&mvm->tcm.work);
 
 	iwl_fw_runtime_free(&mvm->fwrt);
 	mutex_destroy(&mvm->mutex);

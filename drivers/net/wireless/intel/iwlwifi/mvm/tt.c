@@ -293,7 +293,7 @@ static void check_exit_ctkill(struct work_struct *work)
 
 	duration = tt->params.ct_kill_duration;
 
-	flush_work(&mvm->roc_done_wk);
+	flush_work_with_sync_wait(&mvm->roc_done_wk);
 
 	mutex_lock(&mvm->mutex);
 
@@ -853,7 +853,7 @@ void iwl_mvm_thermal_exit(struct iwl_mvm *mvm)
 	if (!(mvm->init_status & IWL_MVM_INIT_STATUS_THERMAL_INIT_COMPLETE))
 		return;
 
-	cancel_delayed_work_sync(&mvm->thermal_throttle.ct_kill_exit);
+	cancel_delayed_work_sync_with_sync_wait(&mvm->thermal_throttle.ct_kill_exit);
 	IWL_DEBUG_TEMP(mvm, "Exit Thermal Throttling\n");
 
 #ifdef CONFIG_THERMAL

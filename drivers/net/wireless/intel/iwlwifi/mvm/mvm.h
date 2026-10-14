@@ -1739,7 +1739,7 @@ static inline void iwl_mvm_set_tx_cmd_ccmp(struct ieee80211_tx_info *info,
 
 static inline void iwl_mvm_wait_for_async_handlers(struct iwl_mvm *mvm)
 {
-	flush_work(&mvm->async_handlers_wk);
+	flush_work_with_sync_wait(&mvm->async_handlers_wk);
 }
 
 /* Statistics */

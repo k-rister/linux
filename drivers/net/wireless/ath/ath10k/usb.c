@@ -263,7 +263,8 @@ static void ath10k_usb_flush_all(struct ath10k *ar)
 	for (i = 0; i < ATH10K_USB_PIPE_MAX; i++) {
 		if (ar_usb->pipes[i].ar_usb) {
 			usb_kill_anchored_urbs(&ar_usb->pipes[i].urb_submitted);
-			cancel_work_sync(&ar_usb->pipes[i].io_complete_work);
+			cancel_work_sync_with_sync_wait(
+				&ar_usb->pipes[i].io_complete_work);
 		}
 	}
 }

@@ -1148,7 +1148,7 @@ void iwl_mvm_tcm_rm_vif(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
 {
 	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
 
-	cancel_delayed_work_sync(&mvmvif->uapsd_nonagg_detected_wk);
+	cancel_delayed_work_sync_with_sync_wait(&mvmvif->uapsd_nonagg_detected_wk);
 }
 
 u32 iwl_mvm_get_systime(struct iwl_mvm *mvm)

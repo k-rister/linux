@@ -3404,7 +3404,7 @@ void __exit fb_console_exit(void)
 		dummycon_unregister_output_notifier(&fbcon_output_nb);
 	console_unlock();
 
-	cancel_work_sync(&fbcon_deferred_takeover_work);
+	cancel_work_sync_with_sync_wait(&fbcon_deferred_takeover_work);
 #endif
 
 	console_lock();

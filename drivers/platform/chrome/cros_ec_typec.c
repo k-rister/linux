@@ -1324,7 +1324,7 @@ static int cros_ec_typec_event(struct notifier_block *nb,
 {
 	struct cros_typec_data *typec = container_of(nb, struct cros_typec_data, nb);
 
-	flush_work(&typec->port_work);
+	flush_work_with_sync_wait(&typec->port_work);
 	schedule_work(&typec->port_work);
 
 	return NOTIFY_OK;
@@ -1437,7 +1437,7 @@ static int __maybe_unused cros_typec_suspend(struct device *dev)
 {
 	struct cros_typec_data *typec = dev_get_drvdata(dev);
 
-	cancel_work_sync(&typec->port_work);
+	cancel_work_sync_with_sync_wait(&typec->port_work);
 
 	return 0;
 }

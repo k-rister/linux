@@ -628,7 +628,7 @@ static void mei_wdt_remove(struct mei_cl_device *cldev)
 	if (!completion_done(&wdt->response))
 		complete(&wdt->response);
 
-	cancel_work_sync(&wdt->unregister);
+	cancel_work_sync_with_sync_wait(&wdt->unregister);
 
 	mei_wdt_unregister(wdt);
 

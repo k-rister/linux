@@ -1381,7 +1381,7 @@ static void xgbe_phy_stop(struct xgbe_prv_data *pdata)
 
 	if (pdata->dev_irq != pdata->an_irq) {
 		devm_free_irq(pdata->dev, pdata->an_irq, pdata);
-		cancel_work_sync(&pdata->an_bh_work);
+		cancel_work_sync_with_sync_wait(&pdata->an_bh_work);
 	}
 
 	pdata->phy_if.phy_impl.stop(pdata);

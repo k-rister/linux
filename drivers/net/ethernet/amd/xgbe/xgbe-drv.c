@@ -1039,8 +1039,8 @@ static void xgbe_free_irqs(struct xgbe_prv_data *pdata)
 
 	devm_free_irq(pdata->dev, pdata->dev_irq, pdata);
 
-	cancel_work_sync(&pdata->dev_bh_work);
-	cancel_work_sync(&pdata->ecc_bh_work);
+	cancel_work_sync_with_sync_wait(&pdata->dev_bh_work);
+	cancel_work_sync_with_sync_wait(&pdata->ecc_bh_work);
 
 	if (pdata->vdata->ecc_support && (pdata->dev_irq != pdata->ecc_irq))
 		devm_free_irq(pdata->dev, pdata->ecc_irq, pdata);

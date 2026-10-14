@@ -787,7 +787,7 @@ void efx_siena_remove_filters(struct efx_nic *efx)
 	struct efx_channel *channel;
 
 	efx_for_each_channel(channel, efx) {
-		cancel_delayed_work_sync(&channel->filter_work);
+		cancel_delayed_work_sync_with_sync_wait(&channel->filter_work);
 		kfree(channel->rps_flow_id);
 		channel->rps_flow_id = NULL;
 	}

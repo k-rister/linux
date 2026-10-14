@@ -9055,9 +9055,9 @@ static void hpsa_remove_one(struct pci_dev *pdev)
 	spin_lock_irqsave(&h->lock, flags);
 	h->remove_in_progress = 1;
 	spin_unlock_irqrestore(&h->lock, flags);
-	cancel_delayed_work_sync(&h->monitor_ctlr_work);
+	cancel_delayed_work_sync_with_sync_wait(&h->monitor_ctlr_work);
 	cancel_delayed_work_sync(&h->rescan_ctlr_work);
-	cancel_delayed_work_sync(&h->event_monitor_work);
+	cancel_delayed_work_sync_with_sync_wait(&h->event_monitor_work);
 	destroy_workqueue(h->rescan_ctlr_wq);
 	destroy_workqueue(h->resubmit_wq);
 	destroy_workqueue(h->monitor_ctlr_wq);

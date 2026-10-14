@@ -520,7 +520,7 @@ static inline void pqi_schedule_rescan_worker_delayed(struct pqi_ctrl_info *ctrl
 
 static inline void pqi_cancel_rescan_worker(struct pqi_ctrl_info *ctrl_info)
 {
-	cancel_delayed_work_sync(&ctrl_info->rescan_work);
+	cancel_delayed_work_sync_with_sync_wait(&ctrl_info->rescan_work);
 }
 
 static inline u32 pqi_read_heartbeat_counter(struct pqi_ctrl_info *ctrl_info)
@@ -1152,7 +1152,7 @@ static inline void pqi_schedule_update_time_worker(struct pqi_ctrl_info *ctrl_in
 
 static inline void pqi_cancel_update_time_worker(struct pqi_ctrl_info *ctrl_info)
 {
-	cancel_delayed_work_sync(&ctrl_info->update_time_work);
+	cancel_delayed_work_sync_with_sync_wait(&ctrl_info->update_time_work);
 }
 
 static inline int pqi_report_luns(struct pqi_ctrl_info *ctrl_info, u8 cmd, void *buffer,
@@ -6676,7 +6676,7 @@ static void pqi_sdev_destroy(struct scsi_device *sdev)
 	mutex_unlock(&ctrl_info->scan_mutex);
 
 	for (lun = 0, tmf_work = device->tmf_work; lun < PQI_MAX_LUNS_PER_DEVICE; lun++, tmf_work++)
-		cancel_work_sync(&tmf_work->work_struct);
+		cancel_work_sync_with_sync_wait(&tmf_work->work_struct);
 
 	mutex_lock(&ctrl_info->lun_reset_mutex);
 	pqi_dev_info(ctrl_info, "removed", device);

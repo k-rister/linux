@@ -1047,7 +1047,7 @@ void target_free_device(struct se_device *dev)
 	WARN_ON(!list_empty(&dev->dev_sep_list));
 
 	percpu_ref_exit(&dev->non_ordered);
-	cancel_work_sync(&dev->delayed_cmd_work);
+	cancel_work_sync_with_sync_wait(&dev->delayed_cmd_work);
 
 	if (target_dev_configured(dev)) {
 		dev->transport->destroy_device(dev);

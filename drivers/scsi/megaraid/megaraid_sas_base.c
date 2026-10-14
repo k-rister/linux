@@ -7777,7 +7777,7 @@ megasas_suspend(struct device *dev)
 	/* cancel the delayed work if this work still in queue */
 	if (instance->ev != NULL) {
 		struct megasas_aen_event *ev = instance->ev;
-		cancel_delayed_work_sync(&ev->hotplug_work);
+		cancel_delayed_work_sync_with_sync_wait(&ev->hotplug_work);
 		instance->ev = NULL;
 	}
 
@@ -8014,7 +8014,7 @@ skip_firing_dcmds:
 	/* cancel the delayed work if this work still in queue*/
 	if (instance->ev != NULL) {
 		struct megasas_aen_event *ev = instance->ev;
-		cancel_delayed_work_sync(&ev->hotplug_work);
+		cancel_delayed_work_sync_with_sync_wait(&ev->hotplug_work);
 		instance->ev = NULL;
 	}
 

@@ -343,7 +343,7 @@ static void fc_rport_work(struct work_struct *work)
 			FC_RPORT_DBG(rdata, "lld callback ev %d\n", event);
 			rdata->lld_event_callback(lport, rdata, event);
 		}
-		if (cancel_delayed_work_sync(&rdata->retry_work))
+		if (cancel_delayed_work_sync_with_sync_wait(&rdata->retry_work))
 			kref_put(&rdata->kref, fc_rport_destroy);
 
 		/*

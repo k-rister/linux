@@ -746,8 +746,8 @@ static void f81232_close(struct usb_serial_port *port)
 	f81232_port_disable(port);
 	usb_serial_generic_close(port);
 	usb_kill_urb(port->interrupt_in_urb);
-	flush_work(&port_priv->interrupt_work);
-	flush_work(&port_priv->lsr_work);
+	flush_work_with_sync_wait(&port_priv->interrupt_work);
+	flush_work_with_sync_wait(&port_priv->lsr_work);
 }
 
 static void f81232_dtr_rts(struct usb_serial_port *port, int on)
@@ -955,8 +955,8 @@ static int f81232_suspend(struct usb_serial *serial, pm_message_t message)
 	usb_kill_urb(port->interrupt_in_urb);
 
 	if (port_priv) {
-		flush_work(&port_priv->interrupt_work);
-		flush_work(&port_priv->lsr_work);
+		flush_work_with_sync_wait(&port_priv->interrupt_work);
+		flush_work_with_sync_wait(&port_priv->lsr_work);
 	}
 
 	return 0;

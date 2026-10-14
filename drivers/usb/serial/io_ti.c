@@ -2549,14 +2549,14 @@ static void edge_disconnect(struct usb_serial *serial)
 {
 	struct edgeport_serial *edge_serial = usb_get_serial_data(serial);
 
-	cancel_delayed_work_sync(&edge_serial->heartbeat_work);
+	cancel_delayed_work_sync_with_sync_wait(&edge_serial->heartbeat_work);
 }
 
 static void edge_release(struct usb_serial *serial)
 {
 	struct edgeport_serial *edge_serial = usb_get_serial_data(serial);
 
-	cancel_delayed_work_sync(&edge_serial->heartbeat_work);
+	cancel_delayed_work_sync_with_sync_wait(&edge_serial->heartbeat_work);
 	kfree(edge_serial);
 }
 
@@ -2667,7 +2667,7 @@ static int edge_suspend(struct usb_serial *serial, pm_message_t message)
 {
 	struct edgeport_serial *edge_serial = usb_get_serial_data(serial);
 
-	cancel_delayed_work_sync(&edge_serial->heartbeat_work);
+	cancel_delayed_work_sync_with_sync_wait(&edge_serial->heartbeat_work);
 
 	return 0;
 }

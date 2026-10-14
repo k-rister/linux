@@ -1637,7 +1637,7 @@ static void acm_disconnect(struct usb_interface *intf)
 
 	tty_port_tty_vhangup(&acm->port);
 
-	cancel_delayed_work_sync(&acm->dwork);
+	cancel_delayed_work_sync_with_sync_wait(&acm->dwork);
 
 	tty_unregister_device(acm_tty_driver, acm->minor);
 
@@ -1679,7 +1679,7 @@ static int acm_suspend(struct usb_interface *intf, pm_message_t message)
 		return 0;
 
 	acm_poison_urbs(acm);
-	cancel_delayed_work_sync(&acm->dwork);
+	cancel_delayed_work_sync_with_sync_wait(&acm->dwork);
 	acm->urbs_in_error_delay = 0;
 
 	return 0;

@@ -562,8 +562,8 @@ static void oti6858_close(struct usb_serial_port *port)
 	dev_dbg(&port->dev, "%s(): after buf_clear()\n", __func__);
 
 	/* cancel scheduled setup */
-	cancel_delayed_work_sync(&priv->delayed_setup_work);
-	cancel_delayed_work_sync(&priv->delayed_write_work);
+	cancel_delayed_work_sync_with_sync_wait(&priv->delayed_setup_work);
+	cancel_delayed_work_sync_with_sync_wait(&priv->delayed_write_work);
 
 	/* shutdown our urbs */
 	dev_dbg(&port->dev, "%s(): shutting down urbs\n", __func__);

@@ -108,7 +108,7 @@ EXPORT_SYMBOL_GPL(mt792xu_reset_work_init);
 
 void mt792xu_reset_work_cleanup(struct mt792x_dev *dev)
 {
-	cancel_work_sync(&dev->usb_reset_work);
+	cancel_work_sync_with_sync_wait(&dev->usb_reset_work);
 	atomic_set(&dev->usb_reset_pending, 0);
 }
 EXPORT_SYMBOL_GPL(mt792xu_reset_work_cleanup);

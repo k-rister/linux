@@ -173,7 +173,7 @@ static void mt76x02u_stop_pre_tbtt_timer(struct mt76x02_dev *dev)
 {
 	do {
 		hrtimer_cancel(&dev->pre_tbtt_timer);
-		cancel_work_sync(&dev->pre_tbtt_work);
+		cancel_work_sync_with_sync_wait(&dev->pre_tbtt_work);
 		/* Timer can be rearmed by work. */
 	} while (hrtimer_active(&dev->pre_tbtt_timer));
 }

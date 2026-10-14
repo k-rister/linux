@@ -1281,7 +1281,7 @@ static void mlxsw_linecard_fini(struct mlxsw_core *mlxsw_core,
 	struct mlxsw_linecard *linecard;
 
 	linecard = mlxsw_linecard_get(linecards, slot_index);
-	cancel_delayed_work_sync(&linecard->status_event_to_dw);
+	cancel_delayed_work_sync_with_sync_wait(&linecard->status_event_to_dw);
 	/* Make sure all scheduled events are processed */
 	mlxsw_core_flush_owq();
 	if (linecard->active)

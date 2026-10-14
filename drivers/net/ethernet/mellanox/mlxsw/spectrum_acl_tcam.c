@@ -841,7 +841,7 @@ mlxsw_sp_acl_tcam_vregion_destroy(struct mlxsw_sp *mlxsw_sp,
 		mutex_lock(&tcam->lock);
 		list_del(&vregion->tlist);
 		mutex_unlock(&tcam->lock);
-		if (cancel_delayed_work_sync(&vregion->rehash.dw) &&
+		if (cancel_delayed_work_sync_with_sync_wait(&vregion->rehash.dw) &&
 		    ctx->hints_priv)
 			ops->region_rehash_hints_put(ctx->hints_priv);
 	}
@@ -1525,7 +1525,7 @@ mlxsw_sp_acl_tcam_region_rehash_intrvl_set(struct devlink *devlink, u32 id,
 		if (val)
 			mlxsw_core_schedule_dw(&vregion->rehash.dw, 0);
 		else
-			cancel_delayed_work_sync(&vregion->rehash.dw);
+			cancel_delayed_work_sync_with_sync_wait(&vregion->rehash.dw);
 	}
 	mutex_unlock(&tcam->lock);
 	return 0;

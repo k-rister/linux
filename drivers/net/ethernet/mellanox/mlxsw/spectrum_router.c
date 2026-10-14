@@ -2970,8 +2970,8 @@ static int mlxsw_sp_neigh_init(struct mlxsw_sp *mlxsw_sp)
 
 static void mlxsw_sp_neigh_fini(struct mlxsw_sp *mlxsw_sp)
 {
-	cancel_delayed_work_sync(&mlxsw_sp->router->neighs_update.dw);
-	cancel_delayed_work_sync(&mlxsw_sp->router->nexthop_probe_dw);
+	cancel_delayed_work_sync_with_sync_wait(&mlxsw_sp->router->neighs_update.dw);
+	cancel_delayed_work_sync_with_sync_wait(&mlxsw_sp->router->nexthop_probe_dw);
 	rhashtable_destroy(&mlxsw_sp->router->neigh_ht);
 }
 
@@ -11745,7 +11745,7 @@ err_crif_ht_init:
 err_ipips_init:
 	__mlxsw_sp_router_fini(mlxsw_sp);
 err_router_init:
-	cancel_delayed_work_sync(&mlxsw_sp->router->nh_grp_activity_dw);
+	cancel_delayed_work_sync_with_sync_wait(&mlxsw_sp->router->nh_grp_activity_dw);
 err_router_ops_init:
 	mutex_destroy(&mlxsw_sp->router->lock);
 	kfree(mlxsw_sp->router);
@@ -11779,7 +11779,7 @@ void mlxsw_sp_router_fini(struct mlxsw_sp *mlxsw_sp)
 	rhashtable_destroy(&mlxsw_sp->router->crif_ht);
 	mlxsw_sp_ipips_fini(mlxsw_sp);
 	__mlxsw_sp_router_fini(mlxsw_sp);
-	cancel_delayed_work_sync(&router->nh_grp_activity_dw);
+	cancel_delayed_work_sync_with_sync_wait(&router->nh_grp_activity_dw);
 	mutex_destroy(&router->lock);
 	kfree(router);
 }

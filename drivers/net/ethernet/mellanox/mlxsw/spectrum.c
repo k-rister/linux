@@ -1753,8 +1753,8 @@ static void mlxsw_sp_port_remove(struct mlxsw_sp *mlxsw_sp, u16 local_port)
 	u8 slot_index = mlxsw_sp_port->mapping.slot_index;
 	u8 module = mlxsw_sp_port->mapping.module;
 
-	cancel_delayed_work_sync(&mlxsw_sp_port->periodic_hw_stats.update_dw);
-	cancel_delayed_work_sync(&mlxsw_sp_port->ptp.shaper_dw);
+	cancel_delayed_work_sync_with_sync_wait(&mlxsw_sp_port->periodic_hw_stats.update_dw);
+	cancel_delayed_work_sync_with_sync_wait(&mlxsw_sp_port->ptp.shaper_dw);
 	unregister_netdev(mlxsw_sp_port->dev); /* This calls ndo_stop */
 	mlxsw_sp_port_ptp_clear(mlxsw_sp_port);
 	mlxsw_sp_port_vlan_classification_set(mlxsw_sp_port, true, true);

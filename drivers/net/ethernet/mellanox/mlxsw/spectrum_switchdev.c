@@ -4139,7 +4139,7 @@ static void mlxsw_sp_fdb_fini(struct mlxsw_sp *mlxsw_sp)
 {
 	struct notifier_block *nb;
 
-	cancel_delayed_work_sync(&mlxsw_sp->bridge->fdb_notify.dw);
+	cancel_delayed_work_sync_with_sync_wait(&mlxsw_sp->bridge->fdb_notify.dw);
 
 	nb = &mlxsw_sp_switchdev_blocking_notifier;
 	unregister_switchdev_blocking_notifier(nb);

@@ -319,7 +319,7 @@ mlxsw_sp1_ptp_clock_init(struct mlxsw_sp *mlxsw_sp, struct device *dev)
 	return &clock->common;
 
 err_ptp_clock_register:
-	cancel_delayed_work_sync(&clock->overflow_work);
+	cancel_delayed_work_sync_with_sync_wait(&clock->overflow_work);
 	kfree(clock);
 	return ERR_PTR(err);
 }
@@ -330,7 +330,7 @@ void mlxsw_sp1_ptp_clock_fini(struct mlxsw_sp_ptp_clock *clock_common)
 		container_of(clock_common, struct mlxsw_sp1_ptp_clock, common);
 
 	ptp_clock_unregister(clock_common->ptp);
-	cancel_delayed_work_sync(&clock->overflow_work);
+	cancel_delayed_work_sync_with_sync_wait(&clock->overflow_work);
 	kfree(clock);
 }
 
@@ -1105,7 +1105,7 @@ void mlxsw_sp1_ptp_fini(struct mlxsw_sp_ptp_state *ptp_state_common)
 
 	ptp_state = mlxsw_sp1_ptp_state(mlxsw_sp);
 
-	cancel_delayed_work_sync(&ptp_state->ht_gc_dw);
+	cancel_delayed_work_sync_with_sync_wait(&ptp_state->ht_gc_dw);
 	mlxsw_sp1_ptp_mtpppc_set(mlxsw_sp, 0, 0);
 	mlxsw_sp1_ptp_set_fifo_clr_on_trap(mlxsw_sp, false);
 	mlxsw_sp_ptp_traps_unset(mlxsw_sp);

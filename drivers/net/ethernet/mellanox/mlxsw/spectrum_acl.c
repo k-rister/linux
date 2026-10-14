@@ -1111,7 +1111,7 @@ void mlxsw_sp_acl_fini(struct mlxsw_sp *mlxsw_sp)
 {
 	struct mlxsw_sp_acl *acl = mlxsw_sp->acl;
 
-	cancel_delayed_work_sync(&mlxsw_sp->acl->rule_activity_update.dw);
+	cancel_delayed_work_sync_with_sync_wait(&mlxsw_sp->acl->rule_activity_update.dw);
 	mlxsw_sp_acl_tcam_fini(mlxsw_sp, &acl->tcam);
 	mutex_destroy(&acl->rules_lock);
 	WARN_ON(!list_empty(&acl->rules));

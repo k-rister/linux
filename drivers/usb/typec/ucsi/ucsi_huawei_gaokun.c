@@ -533,7 +533,7 @@ static void gaokun_ucsi_remove(struct auxiliary_device *adev)
 	struct gaokun_ucsi *uec = auxiliary_get_drvdata(adev);
 	int i;
 
-	disable_delayed_work_sync(&uec->work);
+	disable_delayed_work_sync_with_sync_wait(&uec->work);
 	if (uec->registered) {
 		gaokun_ec_unregister_notify(uec->ec, &uec->nb);
 		ucsi_unregister(uec->ucsi);

@@ -7477,7 +7477,7 @@ static void hwsim_virtio_remove(struct virtio_device *vdev)
 {
 	hwsim_virtio_enabled = false;
 
-	cancel_work_sync(&hwsim_virtio_rx);
+	cancel_work_sync_with_sync_wait(&hwsim_virtio_rx);
 
 	remove_vqs(vdev);
 }

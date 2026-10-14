@@ -466,7 +466,7 @@ static void e1000_down_and_stop(struct e1000_adapter *adapter)
 {
 	set_bit(__E1000_DOWN, &adapter->flags);
 
-	cancel_delayed_work_sync(&adapter->watchdog_task);
+	cancel_delayed_work_sync_with_sync_wait(&adapter->watchdog_task);
 
 	/*
 	 * Since the watchdog task can reschedule other tasks, we should cancel
@@ -474,8 +474,8 @@ static void e1000_down_and_stop(struct e1000_adapter *adapter)
 	 * still running after the adapter has been turned down.
 	 */
 
-	cancel_delayed_work_sync(&adapter->phy_info_task);
-	cancel_delayed_work_sync(&adapter->fifo_stall_task);
+	cancel_delayed_work_sync_with_sync_wait(&adapter->phy_info_task);
+	cancel_delayed_work_sync_with_sync_wait(&adapter->fifo_stall_task);
 }
 
 void e1000_down(struct e1000_adapter *adapter)
@@ -1263,7 +1263,7 @@ static void e1000_remove(struct pci_dev *pdev)
 
 	/* Only kill reset task if adapter is not resetting */
 	if (!test_bit(__E1000_RESETTING, &adapter->flags))
-		cancel_work_sync(&adapter->reset_task);
+		cancel_work_sync_with_sync_wait(&adapter->reset_task);
 
 	e1000_phy_hw_reset(hw);
 

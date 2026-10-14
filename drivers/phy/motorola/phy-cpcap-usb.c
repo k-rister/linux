@@ -698,7 +698,7 @@ static void cpcap_usb_phy_remove(struct platform_device *pdev)
 	cpcap_usb_try_musb_mailbox(ddata, MUSB_VBUS_OFF);
 
 	usb_remove_phy(&ddata->phy);
-	cancel_delayed_work_sync(&ddata->detect_work);
+	cancel_delayed_work_sync_with_sync_wait(&ddata->detect_work);
 	regulator_disable(ddata->vusb);
 }
 

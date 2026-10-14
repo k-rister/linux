@@ -525,7 +525,7 @@ static int __maybe_unused phy_mdm6600_runtime_suspend(struct device *dev)
 {
 	struct phy_mdm6600 *ddata = dev_get_drvdata(dev);
 
-	cancel_delayed_work_sync(&ddata->modem_wake_work);
+	cancel_delayed_work_sync_with_sync_wait(&ddata->modem_wake_work);
 	ddata->awake = false;
 
 	return 0;
@@ -646,9 +646,9 @@ static void phy_mdm6600_remove(struct platform_device *pdev)
 	gpiod_set_value_cansleep(reset_gpio, 1);
 	phy_mdm6600_device_power_off(ddata);
 
-	cancel_delayed_work_sync(&ddata->modem_wake_work);
-	cancel_delayed_work_sync(&ddata->bootup_work);
-	cancel_delayed_work_sync(&ddata->status_work);
+	cancel_delayed_work_sync_with_sync_wait(&ddata->modem_wake_work);
+	cancel_delayed_work_sync_with_sync_wait(&ddata->bootup_work);
+	cancel_delayed_work_sync_with_sync_wait(&ddata->status_work);
 }
 
 static struct platform_driver phy_mdm6600_driver = {

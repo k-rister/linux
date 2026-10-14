@@ -566,7 +566,7 @@ static void tegra_xusb_port_unregister(struct tegra_xusb_port *port)
 	if (!IS_ERR_OR_NULL(port->usb_role_sw)) {
 		of_platform_depopulate(&port->dev);
 		usb_role_switch_unregister(port->usb_role_sw);
-		cancel_work_sync(&port->usb_phy_work);
+		cancel_work_sync_with_sync_wait(&port->usb_phy_work);
 		usb_remove_phy(&port->usb_phy);
 		port->usb_phy.dev->driver = NULL;
 	}

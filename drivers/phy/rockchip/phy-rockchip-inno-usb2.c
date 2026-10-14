@@ -654,10 +654,10 @@ static int rockchip_usb2phy_exit(struct phy *phy)
 	if (rport->port_id == USB2PHY_PORT_OTG &&
 	    rport->mode != USB_DR_MODE_HOST &&
 	    rport->mode != USB_DR_MODE_UNKNOWN) {
-		cancel_delayed_work_sync(&rport->otg_sm_work);
-		cancel_delayed_work_sync(&rport->chg_work);
+		cancel_delayed_work_sync_with_sync_wait(&rport->otg_sm_work);
+		cancel_delayed_work_sync_with_sync_wait(&rport->chg_work);
 	} else if (rport->port_id == USB2PHY_PORT_HOST)
-		cancel_delayed_work_sync(&rport->sm_work);
+		cancel_delayed_work_sync_with_sync_wait(&rport->sm_work);
 
 	return 0;
 }

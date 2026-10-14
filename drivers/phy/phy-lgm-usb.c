@@ -105,7 +105,7 @@ static void phy_shutdown(struct usb_phy *phy)
 		return;
 
 	ta->phy_initialized = false;
-	flush_work(&ta->wk);
+	flush_work_with_sync_wait(&ta->wk);
 	ta->phy.set_vbus(&ta->phy, false);
 
 	ta->connected = false;

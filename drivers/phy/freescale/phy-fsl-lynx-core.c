@@ -437,7 +437,7 @@ void lynx_remove(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct lynx_priv *priv = dev_get_drvdata(dev);
 
-	cancel_delayed_work_sync(&priv->cdr_check);
+	cancel_delayed_work_sync_with_sync_wait(&priv->cdr_check);
 }
 EXPORT_SYMBOL_NS_GPL(lynx_remove, "PHY_FSL_LYNX");
 

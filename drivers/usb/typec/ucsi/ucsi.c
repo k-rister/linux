@@ -2192,7 +2192,7 @@ int ucsi_suspend(struct ucsi *ucsi)
 		return 0;
 
 	for (i = 0; i < ucsi->cap.num_connectors; i++)
-		cancel_work_sync(&ucsi->connector[i].work);
+		cancel_work_sync_with_sync_wait(&ucsi->connector[i].work);
 
 	return 0;
 }
@@ -2365,7 +2365,7 @@ void ucsi_unregister(struct ucsi *ucsi)
 
 	/* Make sure that we are not in the middle of driver initialization */
 	cancel_delayed_work_sync(&ucsi->work);
-	cancel_work_sync(&ucsi->resume_work);
+	cancel_work_sync_with_sync_wait(&ucsi->resume_work);
 
 	ucsi_debugfs_unregister(ucsi);
 
@@ -2376,7 +2376,7 @@ void ucsi_unregister(struct ucsi *ucsi)
 		return;
 
 	for (i = 0; i < ucsi->cap.num_connectors; i++) {
-		cancel_work_sync(&ucsi->connector[i].work);
+		cancel_work_sync_with_sync_wait(&ucsi->connector[i].work);
 		ucsi_unregister_port(&ucsi->connector[i]);
 		lockdep_unregister_key(&ucsi->connector[i].lock_key);
 	}

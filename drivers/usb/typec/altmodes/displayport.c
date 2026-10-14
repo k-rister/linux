@@ -840,7 +840,7 @@ void dp_altmode_remove(struct typec_altmode *alt)
 {
 	struct dp_altmode *dp = typec_altmode_get_drvdata(alt);
 
-	cancel_work_sync(&dp->work);
+	cancel_work_sync_with_sync_wait(&dp->work);
 	typec_altmode_put_plug(dp->plug_prime);
 
 	if (dp->connector_fwnode) {

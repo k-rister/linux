@@ -130,13 +130,13 @@ static int cros_ucsi_sync_control(struct ucsi *ucsi, u64 cmd, u32 *cci,
 		/* Schedule recovery attempt when we timeout
 		 * or tried to send a command while still busy.
 		 */
-		cancel_delayed_work_sync(&udata->write_tmo);
+		cancel_delayed_work_sync_with_sync_wait(&udata->write_tmo);
 		schedule_delayed_work(&udata->write_tmo,
 				      msecs_to_jiffies(WRITE_TMO_MS));
 		break;
 	case 0:
 		/* Successful write. Cancel any pending recovery work. */
-		cancel_delayed_work_sync(&udata->write_tmo);
+		cancel_delayed_work_sync_with_sync_wait(&udata->write_tmo);
 		break;
 	}
 
@@ -242,7 +242,7 @@ static int cros_ucsi_event(struct notifier_block *nb,
 
 	if (host_event & PD_EVENT_PPM) {
 		dev_dbg(udata->dev, "UCSI notification received\n");
-		flush_work(&udata->work);
+		flush_work_with_sync_wait(&udata->work);
 		schedule_work(&udata->work);
 	}
 
@@ -252,8 +252,8 @@ static int cros_ucsi_event(struct notifier_block *nb,
 static void cros_ucsi_destroy(struct cros_ucsi_data *udata)
 {
 	cros_usbpd_unregister_notify(&udata->nb);
-	cancel_delayed_work_sync(&udata->write_tmo);
-	cancel_work_sync(&udata->work);
+	cancel_delayed_work_sync_with_sync_wait(&udata->write_tmo);
+	cancel_work_sync_with_sync_wait(&udata->work);
 	ucsi_destroy(udata->ucsi);
 }
 
@@ -322,8 +322,8 @@ static int __maybe_unused cros_ucsi_suspend(struct device *dev)
 {
 	struct cros_ucsi_data *udata = dev_get_drvdata(dev);
 
-	cancel_delayed_work_sync(&udata->write_tmo);
-	cancel_work_sync(&udata->work);
+	cancel_delayed_work_sync_with_sync_wait(&udata->write_tmo);
+	cancel_work_sync_with_sync_wait(&udata->work);
 
 	return 0;
 }

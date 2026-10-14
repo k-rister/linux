@@ -1517,8 +1517,8 @@ static void ucsi_ccg_remove(struct i2c_client *client)
 {
 	struct ucsi_ccg *uc = i2c_get_clientdata(client);
 
-	cancel_work_sync(&uc->pm_work);
-	cancel_work_sync(&uc->work);
+	cancel_work_sync_with_sync_wait(&uc->pm_work);
+	cancel_work_sync_with_sync_wait(&uc->work);
 	pm_runtime_disable(uc->dev);
 	ucsi_unregister(uc->ucsi);
 	free_irq(uc->irq, uc);

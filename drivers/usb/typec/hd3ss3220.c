@@ -524,7 +524,7 @@ static void hd3ss3220_remove(struct i2c_client *client)
 	struct hd3ss3220 *hd3ss3220 = i2c_get_clientdata(client);
 
 	if (hd3ss3220->poll)
-		cancel_delayed_work_sync(&hd3ss3220->output_poll_work);
+		cancel_delayed_work_sync_with_sync_wait(&hd3ss3220->output_poll_work);
 
 	typec_unregister_port(hd3ss3220->port);
 	usb_role_switch_put(hd3ss3220->role_sw);

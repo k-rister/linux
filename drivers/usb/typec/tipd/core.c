@@ -1784,7 +1784,7 @@ static void cd321x_remove(struct tps6598x *tps)
 {
 	struct cd321x *cd321x = container_of(tps, struct cd321x, tps);
 
-	cancel_delayed_work_sync(&cd321x->update_work);
+	cancel_delayed_work_sync_with_sync_wait(&cd321x->update_work);
 }
 
 static int tps6598x_probe(struct i2c_client *client)

@@ -274,7 +274,7 @@ void typec_mode_selection_delete(struct typec_partner *partner)
 
 	if (sel) {
 		partner->sel = NULL;
-		cancel_delayed_work_sync(&sel->work);
+		cancel_delayed_work_sync_with_sync_wait(&sel->work);
 		mode_list_clean(sel);
 		mutex_destroy(&sel->lock);
 		kfree(sel);

@@ -1796,7 +1796,7 @@ static void fusb302_remove(struct i2c_client *client)
 
 	disable_irq_wake(chip->gpio_int_n_irq);
 	free_irq(chip->gpio_int_n_irq, chip);
-	cancel_work_sync(&chip->irq_work);
+	cancel_work_sync_with_sync_wait(&chip->irq_work);
 	cancel_delayed_work_sync(&chip->bc_lvl_handler);
 	tcpm_unregister_port(chip->tcpm_port);
 	fwnode_handle_put(chip->tcpc_dev.fwnode);
@@ -1814,7 +1814,7 @@ static int fusb302_pm_suspend(struct device *dev)
 	spin_unlock_irqrestore(&chip->irq_lock, flags);
 
 	/* Make sure any pending irq_work is finished before the bus suspends */
-	flush_work(&chip->irq_work);
+	flush_work_with_sync_wait(&chip->irq_work);
 	return 0;
 }
 

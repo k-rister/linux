@@ -307,7 +307,7 @@ static void tbt_altmode_remove(struct typec_altmode *alt)
 {
 	struct tbt_altmode *tbt = typec_altmode_get_drvdata(alt);
 
-	disable_work_sync(&tbt->work);
+	disable_work_sync_with_sync_wait(&tbt->work);
 
 	for (int i = TYPEC_PLUG_SOP_PP; i >= 0; --i) {
 		if (tbt->plug[i])

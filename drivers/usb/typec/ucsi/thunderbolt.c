@@ -207,6 +207,6 @@ void ucsi_thunderbolt_remove_partner(struct typec_altmode *alt)
 	if (alt) {
 		tbt = typec_altmode_get_drvdata(alt);
 		if (tbt)
-			cancel_work_sync(&tbt->work);
+			cancel_work_sync_with_sync_wait(&tbt->work);
 	}
 }

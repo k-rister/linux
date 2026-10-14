@@ -203,8 +203,8 @@ static void wil_vif_deinit(struct wil6210_vif *vif)
 	timer_delete_sync(&vif->scan_timer);
 	timer_delete_sync(&vif->p2p.discovery_timer);
 	cancel_work_sync(&vif->disconnect_worker);
-	cancel_work_sync(&vif->p2p.discovery_expired_work);
-	cancel_work_sync(&vif->p2p.delayed_listen_work);
+	cancel_work_sync_with_sync_wait(&vif->p2p.discovery_expired_work);
+	cancel_work_sync_with_sync_wait(&vif->p2p.delayed_listen_work);
 	wil_probe_client_flush(vif);
 	cancel_work_sync(&vif->probe_client_worker);
 	cancel_work_sync(&vif->enable_tx_key_worker);

@@ -826,7 +826,7 @@ void wil_priv_deinit(struct wil6210_priv *wil)
 	wil_dbg_misc(wil, "priv_deinit\n");
 
 	wil_set_recovery_state(wil, fw_recovery_idle);
-	cancel_work_sync(&wil->fw_error_worker);
+	cancel_work_sync_with_sync_wait(&wil->fw_error_worker);
 	wmi_event_flush(wil);
 	destroy_workqueue(wil->wq_service);
 	destroy_workqueue(wil->wmi_wq);

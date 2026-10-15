@@ -3279,7 +3279,7 @@ static void sysc_remove(struct platform_device *pdev)
 	int error;
 
 	/* Device can still be enabled, see deferred idle quirk in probe */
-	if (cancel_delayed_work_sync(&ddata->idle_work))
+	if (cancel_delayed_work_sync_with_sync_wait(&ddata->idle_work))
 		ti_sysc_idle(&ddata->idle_work.work);
 
 	error = pm_runtime_resume_and_get(ddata->dev);

@@ -2408,7 +2408,7 @@ static int pxa_camera_probe(struct platform_device *pdev)
 	return 0;
 exit_deactivate:
 	pxa_camera_deactivate(pcdev);
-	cancel_work_sync(&pcdev->eof_bh_work);
+	cancel_work_sync_with_sync_wait(&pcdev->eof_bh_work);
 exit_free_dma:
 	dma_release_channel(pcdev->dma_chans[2]);
 exit_free_dma_u:
@@ -2427,7 +2427,7 @@ static void pxa_camera_remove(struct platform_device *pdev)
 	struct pxa_camera_dev *pcdev = platform_get_drvdata(pdev);
 
 	pxa_camera_deactivate(pcdev);
-	cancel_work_sync(&pcdev->eof_bh_work);
+	cancel_work_sync_with_sync_wait(&pcdev->eof_bh_work);
 	dma_release_channel(pcdev->dma_chans[0]);
 	dma_release_channel(pcdev->dma_chans[1]);
 	dma_release_channel(pcdev->dma_chans[2]);

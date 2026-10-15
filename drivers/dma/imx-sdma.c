@@ -1231,7 +1231,7 @@ static void sdma_channel_synchronize(struct dma_chan *chan)
 
 	vchan_synchronize(&sdmac->vc);
 
-	flush_work(&sdmac->terminate_worker);
+	flush_work_with_sync_wait(&sdmac->terminate_worker);
 }
 
 static void sdma_set_watermarklevel_for_p2p(struct sdma_channel *sdmac)

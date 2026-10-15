@@ -1592,7 +1592,7 @@ static void ttusb_dec_exit_bh_work(struct ttusb_dec *dec)
 	struct list_head *item;
 	struct urb_frame *frame;
 
-	cancel_work_sync(&dec->urb_bh_work);
+	cancel_work_sync_with_sync_wait(&dec->urb_bh_work);
 
 	while ((item = dec->urb_frame_list.next) != &dec->urb_frame_list) {
 		frame = list_entry(item, struct urb_frame, urb_frame_list);

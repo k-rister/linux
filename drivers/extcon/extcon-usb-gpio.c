@@ -196,7 +196,7 @@ static void usb_extcon_remove(struct platform_device *pdev)
 {
 	struct usb_extcon_info *info = platform_get_drvdata(pdev);
 
-	cancel_delayed_work_sync(&info->wq_detcable);
+	cancel_delayed_work_sync_with_sync_wait(&info->wq_detcable);
 	device_init_wakeup(&pdev->dev, false);
 }
 

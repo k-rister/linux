@@ -2608,7 +2608,7 @@ static void dm_test_enable_periodic_detection_schedules_work(struct kunit *test)
 	INIT_WORK(&idle_work->base.work, dm_test_idle_work_func);
 
 	dm_helpers_enable_periodic_detection(ctx, true);
-	flush_work(&idle_work->base.work);
+	flush_work_with_sync_wait(&idle_work->base.work);
 
 	KUNIT_EXPECT_TRUE(test, idle_work->base.enable);
 	KUNIT_EXPECT_TRUE(test, idle_work->ran);

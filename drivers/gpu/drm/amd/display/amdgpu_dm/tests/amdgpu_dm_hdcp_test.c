@@ -292,7 +292,7 @@ static void dm_test_process_output_property_validate_always_scheduled(struct kun
 	KUNIT_EXPECT_FALSE(test, delayed_work_pending(&work->callback_dwork));
 	KUNIT_EXPECT_FALSE(test, delayed_work_pending(&work->watchdog_timer_dwork));
 
-	cancel_delayed_work_sync(&work->property_validate_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->property_validate_dwork);
 }
 
 /**
@@ -313,8 +313,8 @@ static void dm_test_process_output_callback_needed(struct kunit *test)
 
 	KUNIT_EXPECT_TRUE(test, delayed_work_pending(&work->callback_dwork));
 
-	cancel_delayed_work_sync(&work->callback_dwork);
-	cancel_delayed_work_sync(&work->property_validate_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->callback_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->property_validate_dwork);
 }
 
 /**
@@ -338,7 +338,7 @@ static void dm_test_process_output_callback_stop(struct kunit *test)
 
 	KUNIT_EXPECT_FALSE(test, delayed_work_pending(&work->callback_dwork));
 
-	cancel_delayed_work_sync(&work->property_validate_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->property_validate_dwork);
 }
 
 /**
@@ -359,8 +359,8 @@ static void dm_test_process_output_watchdog_needed(struct kunit *test)
 
 	KUNIT_EXPECT_TRUE(test, delayed_work_pending(&work->watchdog_timer_dwork));
 
-	cancel_delayed_work_sync(&work->watchdog_timer_dwork);
-	cancel_delayed_work_sync(&work->property_validate_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->watchdog_timer_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->property_validate_dwork);
 }
 
 /**
@@ -384,7 +384,7 @@ static void dm_test_process_output_watchdog_stop(struct kunit *test)
 
 	KUNIT_EXPECT_FALSE(test, delayed_work_pending(&work->watchdog_timer_dwork));
 
-	cancel_delayed_work_sync(&work->property_validate_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->property_validate_dwork);
 }
 
 /**
@@ -408,9 +408,9 @@ static void dm_test_process_output_callback_and_watchdog_needed(struct kunit *te
 	KUNIT_EXPECT_TRUE(test, delayed_work_pending(&work->callback_dwork));
 	KUNIT_EXPECT_TRUE(test, delayed_work_pending(&work->watchdog_timer_dwork));
 
-	cancel_delayed_work_sync(&work->callback_dwork);
-	cancel_delayed_work_sync(&work->watchdog_timer_dwork);
-	cancel_delayed_work_sync(&work->property_validate_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->callback_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->watchdog_timer_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->property_validate_dwork);
 }
 
 /**
@@ -435,8 +435,8 @@ static void dm_test_process_output_callback_stop_and_needed_requeues(struct kuni
 
 	KUNIT_EXPECT_TRUE(test, delayed_work_pending(&work->callback_dwork));
 
-	cancel_delayed_work_sync(&work->callback_dwork);
-	cancel_delayed_work_sync(&work->property_validate_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->callback_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->property_validate_dwork);
 }
 
 /**
@@ -461,8 +461,8 @@ static void dm_test_process_output_watchdog_stop_and_needed_requeues(struct kuni
 
 	KUNIT_EXPECT_TRUE(test, delayed_work_pending(&work->watchdog_timer_dwork));
 
-	cancel_delayed_work_sync(&work->watchdog_timer_dwork);
-	cancel_delayed_work_sync(&work->property_validate_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->watchdog_timer_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->property_validate_dwork);
 }
 /* End of tests for process_output() */
 
@@ -721,9 +721,9 @@ static void dm_test_event_callback_cancels_callback_dwork(struct kunit *test)
 
 	KUNIT_EXPECT_FALSE(test, delayed_work_pending(&work->callback_dwork));
 
-	cancel_delayed_work_sync(&work->callback_dwork);
-	cancel_delayed_work_sync(&work->watchdog_timer_dwork);
-	cancel_delayed_work_sync(&work->property_validate_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->callback_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->watchdog_timer_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->property_validate_dwork);
 }
 
 /**
@@ -744,9 +744,9 @@ static void dm_test_event_callback_schedules_property_validate(struct kunit *tes
 	/* Mutex must be released after the guard scope exits. */
 	KUNIT_EXPECT_FALSE(test, mutex_is_locked(&work->mutex));
 
-	cancel_delayed_work_sync(&work->callback_dwork);
-	cancel_delayed_work_sync(&work->watchdog_timer_dwork);
-	cancel_delayed_work_sync(&work->property_validate_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->callback_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->watchdog_timer_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->property_validate_dwork);
 }
 
 /* End of tests for event_callback() */
@@ -895,7 +895,7 @@ static void dm_test_event_property_validate_updates_on_status_change(struct kuni
 			MOD_HDCP_ENCRYPTION_STATUS_HDCP_OFF);
 	KUNIT_EXPECT_TRUE(test, work_pending(&work->property_update_work));
 
-	cancel_work_sync(&work->property_update_work);
+	cancel_work_sync_with_sync_wait(&work->property_update_work);
 }
 
 /**
@@ -946,9 +946,9 @@ static void dm_test_event_watchdog_timer_cancels_watchdog_dwork(struct kunit *te
 
 	KUNIT_EXPECT_FALSE(test, delayed_work_pending(&work->watchdog_timer_dwork));
 
-	cancel_delayed_work_sync(&work->callback_dwork);
-	cancel_delayed_work_sync(&work->watchdog_timer_dwork);
-	cancel_delayed_work_sync(&work->property_validate_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->callback_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->watchdog_timer_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->property_validate_dwork);
 }
 
 /**
@@ -969,9 +969,9 @@ static void dm_test_event_watchdog_timer_schedules_property_validate(struct kuni
 	/* Mutex must be released after the guard scope exits. */
 	KUNIT_EXPECT_FALSE(test, mutex_is_locked(&work->mutex));
 
-	cancel_delayed_work_sync(&work->callback_dwork);
-	cancel_delayed_work_sync(&work->watchdog_timer_dwork);
-	cancel_delayed_work_sync(&work->property_validate_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->callback_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->watchdog_timer_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->property_validate_dwork);
 }
 
 /* End of tests for event_watchdog_timer() */
@@ -1020,9 +1020,9 @@ static void dm_test_event_cpirq_schedules_property_validate(struct kunit *test)
 	/* Mutex must be released after the guard scope exits. */
 	KUNIT_EXPECT_FALSE(test, mutex_is_locked(&work->mutex));
 
-	cancel_delayed_work_sync(&work->callback_dwork);
-	cancel_delayed_work_sync(&work->watchdog_timer_dwork);
-	cancel_delayed_work_sync(&work->property_validate_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->callback_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->watchdog_timer_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->property_validate_dwork);
 }
 
 /**
@@ -1042,9 +1042,9 @@ static void dm_test_event_cpirq_leaves_callback_and_watchdog_idle(struct kunit *
 	KUNIT_EXPECT_FALSE(test, delayed_work_pending(&work->callback_dwork));
 	KUNIT_EXPECT_FALSE(test, delayed_work_pending(&work->watchdog_timer_dwork));
 
-	cancel_delayed_work_sync(&work->callback_dwork);
-	cancel_delayed_work_sync(&work->watchdog_timer_dwork);
-	cancel_delayed_work_sync(&work->property_validate_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->callback_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->watchdog_timer_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->property_validate_dwork);
 }
 
 /* End of tests for event_cpirq() */
@@ -1070,7 +1070,7 @@ static void dm_test_hdcp_handle_cpirq_schedules_work(struct kunit *test)
 
 	KUNIT_EXPECT_TRUE(test, work_pending(&work->cpirq_work));
 
-	cancel_work_sync(&work->cpirq_work);
+	cancel_work_sync_with_sync_wait(&work->cpirq_work);
 }
 
 /**
@@ -1095,7 +1095,7 @@ static void dm_test_hdcp_handle_cpirq_selects_link_index(struct kunit *test)
 	KUNIT_EXPECT_FALSE(test, work_pending(&work[0].cpirq_work));
 	KUNIT_EXPECT_TRUE(test, work_pending(&work[1].cpirq_work));
 
-	cancel_work_sync(&work[1].cpirq_work);
+	cancel_work_sync_with_sync_wait(&work[1].cpirq_work);
 }
 
 /* End of tests for hdcp_handle_cpirq() */
@@ -1123,7 +1123,7 @@ static void dm_test_hdcp_update_display_enable_schedules_property_validate(struc
 
 	KUNIT_EXPECT_TRUE(test, delayed_work_pending(&work->property_validate_dwork));
 
-	cancel_delayed_work_sync(&work->property_validate_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->property_validate_dwork);
 }
 
 /**
@@ -2122,9 +2122,9 @@ static void dm_test_hdcp_update_display_enable_registers_connector(struct kunit 
 	KUNIT_EXPECT_EQ(test, work->encryption_status[0],
 			MOD_HDCP_ENCRYPTION_STATUS_HDCP_OFF);
 
-	cancel_delayed_work_sync(&work->property_validate_dwork);
-	cancel_delayed_work_sync(&work->callback_dwork);
-	cancel_delayed_work_sync(&work->watchdog_timer_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->property_validate_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->callback_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->watchdog_timer_dwork);
 }
 
 /**
@@ -2148,9 +2148,9 @@ static void dm_test_hdcp_update_display_disable_sets_status_off(struct kunit *te
 	KUNIT_EXPECT_EQ(test, work->encryption_status[2],
 			MOD_HDCP_ENCRYPTION_STATUS_HDCP_OFF);
 
-	cancel_delayed_work_sync(&work->property_validate_dwork);
-	cancel_delayed_work_sync(&work->callback_dwork);
-	cancel_delayed_work_sync(&work->watchdog_timer_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->property_validate_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->callback_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->watchdog_timer_dwork);
 }
 
 /**
@@ -2179,9 +2179,9 @@ static void dm_test_hdcp_remove_display_enabled_resets_cp(struct kunit *test)
 			DRM_MODE_CONTENT_PROTECTION_DESIRED);
 	KUNIT_EXPECT_PTR_EQ(test, work->aconnector[1], NULL);
 
-	cancel_delayed_work_sync(&work->property_validate_dwork);
-	cancel_delayed_work_sync(&work->callback_dwork);
-	cancel_delayed_work_sync(&work->watchdog_timer_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->property_validate_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->callback_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->watchdog_timer_dwork);
 }
 
 /**
@@ -2204,9 +2204,9 @@ static void dm_test_hdcp_remove_display_null_state_clears_connector(struct kunit
 
 	KUNIT_EXPECT_PTR_EQ(test, work->aconnector[0], NULL);
 
-	cancel_delayed_work_sync(&work->property_validate_dwork);
-	cancel_delayed_work_sync(&work->callback_dwork);
-	cancel_delayed_work_sync(&work->watchdog_timer_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->property_validate_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->callback_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->watchdog_timer_dwork);
 }
 
 /**
@@ -2230,9 +2230,9 @@ static void dm_test_hdcp_reset_display_clears_all_state(struct kunit *test)
 			MOD_HDCP_ENCRYPTION_STATUS_HDCP_OFF);
 	KUNIT_EXPECT_PTR_EQ(test, work->aconnector[4], NULL);
 
-	cancel_delayed_work_sync(&work->property_validate_dwork);
-	cancel_delayed_work_sync(&work->callback_dwork);
-	cancel_delayed_work_sync(&work->watchdog_timer_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->property_validate_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->callback_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->watchdog_timer_dwork);
 }
 
 /*
@@ -2447,9 +2447,9 @@ static void dm_test_update_config_dpms_off_removes_display(struct kunit *test)
 			DRM_MODE_CONTENT_PROTECTION_DESIRED);
 	KUNIT_EXPECT_PTR_EQ(test, work->aconnector[0], NULL);
 
-	cancel_delayed_work_sync(&work->property_validate_dwork);
-	cancel_delayed_work_sync(&work->callback_dwork);
-	cancel_delayed_work_sync(&work->watchdog_timer_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->property_validate_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->callback_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->watchdog_timer_dwork);
 }
 
 /**
@@ -2504,9 +2504,9 @@ static void dm_test_update_config_populates_display_and_link(struct kunit *test)
 
 	KUNIT_EXPECT_TRUE(test, work_pending(&work->property_validate_dwork.work));
 
-	cancel_delayed_work_sync(&work->property_validate_dwork);
-	cancel_delayed_work_sync(&work->callback_dwork);
-	cancel_delayed_work_sync(&work->watchdog_timer_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->property_validate_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->callback_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&work->watchdog_timer_dwork);
 }
 
 /* End of tests for update_config() */

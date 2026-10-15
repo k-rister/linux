@@ -1907,7 +1907,7 @@ STATIC_IFN_KUNIT void amdgpu_dm_connector_destroy(struct drm_connector *connecto
 
 	/* Cancel and flush any pending HDMI HPD debounce work */
 	if (aconnector->hdmi_hpd_debounce_delay_ms) {
-		cancel_delayed_work_sync(&aconnector->hdmi_hpd_debounce_work);
+		cancel_delayed_work_sync_with_sync_wait(&aconnector->hdmi_hpd_debounce_work);
 		if (aconnector->hdmi_prev_sink) {
 			dc_sink_release(aconnector->hdmi_prev_sink);
 			aconnector->hdmi_prev_sink = NULL;

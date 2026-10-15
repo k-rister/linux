@@ -392,8 +392,8 @@ static void amdgpu_dm_set_crc_window_default(struct drm_crtc *crtc, struct dc_st
 	/* Disable secure_display if it was enabled */
 	if (was_activated && dm->secure_display_ctx.op_mode == LEGACY_MODE) {
 		/* stop ROI update on this crtc */
-		flush_work(&dm->secure_display_ctx.crtc_ctx[crtc->index].notify_ta_work);
-		flush_work(&dm->secure_display_ctx.crtc_ctx[crtc->index].forward_roi_work);
+		flush_work_with_sync_wait(&dm->secure_display_ctx.crtc_ctx[crtc->index].notify_ta_work);
+		flush_work_with_sync_wait(&dm->secure_display_ctx.crtc_ctx[crtc->index].forward_roi_work);
 		aconnector = (struct amdgpu_dm_connector *)stream->dm_stream_context;
 
 		if (aconnector && get_phy_id(dm, aconnector, &phy_id)) {

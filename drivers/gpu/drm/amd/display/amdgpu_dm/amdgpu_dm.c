@@ -858,7 +858,7 @@ static void amdgpu_dm_fini(struct amdgpu_device *adev)
 	if (adev->dm.idle_workqueue) {
 		if (adev->dm.idle_workqueue->running) {
 			adev->dm.idle_workqueue->enable = false;
-			flush_work(&adev->dm.idle_workqueue->work);
+			flush_work_with_sync_wait(&adev->dm.idle_workqueue->work);
 		}
 
 		kfree(adev->dm.idle_workqueue);
@@ -882,8 +882,8 @@ static void amdgpu_dm_fini(struct amdgpu_device *adev)
 	if (adev->dm.secure_display_ctx.crtc_ctx) {
 		for (i = 0; i < adev->mode_info.num_crtc; i++) {
 			if (adev->dm.secure_display_ctx.crtc_ctx[i].crtc) {
-				flush_work(&adev->dm.secure_display_ctx.crtc_ctx[i].notify_ta_work);
-				flush_work(&adev->dm.secure_display_ctx.crtc_ctx[i].forward_roi_work);
+				flush_work_with_sync_wait(&adev->dm.secure_display_ctx.crtc_ctx[i].notify_ta_work);
+				flush_work_with_sync_wait(&adev->dm.secure_display_ctx.crtc_ctx[i].forward_roi_work);
 			}
 		}
 		kfree(adev->dm.secure_display_ctx.crtc_ctx);

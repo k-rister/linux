@@ -2539,7 +2539,7 @@ static void dm_test_handle_hpd_irq_helper_debounce_schedule(struct kunit *test)
 	/* local_sink is cached for later comparison by the debounce work. */
 	KUNIT_EXPECT_PTR_EQ(test, aconn->hdmi_prev_sink, link->local_sink);
 
-	cancel_delayed_work_sync(&aconn->hdmi_hpd_debounce_work);
+	cancel_delayed_work_sync_with_sync_wait(&aconn->hdmi_hpd_debounce_work);
 	dm_test_sink_release(aconn->hdmi_prev_sink);
 	dm_test_sink_release(link->local_sink);
 }
@@ -2606,7 +2606,7 @@ static void dm_test_handle_hpd_irq_helper_debounce_release_prev(struct kunit *te
 	/* Stale sink replaced by the current local_sink. */
 	KUNIT_EXPECT_PTR_EQ(test, aconn->hdmi_prev_sink, link->local_sink);
 
-	cancel_delayed_work_sync(&aconn->hdmi_hpd_debounce_work);
+	cancel_delayed_work_sync_with_sync_wait(&aconn->hdmi_hpd_debounce_work);
 	dm_test_sink_release(aconn->hdmi_prev_sink);
 	dm_test_sink_release(link->local_sink);
 }

@@ -1475,7 +1475,7 @@ static void s5p_mfc_remove(struct platform_device *pdev)
 	mutex_unlock(&dev->mfc_mutex);
 
 	timer_delete_sync(&dev->watchdog_timer);
-	flush_work(&dev->watchdog_work);
+	flush_work_with_sync_wait(&dev->watchdog_work);
 
 	video_unregister_device(dev->vfd_enc);
 	video_unregister_device(dev->vfd_dec);

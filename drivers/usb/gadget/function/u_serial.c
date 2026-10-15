@@ -1127,7 +1127,7 @@ static void gs_console_exit(struct gs_port *port)
 		gs_console_disconnect(port);
 	spin_unlock_irq(&port->port_lock);
 
-	cancel_work_sync(&cons->work);
+	cancel_work_sync_with_sync_wait(&cons->work);
 	kfifo_free(&cons->buf);
 	kfree(cons);
 	port->console = NULL;
@@ -1254,7 +1254,7 @@ static int gs_closed(struct gs_port *port)
 
 static void gserial_free_port(struct gs_port *port)
 {
-	cancel_delayed_work_sync(&port->push);
+	cancel_delayed_work_sync_with_sync_wait(&port->push);
 	/* wait for old opens to finish */
 	wait_event(port->close_wait, gs_closed(port));
 	WARN_ON(port->port_usb != NULL);

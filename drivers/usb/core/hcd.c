@@ -3050,7 +3050,7 @@ void usb_remove_hcd(struct usb_hcd *hcd)
 	spin_unlock_irq (&hcd_root_hub_lock);
 
 #ifdef CONFIG_PM
-	cancel_work_sync(&hcd->wakeup_work);
+	cancel_work_sync_with_sync_wait(&hcd->wakeup_work);
 #endif
 	cancel_work_sync_with_sync_wait(&hcd->died_work);
 

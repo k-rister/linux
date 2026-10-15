@@ -777,7 +777,7 @@ static int hv_timesync_init(struct hv_util_service *srv)
 
 static void hv_timesync_cancel_work(void)
 {
-	cancel_work_sync(&adj_time_work);
+	cancel_work_sync_with_sync_wait(&adj_time_work);
 }
 
 static int hv_timesync_pre_suspend(void)

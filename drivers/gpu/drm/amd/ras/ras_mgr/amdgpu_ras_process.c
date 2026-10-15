@@ -72,8 +72,8 @@ int amdgpu_ras_process_fini(struct amdgpu_device *adev)
 
 	ras_mgr->is_paused = false;
 	/* Save all cached bad pages to eeprom */
-	flush_delayed_work(&ras_mgr->retire_page_dwork);
-	cancel_delayed_work_sync(&ras_mgr->retire_page_dwork);
+	flush_delayed_work_with_sync_wait(&ras_mgr->retire_page_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&ras_mgr->retire_page_dwork);
 	return 0;
 }
 
@@ -179,7 +179,7 @@ int amdgpu_ras_process_pre_reset(struct amdgpu_device *adev)
 		RAS_DEV_WARN(adev, "Waiting for ras process to complete %s\n",
 			 rc ? "interrupted" : "timeout");
 
-	flush_delayed_work(&ras_mgr->retire_page_dwork);
+	flush_delayed_work_with_sync_wait(&ras_mgr->retire_page_dwork);
 	return 0;
 }
 

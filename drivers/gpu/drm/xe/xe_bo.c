@@ -7,6 +7,7 @@
 
 #include <linux/dma-buf.h>
 #include <linux/nospec.h>
+#include <linux/workqueue.h>
 
 #include <drm/drm_drv.h>
 #include <drm/drm_dumb_buffers.h>
@@ -4015,7 +4016,7 @@ void xe_bo_dev_init(struct xe_bo_dev *bo_dev)
  */
 void xe_bo_dev_fini(struct xe_bo_dev *bo_dev)
 {
-	flush_work(&bo_dev->async_free);
+	flush_work_with_sync_wait(&bo_dev->async_free);
 }
 
 void xe_bo_put(struct xe_bo *bo)

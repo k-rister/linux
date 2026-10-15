@@ -191,7 +191,7 @@ int xe_amc_init(struct xe_i2c *i2c)
 void xe_amc_exit(struct xe_i2c *i2c)
 {
 	if (i2c->amc) {
-		cancel_work_sync(&i2c->amc->work);
+		cancel_work_sync_with_sync_wait(&i2c->amc->work);
 		kfree(i2c->amc);
 	}
 }

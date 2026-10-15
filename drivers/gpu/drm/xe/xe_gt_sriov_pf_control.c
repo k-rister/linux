@@ -5,6 +5,8 @@
 
 #include <drm/drm_managed.h>
 
+#include <linux/workqueue.h>
+
 #include "abi/guc_actions_sriov_abi.h"
 
 #include "xe_device.h"
@@ -2139,7 +2141,7 @@ static void control_worker_func(struct work_struct *w)
 static void pf_stop_worker(struct xe_gt *gt)
 {
 	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
-	cancel_work_sync(&gt->sriov.pf.control.worker);
+	cancel_work_sync_with_sync_wait(&gt->sriov.pf.control.worker);
 }
 
 static void control_fini_action(struct drm_device *dev, void *data)

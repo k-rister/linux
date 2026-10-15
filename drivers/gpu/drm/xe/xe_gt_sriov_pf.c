@@ -5,6 +5,8 @@
 
 #include <drm/drm_managed.h>
 
+#include <linux/workqueue.h>
+
 #include "regs/xe_guc_regs.h"
 #include "regs/xe_regs.h"
 
@@ -57,7 +59,7 @@ static void pf_fini_workers(struct xe_gt *gt)
 {
 	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
 
-	if (disable_work_sync(&gt->sriov.pf.workers.restart)) {
+	if (disable_work_sync_with_sync_wait(&gt->sriov.pf.workers.restart)) {
 		xe_gt_sriov_dbg_verbose(gt, "pending restart disabled!\n");
 		/* release an rpm reference taken on the worker's behalf */
 		xe_pm_runtime_put(gt_to_xe(gt));
@@ -195,7 +197,7 @@ static void pf_cancel_restart(struct xe_gt *gt)
 {
 	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
 
-	if (cancel_work_sync(&gt->sriov.pf.workers.restart)) {
+	if (cancel_work_sync_with_sync_wait(&gt->sriov.pf.workers.restart)) {
 		xe_gt_sriov_dbg_verbose(gt, "pending restart canceled!\n");
 		/* release an rpm reference taken on the worker's behalf */
 		xe_pm_runtime_put(gt_to_xe(gt));
@@ -265,7 +267,7 @@ void xe_gt_sriov_pf_restart(struct xe_gt *gt)
 static void pf_flush_restart(struct xe_gt *gt)
 {
 	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
-	flush_work(&gt->sriov.pf.workers.restart);
+	flush_work_with_sync_wait(&gt->sriov.pf.workers.restart);
 }
 
 /**

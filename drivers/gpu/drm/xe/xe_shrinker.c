@@ -4,6 +4,7 @@
  */
 
 #include <linux/shrinker.h>
+#include <linux/workqueue.h>
 
 #include <drm/drm_managed.h>
 #include <drm/ttm/ttm_backup.h>
@@ -284,7 +285,7 @@ static void xe_shrinker_fini(struct drm_device *drm, void *arg)
 	xe_assert(shrinker->xe, !shrinker->shrinkable_pages);
 	xe_assert(shrinker->xe, !shrinker->purgeable_pages);
 	shrinker_free(shrinker->shrink);
-	flush_work(&shrinker->pm_worker);
+	flush_work_with_sync_wait(&shrinker->pm_worker);
 	kfree(shrinker);
 }
 

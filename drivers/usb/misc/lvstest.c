@@ -459,7 +459,7 @@ static void lvs_rh_disconnect(struct usb_interface *intf)
 	struct lvs_rh *lvs = usb_get_intfdata(intf);
 
 	usb_poison_urb(lvs->urb); /* used in scheduled work */
-	flush_work(&lvs->rh_work);
+	flush_work_with_sync_wait(&lvs->rh_work);
 	usb_free_urb(lvs->urb);
 }
 

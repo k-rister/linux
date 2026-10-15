@@ -866,7 +866,7 @@ static void bq2415x_set_autotimer(struct bq2415x_device *bq, int state)
 		bq2415x_exec_command(bq, BQ2415X_TIMER_RESET);
 		bq->timer_error = NULL;
 	} else {
-		cancel_delayed_work_sync(&bq->work);
+		cancel_delayed_work_sync_with_sync_wait(&bq->work);
 	}
 
 	mutex_unlock(&bq2415x_timer_mutex);
@@ -1048,7 +1048,7 @@ static void bq2415x_power_supply_exit(struct bq2415x_device *bq)
 	bq->autotimer = 0;
 	if (bq->automode > 0)
 		bq->automode = 0;
-	cancel_delayed_work_sync(&bq->work);
+	cancel_delayed_work_sync_with_sync_wait(&bq->work);
 	power_supply_unregister(bq->charger);
 	kfree(bq->model);
 }

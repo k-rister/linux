@@ -161,7 +161,7 @@ static void bmc150_acpi_dual_accel_remove(struct i2c_client *client)
 	struct bmc150_accel_data *data = iio_priv(i2c_get_clientdata(client));
 
 	if (data->resume_callback)
-		cancel_delayed_work_sync(&data->resume_work);
+		cancel_delayed_work_sync_with_sync_wait(&data->resume_work);
 
 	i2c_unregister_device(data->second_device);
 }

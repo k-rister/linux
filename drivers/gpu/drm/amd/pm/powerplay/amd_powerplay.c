@@ -179,7 +179,7 @@ static int pp_hw_fini(struct amdgpu_ip_block *ip_block)
 {
 	struct pp_hwmgr *hwmgr = ip_block->adev->powerplay.pp_handle;
 
-	cancel_delayed_work_sync(&hwmgr->swctf_delayed_work);
+	cancel_delayed_work_sync_with_sync_wait(&hwmgr->swctf_delayed_work);
 
 	hwmgr_hw_fini(hwmgr);
 
@@ -257,7 +257,7 @@ static int pp_suspend(struct amdgpu_ip_block *ip_block)
 	struct amdgpu_device *adev = ip_block->adev;
 	struct pp_hwmgr *hwmgr = adev->powerplay.pp_handle;
 
-	cancel_delayed_work_sync(&hwmgr->swctf_delayed_work);
+	cancel_delayed_work_sync_with_sync_wait(&hwmgr->swctf_delayed_work);
 
 	return hwmgr_suspend(hwmgr);
 }

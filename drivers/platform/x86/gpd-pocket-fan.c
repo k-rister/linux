@@ -186,7 +186,7 @@ static int gpd_pocket_fan_suspend(struct device *dev)
 {
 	struct gpd_pocket_fan_data *fan = dev_get_drvdata(dev);
 
-	cancel_delayed_work_sync(&fan->work);
+	cancel_delayed_work_sync_with_sync_wait(&fan->work);
 	gpd_pocket_fan_set_speed(fan, gpd_pocket_fan_min_speed());
 	return 0;
 }

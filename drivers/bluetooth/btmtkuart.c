@@ -507,7 +507,7 @@ static int btmtkuart_flush(struct hci_dev *hdev)
 	serdev_device_write_flush(bdev->serdev);
 	skb_queue_purge(&bdev->txq);
 
-	cancel_work_sync(&bdev->tx_work);
+	cancel_work_sync_with_sync_wait(&bdev->tx_work);
 
 	kfree_skb(bdev->rx_skb);
 	bdev->rx_skb = NULL;

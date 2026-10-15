@@ -582,7 +582,7 @@ static void tegra_dpaux_remove(struct platform_device *pdev)
 {
 	struct tegra_dpaux *dpaux = platform_get_drvdata(pdev);
 
-	cancel_work_sync(&dpaux->work);
+	cancel_work_sync_with_sync_wait(&dpaux->work);
 
 	/* make sure pads are powered down when not in use */
 	tegra_dpaux_pad_power_down(dpaux);

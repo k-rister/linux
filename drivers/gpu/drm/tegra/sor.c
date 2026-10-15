@@ -2157,7 +2157,7 @@ static void tegra_sor_hdmi_scdc_disable(struct tegra_sor *sor)
 static void tegra_sor_hdmi_scdc_stop(struct tegra_sor *sor)
 {
 	if (sor->scdc_enabled) {
-		cancel_delayed_work_sync(&sor->scdc);
+		cancel_delayed_work_sync_with_sync_wait(&sor->scdc);
 		tegra_sor_hdmi_scdc_disable(sor);
 	}
 }

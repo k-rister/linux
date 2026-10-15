@@ -264,7 +264,7 @@ static int __maybe_unused micro_batt_suspend(struct device *dev)
 {
 	struct micro_battery *mb = dev_get_drvdata(dev);
 
-	cancel_delayed_work_sync(&mb->update);
+	cancel_delayed_work_sync_with_sync_wait(&mb->update);
 	return 0;
 }
 

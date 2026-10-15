@@ -165,7 +165,7 @@ static void request_submodules(struct saa7134_dev *dev)
 
 static void flush_request_submodules(struct saa7134_dev *dev)
 {
-	flush_work(&dev->request_module_wk);
+	flush_work_with_sync_wait(&dev->request_module_wk);
 }
 
 #else

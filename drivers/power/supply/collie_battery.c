@@ -287,7 +287,7 @@ static int wakeup_enabled;
 static int collie_bat_suspend(struct ucb1x00_dev *dev)
 {
 	/* flush all pending status updates */
-	flush_work(&bat_work);
+	flush_work_with_sync_wait(&bat_work);
 
 	if (device_may_wakeup(&dev->ucb->dev) &&
 	    collie_bat_main.status == POWER_SUPPLY_STATUS_CHARGING)
@@ -422,7 +422,7 @@ err_psy_reg_bu:
 	power_supply_unregister(collie_bat_main.psy);
 err_psy_reg_main:
 	/* see comment in collie_bat_remove */
-	cancel_work_sync(&bat_work);
+	cancel_work_sync_with_sync_wait(&bat_work);
 	gpiochip_free_own_desc(collie_bat_bu.gpio_bat);
 err_free_gpio_temp:
 	gpiochip_free_own_desc(collie_bat_main.gpio_temp);
@@ -458,7 +458,7 @@ static void collie_bat_remove(struct ucb1x00_dev *dev)
 	 * since all sources (isr and external_power_changed) are
 	 * unregistered now.
 	 */
-	cancel_work_sync(&bat_work);
+	cancel_work_sync_with_sync_wait(&bat_work);
 }
 
 static struct ucb1x00_driver collie_bat_driver = {

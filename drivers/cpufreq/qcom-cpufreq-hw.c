@@ -511,7 +511,7 @@ static int qcom_cpufreq_hw_cpu_offline(struct cpufreq_policy *policy)
 	data->cancel_throttle = true;
 	mutex_unlock(&data->throttle_lock);
 
-	cancel_delayed_work_sync(&data->throttle_work);
+	cancel_delayed_work_sync_with_sync_wait(&data->throttle_work);
 	irq_set_affinity_and_hint(data->throttle_irq, NULL);
 	disable_irq_nosync(data->throttle_irq);
 

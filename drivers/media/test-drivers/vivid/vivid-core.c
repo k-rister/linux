@@ -853,7 +853,7 @@ static void vivid_dev_release(struct v4l2_device *v4l2_dev)
 {
 	struct vivid_dev *dev = container_of(v4l2_dev, struct vivid_dev, v4l2_dev);
 
-	cancel_work_sync(&dev->update_hdmi_ctrl_work);
+	cancel_work_sync_with_sync_wait(&dev->update_hdmi_ctrl_work);
 	vivid_free_controls(dev);
 	v4l2_device_unregister(&dev->v4l2_dev);
 #ifdef CONFIG_MEDIA_CONTROLLER

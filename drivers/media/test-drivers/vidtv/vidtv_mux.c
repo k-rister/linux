@@ -476,7 +476,7 @@ void vidtv_mux_stop_thread(struct vidtv_mux *m)
 {
 	if (m->streaming) {
 		m->streaming = false; /* thread will quit */
-		cancel_work_sync(&m->mpeg_thread);
+		cancel_work_sync_with_sync_wait(&m->mpeg_thread);
 	}
 }
 

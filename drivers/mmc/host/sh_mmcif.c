@@ -1224,7 +1224,7 @@ static irqreturn_t sh_mmcif_irqt(int irq, void *dev_id)
 	wait_work = host->wait_for;
 	spin_unlock_irqrestore(&host->lock, flags);
 
-	cancel_delayed_work_sync(&host->timeout_work);
+	cancel_delayed_work_sync_with_sync_wait(&host->timeout_work);
 
 	mutex_lock(&host->thread_lock);
 
@@ -1555,7 +1555,7 @@ static void sh_mmcif_remove(struct platform_device *pdev)
 	 * mmc_remove_host() call above. But swapping order doesn't help either
 	 * (a query on the linux-mmc mailing list didn't bring any replies).
 	 */
-	cancel_delayed_work_sync(&host->timeout_work);
+	cancel_delayed_work_sync_with_sync_wait(&host->timeout_work);
 
 	clk_disable_unprepare(host->clk);
 	pm_runtime_put_sync(&pdev->dev);

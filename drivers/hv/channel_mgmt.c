@@ -1656,14 +1656,14 @@ int vmbus_request_offers(void)
 	 * Flush handling of offer messages (which may initiate work on
 	 * other work queues).
 	 */
-	flush_workqueue(vmbus_connection.work_queue);
+	flush_workqueue_with_sync_wait(vmbus_connection.work_queue);
 
 	/*
 	 * Flush workqueue for processing the incoming offers. Subchannel
 	 * offers and their processing can happen later, so there is no need to
 	 * flush that workqueue here.
 	 */
-	flush_workqueue(vmbus_connection.handle_primary_chan_wq);
+	flush_workqueue_with_sync_wait(vmbus_connection.handle_primary_chan_wq);
 
 cleanup:
 	kfree(msginfo);

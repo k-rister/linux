@@ -2726,10 +2726,10 @@ static int vmbus_bus_suspend(struct device *dev)
 	tasklet_enable(&hv_cpu->msg_dpc);
 
 	/* Drain all the workqueues as we are in suspend */
-	drain_workqueue(vmbus_connection.rescind_work_queue);
-	drain_workqueue(vmbus_connection.work_queue);
-	drain_workqueue(vmbus_connection.handle_primary_chan_wq);
-	drain_workqueue(vmbus_connection.handle_sub_chan_wq);
+	drain_workqueue_with_sync_wait(vmbus_connection.rescind_work_queue);
+	drain_workqueue_with_sync_wait(vmbus_connection.work_queue);
+	drain_workqueue_with_sync_wait(vmbus_connection.handle_primary_chan_wq);
+	drain_workqueue_with_sync_wait(vmbus_connection.handle_sub_chan_wq);
 
 	mutex_lock(&vmbus_connection.channel_mutex);
 	list_for_each_entry(channel, &vmbus_connection.chn_list, listentry) {

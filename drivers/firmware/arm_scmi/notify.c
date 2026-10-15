@@ -1713,7 +1713,7 @@ void scmi_notification_quiesce(struct scmi_handle *handle)
 	if (!ni)
 		return;
 
-	disable_work_sync(&ni->init_work);
+	disable_work_sync_with_sync_wait(&ni->init_work);
 }
 
 /**

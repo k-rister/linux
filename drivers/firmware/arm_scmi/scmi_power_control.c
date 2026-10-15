@@ -140,7 +140,7 @@ static int scmi_reboot_notifier(struct notifier_block *nb,
 
 	if (sc->state == SCMI_SYSPOWER_REBOOTING) {
 		dev_dbg(sc->dev, "Reboot in progress...cancel delayed work.\n");
-		cancel_delayed_work_sync(&sc->forceful_work);
+		cancel_delayed_work_sync_with_sync_wait(&sc->forceful_work);
 	}
 	mutex_unlock(&sc->state_mtx);
 

@@ -1430,9 +1430,9 @@ steam_register_sensors_fail:
 steam_register_input_fail:
 	steam_battery_unregister(steam);
 	mutex_unlock(&steam->registration_mutex);
-	cancel_work_sync(&steam->rumble_work);
-	cancel_delayed_work_sync(&steam->mode_switch);
-	cancel_delayed_work_sync(&steam->coalesce_rumble_work);
+	cancel_work_sync_with_sync_wait(&steam->rumble_work);
+	cancel_delayed_work_sync_with_sync_wait(&steam->mode_switch);
+	cancel_delayed_work_sync_with_sync_wait(&steam->coalesce_rumble_work);
 	return ret;
 }
 
@@ -1450,9 +1450,9 @@ static void steam_unregister(struct steam_device *steam)
 	steam_sensors_unregister(steam);
 	steam_input_unregister(steam);
 	mutex_unlock(&steam->registration_mutex);
-	cancel_work_sync(&steam->rumble_work);
-	cancel_delayed_work_sync(&steam->mode_switch);
-	cancel_delayed_work_sync(&steam->coalesce_rumble_work);
+	cancel_work_sync_with_sync_wait(&steam->rumble_work);
+	cancel_delayed_work_sync_with_sync_wait(&steam->mode_switch);
+	cancel_delayed_work_sync_with_sync_wait(&steam->coalesce_rumble_work);
 	mutex_lock(&steam_devices_lock);
 	list_del_init(&steam->list);
 	mutex_unlock(&steam_devices_lock);
@@ -1842,10 +1842,10 @@ err_hw_close:
 err_hw_stop:
 	hid_hw_stop(hdev);
 err_cancel_work:
-	cancel_work_sync(&steam->work_connect);
-	cancel_delayed_work_sync(&steam->mode_switch);
-	cancel_work_sync(&steam->rumble_work);
-	cancel_delayed_work_sync(&steam->coalesce_rumble_work);
+	cancel_work_sync_with_sync_wait(&steam->work_connect);
+	cancel_delayed_work_sync_with_sync_wait(&steam->mode_switch);
+	cancel_work_sync_with_sync_wait(&steam->rumble_work);
+	cancel_delayed_work_sync_with_sync_wait(&steam->coalesce_rumble_work);
 
 	return ret;
 }
@@ -1865,7 +1865,7 @@ static void steam_remove(struct hid_device *hdev)
 	spin_lock_irqsave(&steam->lock, flags);
 	steam->client_opened = 0;
 	spin_unlock_irqrestore(&steam->lock, flags);
-	cancel_work_sync(&steam->work_connect);
+	cancel_work_sync_with_sync_wait(&steam->work_connect);
 	if (steam->quirks & STEAM_QUIRK_WIRELESS) {
 		hid_info(hdev, "Steam wireless receiver disconnected");
 	}

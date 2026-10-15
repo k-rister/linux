@@ -784,7 +784,7 @@ void intel_guc_log_relay_flush(struct intel_guc_log *log)
 	 * Before initiating the forceful flush, wait for any pending/ongoing
 	 * flush to complete otherwise forceful flush may not actually happen.
 	 */
-	flush_work(&log->relay.flush_work);
+	flush_work_with_sync_wait(&log->relay.flush_work);
 
 	with_intel_runtime_pm(guc_to_gt(guc)->uncore->rpm, wakeref)
 		guc_action_flush_log(guc);
@@ -808,7 +808,7 @@ static void guc_log_relay_stop(struct intel_guc_log *log)
 
 	intel_synchronize_irq(i915);
 
-	flush_work(&log->relay.flush_work);
+	flush_work_with_sync_wait(&log->relay.flush_work);
 
 	log->relay.started = false;
 }

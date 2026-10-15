@@ -435,7 +435,7 @@ void intel_dmc_wl_flush_release_work(struct intel_display *display)
 	if (!__intel_dmc_wl_supported(display))
 		return;
 
-	flush_delayed_work(&wl->work);
+	flush_delayed_work_with_sync_wait(&wl->work);
 }
 
 void intel_dmc_wl_get(struct intel_display *display, intel_reg_t reg)

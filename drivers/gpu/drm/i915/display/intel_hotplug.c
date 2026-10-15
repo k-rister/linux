@@ -955,11 +955,11 @@ static bool cancel_all_detection_work(struct intel_display *display)
 {
 	bool was_pending = false;
 
-	if (cancel_delayed_work_sync(&display->hotplug.hotplug_work))
+	if (cancel_delayed_work_sync_with_sync_wait(&display->hotplug.hotplug_work))
 		was_pending = true;
-	if (cancel_work_sync(&display->hotplug.poll_init_work))
+	if (cancel_work_sync_with_sync_wait(&display->hotplug.poll_init_work))
 		was_pending = true;
-	if (cancel_delayed_work_sync(&display->hotplug.reenable_work))
+	if (cancel_delayed_work_sync_with_sync_wait(&display->hotplug.reenable_work))
 		was_pending = true;
 
 	return was_pending;
@@ -1183,7 +1183,7 @@ static int i915_hpd_storm_ctl_show(struct seq_file *m, void *data)
 	 */
 	intel_parent_irq_synchronize(display);
 	flush_work(&display->hotplug.dig_port_work);
-	flush_delayed_work(&display->hotplug.hotplug_work);
+	flush_delayed_work_with_sync_wait(&display->hotplug.hotplug_work);
 
 	seq_printf(m, "Threshold: %d\n", hotplug->hpd_storm_threshold);
 	seq_printf(m, "Detected: %s\n",
@@ -1237,7 +1237,7 @@ static ssize_t i915_hpd_storm_ctl_write(struct file *file,
 	spin_unlock_irq(&display->irq.lock);
 
 	/* Re-enable hpd immediately if we were in an irq storm */
-	flush_delayed_work(&display->hotplug.reenable_work);
+	flush_delayed_work_with_sync_wait(&display->hotplug.reenable_work);
 
 	return len;
 }
@@ -1315,7 +1315,7 @@ static ssize_t i915_hpd_short_storm_ctl_write(struct file *file,
 	spin_unlock_irq(&display->irq.lock);
 
 	/* Re-enable hpd immediately if we were in an irq storm */
-	flush_delayed_work(&display->hotplug.reenable_work);
+	flush_delayed_work_with_sync_wait(&display->hotplug.reenable_work);
 
 	return len;
 }

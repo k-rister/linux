@@ -168,7 +168,7 @@ static void rps_stop_timer(struct intel_rps *rps)
 {
 	timer_delete_sync(&rps->timer);
 	rps->pm_timestamp = ktime_sub(ktime_get(), rps->pm_timestamp);
-	cancel_work_sync(&rps->work);
+	cancel_work_sync_with_sync_wait(&rps->work);
 }
 
 static u32 rps_pm_mask(struct intel_rps *rps, u8 val)
@@ -257,7 +257,7 @@ static void rps_disable_interrupts(struct intel_rps *rps)
 	 * we will reset the GPU to minimum frequencies, so the current
 	 * state of the worker can be discarded.
 	 */
-	cancel_work_sync(&rps->work);
+	cancel_work_sync_with_sync_wait(&rps->work);
 
 	rps_reset_interrupts(rps);
 	GT_TRACE(gt, "interrupts:off\n");

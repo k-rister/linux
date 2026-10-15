@@ -2418,8 +2418,8 @@ void intel_psr_disable(struct intel_dp *intel_dp,
 	intel_dp->psr.link_ok = false;
 
 	mutex_unlock(&intel_dp->psr.lock);
-	cancel_work_sync(&intel_dp->psr.work);
-	cancel_delayed_work_sync(&intel_dp->psr.dc3co_work);
+	cancel_work_sync_with_sync_wait(&intel_dp->psr.work);
+	cancel_delayed_work_sync_with_sync_wait(&intel_dp->psr.dc3co_work);
 }
 
 /**
@@ -2449,8 +2449,8 @@ void intel_psr_pause(struct intel_dp *intel_dp)
 
 	mutex_unlock(&psr->lock);
 
-	cancel_work_sync(&psr->work);
-	cancel_delayed_work_sync(&psr->dc3co_work);
+	cancel_work_sync_with_sync_wait(&psr->work);
+	cancel_delayed_work_sync_with_sync_wait(&psr->dc3co_work);
 }
 
 /**

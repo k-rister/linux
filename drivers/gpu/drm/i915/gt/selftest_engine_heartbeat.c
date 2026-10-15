@@ -200,7 +200,7 @@ static int __live_heartbeat_off(struct intel_engine_cs *engine)
 	intel_engine_pm_get(engine);
 
 	engine->serial++;
-	flush_delayed_work(&engine->heartbeat.work);
+	flush_delayed_work_with_sync_wait(&engine->heartbeat.work);
 	if (!delayed_work_pending(&engine->heartbeat.work)) {
 		pr_err("%s: heartbeat not running\n",
 		       engine->name);
@@ -213,7 +213,7 @@ static int __live_heartbeat_off(struct intel_engine_cs *engine)
 		goto err_pm;
 
 	engine->serial++;
-	flush_delayed_work(&engine->heartbeat.work);
+	flush_delayed_work_with_sync_wait(&engine->heartbeat.work);
 	if (delayed_work_pending(&engine->heartbeat.work)) {
 		pr_err("%s: heartbeat still running\n",
 		       engine->name);

@@ -565,7 +565,7 @@ static int test_ipc(void *arg)
 		ret = -EINVAL;
 	}
 
-	flush_work(&ipc.work);
+	flush_work_with_sync_wait(&ipc.work);
 	destroy_work_on_stack(&ipc.work);
 	free_fence(ipc.out);
 err_in:

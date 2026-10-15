@@ -871,7 +871,7 @@ void intel_pps_vdd_off_sync(struct intel_dp *intel_dp)
 	if (!intel_dp_is_edp(intel_dp))
 		return;
 
-	cancel_delayed_work_sync(&intel_dp->pps.panel_vdd_work);
+	cancel_delayed_work_sync_with_sync_wait(&intel_dp->pps.panel_vdd_work);
 	/*
 	 * vdd might still be enabled due to the delayed vdd off.
 	 * Make sure vdd is actually turned off here.

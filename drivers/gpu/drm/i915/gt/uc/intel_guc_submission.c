@@ -1431,7 +1431,7 @@ static void guc_cancel_busyness_worker(struct intel_guc *guc)
 	    test_bit(I915_RESET_BACKOFF, &guc_to_gt(guc)->reset.flags))
 		cancel_delayed_work(&guc->timestamp.work);
 	else
-		cancel_delayed_work_sync(&guc->timestamp.work);
+		cancel_delayed_work_sync_with_sync_wait(&guc->timestamp.work);
 }
 
 static void __reset_guc_busyness_stats(struct intel_guc *guc)

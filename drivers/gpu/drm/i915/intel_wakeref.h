@@ -226,7 +226,7 @@ intel_wakeref_unlock_wait(struct intel_wakeref *wf)
 {
 	mutex_lock(&wf->mutex);
 	mutex_unlock(&wf->mutex);
-	flush_delayed_work(&wf->work);
+	flush_delayed_work_with_sync_wait(&wf->work);
 }
 
 /**

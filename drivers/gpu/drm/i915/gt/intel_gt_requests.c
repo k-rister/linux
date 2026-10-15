@@ -47,8 +47,8 @@ static bool flush_submission(struct intel_gt *gt, long timeout)
 		intel_engine_flush_submission(engine);
 
 		/* Flush the background retirement and idle barriers */
-		flush_work(&engine->retire_work);
-		flush_delayed_work(&engine->wakeref.work);
+		flush_work_with_sync_wait(&engine->retire_work);
+		flush_delayed_work_with_sync_wait(&engine->wakeref.work);
 
 		/* Is the idle barrier still outstanding? */
 		active |= engine_active(engine);
@@ -126,7 +126,7 @@ void intel_engine_init_retire(struct intel_engine_cs *engine)
 
 void intel_engine_fini_retire(struct intel_engine_cs *engine)
 {
-	flush_work(&engine->retire_work);
+	flush_work_with_sync_wait(&engine->retire_work);
 	GEM_BUG_ON(engine->retire);
 }
 
@@ -231,9 +231,9 @@ void intel_gt_unpark_requests(struct intel_gt *gt)
 void intel_gt_fini_requests(struct intel_gt *gt)
 {
 	/* Wait until the work is marked as finished before unloading! */
-	cancel_delayed_work_sync(&gt->requests.retire_work);
+	cancel_delayed_work_sync_with_sync_wait(&gt->requests.retire_work);
 
-	flush_work(&gt->watchdog.work);
+	flush_work_with_sync_wait(&gt->watchdog.work);
 }
 
 void intel_gt_watchdog_work(struct work_struct *work)

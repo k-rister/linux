@@ -27,7 +27,7 @@ void intel_encoder_link_check_init(struct intel_encoder *encoder,
 
 void intel_encoder_link_check_flush_work(struct intel_encoder *encoder)
 {
-	cancel_delayed_work_sync(&encoder->link_check_work);
+	cancel_delayed_work_sync_with_sync_wait(&encoder->link_check_work);
 }
 
 void intel_encoder_link_check_queue_work(struct intel_encoder *encoder, int delay_ms)

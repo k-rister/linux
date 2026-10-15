@@ -206,7 +206,7 @@ void intel_drrs_deactivate(const struct intel_crtc_state *old_crtc_state)
 
 	mutex_unlock(&crtc->drrs.mutex);
 
-	cancel_delayed_work_sync(&crtc->drrs.work);
+	cancel_delayed_work_sync_with_sync_wait(&crtc->drrs.work);
 }
 
 static void intel_drrs_downclock_work(struct work_struct *work)

@@ -2164,7 +2164,7 @@ static void __intel_fbc_reset_underrun(struct intel_fbc *fbc)
 {
 	struct intel_display *display = fbc->display;
 
-	cancel_work_sync(&fbc->underrun_work);
+	cancel_work_sync_with_sync_wait(&fbc->underrun_work);
 
 	mutex_lock(&fbc->lock);
 

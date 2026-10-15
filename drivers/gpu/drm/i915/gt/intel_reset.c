@@ -1705,7 +1705,7 @@ void __intel_init_wedge(struct intel_wedge_me *w,
 
 void __intel_fini_wedge(struct intel_wedge_me *w)
 {
-	cancel_delayed_work_sync(&w->work);
+	cancel_delayed_work_sync_with_sync_wait(&w->work);
 	destroy_delayed_work_on_stack(&w->work);
 	w->gt = NULL;
 }

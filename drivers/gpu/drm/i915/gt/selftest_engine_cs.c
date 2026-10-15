@@ -28,7 +28,7 @@ static intel_wakeref_t perf_begin(struct intel_gt *gt)
 	/* Boost gpufreq to max [waitboost] and keep it fixed */
 	atomic_inc(&gt->rps.num_waiters);
 	queue_work(gt->i915->unordered_wq, &gt->rps.work);
-	flush_work(&gt->rps.work);
+	flush_work_with_sync_wait(&gt->rps.work);
 
 	return wakeref;
 }

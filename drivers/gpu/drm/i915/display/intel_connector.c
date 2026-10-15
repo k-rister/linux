@@ -72,7 +72,7 @@ void intel_connector_queue_modeset_retry_work(struct intel_connector *connector)
 
 void intel_connector_cancel_modeset_retry_work(struct intel_connector *connector)
 {
-	if (cancel_work_sync(&connector->modeset_retry_work))
+	if (cancel_work_sync_with_sync_wait(&connector->modeset_retry_work))
 		drm_connector_put(&connector->base);
 }
 

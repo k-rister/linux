@@ -2554,7 +2554,7 @@ int intel_hdcp_disable(struct intel_connector *connector)
 out:
 	mutex_unlock(&dig_port->hdcp.mutex);
 	mutex_unlock(&hdcp->mutex);
-	cancel_delayed_work_sync(&hdcp->check_work);
+	cancel_delayed_work_sync_with_sync_wait(&hdcp->check_work);
 	return ret;
 }
 
@@ -2627,8 +2627,8 @@ void intel_hdcp_cancel_works(struct intel_connector *connector)
 	if (!connector->hdcp.shim)
 		return;
 
-	cancel_delayed_work_sync(&connector->hdcp.check_work);
-	cancel_work_sync(&connector->hdcp.prop_work);
+	cancel_delayed_work_sync_with_sync_wait(&connector->hdcp.check_work);
+	cancel_work_sync_with_sync_wait(&connector->hdcp.prop_work);
 }
 
 void intel_hdcp_component_fini(struct intel_display *display)
@@ -2666,7 +2666,7 @@ void intel_hdcp_cleanup(struct intel_connector *connector)
 	 * Now that the connector is not registered, check_work won't be run,
 	 * but cancel any outstanding instances of it
 	 */
-	cancel_delayed_work_sync(&hdcp->check_work);
+	cancel_delayed_work_sync_with_sync_wait(&hdcp->check_work);
 
 	/*
 	 * We don't cancel prop_work in the same way as check_work since it

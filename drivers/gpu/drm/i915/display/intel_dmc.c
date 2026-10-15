@@ -1476,7 +1476,7 @@ void intel_dmc_suspend(struct intel_display *display)
 		return;
 
 	if (dmc)
-		flush_work(&dmc->work);
+		flush_work_with_sync_wait(&dmc->work);
 
 	/* Drop the reference held in case DMC isn't loaded. */
 	if (!intel_dmc_has_payload(display))
@@ -1491,7 +1491,7 @@ void intel_dmc_wait_fw_load(struct intel_display *display)
 		return;
 
 	if (dmc)
-		flush_work(&dmc->work);
+		flush_work_with_sync_wait(&dmc->work);
 }
 
 /**

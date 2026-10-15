@@ -1238,7 +1238,7 @@ static void intel_opregion_suspend_display(struct intel_display *display)
 	if (opregion->asle)
 		opregion->asle->ardy = ASLE_ARDY_NOT_READY;
 
-	cancel_work_sync(&opregion->asle_work);
+	cancel_work_sync_with_sync_wait(&opregion->asle_work);
 
 	if (opregion->acpi)
 		opregion->acpi->drdy = 0;

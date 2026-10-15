@@ -5081,7 +5081,7 @@ static void dwc2_hcd_free(struct dwc2_hsotg *hsotg)
 		destroy_workqueue(hsotg->wq_otg);
 	}
 
-	cancel_work_sync(&hsotg->phy_reset_work);
+	cancel_work_sync_with_sync_wait(&hsotg->phy_reset_work);
 
 	timer_delete(&hsotg->wkp_timer);
 }

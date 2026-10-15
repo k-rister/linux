@@ -1181,7 +1181,7 @@ err_engine:
 
 	omap_aes_dma_cleanup(dd);
 err_irq:
-	cancel_work_sync(&dd->done_task);
+	cancel_work_sync_with_sync_wait(&dd->done_task);
 err_pm_disable:
 	pm_runtime_disable(dev);
 err_data:
@@ -1205,7 +1205,7 @@ static void omap_aes_remove(struct platform_device *pdev)
 
 	crypto_engine_exit(dd->engine);
 
-	cancel_work_sync(&dd->done_task);
+	cancel_work_sync_with_sync_wait(&dd->done_task);
 	omap_aes_dma_cleanup(dd);
 	pm_runtime_disable(dd->dev);
 }

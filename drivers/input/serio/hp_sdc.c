@@ -986,7 +986,7 @@ static void hp_sdc_exit(void)
 	tasklet_kill(&hp_sdc.task);
 
 #if defined(__hppa__)
-	cancel_delayed_work_sync(&moduleloader_work);
+	cancel_delayed_work_sync_with_sync_wait(&moduleloader_work);
 	if (unregister_parisc_driver(&hp_sdc_driver))
 		printk(KERN_WARNING PREFIX "Error unregistering HP SDC");
 #endif

@@ -1808,7 +1808,7 @@ void musb_gadget_cleanup(struct musb *musb)
 	if (musb->port_mode == MUSB_HOST)
 		return;
 
-	cancel_delayed_work_sync(&musb->gadget_work);
+	cancel_delayed_work_sync_with_sync_wait(&musb->gadget_work);
 	usb_del_gadget_udc(&musb->g);
 }
 

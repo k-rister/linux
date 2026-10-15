@@ -2566,9 +2566,9 @@ musb_init_controller(struct device *dev, int nIrq, void __iomem *ctrl)
 	return 0;
 
 fail3:
-	cancel_delayed_work_sync(&musb->irq_work);
-	cancel_delayed_work_sync(&musb->finish_resume_work);
-	cancel_delayed_work_sync(&musb->deassert_reset_work);
+	cancel_delayed_work_sync_with_sync_wait(&musb->irq_work);
+	cancel_delayed_work_sync_with_sync_wait(&musb->finish_resume_work);
+	cancel_delayed_work_sync_with_sync_wait(&musb->deassert_reset_work);
 	if (musb->dma_controller)
 		musb_dma_controller_destroy(musb->dma_controller);
 
@@ -2630,9 +2630,9 @@ static void musb_remove(struct platform_device *pdev)
 	 */
 	musb_exit_debugfs(musb);
 
-	cancel_delayed_work_sync(&musb->irq_work);
-	cancel_delayed_work_sync(&musb->finish_resume_work);
-	cancel_delayed_work_sync(&musb->deassert_reset_work);
+	cancel_delayed_work_sync_with_sync_wait(&musb->irq_work);
+	cancel_delayed_work_sync_with_sync_wait(&musb->finish_resume_work);
+	cancel_delayed_work_sync_with_sync_wait(&musb->deassert_reset_work);
 	pm_runtime_get_sync(musb->controller);
 	musb_host_cleanup(musb);
 	musb_gadget_cleanup(musb);
@@ -2814,7 +2814,7 @@ static int musb_suspend(struct device *dev)
 	musb_disable_interrupts(musb);
 
 	musb->flush_irq_work = true;
-	while (flush_delayed_work(&musb->irq_work))
+	while (flush_delayed_work_with_sync_wait(&musb->irq_work))
 		;
 	musb->flush_irq_work = false;
 

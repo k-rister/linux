@@ -1091,8 +1091,8 @@ out5:
 	if (host->flags & HOST_F_DBDMA)
 		au1xmmc_dbdma_shutdown(host);
 
-	cancel_work_sync(&host->data_bh_work);
-	cancel_work_sync(&host->finish_bh_work);
+	cancel_work_sync_with_sync_wait(&host->data_bh_work);
+	cancel_work_sync_with_sync_wait(&host->finish_bh_work);
 
 	if (host->platdata && host->platdata->cd_setup &&
 	    !(mmc->caps & MMC_CAP_NEEDS_POLL))
@@ -1132,8 +1132,8 @@ static void au1xmmc_remove(struct platform_device *pdev)
 		__raw_writel(0, HOST_CONFIG2(host));
 		wmb(); /* drain writebuffer */
 
-		cancel_work_sync(&host->data_bh_work);
-		cancel_work_sync(&host->finish_bh_work);
+		cancel_work_sync_with_sync_wait(&host->data_bh_work);
+		cancel_work_sync_with_sync_wait(&host->finish_bh_work);
 
 		if (host->flags & HOST_F_DBDMA)
 			au1xmmc_dbdma_shutdown(host);

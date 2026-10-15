@@ -511,7 +511,7 @@ static int hdlc_init(struct gb_beagleplay *bg)
 
 static void hdlc_deinit(struct gb_beagleplay *bg)
 {
-	flush_work(&bg->tx_work);
+	flush_work_with_sync_wait(&bg->tx_work);
 }
 
 /**
@@ -976,7 +976,7 @@ static enum fw_upload_err cc1352_prepare(struct fw_upload *fw_upload,
 	if (gb_beagleplay_stop_svc(bg))
 		dev_warn(&bg->sd->dev, "Failed to send SVC stop before flashing\n");
 	msleep(200);
-	flush_work(&bg->tx_work);
+	flush_work_with_sync_wait(&bg->tx_work);
 
 	serdev_device_wait_until_sent(bg->sd, CC1352_BOOTLOADER_TIMEOUT);
 

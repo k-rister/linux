@@ -352,7 +352,7 @@ static int srt_ec_suspend(struct device *dev)
 {
 	struct srt_ec_device *srt = dev_get_drvdata(dev);
 
-	cancel_delayed_work_sync(&srt->poll_work);
+	cancel_delayed_work_sync_with_sync_wait(&srt->poll_work);
 
 	return 0;
 }

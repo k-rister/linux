@@ -1919,7 +1919,7 @@ svm_range_list_lock_and_flush_work(struct svm_range_list *svms,
 				   struct mm_struct *mm)
 {
 retry_flush_work:
-	flush_work(&svms->deferred_list_work);
+	flush_work_with_sync_wait(&svms->deferred_list_work);
 	mmap_write_lock(mm);
 
 	if (list_empty(&svms->deferred_range_list))
@@ -3345,10 +3345,10 @@ void svm_range_list_fini(struct kfd_process *p)
 	pr_debug("process pid %d svms 0x%p\n", p->lead_thread->pid,
 		 &p->svms);
 
-	cancel_delayed_work_sync(&p->svms.restore_work);
+	cancel_delayed_work_sync_with_sync_wait(&p->svms.restore_work);
 
 	/* Ensure list work is finished before process is destroyed */
-	flush_work(&p->svms.deferred_list_work);
+	flush_work_with_sync_wait(&p->svms.deferred_list_work);
 
 	/*
 	 * Ensure no retry fault comes in afterwards, as page fault handler will
@@ -3925,7 +3925,7 @@ svm_range_get_attr(struct kfd_process *p, struct mm_struct *mm,
 	 * would be a race condition in the application anyway, and undefined
 	 * behaviour is acceptable in that case.
 	 */
-	flush_work(&p->svms.deferred_list_work);
+	flush_work_with_sync_wait(&p->svms.deferred_list_work);
 
 	mmap_read_lock(mm);
 	r = svm_range_is_valid(p, start, size);

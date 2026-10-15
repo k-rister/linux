@@ -612,7 +612,7 @@ void kfd_dbg_trap_deactivate(struct kfd_process *target, bool unwind, int unwind
 		if (resume_count)
 			pr_debug("Resumed %d queues\n", resume_count);
 
-		cancel_work_sync(&target->debug_event_workarea);
+		cancel_work_sync_with_sync_wait(&target->debug_event_workarea);
 		kfd_dbg_clear_process_address_watch(target);
 		kfd_dbg_trap_set_wave_launch_mode(target, 0);
 
@@ -694,7 +694,7 @@ int kfd_dbg_trap_disable(struct kfd_process *target)
 	else if (target->runtime_info.runtime_state != DEBUG_RUNTIME_STATE_DISABLED)
 		target->runtime_info.runtime_state = DEBUG_RUNTIME_STATE_ENABLED;
 
-	cancel_work_sync(&target->debug_event_workarea);
+	cancel_work_sync_with_sync_wait(&target->debug_event_workarea);
 	fput(target->dbg_ev_file);
 	target->dbg_ev_file = NULL;
 

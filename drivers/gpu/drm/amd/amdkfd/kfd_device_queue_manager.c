@@ -3806,7 +3806,7 @@ int suspend_queues(struct kfd_process *p,
 		schedule_work(&copy_context_worker.copy_context_work);
 
 
-		flush_work(&copy_context_worker.copy_context_work);
+		flush_work_with_sync_wait(&copy_context_worker.copy_context_work);
 		destroy_work_on_stack(&copy_context_worker.copy_context_work);
 	}
 

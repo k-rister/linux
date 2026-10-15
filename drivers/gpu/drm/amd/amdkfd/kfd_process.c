@@ -362,7 +362,7 @@ static ssize_t kfd_procfs_show(struct kobject *kobj, struct attribute *attr,
 
 		schedule_work(&sdma_activity_work_handler.sdma_activity_work);
 
-		flush_work(&sdma_activity_work_handler.sdma_activity_work);
+		flush_work_with_sync_wait(&sdma_activity_work_handler.sdma_activity_work);
 		destroy_work_on_stack(&sdma_activity_work_handler.sdma_activity_work);
 
 		return snprintf(buffer, PAGE_SIZE, "%llu\n",
@@ -1399,12 +1399,12 @@ void kfd_process_notifier_release_internal(struct kfd_process *p)
 	int i;
 
 	kfd_process_table_remove(p);
-	cancel_delayed_work_sync(&p->eviction_work);
+	cancel_delayed_work_sync_with_sync_wait(&p->eviction_work);
 	cancel_delayed_work_sync(&p->restore_work);
 	/*
 	 * If work pending, cancel it and drop the extra ref
 	 */
-	if (cancel_delayed_work_sync(&p->signal_work))
+	if (cancel_delayed_work_sync_with_sync_wait(&p->signal_work))
 		kfd_unref_process(p);
 
 	/*
@@ -2419,7 +2419,7 @@ int kfd_send_exception_to_runtime(struct kfd_process *p,
 	worker.error_reason = error_reason;
 
 	schedule_work(&worker.work);
-	flush_work(&worker.work);
+	flush_work_with_sync_wait(&worker.work);
 	destroy_work_on_stack(&worker.work);
 
 	return 0;

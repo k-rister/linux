@@ -577,7 +577,7 @@ static void tda1997x_disable_edid(struct v4l2_subdev *sd)
 	struct tda1997x_state *state = to_state(sd);
 
 	v4l2_dbg(1, debug, sd, "%s\n", __func__);
-	cancel_delayed_work_sync(&state->delayed_work_enable_hpd);
+	cancel_delayed_work_sync_with_sync_wait(&state->delayed_work_enable_hpd);
 
 	/* Set HPD low */
 	tda1997x_manual_hpd(sd, HPD_LOW_BP);
@@ -2824,7 +2824,7 @@ static void tda1997x_remove(struct i2c_client *client)
 	media_entity_cleanup(&sd->entity);
 	v4l2_ctrl_handler_free(&state->hdl);
 	regulator_bulk_disable(TDA1997X_NUM_SUPPLIES, state->supplies);
-	cancel_delayed_work_sync(&state->delayed_work_enable_hpd);
+	cancel_delayed_work_sync_with_sync_wait(&state->delayed_work_enable_hpd);
 	mutex_destroy(&state->page_lock);
 	mutex_destroy(&state->lock);
 

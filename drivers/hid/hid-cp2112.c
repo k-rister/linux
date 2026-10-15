@@ -1194,7 +1194,7 @@ static void cp2112_gpio_irq_shutdown(struct irq_data *d)
 
 	if (!dev->irq_mask) {
 		dev->gpio_poll = false;
-		cancel_delayed_work_sync(&dev->gpio_poll_worker);
+		cancel_delayed_work_sync_with_sync_wait(&dev->gpio_poll_worker);
 	}
 }
 
@@ -1408,7 +1408,7 @@ static void cp2112_remove(struct hid_device *hdev)
 
 	if (dev->gpio_poll) {
 		dev->gpio_poll = false;
-		cancel_delayed_work_sync(&dev->gpio_poll_worker);
+		cancel_delayed_work_sync_with_sync_wait(&dev->gpio_poll_worker);
 	}
 
 	gpiochip_remove(&dev->gc);

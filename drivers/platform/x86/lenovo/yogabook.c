@@ -244,7 +244,7 @@ static int yogabook_probe(struct device *dev, struct yogabook_data *data,
 
 error_free_irq:
 	free_irq(data->backside_hall_irq, data);
-	cancel_work_sync(&data->work);
+	cancel_work_sync_with_sync_wait(&data->work);
 	return r;
 }
 
@@ -253,7 +253,7 @@ static void yogabook_remove(struct yogabook_data *data)
 	int r = 0;
 
 	free_irq(data->backside_hall_irq, data);
-	cancel_work_sync(&data->work);
+	cancel_work_sync_with_sync_wait(&data->work);
 
 	if (!test_bit(YB_KBD_IS_ON, &data->flags))
 		r |= device_reprobe(data->kbd_dev);
@@ -270,7 +270,7 @@ static int yogabook_suspend(struct device *dev)
 	struct yogabook_data *data = dev_get_drvdata(dev);
 
 	set_bit(YB_SUSPENDED, &data->flags);
-	flush_work(&data->work);
+	flush_work_with_sync_wait(&data->work);
 
 	if (test_bit(YB_KBD_IS_ON, &data->flags))
 		data->set_kbd_backlight(data, 0);
@@ -518,7 +518,7 @@ static int yogabook_pdev_probe(struct platform_device *pdev)
 
 error_free_irq:
 	free_irq(data->pen_touch_irq, data);
-	cancel_work_sync(&data->work);
+	cancel_work_sync_with_sync_wait(&data->work);
 error_put_devs:
 	put_device(data->dig_dev);
 	put_device(data->kbd_dev);
@@ -531,7 +531,7 @@ static void yogabook_pdev_remove(struct platform_device *pdev)
 
 	yogabook_remove(data);
 	free_irq(data->pen_touch_irq, data);
-	cancel_work_sync(&data->work);
+	cancel_work_sync_with_sync_wait(&data->work);
 	put_device(data->dig_dev);
 	put_device(data->kbd_dev);
 }

@@ -467,7 +467,7 @@ static int vpe_hw_fini(struct amdgpu_ip_block *ip_block)
 	struct amdgpu_device *adev = ip_block->adev;
 	struct amdgpu_vpe *vpe = &adev->vpe;
 
-	cancel_delayed_work_sync(&adev->vpe.idle_work);
+	cancel_delayed_work_sync_with_sync_wait(&adev->vpe.idle_work);
 
 	vpe_ring_stop(vpe);
 
@@ -882,7 +882,7 @@ static void vpe_ring_begin_use(struct amdgpu_ring *ring)
 	struct amdgpu_device *adev = ring->adev;
 	struct amdgpu_vpe *vpe = &adev->vpe;
 
-	cancel_delayed_work_sync(&adev->vpe.idle_work);
+	cancel_delayed_work_sync_with_sync_wait(&adev->vpe.idle_work);
 
 	/* Power on VPE and notify VPE of new context  */
 	if (!vpe->context_started) {

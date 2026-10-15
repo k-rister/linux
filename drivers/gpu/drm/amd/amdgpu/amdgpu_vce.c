@@ -302,7 +302,7 @@ int amdgpu_vce_suspend(struct amdgpu_device *adev)
 {
 	int i;
 
-	cancel_delayed_work_sync(&adev->vce.idle_work);
+	cancel_delayed_work_sync_with_sync_wait(&adev->vce.idle_work);
 
 	if (adev->vce.vcpu_bo == NULL)
 		return 0;
@@ -393,7 +393,7 @@ void amdgpu_vce_ring_begin_use(struct amdgpu_ring *ring)
 		return;
 
 	mutex_lock(&adev->vce.idle_mutex);
-	set_clocks = !cancel_delayed_work_sync(&adev->vce.idle_work);
+	set_clocks = !cancel_delayed_work_sync_with_sync_wait(&adev->vce.idle_work);
 	if (set_clocks) {
 		if (adev->pm.dpm_enabled) {
 			amdgpu_dpm_enable_vce(adev, true);

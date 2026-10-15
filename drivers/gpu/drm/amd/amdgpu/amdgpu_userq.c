@@ -444,7 +444,7 @@ amdgpu_userq_ensure_ev_fence(struct amdgpu_userq_mgr *uq_mgr,
 
 retry:
 	/* Flush any pending resume work to create ev_fence */
-	flush_delayed_work(&uq_mgr->resume_work);
+	flush_delayed_work_with_sync_wait(&uq_mgr->resume_work);
 
 	mutex_lock(&uq_mgr->userq_mutex);
 	ev_fence = amdgpu_evf_mgr_get_fence(evf_mgr);
@@ -542,7 +542,7 @@ amdgpu_userq_destroy(struct amdgpu_userq_mgr *uq_mgr, struct amdgpu_usermode_que
 
 	trace_amdgpu_userq_destroy_start(queue);
 
-	cancel_delayed_work_sync(&uq_mgr->resume_work);
+	cancel_delayed_work_sync_with_sync_wait(&uq_mgr->resume_work);
 
 	mutex_lock(&uq_mgr->userq_mutex);
 	amdgpu_userq_wait_for_last_fence(queue);
@@ -1327,7 +1327,7 @@ void amdgpu_userq_mgr_cancel_reset_work(struct amdgpu_device *adev)
 
 void amdgpu_userq_mgr_cancel_resume(struct amdgpu_userq_mgr *userq_mgr)
 {
-	cancel_delayed_work_sync(&userq_mgr->resume_work);
+	cancel_delayed_work_sync_with_sync_wait(&userq_mgr->resume_work);
 }
 
 void amdgpu_userq_mgr_fini(struct amdgpu_userq_mgr *userq_mgr)
@@ -1384,7 +1384,7 @@ int amdgpu_userq_suspend(struct amdgpu_device *adev)
 
 	xa_for_each(&adev->userq_doorbell_xa, queue_id, queue) {
 		uqm = queue->userq_mgr;
-		cancel_delayed_work_sync(&uqm->resume_work);
+		cancel_delayed_work_sync_with_sync_wait(&uqm->resume_work);
 		guard(mutex)(&uqm->userq_mutex);
 		if (adev->in_s0ix)
 			r = amdgpu_userq_preempt_helper(queue);
@@ -1439,7 +1439,7 @@ int amdgpu_userq_stop_sched_for_enforce_isolation(struct amdgpu_device *adev,
 	adev->userq_halt_for_enforce_isolation = true;
 	xa_for_each(&adev->userq_doorbell_xa, queue_id, queue) {
 		uqm = queue->userq_mgr;
-		cancel_delayed_work_sync(&uqm->resume_work);
+		cancel_delayed_work_sync_with_sync_wait(&uqm->resume_work);
 		mutex_lock(&uqm->userq_mutex);
 		if (((queue->queue_type == AMDGPU_HW_IP_GFX) ||
 		     (queue->queue_type == AMDGPU_HW_IP_COMPUTE)) &&

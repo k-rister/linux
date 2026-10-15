@@ -279,7 +279,7 @@ static int vcn_v1_0_hw_fini(struct amdgpu_ip_block *ip_block)
 	struct amdgpu_device *adev = ip_block->adev;
 	struct amdgpu_vcn_inst *vinst = adev->vcn.inst;
 
-	cancel_delayed_work_sync(&vinst->idle_work);
+	cancel_delayed_work_sync_with_sync_wait(&vinst->idle_work);
 
 	if ((adev->pg_flags & AMD_PG_SUPPORT_VCN_DPG) ||
 	    (vinst->cur_state != AMD_PG_STATE_GATE &&
@@ -303,7 +303,7 @@ static int vcn_v1_0_suspend(struct amdgpu_ip_block *ip_block)
 	struct amdgpu_device *adev = ip_block->adev;
 	bool idle_work_unexecuted;
 
-	idle_work_unexecuted = cancel_delayed_work_sync(&adev->vcn.inst[0].idle_work);
+	idle_work_unexecuted = cancel_delayed_work_sync_with_sync_wait(&adev->vcn.inst[0].idle_work);
 	if (idle_work_unexecuted) {
 		if (adev->pm.dpm_enabled)
 			amdgpu_dpm_enable_vcn(adev, false, 0);
@@ -1909,7 +1909,7 @@ static void vcn_v1_0_idle_work_handler(struct work_struct *work)
 static void vcn_v1_0_ring_begin_use(struct amdgpu_ring *ring)
 {
 	struct	amdgpu_device *adev = ring->adev;
-	bool set_clocks = !cancel_delayed_work_sync(&adev->vcn.inst[0].idle_work);
+	bool set_clocks = !cancel_delayed_work_sync_with_sync_wait(&adev->vcn.inst[0].idle_work);
 
 	mutex_lock(&adev->vcn.inst[0].vcn1_jpeg1_workaround);
 

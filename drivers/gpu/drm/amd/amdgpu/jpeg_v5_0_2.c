@@ -271,7 +271,7 @@ static int jpeg_v5_0_2_hw_fini(struct amdgpu_ip_block *ip_block)
 	struct amdgpu_device *adev = ip_block->adev;
 	int ret = 0;
 
-	cancel_delayed_work_sync(&adev->jpeg.idle_work);
+	cancel_delayed_work_sync_with_sync_wait(&adev->jpeg.idle_work);
 
 		if (adev->jpeg.cur_state != AMD_PG_STATE_GATE)
 			ret = jpeg_v5_0_2_set_powergating_state(ip_block, AMD_PG_STATE_GATE);

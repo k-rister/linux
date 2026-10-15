@@ -96,7 +96,7 @@ int amdgpu_jpeg_sw_fini(struct amdgpu_device *adev)
 
 int amdgpu_jpeg_suspend(struct amdgpu_device *adev)
 {
-	cancel_delayed_work_sync(&adev->jpeg.idle_work);
+	cancel_delayed_work_sync_with_sync_wait(&adev->jpeg.idle_work);
 
 	return 0;
 }
@@ -135,7 +135,7 @@ void amdgpu_jpeg_ring_begin_use(struct amdgpu_ring *ring)
 	struct amdgpu_device *adev = ring->adev;
 
 	if (!atomic_fetch_inc(&adev->jpeg.total_submission_cnt))
-		cancel_delayed_work_sync(&adev->jpeg.idle_work);
+		cancel_delayed_work_sync_with_sync_wait(&adev->jpeg.idle_work);
 
 	mutex_lock(&adev->jpeg.jpeg_pg_lock);
 	amdgpu_device_ip_set_powergating_state(adev, AMD_IP_BLOCK_TYPE_JPEG,

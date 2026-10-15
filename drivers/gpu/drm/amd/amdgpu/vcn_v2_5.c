@@ -160,7 +160,7 @@ static void vcn_v2_5_ring_begin_use(struct amdgpu_ring *ring)
 	struct amdgpu_vcn_inst *v = &adev->vcn.inst[ring->me];
 
 	if (!atomic_fetch_inc(&adev->vcn.inst[0].total_submission_cnt))
-		cancel_delayed_work_sync(&adev->vcn.inst[0].idle_work);
+		cancel_delayed_work_sync_with_sync_wait(&adev->vcn.inst[0].idle_work);
 
 	/* We can safely return early here because we've cancelled the
 	 * the delayed work so there is no one else to set it to false
@@ -512,7 +512,7 @@ static int vcn_v2_5_hw_fini(struct amdgpu_ip_block *ip_block)
 		if (adev->vcn.harvest_config & (1 << i))
 			continue;
 
-		cancel_delayed_work_sync(&vinst->idle_work);
+		cancel_delayed_work_sync_with_sync_wait(&vinst->idle_work);
 
 		if ((adev->pg_flags & AMD_PG_SUPPORT_VCN_DPG) ||
 		    (vinst->cur_state != AMD_PG_STATE_GATE &&

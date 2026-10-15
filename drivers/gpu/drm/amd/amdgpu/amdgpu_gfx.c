@@ -957,7 +957,7 @@ static void amdgpu_gfx_do_off_ctrl(struct amdgpu_device *adev, bool enable,
 		}
 	} else {
 		if (adev->gfx.gfx_off_req_count == 0) {
-			cancel_delayed_work_sync(&adev->gfx.gfx_off_delay_work);
+			cancel_delayed_work_sync_with_sync_wait(&adev->gfx.gfx_off_delay_work);
 
 			if (adev->gfx.gfx_off_state &&
 			    !amdgpu_dpm_set_powergating_by_smu(adev, AMD_IP_BLOCK_TYPE_GFX, false, 0)) {
@@ -2553,7 +2553,7 @@ static void amdgpu_gfx_kfd_sch_ctrl(struct amdgpu_device *adev, u32 idx,
 		}
 	} else {
 		if (adev->gfx.userq_sch_req_count[idx] == 0) {
-			cancel_delayed_work_sync(&adev->gfx.enforce_isolation[idx].work);
+			cancel_delayed_work_sync_with_sync_wait(&adev->gfx.enforce_isolation[idx].work);
 			if (!adev->gfx.userq_sch_inactive[idx]) {
 				amdgpu_userq_stop_sched_for_enforce_isolation(adev, idx);
 				if (adev->kfd.init_complete)
@@ -2803,7 +2803,7 @@ void amdgpu_gfx_profile_ring_begin_use(struct amdgpu_ring *ring)
 		profile = PP_SMC_POWER_PROFILE_COMPUTE;
 
 	if (!atomic_fetch_inc(&adev->gfx.total_submission_cnt))
-		cancel_delayed_work_sync(&adev->gfx.idle_work);
+		cancel_delayed_work_sync_with_sync_wait(&adev->gfx.idle_work);
 
 	/* We can safely return early here because we've cancelled the
 	 * the delayed work so there is no one else to set it to false

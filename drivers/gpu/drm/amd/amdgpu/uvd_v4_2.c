@@ -215,7 +215,7 @@ static int uvd_v4_2_hw_fini(struct amdgpu_ip_block *ip_block)
 {
 	struct amdgpu_device *adev = ip_block->adev;
 
-	cancel_delayed_work_sync(&adev->uvd.idle_work);
+	cancel_delayed_work_sync_with_sync_wait(&adev->uvd.idle_work);
 
 	if (RREG32(mmUVD_STATUS) != 0)
 		uvd_v4_2_stop(adev);
@@ -246,7 +246,7 @@ static int uvd_v4_2_suspend(struct amdgpu_ip_block *ip_block)
 	 * jobs for clockgating/powergating/dpm setting to
 	 * ->set_powergating_state().
 	 */
-	cancel_delayed_work_sync(&adev->uvd.idle_work);
+	cancel_delayed_work_sync_with_sync_wait(&adev->uvd.idle_work);
 
 	if (adev->pm.dpm_enabled) {
 		amdgpu_dpm_enable_uvd(adev, false);

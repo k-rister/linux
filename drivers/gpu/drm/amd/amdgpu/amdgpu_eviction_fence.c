@@ -170,7 +170,7 @@ void amdgpu_evf_mgr_shutdown(struct amdgpu_eviction_fence_mgr *evf_mgr)
 {
 	evf_mgr->shutdown = true;
 	/* Make sure that the shutdown is visible to the suspend work */
-	flush_work(&evf_mgr->suspend_work);
+	flush_work_with_sync_wait(&evf_mgr->suspend_work);
 }
 
 void amdgpu_evf_mgr_flush_suspend(struct amdgpu_eviction_fence_mgr *evf_mgr)
@@ -178,7 +178,7 @@ void amdgpu_evf_mgr_flush_suspend(struct amdgpu_eviction_fence_mgr *evf_mgr)
 	dma_fence_wait(rcu_dereference_protected(evf_mgr->ev_fence, true),
 		       false);
 	/* Make sure that we are done with the last suspend work */
-	flush_work(&evf_mgr->suspend_work);
+	flush_work_with_sync_wait(&evf_mgr->suspend_work);
 }
 
 void amdgpu_evf_mgr_fini(struct amdgpu_eviction_fence_mgr *evf_mgr)

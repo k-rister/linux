@@ -1649,7 +1649,7 @@ static int gfx_v12_0_sw_fini(struct amdgpu_ip_block *ip_block)
 	int i;
 	struct amdgpu_device *adev = ip_block->adev;
 
-	cancel_work_sync(&adev->gfx.userq_priv_fault_work);
+	cancel_work_sync_with_sync_wait(&adev->gfx.userq_priv_fault_work);
 
 	for (i = 0; i < adev->gfx.num_gfx_rings; i++)
 		amdgpu_ring_fini(&adev->gfx.gfx_ring[i]);
@@ -3881,7 +3881,7 @@ static int gfx_v12_0_hw_fini(struct amdgpu_ip_block *ip_block)
 	struct amdgpu_device *adev = ip_block->adev;
 	uint32_t tmp;
 
-	cancel_delayed_work_sync(&adev->gfx.idle_work);
+	cancel_delayed_work_sync_with_sync_wait(&adev->gfx.idle_work);
 
 	gfx_v12_0_set_userq_eop_interrupts(adev, false);
 	amdgpu_irq_put(adev, &adev->gfx.bad_op_irq, 0);

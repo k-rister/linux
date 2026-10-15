@@ -2796,7 +2796,7 @@ static int dce_v8_0_hw_fini(struct amdgpu_ip_block *ip_block)
 
 	dce_v8_0_pageflip_interrupt_fini(adev);
 
-	flush_delayed_work(&adev->hotplug_work);
+	flush_delayed_work_with_sync_wait(&adev->hotplug_work);
 
 	return 0;
 }

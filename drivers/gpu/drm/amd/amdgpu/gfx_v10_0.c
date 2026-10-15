@@ -7565,7 +7565,7 @@ static int gfx_v10_0_hw_fini(struct amdgpu_ip_block *ip_block)
 {
 	struct amdgpu_device *adev = ip_block->adev;
 
-	cancel_delayed_work_sync(&adev->gfx.idle_work);
+	cancel_delayed_work_sync_with_sync_wait(&adev->gfx.idle_work);
 
 	amdgpu_irq_put(adev, &adev->gfx.bad_op_irq, 0);
 	amdgpu_irq_put(adev, &adev->gfx.priv_inst_irq, 0);

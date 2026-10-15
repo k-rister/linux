@@ -777,7 +777,7 @@ void amdgpu_virt_fini_data_exchange(struct amdgpu_device *adev)
 {
 	if (adev->virt.vf2pf_update_interval_ms != 0) {
 		dev_info(adev->dev, "clean up the vf2pf work item\n");
-		cancel_delayed_work_sync(&adev->virt.vf2pf_work);
+		cancel_delayed_work_sync_with_sync_wait(&adev->virt.vf2pf_work);
 		adev->virt.vf2pf_update_interval_ms = 0;
 	}
 }

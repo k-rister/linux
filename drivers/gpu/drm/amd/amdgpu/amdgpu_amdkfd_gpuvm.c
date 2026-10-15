@@ -1610,7 +1610,7 @@ void amdgpu_amdkfd_gpuvm_destroy_cb(struct amdgpu_device *adev,
 		WARN_ON(!list_empty(&process_info->userptr_inval_list));
 
 		dma_fence_put(&process_info->eviction_fence->base);
-		cancel_delayed_work_sync(&process_info->restore_userptr_work);
+		cancel_delayed_work_sync_with_sync_wait(&process_info->restore_userptr_work);
 		put_pid(process_info->pid);
 		mutex_destroy(&process_info->lock);
 		mutex_destroy(&process_info->notifier_lock);

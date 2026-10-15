@@ -667,7 +667,7 @@ static int vce_v1_0_hw_fini(struct amdgpu_ip_block *ip_block)
 	if (r)
 		return r;
 
-	cancel_delayed_work_sync(&ip_block->adev->vce.idle_work);
+	cancel_delayed_work_sync_with_sync_wait(&ip_block->adev->vce.idle_work);
 	return 0;
 }
 
@@ -687,7 +687,7 @@ static int vce_v1_0_suspend(struct amdgpu_ip_block *ip_block)
 	 * jobs for clockgating/powergating/dpm setting to
 	 * ->set_powergating_state().
 	 */
-	cancel_delayed_work_sync(&adev->vce.idle_work);
+	cancel_delayed_work_sync_with_sync_wait(&adev->vce.idle_work);
 
 	if (adev->pm.dpm_enabled) {
 		amdgpu_dpm_enable_vce(adev, false);

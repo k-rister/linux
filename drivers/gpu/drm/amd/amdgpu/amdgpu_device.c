@@ -3122,7 +3122,7 @@ static int amdgpu_device_ip_suspend_phase2(struct amdgpu_device *adev)
 		if (adev->in_s0ix &&
 		    adev->ip_blocks[i].version->type == AMD_IP_BLOCK_TYPE_GFX &&
 		    amdgpu_ip_version(adev, GC_HWIP, 0) >= IP_VERSION(10, 0, 0))
-			cancel_delayed_work_sync(&adev->gfx.idle_work);
+			cancel_delayed_work_sync_with_sync_wait(&adev->gfx.idle_work);
 		/* skip suspend of gfx/mes and psp for S0ix
 		 * gfx is in gfxoff state, so on resume it will exit gfxoff just
 		 * like at runtime. PSP is also part of the always on hardware
@@ -4482,7 +4482,7 @@ int amdgpu_device_prepare(struct drm_device *dev)
 	if (r)
 		return r;
 
-	flush_delayed_work(&adev->gfx.gfx_off_delay_work);
+	flush_delayed_work_with_sync_wait(&adev->gfx.gfx_off_delay_work);
 
 	for (i = 0; i < adev->num_ip_blocks; i++) {
 		if (!adev->ip_blocks[i].status.valid)

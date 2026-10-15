@@ -430,7 +430,7 @@ int amdgpu_uvd_prepare_suspend(struct amdgpu_device *adev)
 	void *ptr;
 	int i, j, idx;
 
-	cancel_delayed_work_sync(&adev->uvd.idle_work);
+	cancel_delayed_work_sync_with_sync_wait(&adev->uvd.idle_work);
 
 	/* only valid for physical mode */
 	if (adev->asic_type < CHIP_POLARIS10) {
@@ -1279,7 +1279,7 @@ void amdgpu_uvd_ring_begin_use(struct amdgpu_ring *ring)
 	if (amdgpu_sriov_vf(adev))
 		return;
 
-	set_clocks = !cancel_delayed_work_sync(&adev->uvd.idle_work);
+	set_clocks = !cancel_delayed_work_sync_with_sync_wait(&adev->uvd.idle_work);
 	if (set_clocks) {
 		if (adev->pm.dpm_enabled) {
 			amdgpu_dpm_enable_uvd(adev, true);

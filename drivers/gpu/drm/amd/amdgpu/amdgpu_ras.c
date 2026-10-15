@@ -2433,7 +2433,7 @@ int amdgpu_ras_interrupt_remove_handler(struct amdgpu_device *adev,
 	if (data->inuse == 0)
 		return 0;
 
-	cancel_work_sync(&data->ih_work);
+	cancel_work_sync_with_sync_wait(&data->ih_work);
 
 	kfree(data->ring);
 	memset(data, 0, sizeof(*data));
@@ -4008,7 +4008,7 @@ int amdgpu_ras_fini(struct amdgpu_device *adev)
 	if (AMDGPU_RAS_GET_FEATURES(con->features))
 		amdgpu_ras_disable_all_features(adev, 0);
 
-	cancel_delayed_work_sync(&con->ras_counte_delay_work);
+	cancel_delayed_work_sync_with_sync_wait(&con->ras_counte_delay_work);
 
 	amdgpu_ras_set_context(adev, NULL);
 	kfree(con);

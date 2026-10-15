@@ -2169,7 +2169,7 @@ ffs_fs_kill_sb(struct super_block *sb)
 		ffs_data_reset(ffs);
 		// no configfs accesses from that point on,
 		// so no further schedule_work() is possible
-		cancel_work_sync(&ffs->reset_work);
+		cancel_work_sync_with_sync_wait(&ffs->reset_work);
 		ffs_data_put(ffs);
 	}
 }

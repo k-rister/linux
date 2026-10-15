@@ -1103,7 +1103,7 @@ static void shield_remove(struct hid_device *hdev)
 	hid_hw_close(hdev);
 	thunderstrike_destroy(ts);
 	timer_delete_sync(&ts->psy_stats_timer);
-	cancel_work_sync(&ts->hostcmd_req_work);
+	cancel_work_sync_with_sync_wait(&ts->hostcmd_req_work);
 	hid_hw_stop(hdev);
 }
 

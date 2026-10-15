@@ -246,7 +246,7 @@ static void msp430_ir_deinit(struct budget_ci *budget_ci)
 
 	SAA7146_IER_DISABLE(saa, MASK_06);
 	saa7146_setgpio(saa, 3, SAA7146_GPIO_INPUT);
-	cancel_work_sync(&budget_ci->ir.msp430_irq_bh_work);
+	cancel_work_sync_with_sync_wait(&budget_ci->ir.msp430_irq_bh_work);
 
 	rc_unregister_device(budget_ci->ir.dev);
 	rc_free_device(budget_ci->ir.dev);
@@ -532,7 +532,7 @@ static void ciintf_deinit(struct budget_ci *budget_ci)
 	if (budget_ci->ci_irq) {
 		SAA7146_IER_DISABLE(saa, MASK_03);
 		saa7146_setgpio(saa, 0, SAA7146_GPIO_INPUT);
-		cancel_work_sync(&budget_ci->ciintf_irq_bh_work);
+		cancel_work_sync_with_sync_wait(&budget_ci->ciintf_irq_bh_work);
 	}
 
 	// reset interface

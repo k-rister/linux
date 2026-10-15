@@ -565,7 +565,7 @@ int ttpci_budget_deinit(struct budget *budget)
 
 	budget_unregister(budget);
 
-	cancel_work_sync(&budget->vpe_bh_work);
+	cancel_work_sync_with_sync_wait(&budget->vpe_bh_work);
 
 	saa7146_vfree_destroy_pgtable(dev->pci, budget->grabbing, &budget->pt);
 

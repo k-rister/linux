@@ -1078,7 +1078,7 @@ fini_video_inputs:
 	for (i = last_input_nr_registered; i >= 0; i--)
 		tw5864_video_input_fini(&dev->inputs[i]);
 
-	cancel_work_sync(&dev->bh_work);
+	cancel_work_sync_with_sync_wait(&dev->bh_work);
 
 free_dma:
 	for (i = last_dma_allocated; i >= 0; i--) {
@@ -1197,7 +1197,7 @@ void tw5864_video_fini(struct tw5864_dev *dev)
 {
 	int i;
 
-	cancel_work_sync(&dev->bh_work);
+	cancel_work_sync_with_sync_wait(&dev->bh_work);
 
 	for (i = 0; i < TW5864_INPUTS; i++)
 		tw5864_video_input_fini(&dev->inputs[i]);

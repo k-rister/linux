@@ -230,7 +230,7 @@ static void shark_unregister_leds(struct shark_device *shark)
 	for (i = 0; i < NO_LEDS; i++)
 		led_classdev_unregister(&shark->leds[i]);
 
-	cancel_work_sync(&shark->led_work);
+	cancel_work_sync_with_sync_wait(&shark->led_work);
 }
 
 static inline void shark_resume_leds(struct shark_device *shark)

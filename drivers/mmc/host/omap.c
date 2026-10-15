@@ -1359,7 +1359,7 @@ static void mmc_omap_remove_slot(struct mmc_omap_slot *slot)
 	if (slot->pdata->get_cover_state != NULL)
 		device_remove_file(&mmc->class_dev, &dev_attr_cover_switch);
 
-	cancel_work_sync(&slot->cover_bh_work);
+	cancel_work_sync_with_sync_wait(&slot->cover_bh_work);
 	timer_delete_sync(&slot->cover_timer);
 	flush_workqueue_with_sync_wait(slot->host->mmc_omap_wq);
 

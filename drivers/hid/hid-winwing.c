@@ -386,7 +386,7 @@ static void winwing_remove(struct hid_device *hdev)
 	data = (struct winwing_drv_data *) hid_get_drvdata(hdev);
 
 	if (data)
-		cancel_work_sync(&data->rumble_work);
+		cancel_work_sync_with_sync_wait(&data->rumble_work);
 
 	hid_hw_close(hdev);
 	hid_hw_stop(hdev);

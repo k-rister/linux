@@ -287,7 +287,7 @@ static int bq24257_set_input_current_limit(struct bq24257_device *bq,
 	 * case we want to abort and go straight to the user-specified value.
 	 */
 	if (bq->iilimit_autoset_enable)
-		cancel_delayed_work_sync(&bq->iilimit_setup_work);
+		cancel_delayed_work_sync_with_sync_wait(&bq->iilimit_setup_work);
 
 	return bq24257_field_write(bq, F_IILIMIT,
 				   bq24257_find_idx(val->intval,
@@ -609,7 +609,7 @@ static void bq24257_handle_state_change(struct bq24257_device *bq,
 	if (!new_state->power_good) {
 		dev_dbg(bq->dev, "Power removed\n");
 		if (bq->iilimit_autoset_enable) {
-			cancel_delayed_work_sync(&bq->iilimit_setup_work);
+			cancel_delayed_work_sync_with_sync_wait(&bq->iilimit_setup_work);
 
 			/* activate D+/D- port detection algorithm */
 			ret = bq24257_field_write(bq, F_DPDM_EN, 1);
@@ -1077,7 +1077,7 @@ static int bq24257_suspend(struct device *dev)
 	int ret = 0;
 
 	if (bq->iilimit_autoset_enable)
-		cancel_delayed_work_sync(&bq->iilimit_setup_work);
+		cancel_delayed_work_sync_with_sync_wait(&bq->iilimit_setup_work);
 
 	/* reset all registers to default (and activate standalone mode) */
 	ret = bq24257_field_write(bq, F_RESET, 1);

@@ -786,7 +786,7 @@ static void sysmon_disable_interrupts(void *data)
 	scoped_guard(spinlock_irq, &sysmon->irq_lock)
 		sysmon->masked_temp = 0;
 
-	cancel_delayed_work_sync(&sysmon->sysmon_unmask_work);
+	cancel_delayed_work_sync_with_sync_wait(&sysmon->sysmon_unmask_work);
 }
 
 static int sysmon_init_interrupt(struct sysmon *sysmon,

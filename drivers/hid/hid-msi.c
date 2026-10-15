@@ -1932,8 +1932,8 @@ static void claw_remove(struct hid_device *hdev)
 	if (!drvdata)
 		return;
 
-	cancel_delayed_work_sync(&drvdata->cfg_resume);
-	cancel_delayed_work_sync(&drvdata->cfg_setup);
+	cancel_delayed_work_sync_with_sync_wait(&drvdata->cfg_resume);
+	cancel_delayed_work_sync_with_sync_wait(&drvdata->cfg_setup);
 
 	scoped_guard(spinlock_irqsave, &drvdata->registration_lock) {
 		/* Pairs with smp_store_release from cfg_setup_fn in system_wq context */
@@ -1953,7 +1953,7 @@ static void claw_remove(struct hid_device *hdev)
 		device_remove_group(drvdata->led_mc.led_cdev.dev, &claw_rgb_attr_group);
 		led_classdev_multicolor_unregister(&drvdata->led_mc);
 	}
-	cancel_delayed_work_sync(&drvdata->rgb_queue);
+	cancel_delayed_work_sync_with_sync_wait(&drvdata->rgb_queue);
 
 	hid_hw_close(hdev);
 }
@@ -2012,9 +2012,9 @@ static int claw_suspend(struct hid_device *hdev)
 	if (!drvdata)
 		return -ENODEV;
 
-	cancel_delayed_work_sync(&drvdata->cfg_resume);
-	cancel_delayed_work_sync(&drvdata->cfg_setup);
-	cancel_delayed_work_sync(&drvdata->rgb_queue);
+	cancel_delayed_work_sync_with_sync_wait(&drvdata->cfg_resume);
+	cancel_delayed_work_sync_with_sync_wait(&drvdata->cfg_setup);
+	cancel_delayed_work_sync_with_sync_wait(&drvdata->rgb_queue);
 
 	return 0;
 }

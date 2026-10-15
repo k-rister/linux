@@ -188,5 +188,5 @@ void vbox_irq_fini(struct vbox_private *vbox)
 	struct pci_dev *pdev = to_pci_dev(dev->dev);
 
 	free_irq(pdev->irq, dev);
-	flush_work(&vbox->hotplug_work);
+	flush_work_with_sync_wait(&vbox->hotplug_work);
 }

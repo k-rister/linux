@@ -2516,8 +2516,8 @@ void zynqmp_dp_remove(struct zynqmp_dpsub *dpsub)
 	zynqmp_dp_write(dp, ZYNQMP_DP_INT_DS, ZYNQMP_DP_INT_ALL);
 	devm_free_irq(dp->dev, dp->irq, dp);
 
-	cancel_work_sync(&dp->hpd_irq_work);
-	cancel_work_sync(&dp->hpd_work);
+	cancel_work_sync_with_sync_wait(&dp->hpd_irq_work);
+	cancel_work_sync_with_sync_wait(&dp->hpd_work);
 
 	zynqmp_dp_write(dp, ZYNQMP_DP_TRANSMITTER_ENABLE, 0);
 	zynqmp_dp_write(dp, ZYNQMP_DP_INT_DS, 0xffffffff);

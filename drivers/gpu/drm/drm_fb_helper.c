@@ -512,8 +512,8 @@ void drm_fb_helper_fini(struct drm_fb_helper *fb_helper)
 	if (!drm_fbdev_emulation)
 		return;
 
-	cancel_work_sync(&fb_helper->resume_work);
-	cancel_work_sync(&fb_helper->damage_work);
+	cancel_work_sync_with_sync_wait(&fb_helper->resume_work);
+	cancel_work_sync_with_sync_wait(&fb_helper->damage_work);
 
 	drm_fb_helper_release_info(fb_helper);
 }
@@ -701,7 +701,7 @@ void drm_fb_helper_set_suspend_unlocked(struct drm_fb_helper *fb_helper,
 		return;
 
 	/* make sure there's no pending/ongoing resume */
-	flush_work(&fb_helper->resume_work);
+	flush_work_with_sync_wait(&fb_helper->resume_work);
 
 	if (suspend) {
 		if (fb_helper->info->state != FBINFO_STATE_RUNNING)
@@ -712,7 +712,7 @@ void drm_fb_helper_set_suspend_unlocked(struct drm_fb_helper *fb_helper,
 		 * interrupts are disabled and drm_fb_helper_fb_dirty()
 		 * would wait for VBlank timeout otherwise.
 		 */
-		cancel_work_sync(&fb_helper->damage_work);
+		cancel_work_sync_with_sync_wait(&fb_helper->damage_work);
 
 		console_lock();
 

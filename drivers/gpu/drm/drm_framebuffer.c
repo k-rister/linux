@@ -467,7 +467,7 @@ int drm_mode_rmfb(struct drm_device *dev, u32 fb_id,
 		list_add_tail(&fb->filp_head, &arg.fbs);
 
 		schedule_work(&arg.work);
-		flush_work(&arg.work);
+		flush_work_with_sync_wait(&arg.work);
 		destroy_work_on_stack(&arg.work);
 	} else
 		drm_framebuffer_put(fb);
@@ -819,7 +819,7 @@ void drm_fb_release(struct drm_file *priv)
 		INIT_WORK_ONSTACK(&arg.work, drm_mode_rmfb_work_fn);
 
 		schedule_work(&arg.work);
-		flush_work(&arg.work);
+		flush_work_with_sync_wait(&arg.work);
 		destroy_work_on_stack(&arg.work);
 	}
 }

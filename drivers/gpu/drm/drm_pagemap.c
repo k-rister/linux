@@ -1674,8 +1674,8 @@ void drm_pagemap_destroy(struct drm_pagemap *dpagemap, bool is_atomic_or_reclaim
 
 static void drm_pagemap_exit(void)
 {
-	flush_work(&drm_pagemap_work);
+	flush_work_with_sync_wait(&drm_pagemap_work);
 	if (WARN_ON(!llist_empty(&drm_pagemap_unhold_list)))
-		disable_work_sync(&drm_pagemap_work);
+		disable_work_sync_with_sync_wait(&drm_pagemap_work);
 }
 module_exit(drm_pagemap_exit);

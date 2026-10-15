@@ -93,7 +93,7 @@ void speakup_cancel_selection(void)
 {
 	struct tty_struct *tty;
 
-	cancel_work_sync(&speakup_sel_work.work);
+	cancel_work_sync_with_sync_wait(&speakup_sel_work.work);
 	/* setting to null so that if work fails to run and we cancel it,
 	 * we can run it again without getting EBUSY forever from there on.
 	 * we need to use xchg here to avoid race with speakup_set_selection()
@@ -134,7 +134,7 @@ void speakup_cancel_paste(void)
 {
 	struct tty_struct *tty;
 
-	cancel_work_sync(&speakup_paste_work.work);
+	cancel_work_sync_with_sync_wait(&speakup_paste_work.work);
 	tty = xchg(&speakup_paste_work.tty, NULL);
 	if (tty)
 		tty_kref_put(tty);

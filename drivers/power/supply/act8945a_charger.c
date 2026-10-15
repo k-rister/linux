@@ -641,7 +641,7 @@ static void act8945a_charger_remove(struct platform_device *pdev)
 	struct act8945a_charger *charger = platform_get_drvdata(pdev);
 
 	charger->init_done = false;
-	cancel_work_sync(&charger->work);
+	cancel_work_sync_with_sync_wait(&charger->work);
 }
 
 static struct platform_driver act8945a_charger_driver = {

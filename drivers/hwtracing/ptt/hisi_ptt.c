@@ -1261,7 +1261,7 @@ static void hisi_ptt_unregister_filter_update_notifier(void *data)
 	bus_unregister_notifier(&pci_bus_type, &hisi_ptt->hisi_ptt_nb);
 
 	/* Cancel any work that has been queued */
-	cancel_delayed_work_sync(&hisi_ptt->work);
+	cancel_delayed_work_sync_with_sync_wait(&hisi_ptt->work);
 }
 
 /* Register the bus notifier for dynamically updating the filter list */

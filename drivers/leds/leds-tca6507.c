@@ -770,7 +770,7 @@ static void tca6507_remove(struct i2c_client *client)
 {
 	struct tca6507_chip *tca = i2c_get_clientdata(client);
 
-	cancel_work_sync(&tca->work);
+	cancel_work_sync_with_sync_wait(&tca->work);
 }
 
 static struct i2c_driver tca6507_driver = {

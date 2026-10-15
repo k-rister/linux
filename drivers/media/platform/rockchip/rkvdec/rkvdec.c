@@ -1867,7 +1867,7 @@ static void rkvdec_remove(struct platform_device *pdev)
 {
 	struct rkvdec_dev *rkvdec = platform_get_drvdata(pdev);
 
-	cancel_delayed_work_sync(&rkvdec->watchdog_work);
+	cancel_delayed_work_sync_with_sync_wait(&rkvdec->watchdog_work);
 
 	rkvdec_v4l2_cleanup(rkvdec);
 	pm_runtime_disable(&pdev->dev);

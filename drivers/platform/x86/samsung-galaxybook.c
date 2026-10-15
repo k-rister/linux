@@ -1222,8 +1222,8 @@ static void galaxybook_i8042_filter_remove(void *data)
 	struct samsung_galaxybook *galaxybook = data;
 
 	i8042_remove_filter(galaxybook_i8042_filter);
-	cancel_work_sync(&galaxybook->kbd_backlight_hotkey_work);
-	cancel_work_sync(&galaxybook->block_recording_hotkey_work);
+	cancel_work_sync_with_sync_wait(&galaxybook->kbd_backlight_hotkey_work);
+	cancel_work_sync_with_sync_wait(&galaxybook->block_recording_hotkey_work);
 }
 
 static int galaxybook_i8042_filter_install(struct samsung_galaxybook *galaxybook)

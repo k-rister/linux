@@ -345,7 +345,7 @@ static int hdpvr_stop_streaming(struct hdpvr_device *dev)
 	wake_up_interruptible(&dev->wait_buffer);
 	msleep(50);
 
-	flush_work(&dev->worker);
+	flush_work_with_sync_wait(&dev->worker);
 
 	mutex_lock(&dev->io_mutex);
 	/* kill the still outstanding urbs */
@@ -1132,7 +1132,7 @@ static void hdpvr_device_release(struct video_device *vdev)
 	struct hdpvr_device *dev = video_get_drvdata(vdev);
 
 	hdpvr_delete(dev);
-	flush_work(&dev->worker);
+	flush_work_with_sync_wait(&dev->worker);
 
 	v4l2_device_unregister(&dev->v4l2_dev);
 	v4l2_ctrl_handler_free(&dev->hdl);

@@ -1671,7 +1671,7 @@ static void dualsense_remove(struct ps_device *ps_dev)
 	scoped_guard(spinlock_irqsave, &ds->base.lock)
 		ds->output_worker_initialized = false;
 
-	cancel_work_sync(&ds->output_worker);
+	cancel_work_sync_with_sync_wait(&ds->output_worker);
 }
 
 static int dualsense_reset_leds(struct dualsense *ds)
@@ -2675,10 +2675,10 @@ static void dualshock4_remove(struct ps_device *ps_dev)
 	scoped_guard(spinlock_irqsave, &ds4->base.lock)
 		ds4->output_worker_initialized = false;
 
-	cancel_work_sync(&ds4->output_worker);
+	cancel_work_sync_with_sync_wait(&ds4->output_worker);
 
 	if (ps_dev->hdev->product == USB_DEVICE_ID_SONY_PS4_CONTROLLER_DONGLE)
-		cancel_work_sync(&ds4->dongle_hotplug_worker);
+		cancel_work_sync_with_sync_wait(&ds4->dongle_hotplug_worker);
 }
 
 static inline void dualshock4_schedule_work(struct dualshock4 *ds4)

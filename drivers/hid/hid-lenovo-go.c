@@ -2412,7 +2412,7 @@ static void hid_go_cfg_remove(struct hid_device *hdev)
 	 * put_device() has released the underlying hdev and dereference
 	 * a stale drvdata.hdev pointer.
 	 */
-	cancel_delayed_work_sync(&drvdata.go_cfg_setup);
+	cancel_delayed_work_sync_with_sync_wait(&drvdata.go_cfg_setup);
 
 	guard(mutex)(&drvdata.cfg_mutex);
 	sysfs_remove_groups(&hdev->dev.kobj, top_level_attr_groups);

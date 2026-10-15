@@ -1467,8 +1467,8 @@ static void bcm2835_remove(struct platform_device *pdev)
 
 	free_irq(host->irq, host);
 
-	cancel_work_sync(&host->dma_work);
-	cancel_delayed_work_sync(&host->timeout_work);
+	cancel_work_sync_with_sync_wait(&host->dma_work);
+	cancel_delayed_work_sync_with_sync_wait(&host->timeout_work);
 
 	clk_disable_unprepare(host->clk);
 

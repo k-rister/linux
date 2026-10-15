@@ -880,7 +880,7 @@ static void __exit gameport_exit(void)
 	 * There should not be any outstanding events but work may
 	 * still be scheduled so simply cancel it.
 	 */
-	cancel_work_sync(&gameport_event_work);
+	cancel_work_sync_with_sync_wait(&gameport_event_work);
 }
 
 subsys_initcall(gameport_init);

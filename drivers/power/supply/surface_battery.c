@@ -838,7 +838,7 @@ static void surface_battery_remove(struct ssam_device *sdev)
 	struct spwr_battery_device *bat = ssam_device_get_drvdata(sdev);
 
 	ssam_device_notifier_unregister(sdev, &bat->notif);
-	cancel_delayed_work_sync(&bat->update_work);
+	cancel_delayed_work_sync_with_sync_wait(&bat->update_work);
 }
 
 static const struct spwr_psy_properties spwr_psy_props_bat1 = {

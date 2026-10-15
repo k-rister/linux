@@ -1142,7 +1142,7 @@ static int i5100_init_one(struct pci_dev *pdev, const struct pci_device_id *id)
 
 bail_scrub:
 	priv->scrub_enable = 0;
-	cancel_delayed_work_sync(&(priv->i5100_scrubbing));
+	cancel_delayed_work_sync_with_sync_wait(&(priv->i5100_scrubbing));
 	pci_disable_device(einj);
 
 bail_einj:
@@ -1188,7 +1188,7 @@ static void i5100_remove_one(struct pci_dev *pdev)
 	edac_debugfs_remove_recursive(priv->debugfs);
 
 	priv->scrub_enable = 0;
-	cancel_delayed_work_sync(&(priv->i5100_scrubbing));
+	cancel_delayed_work_sync_with_sync_wait(&(priv->i5100_scrubbing));
 
 	pci_disable_device(pdev);
 	pci_disable_device(priv->ch0mm);

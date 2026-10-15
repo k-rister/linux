@@ -1804,7 +1804,7 @@ static void at91_udc_shutdown_vbus_timer(struct at91_udc *udc)
 		return;
 
 	timer_shutdown_sync(&udc->vbus_timer);
-	cancel_work_sync(&udc->vbus_timer_work);
+	cancel_work_sync_with_sync_wait(&udc->vbus_timer_work);
 }
 
 static int at91udc_probe(struct platform_device *pdev)

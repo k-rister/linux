@@ -629,6 +629,6 @@ void amd_pmf_deinit_smart_pc(struct amd_pmf_dev *dev)
 	if (pb_side_load && dev->esbin)
 		amd_pmf_remove_pb(dev);
 
-	cancel_delayed_work_sync(&dev->pb_work);
+	cancel_delayed_work_sync_with_sync_wait(&dev->pb_work);
 	amd_pmf_tee_deinit(dev);
 }

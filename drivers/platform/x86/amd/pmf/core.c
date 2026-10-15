@@ -333,7 +333,7 @@ static int amd_pmf_freeze_handler(struct device *dev)
 	if (!pdev->smart_pc_enabled)
 		return 0;
 
-	cancel_delayed_work_sync(&pdev->pb_work);
+	cancel_delayed_work_sync_with_sync_wait(&pdev->pb_work);
 	/* Clear all TEE resources */
 	amd_pmf_tee_deinit(pdev);
 	pdev->session_id = 0;
@@ -346,7 +346,7 @@ static int amd_pmf_suspend_handler(struct device *dev)
 	struct amd_pmf_dev *pdev = dev_get_drvdata(dev);
 
 	if (pdev->smart_pc_enabled)
-		cancel_delayed_work_sync(&pdev->pb_work);
+		cancel_delayed_work_sync_with_sync_wait(&pdev->pb_work);
 
 	if (is_apmf_func_supported(pdev, APMF_FUNC_SBIOS_HEARTBEAT_V2))
 		amd_pmf_notify_sbios_heartbeat_event_v2(pdev, ON_SUSPEND);

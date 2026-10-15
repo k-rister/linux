@@ -596,7 +596,7 @@ void apmf_acpi_deinit(struct amd_pmf_dev *pmf_dev)
 	acpi_handle ahandle = ACPI_HANDLE(pmf_dev->dev);
 
 	if (pmf_dev->hb_interval && pmf_dev->pmf_if_version == PMF_IF_V1)
-		cancel_delayed_work_sync(&pmf_dev->heart_beat);
+		cancel_delayed_work_sync_with_sync_wait(&pmf_dev->heart_beat);
 
 	if (is_apmf_func_supported(pmf_dev, APMF_FUNC_AUTO_MODE) &&
 	    is_apmf_func_supported(pmf_dev, APMF_FUNC_SBIOS_REQUESTS))

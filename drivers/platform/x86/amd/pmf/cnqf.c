@@ -436,7 +436,7 @@ const struct attribute_group cnqf_feature_attribute_group = {
 
 void amd_pmf_deinit_cnqf(struct amd_pmf_dev *dev)
 {
-	cancel_delayed_work_sync(&dev->work_buffer);
+	cancel_delayed_work_sync_with_sync_wait(&dev->work_buffer);
 }
 
 int amd_pmf_init_cnqf(struct amd_pmf_dev *dev)

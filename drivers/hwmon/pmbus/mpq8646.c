@@ -955,7 +955,7 @@ static void mpq8646_remove(struct i2c_client *client)
 	struct mpq8646_priv *priv = mpq8646_priv_from_client(client);
 
 	mpq8646_debugfs_unregister(priv);
-	cancel_delayed_work_sync(&priv->alarm_poll_work);
+	cancel_delayed_work_sync_with_sync_wait(&priv->alarm_poll_work);
 }
 
 static struct i2c_driver mpq8646_driver = {

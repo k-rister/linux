@@ -723,7 +723,7 @@ static void __exit onboard_dev_exit(void)
 	usb_deregister_device_driver(&onboard_dev_usbdev_driver);
 	platform_driver_unregister(&onboard_dev_driver);
 
-	cancel_work_sync(&attach_usb_driver_work);
+	cancel_work_sync_with_sync_wait(&attach_usb_driver_work);
 }
 module_exit(onboard_dev_exit);
 

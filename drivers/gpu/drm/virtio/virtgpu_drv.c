@@ -208,10 +208,10 @@ static int virtgpu_freeze(struct virtio_device *vdev)
 	if (vgdev->hibernated)
 		virtio_gpu_object_unref_all(vgdev);
 
-	flush_work(&vgdev->obj_free_work);
-	flush_work(&vgdev->ctrlq.dequeue_work);
-	flush_work(&vgdev->cursorq.dequeue_work);
-	flush_work(&vgdev->config_changed_work);
+	flush_work_with_sync_wait(&vgdev->obj_free_work);
+	flush_work_with_sync_wait(&vgdev->ctrlq.dequeue_work);
+	flush_work_with_sync_wait(&vgdev->cursorq.dequeue_work);
+	flush_work_with_sync_wait(&vgdev->config_changed_work);
 
 	error = virtio_gpu_wait_queue(&vgdev->ctrlq, vgdev->ctrlq.vq->num_max);
 	if (error) {

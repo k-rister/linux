@@ -1053,7 +1053,7 @@ static void cdn_dp_unbind(struct device *dev, struct device *master, void *data)
 	struct cdn_dp_device *dp = dev_get_drvdata(dev);
 	struct drm_encoder *encoder = &dp->encoder.encoder;
 
-	cancel_work_sync(&dp->event_work);
+	cancel_work_sync_with_sync_wait(&dp->event_work);
 	encoder->funcs->destroy(encoder);
 
 	pm_runtime_disable(dev);

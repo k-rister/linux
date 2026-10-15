@@ -540,7 +540,7 @@ int cdns_mhdp_hdcp_disable(struct cdns_mhdp_device *mhdp)
 		ret = _cdns_mhdp_hdcp_disable(mhdp);
 	}
 	mutex_unlock(&mhdp->hdcp.mutex);
-	cancel_delayed_work_sync(&mhdp->hdcp.check_work);
+	cancel_delayed_work_sync_with_sync_wait(&mhdp->hdcp.check_work);
 
 	return ret;
 }

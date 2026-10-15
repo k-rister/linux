@@ -170,7 +170,7 @@ static void tfp410_detach(struct drm_bridge *bridge)
 
 	if (dvi->connector.dev && dvi->bridge.next_bridge->ops & DRM_BRIDGE_OP_HPD) {
 		drm_bridge_hpd_disable(dvi->bridge.next_bridge);
-		cancel_delayed_work_sync(&dvi->hpd_work);
+		cancel_delayed_work_sync_with_sync_wait(&dvi->hpd_work);
 	}
 }
 

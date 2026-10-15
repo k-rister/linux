@@ -485,7 +485,7 @@ static void sn65dsi83_monitor_start(struct sn65dsi83 *ctx)
 
 static void sn65dsi83_monitor_stop(struct sn65dsi83 *ctx)
 {
-	cancel_delayed_work_sync(&ctx->monitor_work);
+	cancel_delayed_work_sync_with_sync_wait(&ctx->monitor_work);
 }
 
 /*

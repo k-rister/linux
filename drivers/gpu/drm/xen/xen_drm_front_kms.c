@@ -19,6 +19,7 @@
 #include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_vblank.h>
+#include <linux/workqueue.h>
 
 #include "xen_drm_front.h"
 #include "xen_drm_front_conn.h"
@@ -376,7 +377,7 @@ void xen_drm_front_kms_fini(struct xen_drm_front_drm_info *drm_info)
 		struct xen_drm_front_drm_pipeline *pipeline =
 				&drm_info->pipeline[i];
 
-		cancel_delayed_work_sync(&pipeline->pflip_to_worker);
+		cancel_delayed_work_sync_with_sync_wait(&pipeline->pflip_to_worker);
 
 		send_pending_event(pipeline);
 	}

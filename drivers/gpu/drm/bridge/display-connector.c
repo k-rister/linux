@@ -112,7 +112,7 @@ static void display_connector_hpd_disable(struct drm_bridge *bridge)
 	struct display_connector *conn = to_display_connector(bridge);
 
 	if (conn->bridge.type == DRM_MODE_CONNECTOR_DisplayPort)
-		cancel_work_sync(&conn->hpd_work);
+		cancel_work_sync_with_sync_wait(&conn->hpd_work);
 
 	disable_irq(conn->hpd_irq);
 }

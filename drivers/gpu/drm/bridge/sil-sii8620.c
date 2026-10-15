@@ -29,6 +29,7 @@
 #include <linux/of_graph.h>
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
+#include <linux/workqueue.h>
 
 #include <media/rc-core.h>
 
@@ -2358,7 +2359,7 @@ static void sii8620_remove(struct i2c_client *client)
 	if (ctx->extcon) {
 		extcon_unregister_notifier(ctx->extcon, EXTCON_DISP_MHL,
 					   &ctx->extcon_nb);
-		flush_work(&ctx->extcon_wq);
+		flush_work_with_sync_wait(&ctx->extcon_wq);
 		if (ctx->cable_state > 0)
 			sii8620_cable_out(ctx);
 	} else {

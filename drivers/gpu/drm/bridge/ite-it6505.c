@@ -19,6 +19,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/types.h>
 #include <linux/wait.h>
+#include <linux/workqueue.h>
 #include <linux/bitfield.h>
 
 #include <crypto/sha1.h>
@@ -2314,7 +2315,7 @@ static void it6505_show_hdcp_info(struct it6505 *it6505)
 static void it6505_stop_link_train(struct it6505 *it6505)
 {
 	it6505->link_state = LINK_IDLE;
-	cancel_work_sync(&it6505->link_works);
+	cancel_work_sync_with_sync_wait(&it6505->link_works);
 	it6505_write(it6505, REG_TRAIN_CTRL1, FORCE_RETRAIN);
 }
 
@@ -2658,7 +2659,7 @@ static void it6505_irq_video_handler(struct it6505 *it6505, const int *int_statu
 	    (it6505_test_bit(BIT_INT_VID_FIFO_ERROR,
 			     (unsigned int *)int_status))) {
 		it6505->auto_train_retry = AUTO_TRAIN_RETRY;
-		flush_work(&it6505->link_works);
+		flush_work_with_sync_wait(&it6505->link_works);
 		it6505_stop_hdcp(it6505);
 		it6505_video_reset(it6505);
 
@@ -2956,7 +2957,7 @@ static void it6505_remove_notifier_module(struct it6505 *it6505)
 						it6505->extcon,	EXTCON_DISP_DP,
 						&it6505->event_nb);
 
-		flush_work(&it6505->extcon_wq);
+		flush_work_with_sync_wait(&it6505->extcon_wq);
 	}
 }
 
@@ -3096,7 +3097,7 @@ static void it6505_bridge_detach(struct drm_bridge *bridge)
 {
 	struct it6505 *it6505 = bridge_to_it6505(bridge);
 
-	flush_work(&it6505->link_works);
+	flush_work_with_sync_wait(&it6505->link_works);
 	it6505_remove_notifier_module(it6505);
 }
 

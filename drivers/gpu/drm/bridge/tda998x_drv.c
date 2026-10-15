@@ -10,6 +10,7 @@
 #include <linux/module.h>
 #include <linux/platform_data/tda9950.h>
 #include <linux/irq.h>
+#include <linux/workqueue.h>
 #include <sound/asoundef.h>
 #include <sound/hdmi-codec.h>
 
@@ -2027,7 +2028,7 @@ free_irq:
 	}
 cancel_work:
 	timer_delete_sync(&priv->edid_delay_timer);
-	cancel_work_sync(&priv->detect_work);
+	cancel_work_sync_with_sync_wait(&priv->detect_work);
 	return ret;
 }
 
@@ -2052,7 +2053,7 @@ static void tda998x_remove(struct i2c_client *client)
 	}
 
 	timer_delete_sync(&priv->edid_delay_timer);
-	cancel_work_sync(&priv->detect_work);
+	cancel_work_sync_with_sync_wait(&priv->detect_work);
 }
 
 #ifdef CONFIG_OF

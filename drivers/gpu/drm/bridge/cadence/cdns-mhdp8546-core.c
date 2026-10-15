@@ -2433,8 +2433,8 @@ static void cdns_mhdp_remove(struct platform_device *pdev)
 	pm_runtime_put_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
 
-	cancel_work_sync(&mhdp->modeset_retry_work);
-	flush_work(&mhdp->hpd_work);
+	cancel_work_sync_with_sync_wait(&mhdp->modeset_retry_work);
+	flush_work_with_sync_wait(&mhdp->hpd_work);
 	/* Ignoring mhdp->hdcp.check_work and mhdp->hdcp.prop_work here. */
 }
 

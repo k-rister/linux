@@ -869,7 +869,7 @@ retry:
 
 err_remove_bridge:
 	free_irq(client->irq, lt9611uxc);
-	cancel_work_sync(&lt9611uxc->work);
+	cancel_work_sync_with_sync_wait(&lt9611uxc->work);
 	drm_bridge_remove(&lt9611uxc->bridge);
 
 err_disable_regulators:
@@ -887,7 +887,7 @@ static void lt9611uxc_remove(struct i2c_client *client)
 	struct lt9611uxc *lt9611uxc = i2c_get_clientdata(client);
 
 	free_irq(client->irq, lt9611uxc);
-	cancel_work_sync(&lt9611uxc->work);
+	cancel_work_sync_with_sync_wait(&lt9611uxc->work);
 	drm_bridge_remove(&lt9611uxc->bridge);
 
 	mutex_destroy(&lt9611uxc->ocm_lock);

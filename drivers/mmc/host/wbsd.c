@@ -1470,11 +1470,11 @@ static void  wbsd_release_irq(struct wbsd_host *host)
 
 	host->irq = 0;
 
-	cancel_work_sync(&host->card_bh_work);
-	cancel_work_sync(&host->fifo_bh_work);
-	cancel_work_sync(&host->crc_bh_work);
-	cancel_work_sync(&host->timeout_bh_work);
-	cancel_work_sync(&host->finish_bh_work);
+	cancel_work_sync_with_sync_wait(&host->card_bh_work);
+	cancel_work_sync_with_sync_wait(&host->fifo_bh_work);
+	cancel_work_sync_with_sync_wait(&host->crc_bh_work);
+	cancel_work_sync_with_sync_wait(&host->timeout_bh_work);
+	cancel_work_sync_with_sync_wait(&host->finish_bh_work);
 }
 
 /*

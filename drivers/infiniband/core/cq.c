@@ -341,7 +341,7 @@ void ib_free_cq(struct ib_cq *cq)
 		break;
 	case IB_POLL_WORKQUEUE:
 	case IB_POLL_UNBOUND_WORKQUEUE:
-		cancel_work_sync(&cq->work);
+		cancel_work_sync_with_sync_wait(&cq->work);
 		break;
 	default:
 		WARN_ON_ONCE(1);

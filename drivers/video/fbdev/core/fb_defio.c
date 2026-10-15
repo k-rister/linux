@@ -276,7 +276,7 @@ int fb_deferred_io_fsync(struct file *file, loff_t start, loff_t end, int datasy
 		return 0;
 
 	inode_lock(inode);
-	flush_delayed_work(&info->deferred_work);
+	flush_delayed_work_with_sync_wait(&info->deferred_work);
 	inode_unlock(inode);
 
 	return 0;
@@ -450,7 +450,7 @@ EXPORT_SYMBOL_GPL(fb_deferred_io_open);
 
 static void fb_deferred_io_lastclose(struct fb_info *info)
 {
-	flush_delayed_work(&info->deferred_work);
+	flush_delayed_work_with_sync_wait(&info->deferred_work);
 }
 
 void fb_deferred_io_release(struct fb_info *info)

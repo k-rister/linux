@@ -616,7 +616,7 @@ static void tegra_actmon_pause(struct tegra_devfreq *tegra)
 	cpufreq_unregister_notifier(&tegra->cpu_rate_change_nb,
 				    CPUFREQ_TRANSITION_NOTIFIER);
 
-	cancel_delayed_work_sync(&tegra->cpufreq_update_work);
+	cancel_delayed_work_sync_with_sync_wait(&tegra->cpufreq_update_work);
 
 	tegra_actmon_stop_devices(tegra);
 

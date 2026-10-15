@@ -1272,8 +1272,8 @@ void tmio_mmc_host_remove(struct tmio_mmc_host *host)
 	dev_pm_qos_hide_latency_limit(&pdev->dev);
 
 	mmc_remove_host(mmc);
-	cancel_work_sync(&host->done);
-	cancel_delayed_work_sync(&host->delayed_reset_work);
+	cancel_work_sync_with_sync_wait(&host->done);
+	cancel_delayed_work_sync_with_sync_wait(&host->delayed_reset_work);
 	tmio_mmc_release_dma(host);
 	tmio_mmc_disable_mmc_irqs(host, host->sdcard_irq_mask_all);
 

@@ -1422,7 +1422,7 @@ static void aspeed_video_start(struct aspeed_video *video)
 static void aspeed_video_stop(struct aspeed_video *video)
 {
 	set_bit(VIDEO_STOPPED, &video->flags);
-	cancel_delayed_work_sync(&video->res_work);
+	cancel_delayed_work_sync_with_sync_wait(&video->res_work);
 
 	aspeed_video_off(video);
 

@@ -1038,7 +1038,7 @@ static struct ionic_eq *ionic_create_eq(struct ionic_ibdev *dev, int eqid)
 err_cmd:
 	eq->enable = false;
 	free_irq(eq->irq, eq);
-	flush_work(&eq->work);
+	cancel_work_sync_with_sync_wait(&eq->work);
 err_irq:
 	ionic_intr_free(dev->lif_cfg.lif, eq->intr);
 err_intr:
@@ -1055,7 +1055,7 @@ static void ionic_destroy_eq(struct ionic_eq *eq)
 
 	eq->enable = false;
 	free_irq(eq->irq, eq);
-	flush_work(&eq->work);
+	cancel_work_sync_with_sync_wait(&eq->work);
 
 	ionic_intr_free(dev->lif_cfg.lif, eq->intr);
 	ionic_queue_destroy(&eq->q, dev->lif_cfg.hwdev);
@@ -1196,15 +1196,15 @@ void ionic_destroy_rdma_admin(struct ionic_ibdev *dev)
 	 * completions are flushed. admin_state = IONIC_ADMIN_KILLED
 	 * stops queueing up further works.
 	 */
-	cancel_delayed_work_sync(&dev->admin_dwork);
-	cancel_work_sync(&dev->reset_work);
+	cancel_delayed_work_sync_with_sync_wait(&dev->admin_dwork);
+	cancel_work_sync_with_sync_wait(&dev->reset_work);
 
 	if (dev->aq_vec) {
 		while (dev->lif_cfg.aq_count > 0) {
 			aq = dev->aq_vec[--dev->lif_cfg.aq_count];
 			vcq = aq->vcq;
 
-			cancel_work_sync(&aq->work);
+			cancel_work_sync_with_sync_wait(&aq->work);
 
 			__ionic_destroy_rdma_adminq(dev, aq);
 			if (vcq) {

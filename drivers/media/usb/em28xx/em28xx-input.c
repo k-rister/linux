@@ -378,7 +378,7 @@ static void em28xx_ir_stop(struct rc_dev *rc)
 {
 	struct em28xx_IR *ir = rc->priv;
 
-	cancel_delayed_work_sync(&ir->work);
+	cancel_delayed_work_sync_with_sync_wait(&ir->work);
 }
 
 static int em2860_ir_change_protocol(struct rc_dev *rc_dev, u64 *rc_proto)
@@ -673,7 +673,7 @@ next_button:
 static void em28xx_shutdown_buttons(struct em28xx *dev)
 {
 	/* Cancel polling */
-	cancel_delayed_work_sync(&dev->buttons_query_work);
+	cancel_delayed_work_sync_with_sync_wait(&dev->buttons_query_work);
 	/* Clear polling addresses list */
 	dev->num_button_polling_addresses = 0;
 	/* Deregister input devices */
@@ -876,8 +876,8 @@ static int em28xx_ir_suspend(struct em28xx *dev)
 
 	dev_info(&dev->intf->dev, "Suspending input extension\n");
 	if (ir)
-		cancel_delayed_work_sync(&ir->work);
-	cancel_delayed_work_sync(&dev->buttons_query_work);
+		cancel_delayed_work_sync_with_sync_wait(&ir->work);
+	cancel_delayed_work_sync_with_sync_wait(&dev->buttons_query_work);
 	/*
 	 * is canceling delayed work sufficient or does the rc event
 	 * kthread needs stopping? kthread is stopped in

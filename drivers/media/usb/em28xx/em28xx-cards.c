@@ -3707,7 +3707,7 @@ static void request_modules(struct em28xx *dev)
 
 static void flush_request_modules(struct em28xx *dev)
 {
-	flush_work(&dev->request_module_wk);
+	flush_work_with_sync_wait(&dev->request_module_wk);
 }
 
 static int em28xx_media_device_init(struct em28xx *dev,

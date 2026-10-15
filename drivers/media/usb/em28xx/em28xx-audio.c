@@ -906,7 +906,7 @@ static int em28xx_audio_fini(struct em28xx *dev)
 
 	if (dev->adev.sndcard) {
 		snd_card_disconnect(dev->adev.sndcard);
-		flush_work(&dev->adev.wq_trigger);
+		flush_work_with_sync_wait(&dev->adev.wq_trigger);
 
 		em28xx_audio_free_urb(dev);
 

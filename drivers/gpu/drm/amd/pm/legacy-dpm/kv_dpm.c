@@ -3028,7 +3028,7 @@ static int kv_dpm_sw_fini(struct amdgpu_ip_block *ip_block)
 {
 	struct amdgpu_device *adev = ip_block->adev;
 
-	flush_work(&adev->pm.dpm.thermal.work);
+	flush_work_with_sync_wait(&adev->pm.dpm.thermal.work);
 
 	kv_dpm_fini(adev);
 
@@ -3070,7 +3070,7 @@ static int kv_dpm_suspend(struct amdgpu_ip_block *ip_block)
 {
 	struct amdgpu_device *adev = ip_block->adev;
 
-	cancel_work_sync(&adev->pm.dpm.thermal.work);
+	cancel_work_sync_with_sync_wait(&adev->pm.dpm.thermal.work);
 
 	if (adev->pm.dpm_enabled) {
 		mutex_lock(&adev->pm.mutex);

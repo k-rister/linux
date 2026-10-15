@@ -195,7 +195,7 @@ static void request_modules(struct bttv *dev)
 
 static void flush_request_modules(struct bttv *dev)
 {
-	flush_work(&dev->request_module_wk);
+	flush_work_with_sync_wait(&dev->request_module_wk);
 }
 #else
 #define request_modules(dev)

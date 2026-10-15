@@ -479,7 +479,7 @@ static int bt878_probe(struct pci_dev *dev, const struct pci_device_id *pci_id)
 	bt878_num++;
 
 	if (!bt->bh_work.func)
-		disable_work_sync(&bt->bh_work);
+		disable_work_sync_with_sync_wait(&bt->bh_work);
 
 	return 0;
 

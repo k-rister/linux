@@ -167,7 +167,7 @@ static void adc_jack_remove(struct platform_device *pdev)
 	if (data->wakeup_source)
 		device_init_wakeup(&pdev->dev, false);
 	free_irq(data->irq, data);
-	cancel_work_sync(&data->handler.work);
+	cancel_work_sync_with_sync_wait(&data->handler.work);
 }
 
 #ifdef CONFIG_PM_SLEEP
@@ -175,7 +175,7 @@ static int adc_jack_suspend(struct device *dev)
 {
 	struct adc_jack_data *data = dev_get_drvdata(dev);
 
-	cancel_delayed_work_sync(&data->handler);
+	cancel_delayed_work_sync_with_sync_wait(&data->handler);
 	if (device_may_wakeup(data->dev))
 		enable_irq_wake(data->irq);
 

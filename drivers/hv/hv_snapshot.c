@@ -158,7 +158,7 @@ static int vss_on_msg(void *msg, int len)
 			vss_transaction.msg->vss_cf.flags =
 				VSS_HBU_NO_AUTO_RECOVERY;
 
-		if (cancel_delayed_work_sync(&vss_timeout_work)) {
+		if (cancel_delayed_work_sync_with_sync_wait(&vss_timeout_work)) {
 			vss_respond_to_host(vss_msg->error);
 			/* Transaction is finished, reset the state. */
 			hv_poll_channel(vss_transaction.recv_channel,
@@ -199,7 +199,7 @@ static void vss_send_op(void)
 	rc = hvutil_transport_send(hvt, vss_msg, sizeof(*vss_msg), NULL);
 	if (rc) {
 		pr_warn("VSS: failed to communicate to the daemon: %d\n", rc);
-		if (cancel_delayed_work_sync(&vss_timeout_work)) {
+		if (cancel_delayed_work_sync_with_sync_wait(&vss_timeout_work)) {
 			vss_respond_to_host(HV_E_FAIL);
 			vss_transaction.state = HVUTIL_READY;
 		}
@@ -364,7 +364,7 @@ void hv_vss_onchannelcallback(void *context)
 
 static void vss_on_reset(void)
 {
-	if (cancel_delayed_work_sync(&vss_timeout_work))
+	if (cancel_delayed_work_sync_with_sync_wait(&vss_timeout_work))
 		vss_respond_to_host(HV_E_FAIL);
 	vss_transaction.state = HVUTIL_DEVICE_INIT;
 }
@@ -402,8 +402,8 @@ hv_vss_init_transport(void)
 
 static void hv_vss_cancel_work(void)
 {
-	cancel_delayed_work_sync(&vss_timeout_work);
-	cancel_work_sync(&vss_handle_request_work);
+	cancel_delayed_work_sync_with_sync_wait(&vss_timeout_work);
+	cancel_work_sync_with_sync_wait(&vss_handle_request_work);
 }
 
 int hv_vss_pre_suspend(void)

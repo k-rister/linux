@@ -374,7 +374,7 @@ static void pca9532_destroy_devices(struct pca9532_data *data, int n_devs)
 			break;
 		case PCA9532_TYPE_N2100_BEEP:
 			if (data->idev != NULL) {
-				cancel_work_sync(&data->work);
+				cancel_work_sync_with_sync_wait(&data->work);
 				data->idev = NULL;
 			}
 			break;
@@ -466,7 +466,7 @@ static int pca9532_configure(struct i2c_client *client,
 			INIT_WORK(&data->work, pca9532_input_work);
 			err = input_register_device(data->idev);
 			if (err) {
-				cancel_work_sync(&data->work);
+				cancel_work_sync_with_sync_wait(&data->work);
 				data->idev = NULL;
 				goto exit;
 			}

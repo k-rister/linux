@@ -2665,7 +2665,7 @@ static void renesas_usb3_remove(struct platform_device *pdev)
 	put_device(usb3->host_dev);
 	device_remove_file(&pdev->dev, &dev_attr_role);
 
-	cancel_work_sync(&usb3->role_work);
+	cancel_work_sync_with_sync_wait(&usb3->role_work);
 	usb_role_switch_unregister(usb3->role_sw);
 
 	usb_del_gadget_udc(&usb3->gadget);

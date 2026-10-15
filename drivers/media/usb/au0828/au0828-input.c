@@ -243,7 +243,7 @@ static void au0828_rc_stop(struct rc_dev *rc)
 {
 	struct au0828_rc *ir = rc->priv;
 
-	cancel_delayed_work_sync(&ir->work);
+	cancel_delayed_work_sync_with_sync_wait(&ir->work);
 
 	/* do nothing if device is disconnected */
 	if (!test_bit(DEV_DISCONNECTED, &ir->dev->dev_state)) {
@@ -374,7 +374,7 @@ int au0828_rc_suspend(struct au0828_dev *dev)
 
 	pr_info("Stopping RC\n");
 
-	cancel_delayed_work_sync(&ir->work);
+	cancel_delayed_work_sync_with_sync_wait(&ir->work);
 
 	/* Disable IR */
 	au8522_rc_clear(ir, 0xe0, 1 << 4);

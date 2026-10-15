@@ -312,7 +312,7 @@ static int au0828_dvb_stop_feed(struct dvb_demux_feed *feed)
 	dprintk(1, "%s()\n", __func__);
 
 	if (dvb->frontend) {
-		cancel_work_sync(&dev->restart_streaming);
+		cancel_work_sync_with_sync_wait(&dev->restart_streaming);
 
 		mutex_lock(&dvb->lock);
 		dvb->stop_count++;
@@ -372,7 +372,7 @@ static int au0828_set_frontend(struct dvb_frontend *fe)
 		 * kthread may also hold it.
 		 */
 		mutex_unlock(&dvb->lock);
-		cancel_work_sync(&dev->restart_streaming);
+		cancel_work_sync_with_sync_wait(&dev->restart_streaming);
 		mutex_lock(&dvb->lock);
 
 		stop_urb_transfer(dev);
@@ -537,7 +537,7 @@ void au0828_dvb_unregister(struct au0828_dev *dev)
 	if (dvb->frontend == NULL)
 		return;
 
-	cancel_work_sync(&dev->restart_streaming);
+	cancel_work_sync_with_sync_wait(&dev->restart_streaming);
 
 	dvb_net_release(&dvb->net);
 	dvb->demux.dmx.remove_frontend(&dvb->demux.dmx, &dvb->fe_mem);
@@ -652,7 +652,7 @@ void au0828_dvb_suspend(struct au0828_dev *dev)
 
 	if (dvb->frontend) {
 		if (dev->urb_streaming) {
-			cancel_work_sync(&dev->restart_streaming);
+			cancel_work_sync_with_sync_wait(&dev->restart_streaming);
 			/* Stop transport */
 			mutex_lock(&dvb->lock);
 			stop_urb_transfer(dev);

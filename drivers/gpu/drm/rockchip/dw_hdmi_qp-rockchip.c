@@ -704,7 +704,7 @@ static void dw_hdmi_qp_rockchip_unbind(struct device *dev,
 {
 	struct rockchip_hdmi_qp *hdmi = dev_get_drvdata(dev);
 
-	cancel_delayed_work_sync(&hdmi->hpd_work);
+	cancel_delayed_work_sync_with_sync_wait(&hdmi->hpd_work);
 }
 
 static const struct component_ops dw_hdmi_qp_rockchip_ops = {

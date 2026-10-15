@@ -359,7 +359,7 @@ static void uvc_status_stop(struct uvc_device *dev)
 	 * Cancel any pending asynchronous work. If any status event was queued,
 	 * process it synchronously.
 	 */
-	if (cancel_work_sync(&w->work))
+	if (cancel_work_sync_with_sync_wait(&w->work))
 		uvc_ctrl_status_event(w->chain, w->ctrl, w->data);
 
 	/* Kill the urb. */
@@ -371,7 +371,7 @@ static void uvc_status_stop(struct uvc_device *dev)
 	 * cancelled before returning or it could then race with a future
 	 * uvc_status_start() call.
 	 */
-	if (cancel_work_sync(&w->work))
+	if (cancel_work_sync_with_sync_wait(&w->work))
 		uvc_ctrl_status_event(w->chain, w->ctrl, w->data);
 }
 

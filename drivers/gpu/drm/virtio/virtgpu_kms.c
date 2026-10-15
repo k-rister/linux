@@ -347,10 +347,10 @@ void virtio_gpu_deinit(struct drm_device *dev)
 	struct virtio_gpu_device *vgdev = dev->dev_private;
 
 	unregister_pm_notifier(&vgdev->pm_nb);
-	flush_work(&vgdev->obj_free_work);
-	flush_work(&vgdev->ctrlq.dequeue_work);
-	flush_work(&vgdev->cursorq.dequeue_work);
-	flush_work(&vgdev->config_changed_work);
+	flush_work_with_sync_wait(&vgdev->obj_free_work);
+	flush_work_with_sync_wait(&vgdev->ctrlq.dequeue_work);
+	flush_work_with_sync_wait(&vgdev->cursorq.dequeue_work);
+	flush_work_with_sync_wait(&vgdev->config_changed_work);
 	virtio_reset_device(vgdev->vdev);
 	virtio_gpu_reclaim_vbufs(vgdev);
 	vgdev->vdev->config->del_vqs(vgdev->vdev);

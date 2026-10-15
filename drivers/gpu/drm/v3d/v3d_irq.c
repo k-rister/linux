@@ -341,7 +341,7 @@ v3d_irq_disable(struct v3d_dev *v3d)
 		V3D_CORE_WRITE(core, V3D_CTL_INT_CLR, V3D_CORE_IRQS(v3d->ver));
 	V3D_WRITE(V3D_HUB_INT_CLR, V3D_HUB_IRQS(v3d->ver));
 
-	cancel_work_sync(&v3d->overflow_mem_work);
+	cancel_work_sync_with_sync_wait(&v3d->overflow_mem_work);
 }
 
 /** Reinitializes interrupt registers when a GPU reset is performed. */

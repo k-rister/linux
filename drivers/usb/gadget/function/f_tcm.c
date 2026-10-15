@@ -2479,7 +2479,7 @@ static void tcm_cancel_delayed_set_alt_sync(struct f_uas *fu)
 		fu->delayed_set_alt_cancel = true;
 	spin_unlock_irqrestore(&fu->delayed_set_alt_lock, flags);
 
-	cancel_work_sync(&fu->delayed_set_alt);
+	cancel_work_sync_with_sync_wait(&fu->delayed_set_alt);
 
 	spin_lock_irqsave(&fu->delayed_set_alt_lock, flags);
 	fu->delayed_set_alt_state = USBG_DELAYED_SET_ALT_IDLE;

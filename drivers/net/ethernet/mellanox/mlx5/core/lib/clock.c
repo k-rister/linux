@@ -1598,7 +1598,7 @@ void mlx5_clock_unload(struct mlx5_core_dev *mdev)
 
 out:
 	mlx5_eq_notifier_unregister(mdev, &mdev->clock_state->pps_nb);
-	cancel_work_sync(&mdev->clock_state->out_work);
+	cancel_work_sync_with_sync_wait(&mdev->clock_state->out_work);
 }
 
 static struct mlx5_clock null_clock;

@@ -189,7 +189,7 @@ static void mapping_flush_work(struct mapping_ctx *ctx)
 	if (!ctx->delayed_removal)
 		return;
 
-	cancel_delayed_work_sync(&ctx->dwork);
+	cancel_delayed_work_sync_with_sync_wait(&ctx->dwork);
 	mapping_remove_and_free_list(ctx, &ctx->pending_list);
 }
 

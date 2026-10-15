@@ -362,7 +362,7 @@ void mlx5hws_action_ste_pool_uninit(struct mlx5hws_context *ctx)
 	size_t queues = ctx->queues;
 	int i;
 
-	cancel_delayed_work_sync(&ctx->action_ste_cleanup);
+	cancel_delayed_work_sync_with_sync_wait(&ctx->action_ste_cleanup);
 
 	for (i = 0; i < queues; i++)
 		hws_action_ste_pool_destroy(&ctx->action_ste_pool[i]);

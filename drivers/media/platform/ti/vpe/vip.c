@@ -825,7 +825,7 @@ static void vip_quiesce_stream(struct vip_stream *stream)
 {
 	struct vip_dev *dev = stream->port->dev;
 
-	disable_work_sync(&stream->recovery_work);
+	disable_work_sync_with_sync_wait(&stream->recovery_work);
 	disable_irqs(dev, dev->slice_id, stream->list_num);
 	clear_irqs(dev, dev->slice_id, stream->list_num);
 	synchronize_irq(dev->irq);

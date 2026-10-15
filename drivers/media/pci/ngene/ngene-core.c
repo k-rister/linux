@@ -1649,7 +1649,7 @@ void ngene_remove(struct pci_dev *pdev)
 	struct ngene *dev = pci_get_drvdata(pdev);
 	int i;
 
-	cancel_work_sync(&dev->event_bh_work);
+	cancel_work_sync_with_sync_wait(&dev->event_bh_work);
 	for (i = MAX_STREAM - 1; i >= 0; i--)
 		release_channel(&dev->channel[i]);
 	if (dev->ci.en)

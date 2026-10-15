@@ -1793,7 +1793,7 @@ static int bcm63xx_udc_pullup(struct usb_gadget *gadget, int is_on)
 			msleep(50);
 		}
 		bcm63xx_set_ctrl_irqs(udc, false);
-		cancel_work_sync(&udc->ep0_wq);
+		cancel_work_sync_with_sync_wait(&udc->ep0_wq);
 		return 0;
 	}
 

@@ -779,7 +779,7 @@ static int btmtksdio_close(struct hci_dev *hdev)
 
 	sdio_release_irq(bdev->func);
 
-	cancel_work_sync(&bdev->txrx_work);
+	cancel_work_sync_with_sync_wait(&bdev->txrx_work);
 
 	btmtksdio_fw_pmctrl(bdev);
 
@@ -797,7 +797,7 @@ static int btmtksdio_flush(struct hci_dev *hdev)
 
 	skb_queue_purge(&bdev->txq);
 
-	cancel_work_sync(&bdev->txrx_work);
+	cancel_work_sync_with_sync_wait(&bdev->txrx_work);
 
 	return 0;
 }
@@ -1324,7 +1324,7 @@ static void btmtksdio_reset(struct hci_dev *hdev)
 
 	sdio_writel(bdev->func, C_INT_EN_CLR, MTK_REG_CHLPCR, NULL);
 	skb_queue_purge(&bdev->txq);
-	cancel_work_sync(&bdev->txrx_work);
+	cancel_work_sync_with_sync_wait(&bdev->txrx_work);
 
 	gpiod_set_value_cansleep(bdev->reset, 1);
 	msleep(100);

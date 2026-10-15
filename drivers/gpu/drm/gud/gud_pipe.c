@@ -631,7 +631,7 @@ void gud_plane_atomic_update(struct drm_plane *plane,
 	int ret, idx;
 
 	if (!crtc || crtc->state->mode_changed || !crtc->state->enable) {
-		cancel_work_sync(&gdrm->work);
+		cancel_work_sync_with_sync_wait(&gdrm->work);
 		mutex_lock(&gdrm->damage_lock);
 		if (gdrm->fb) {
 			drm_framebuffer_put(gdrm->fb);

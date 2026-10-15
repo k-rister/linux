@@ -335,7 +335,7 @@ static void gud_connector_early_unregister(struct drm_connector *connector)
 	struct gud_connector *gconn = to_gud_connector(connector);
 
 	backlight_device_unregister(gconn->backlight);
-	cancel_work_sync(&gconn->backlight_work);
+	cancel_work_sync_with_sync_wait(&gconn->backlight_work);
 }
 
 static void gud_connector_destroy(struct drm_connector *connector)

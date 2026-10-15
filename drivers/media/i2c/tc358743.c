@@ -432,7 +432,7 @@ static void tc358743_disable_edid(struct v4l2_subdev *sd)
 
 	v4l2_dbg(2, debug, sd, "%s:\n", __func__);
 
-	cancel_delayed_work_sync(&state->delayed_work_enable_hotplug);
+	cancel_delayed_work_sync_with_sync_wait(&state->delayed_work_enable_hotplug);
 
 	/* DDC access to EDID is also disabled when hotplug is disabled. See
 	 * register DDC_CTL */
@@ -2327,9 +2327,9 @@ err_work_queues:
 	cec_unregister_adapter(state->cec_adap);
 	if (!state->i2c_client->irq) {
 		timer_delete_sync(&state->timer);
-		flush_work(&state->work_i2c_poll);
+		flush_work_with_sync_wait(&state->work_i2c_poll);
 	}
-	cancel_delayed_work_sync(&state->delayed_work_enable_hotplug);
+	cancel_delayed_work_sync_with_sync_wait(&state->delayed_work_enable_hotplug);
 	mutex_destroy(&state->confctl_mutex);
 err_hdl:
 	media_entity_cleanup(&sd->entity);
@@ -2344,9 +2344,9 @@ static void tc358743_remove(struct i2c_client *client)
 
 	if (!state->i2c_client->irq) {
 		timer_delete_sync(&state->timer);
-		flush_work(&state->work_i2c_poll);
+		flush_work_with_sync_wait(&state->work_i2c_poll);
 	}
-	cancel_delayed_work_sync(&state->delayed_work_enable_hotplug);
+	cancel_delayed_work_sync_with_sync_wait(&state->delayed_work_enable_hotplug);
 	v4l2_debugfs_if_free(state->infoframes);
 	debugfs_remove_recursive(state->debugfs_dir);
 	cec_unregister_adapter(state->cec_adap);

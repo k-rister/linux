@@ -895,7 +895,7 @@ alloc_id_err:
 mem_err:
 	for (i--; i >= 0; i--) {
 		unregister_netdevice_notifier(&bgrps[i]->bond_nb);
-		cancel_delayed_work_sync(&bgrps[i]->bond_work);
+		cancel_delayed_work_sync_with_sync_wait(&bgrps[i]->bond_work);
 		remove_bond_id(bgrps[i]->bus_num, bgrps[i]->bond_id);
 		mutex_destroy(&bgrps[i]->bond_mutex);
 		kvfree(bgrps[i]);
@@ -916,7 +916,7 @@ void hns_roce_dealloc_bond_grp(void)
 			if (!bond_grp)
 				continue;
 			unregister_netdevice_notifier(&bond_grp->bond_nb);
-			cancel_delayed_work_sync(&bond_grp->bond_work);
+			cancel_delayed_work_sync_with_sync_wait(&bond_grp->bond_work);
 			remove_bond_id(bond_grp->bus_num, bond_grp->bond_id);
 			mutex_destroy(&bond_grp->bond_mutex);
 			kvfree(bond_grp);
@@ -971,7 +971,7 @@ void hns_roce_bond_suspend(struct hnae3_handle *handle)
 		if (!bond_grp)
 			continue;
 		unregister_netdevice_notifier(&bond_grp->bond_nb);
-		cancel_delayed_work_sync(&bond_grp->bond_work);
+		cancel_delayed_work_sync_with_sync_wait(&bond_grp->bond_work);
 	}
 
 out:

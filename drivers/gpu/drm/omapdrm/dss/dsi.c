@@ -4410,7 +4410,7 @@ static int omap_dsi_host_detach(struct mipi_dsi_host *host,
 	if (WARN_ON(dsi->dsidev != client))
 		return -EINVAL;
 
-	cancel_delayed_work_sync(&dsi->dsi_disable_work);
+	cancel_delayed_work_sync_with_sync_wait(&dsi->dsi_disable_work);
 
 	dsi_bus_lock(dsi);
 
@@ -4656,7 +4656,7 @@ static void dsi_bridge_enable(struct drm_bridge *bridge,
 	struct dsi_data *dsi = drm_bridge_to_dsi(bridge);
 	struct omap_dss_device *dssdev = &dsi->output;
 
-	cancel_delayed_work_sync(&dsi->dsi_disable_work);
+	cancel_delayed_work_sync_with_sync_wait(&dsi->dsi_disable_work);
 
 	dsi_bus_lock(dsi);
 
@@ -4676,7 +4676,7 @@ static void dsi_bridge_disable(struct drm_bridge *bridge,
 	struct dsi_data *dsi = drm_bridge_to_dsi(bridge);
 	struct omap_dss_device *dssdev = &dsi->output;
 
-	cancel_delayed_work_sync(&dsi->dsi_disable_work);
+	cancel_delayed_work_sync_with_sync_wait(&dsi->dsi_disable_work);
 
 	dsi_bus_lock(dsi);
 

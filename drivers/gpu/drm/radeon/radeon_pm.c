@@ -453,7 +453,7 @@ static ssize_t radeon_set_pm_method(struct device *dev,
 		rdev->pm.dynpm_planned_action = DYNPM_ACTION_NONE;
 		rdev->pm.pm_method = PM_METHOD_PROFILE;
 		mutex_unlock(&rdev->pm.mutex);
-		cancel_delayed_work_sync(&rdev->pm.dynpm_idle_work);
+		cancel_delayed_work_sync_with_sync_wait(&rdev->pm.dynpm_idle_work);
 	} else {
 		count = -EINVAL;
 		goto fail;
@@ -1249,7 +1249,7 @@ static void radeon_pm_suspend_old(struct radeon_device *rdev)
 	}
 	mutex_unlock(&rdev->pm.mutex);
 
-	cancel_delayed_work_sync(&rdev->pm.dynpm_idle_work);
+	cancel_delayed_work_sync_with_sync_wait(&rdev->pm.dynpm_idle_work);
 }
 
 static void radeon_pm_suspend_dpm(struct radeon_device *rdev)
@@ -1652,7 +1652,7 @@ static void radeon_pm_fini_old(struct radeon_device *rdev)
 		}
 		mutex_unlock(&rdev->pm.mutex);
 
-		cancel_delayed_work_sync(&rdev->pm.dynpm_idle_work);
+		cancel_delayed_work_sync_with_sync_wait(&rdev->pm.dynpm_idle_work);
 
 		device_remove_file(rdev->dev, &dev_attr_power_profile);
 		device_remove_file(rdev->dev, &dev_attr_power_method);

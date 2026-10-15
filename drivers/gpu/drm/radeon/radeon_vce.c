@@ -287,7 +287,7 @@ static void radeon_vce_idle_work_handler(struct work_struct *work)
 void radeon_vce_note_usage(struct radeon_device *rdev)
 {
 	bool streams_changed = false;
-	bool set_clocks = !cancel_delayed_work_sync(&rdev->vce.idle_work);
+	bool set_clocks = !cancel_delayed_work_sync_with_sync_wait(&rdev->vce.idle_work);
 	set_clocks &= schedule_delayed_work(&rdev->vce.idle_work,
 					    msecs_to_jiffies(VCE_IDLE_TIMEOUT_MS));
 

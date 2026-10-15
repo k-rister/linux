@@ -338,7 +338,7 @@ int radeon_irq_kms_init(struct radeon_device *rdev)
 	r = radeon_irq_install(rdev, rdev->pdev->irq);
 	if (r) {
 		rdev->irq.installed = false;
-		flush_delayed_work(&rdev->hotplug_work);
+		flush_delayed_work_with_sync_wait(&rdev->hotplug_work);
 		return r;
 	}
 
@@ -360,7 +360,7 @@ void radeon_irq_kms_fini(struct radeon_device *rdev)
 		rdev->irq.installed = false;
 		if (rdev->msi_enabled)
 			pci_disable_msi(rdev->pdev);
-		flush_delayed_work(&rdev->hotplug_work);
+		flush_delayed_work_with_sync_wait(&rdev->hotplug_work);
 	}
 }
 

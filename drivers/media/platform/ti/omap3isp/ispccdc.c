@@ -1354,7 +1354,7 @@ static int ccdc_disable(struct isp_ccdc_device *ccdc)
 	ccdc_lsc_free_request(ccdc, ccdc->lsc.request);
 	ccdc->lsc.request = ccdc->lsc.active;
 	ccdc->lsc.active = NULL;
-	cancel_work_sync(&ccdc->lsc.table_work);
+	cancel_work_sync_with_sync_wait(&ccdc->lsc.table_work);
 	ccdc_lsc_free_queue(ccdc, &ccdc->lsc.free_queue);
 	mutex_unlock(&ccdc->ioctl_lock);
 
@@ -2753,7 +2753,7 @@ void omap3isp_ccdc_cleanup(struct isp_device *isp)
 	 * so only the pending request and the free queue need to be handled.
 	 */
 	ccdc_lsc_free_request(ccdc, ccdc->lsc.request);
-	cancel_work_sync(&ccdc->lsc.table_work);
+	cancel_work_sync_with_sync_wait(&ccdc->lsc.table_work);
 	ccdc_lsc_free_queue(ccdc, &ccdc->lsc.free_queue);
 
 	if (ccdc->fpc.addr != NULL)

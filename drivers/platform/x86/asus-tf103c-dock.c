@@ -682,7 +682,7 @@ static void tf103c_dock_start_hpd(struct tf103c_dock_data *dock)
 static void tf103c_dock_stop_hpd(struct tf103c_dock_data *dock)
 {
 	disable_irq(dock->hpd_irq);
-	cancel_delayed_work_sync(&dock->hpd_work);
+	cancel_delayed_work_sync_with_sync_wait(&dock->hpd_work);
 }
 
 /*** probe ***/

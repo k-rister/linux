@@ -92,7 +92,7 @@ void hfi1_mmu_rb_unregister(struct mmu_rb_handler *handler)
 	 * Make sure the wq delete handler is finished running.  It will not
 	 * be triggered once the mmu notifiers are unregistered above.
 	 */
-	flush_work(&handler->del_work);
+	flush_work_with_sync_wait(&handler->del_work);
 
 	INIT_LIST_HEAD(&del_list);
 

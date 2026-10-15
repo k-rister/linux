@@ -388,8 +388,10 @@ static void ssip_reset(struct hsi_client *cl)
 	struct list_head *head, *tmp;
 	struct hsi_msg *msg;
 
-	if (netif_running(ssi->netdev))
+	if (netif_running(ssi->netdev)) {
 		netif_carrier_off(ssi->netdev);
+		netif_tx_disable(ssi->netdev);
+	}
 	hsi_flush(cl);
 	spin_lock_bh(&ssi->lock);
 	if (ssi->send_state != SEND_IDLE)
@@ -401,7 +403,10 @@ static void ssip_reset(struct hsi_client *cl)
 	timer_delete(&ssi->rx_wd);
 	timer_delete(&ssi->tx_wd);
 	timer_delete(&ssi->keep_alive);
-	cancel_work_sync(&ssi->work);
+	/* ssip_pn_xmit() can queue this work, so drain it outside ssi->lock. */
+	spin_unlock_bh(&ssi->lock);
+	cancel_work_sync_with_sync_wait(&ssi->work);
+	spin_lock_bh(&ssi->lock);
 	ssi->main_state = 0;
 	ssi->send_state = 0;
 	ssi->recv_state = 0;

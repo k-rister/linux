@@ -620,7 +620,7 @@ purge_gnt_list:
 	}
 
 	/* Drain pending purge work */
-	flush_work(&ring->persistent_purge_work);
+	flush_work_with_sync_wait(&ring->persistent_purge_work);
 
 	if (log_stats)
 		print_stats(ring);

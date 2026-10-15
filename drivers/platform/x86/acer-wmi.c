@@ -2452,7 +2452,7 @@ static void acer_rfkill_exit(void)
 {
 	if ((ec_raw_mode || !wmi_has_guid(ACERWMID_EVENT_GUID)) &&
 	    has_cap(ACER_CAP_WIRELESS | ACER_CAP_BLUETOOTH | ACER_CAP_THREEG))
-		cancel_delayed_work_sync(&acer_rfkill_work);
+		cancel_delayed_work_sync_with_sync_wait(&acer_rfkill_work);
 
 	if (has_cap(ACER_CAP_WIRELESS)) {
 		rfkill_unregister(wireless_rfkill);

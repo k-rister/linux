@@ -69,7 +69,7 @@ static void stadia_input_close(struct input_dev *dev)
 
 	WRITE_ONCE(stadiaff->magnitudes, 0);
 	stadiaff_work(&stadiaff->work);
-	disable_work_sync(&stadiaff->work);
+	disable_work_sync_with_sync_wait(&stadiaff->work);
 
 	hid_hw_close(hid);
 }
@@ -105,7 +105,7 @@ static int stadia_input_configured(struct hid_device *hid, struct hid_input *hid
 	stadiaff->hid = hid;
 	stadiaff->report = report;
 	INIT_WORK(&stadiaff->work, stadiaff_work);
-	disable_work_sync(&stadiaff->work);
+	disable_work_sync_with_sync_wait(&stadiaff->work);
 
 	dev->open = stadia_input_open;
 	dev->close = stadia_input_close;

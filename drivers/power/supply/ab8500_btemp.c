@@ -454,7 +454,7 @@ static void ab8500_btemp_periodic(struct ab8500_btemp *di,
 	 * Make sure a new measurement is done directly by cancelling
 	 * any pending work
 	 */
-	cancel_delayed_work_sync(&di->btemp_periodic_work);
+	cancel_delayed_work_sync_with_sync_wait(&di->btemp_periodic_work);
 
 	if (enable)
 		queue_delayed_work(di->btemp_wq, &di->btemp_periodic_work, 0);

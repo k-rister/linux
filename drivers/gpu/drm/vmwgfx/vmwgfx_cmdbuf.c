@@ -1400,7 +1400,7 @@ void vmw_cmdbuf_man_destroy(struct vmw_cmdbuf_man *man)
 
 	vmw_generic_waiter_remove(man->dev_priv, SVGA_IRQFLAG_ERROR,
 				  &man->dev_priv->error_waiters);
-	(void) cancel_work_sync(&man->work);
+	(void) cancel_work_sync_with_sync_wait(&man->work);
 	dma_pool_destroy(man->dheaders);
 	dma_pool_destroy(man->headers);
 	mutex_destroy(&man->cur_mutex);

@@ -124,7 +124,7 @@ static void kvp_register_done(void)
 	 * work to not poll the channel twice.
 	 */
 	pr_debug("KVP: userspace daemon registered\n");
-	cancel_delayed_work_sync(&kvp_host_handshake_work);
+	cancel_delayed_work_sync_with_sync_wait(&kvp_host_handshake_work);
 	hv_poll_channel(kvp_transaction.recv_channel, kvp_poll_wrapper);
 }
 
@@ -248,7 +248,7 @@ static int kvp_on_msg(void *msg, int len)
 	 * Complete the transaction by forwarding the key value
 	 * to the host. But first, cancel the timeout.
 	 */
-	if (cancel_delayed_work_sync(&kvp_timeout_work)) {
+	if (cancel_delayed_work_sync_with_sync_wait(&kvp_timeout_work)) {
 		kvp_respond_to_host(message, error);
 		hv_poll_channel(kvp_transaction.recv_channel, kvp_poll_wrapper);
 	}
@@ -496,7 +496,7 @@ kvp_send_key(struct work_struct *dummy)
 	rc = hvutil_transport_send(hvt, message, sizeof(*message), NULL);
 	if (rc) {
 		pr_debug("KVP: failed to communicate to the daemon: %d\n", rc);
-		if (cancel_delayed_work_sync(&kvp_timeout_work)) {
+		if (cancel_delayed_work_sync_with_sync_wait(&kvp_timeout_work)) {
 			kvp_respond_to_host(message, HV_E_FAIL);
 			kvp_transaction.state = HVUTIL_READY;
 		}
@@ -746,7 +746,7 @@ void hv_kvp_onchannelcallback(void *context)
 
 static void kvp_on_reset(void)
 {
-	if (cancel_delayed_work_sync(&kvp_timeout_work))
+	if (cancel_delayed_work_sync_with_sync_wait(&kvp_timeout_work))
 		kvp_respond_to_host(NULL, HV_E_FAIL);
 	kvp_transaction.state = HVUTIL_DEVICE_INIT;
 }
@@ -782,9 +782,9 @@ hv_kvp_init_transport(void)
 
 static void hv_kvp_cancel_work(void)
 {
-	cancel_delayed_work_sync(&kvp_host_handshake_work);
-	cancel_delayed_work_sync(&kvp_timeout_work);
-	cancel_work_sync(&kvp_sendkey_work);
+	cancel_delayed_work_sync_with_sync_wait(&kvp_host_handshake_work);
+	cancel_delayed_work_sync_with_sync_wait(&kvp_timeout_work);
+	cancel_work_sync_with_sync_wait(&kvp_sendkey_work);
 }
 
 int hv_kvp_pre_suspend(void)

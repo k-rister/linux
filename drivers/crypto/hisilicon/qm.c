@@ -3083,10 +3083,10 @@ void hisi_qm_wait_task_finish(struct hisi_qm *qm, struct hisi_qm_list *qm_list)
 
 	/* Cancel possible RAS reset process during the uninstallation procedure. */
 	if (qm->fun_type == QM_HW_PF)
-		cancel_work_sync(&qm->rst_work);
+		cancel_work_sync_with_sync_wait(&qm->rst_work);
 
 	if (test_bit(QM_SUPPORT_MB_COMMAND, &qm->caps))
-		flush_work(&qm->cmd_process);
+		flush_work_with_sync_wait(&qm->cmd_process);
 
 	udelay(REMOVE_WAIT_DELAY);
 }

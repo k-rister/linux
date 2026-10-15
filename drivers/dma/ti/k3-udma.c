@@ -3997,7 +3997,7 @@ static void udma_synchronize(struct dma_chan *chan)
 	if (udma_is_chan_running(uc))
 		dev_warn(uc->ud->dev, "chan%d refused to stop!\n", uc->id);
 
-	cancel_delayed_work_sync(&uc->tx_drain.work);
+	cancel_delayed_work_sync_with_sync_wait(&uc->tx_drain.work);
 	udma_reset_rings(uc);
 }
 
@@ -4091,7 +4091,7 @@ static void udma_free_chan_resources(struct dma_chan *chan)
 		udma_reset_rings(uc);
 	}
 
-	cancel_delayed_work_sync(&uc->tx_drain.work);
+	cancel_delayed_work_sync_with_sync_wait(&uc->tx_drain.work);
 
 	if (uc->irq_num_ring > 0) {
 		free_irq(uc->irq_num_ring, uc);

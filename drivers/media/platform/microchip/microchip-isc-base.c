@@ -1704,7 +1704,7 @@ static void isc_async_unbind(struct v4l2_async_notifier *notifier,
 	struct isc_device *isc = container_of(notifier->v4l2_dev,
 					      struct isc_device, v4l2_dev);
 	mutex_destroy(&isc->awb_mutex);
-	cancel_work_sync(&isc->awb_work);
+	cancel_work_sync_with_sync_wait(&isc->awb_work);
 	video_unregister_device(&isc->video_dev);
 	v4l2_ctrl_handler_free(&isc->ctrls.handler);
 }

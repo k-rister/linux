@@ -1115,7 +1115,7 @@ void gether_cleanup(struct eth_dev *dev)
 		return;
 
 	unregister_netdev(dev->net);
-	flush_work(&dev->work);
+	flush_work_with_sync_wait(&dev->work);
 	free_netdev(dev->net);
 }
 EXPORT_SYMBOL_GPL(gether_cleanup);

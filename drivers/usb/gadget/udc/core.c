@@ -1476,7 +1476,7 @@ int usb_add_gadget(struct usb_gadget *gadget)
 	ida_free(&gadget_id_numbers, gadget->id_number);
 
  err_del_udc:
-	flush_work(&gadget->work);
+	flush_work_with_sync_wait(&gadget->work);
 	device_del(&udc->dev);
 
  err_unlist_udc:
@@ -1596,9 +1596,9 @@ void usb_del_gadget(struct usb_gadget *gadget)
 	spin_lock_irqsave(&gadget->state_lock, flags);
 	gadget->teardown = true;
 	spin_unlock_irqrestore(&gadget->state_lock, flags);
-	flush_work(&gadget->work);
+	flush_work_with_sync_wait(&gadget->work);
 	ida_free(&gadget_id_numbers, gadget->id_number);
-	cancel_work_sync(&udc->vbus_work);
+	cancel_work_sync_with_sync_wait(&udc->vbus_work);
 	device_unregister(&udc->dev);
 }
 EXPORT_SYMBOL_GPL(usb_del_gadget);
@@ -1713,7 +1713,7 @@ static void gadget_unbind_driver(struct device *dev)
 	dev_dbg(&udc->dev, "unbinding gadget driver [%s]\n", driver->function);
 
 	udc->allow_connect = false;
-	cancel_work_sync(&udc->vbus_work);
+	cancel_work_sync_with_sync_wait(&udc->vbus_work);
 	mutex_lock(&udc->connect_lock);
 	usb_gadget_disconnect_locked(gadget);
 	usb_gadget_disable_async_callbacks(udc);

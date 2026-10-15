@@ -427,7 +427,7 @@ static int smi_port_init(struct smi_port *port, int dmaChanUsed)
 
 	smi_port_disableInterrupt(port);
 	INIT_WORK(&port->bh_work, smi_dma_xfer);
-	disable_work_sync(&port->bh_work);
+	disable_work_sync_with_sync_wait(&port->bh_work);
 	port->enable = 1;
 	return 0;
 err:
@@ -438,7 +438,7 @@ err:
 static void smi_port_exit(struct smi_port *port)
 {
 	smi_port_disableInterrupt(port);
-	cancel_work_sync(&port->bh_work);
+	cancel_work_sync_with_sync_wait(&port->bh_work);
 	smi_port_dma_free(port);
 	port->enable = 0;
 }
@@ -837,7 +837,7 @@ static int smi_stop_feed(struct dvb_demux_feed *dvbdmxfeed)
 	if (--port->users)
 		return port->users;
 
-	disable_work_sync(&port->bh_work);
+	disable_work_sync_with_sync_wait(&port->bh_work);
 	smi_port_disableInterrupt(port);
 	smi_clear(port->DMA_MANAGEMENT, 0x30003);
 	return 0;

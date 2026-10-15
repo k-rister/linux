@@ -607,7 +607,7 @@ static void bdc_remove(struct platform_device *pdev)
 	 * schedule_delayed_work (self-rearmed in bdc_func_wake_timer), so
 	 * the IRQ must be released first to prevent re-arm after cancel.
 	 */
-	cancel_delayed_work_sync(&bdc->func_wake_notify);
+	cancel_delayed_work_sync_with_sync_wait(&bdc->func_wake_notify);
 	bdc_udc_exit(bdc);
 	bdc_hw_exit(bdc);
 	bdc_phy_exit(bdc);

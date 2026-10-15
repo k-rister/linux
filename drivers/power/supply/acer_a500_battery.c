@@ -257,14 +257,14 @@ static void a500_battery_remove(struct platform_device *pdev)
 {
 	struct a500_battery *bat = dev_get_drvdata(&pdev->dev);
 
-	cancel_delayed_work_sync(&bat->poll_work);
+	cancel_delayed_work_sync_with_sync_wait(&bat->poll_work);
 }
 
 static int __maybe_unused a500_battery_suspend(struct device *dev)
 {
 	struct a500_battery *bat = dev_get_drvdata(dev);
 
-	cancel_delayed_work_sync(&bat->poll_work);
+	cancel_delayed_work_sync_with_sync_wait(&bat->poll_work);
 
 	return 0;
 }

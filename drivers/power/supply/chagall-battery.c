@@ -251,7 +251,7 @@ static int __maybe_unused chagall_battery_suspend(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct chagall_battery_data *cg = i2c_get_clientdata(client);
 
-	cancel_delayed_work_sync(&cg->poll_work);
+	cancel_delayed_work_sync_with_sync_wait(&cg->poll_work);
 
 	return 0;
 }

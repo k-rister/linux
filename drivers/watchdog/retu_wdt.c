@@ -42,7 +42,7 @@ static void retu_wdt_ping_enable(struct retu_wdt_dev *wdev)
 static void retu_wdt_ping_disable(struct retu_wdt_dev *wdev)
 {
 	retu_write(wdev->rdev, RETU_REG_WATCHDOG, RETU_WDT_MAX_TIMER);
-	cancel_delayed_work_sync(&wdev->ping_work);
+	cancel_delayed_work_sync_with_sync_wait(&wdev->ping_work);
 }
 
 static void retu_wdt_ping_work(struct work_struct *work)

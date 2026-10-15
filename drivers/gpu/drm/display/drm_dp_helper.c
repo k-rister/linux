@@ -2515,7 +2515,7 @@ int drm_dp_stop_crc(struct drm_dp_aux *aux)
 	if (ret < 0)
 		return ret;
 
-	flush_work(&aux->crc_work);
+	flush_work_with_sync_wait(&aux->crc_work);
 	aux->crtc = NULL;
 
 	return 0;

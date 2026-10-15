@@ -311,7 +311,7 @@ void drm_dp_cec_attach(struct drm_dp_aux *aux, u16 source_physical_address)
 	if (!aux->transfer)
 		return;
 
-	cancel_delayed_work_sync(&aux->cec.unregister_work);
+	cancel_delayed_work_sync_with_sync_wait(&aux->cec.unregister_work);
 
 	mutex_lock(&aux->cec.lock);
 	if (!drm_dp_cec_cap(aux, &cap)) {
@@ -395,7 +395,7 @@ void drm_dp_cec_unset_edid(struct drm_dp_aux *aux)
 	if (!aux->transfer)
 		return;
 
-	cancel_delayed_work_sync(&aux->cec.unregister_work);
+	cancel_delayed_work_sync_with_sync_wait(&aux->cec.unregister_work);
 
 	mutex_lock(&aux->cec.lock);
 	if (!aux->cec.adap)
@@ -453,7 +453,7 @@ void drm_dp_cec_unregister_connector(struct drm_dp_aux *aux)
 {
 	if (!aux->cec.adap)
 		return;
-	cancel_delayed_work_sync(&aux->cec.unregister_work);
+	cancel_delayed_work_sync_with_sync_wait(&aux->cec.unregister_work);
 	cec_unregister_adapter(aux->cec.adap);
 	aux->cec.adap = NULL;
 }

@@ -3766,8 +3766,8 @@ void drm_dp_mst_topology_mgr_suspend(struct drm_dp_mst_topology_mgr *mgr)
 	drm_dp_dpcd_write_byte(mgr->aux, DP_MSTM_CTRL,
 			       DP_MST_EN | DP_UPSTREAM_IS_SRC);
 	mutex_unlock(&mgr->lock);
-	flush_work(&mgr->up_req_work);
-	flush_work(&mgr->work);
+	flush_work_with_sync_wait(&mgr->up_req_work);
+	flush_work_with_sync_wait(&mgr->work);
 	flush_work(&mgr->delayed_destroy_work);
 
 	mutex_lock(&mgr->lock);
@@ -3848,7 +3848,7 @@ int drm_dp_mst_topology_mgr_resume(struct drm_dp_mst_topology_mgr *mgr,
 	if (sync) {
 		drm_dbg_kms(mgr->dev,
 			    "Waiting for link probe work to finish re-syncing topology...\n");
-		flush_work(&mgr->work);
+		flush_work_with_sync_wait(&mgr->work);
 	}
 
 	return 0;
@@ -5782,7 +5782,7 @@ EXPORT_SYMBOL(drm_dp_mst_topology_mgr_init);
 void drm_dp_mst_topology_mgr_destroy(struct drm_dp_mst_topology_mgr *mgr)
 {
 	drm_dp_mst_topology_mgr_set_mst(mgr, false);
-	flush_work(&mgr->work);
+	flush_work_with_sync_wait(&mgr->work);
 	/* The following will also drain any requeued work on the WQ. */
 	if (mgr->delayed_destroy_wq) {
 		destroy_workqueue(mgr->delayed_destroy_wq);

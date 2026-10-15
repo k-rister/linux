@@ -328,7 +328,7 @@ static void ocrdma_remove(struct ocrdma_dev *dev)
 	/* first unregister with stack to stop all the active traffic
 	 * of the registered clients.
 	 */
-	cancel_delayed_work_sync(&dev->eqd_work);
+	cancel_delayed_work_sync_with_sync_wait(&dev->eqd_work);
 	ib_unregister_device(&dev->ibdev);
 
 	ocrdma_rem_port_stats(dev);

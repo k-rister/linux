@@ -282,7 +282,7 @@ static int set_device_name(struct led_netdev_data *trigger_data,
 	if (size >= IFNAMSIZ)
 		return -EINVAL;
 
-	cancel_delayed_work_sync(&trigger_data->work);
+	cancel_delayed_work_sync_with_sync_wait(&trigger_data->work);
 
 	memcpy(device_name, name, size);
 	device_name[size] = 0;
@@ -432,7 +432,7 @@ static ssize_t netdev_led_attr_store(struct device *dev, const char *buf,
 	     test_bit(TRIGGER_NETDEV_LINK_100000, &mode)))
 		return -EINVAL;
 
-	cancel_delayed_work_sync(&trigger_data->work);
+	cancel_delayed_work_sync_with_sync_wait(&trigger_data->work);
 
 	trigger_data->mode = mode;
 	trigger_data->hw_control = can_hw_control(trigger_data);
@@ -503,7 +503,7 @@ static ssize_t interval_store(struct device *dev,
 
 	/* impose some basic bounds on the timer interval */
 	if (value >= 5 && value <= 10000) {
-		cancel_delayed_work_sync(&trigger_data->work);
+		cancel_delayed_work_sync_with_sync_wait(&trigger_data->work);
 
 		atomic_set(&trigger_data->interval, msecs_to_jiffies(value));
 		set_baseline_state(trigger_data);	/* resets timer */
@@ -629,7 +629,7 @@ static int netdev_trig_notify(struct notifier_block *nb,
 	      (evt == NETDEV_REGISTER && !strcmp(dev->name, trigger_data->device_name))))
 		return NOTIFY_DONE;
 
-	cancel_delayed_work_sync(&trigger_data->work);
+	cancel_delayed_work_sync_with_sync_wait(&trigger_data->work);
 
 	mutex_lock(&trigger_data->lock);
 
@@ -791,7 +791,7 @@ static void netdev_trig_deactivate(struct led_classdev *led_cdev)
 
 	unregister_netdevice_notifier(&trigger_data->notifier);
 
-	cancel_delayed_work_sync(&trigger_data->work);
+	cancel_delayed_work_sync_with_sync_wait(&trigger_data->work);
 
 	dev_put(trigger_data->net_dev);
 

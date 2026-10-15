@@ -68,7 +68,7 @@ static void nitrox_cmdq_cleanup(struct nitrox_cmdq *cmdq)
 		return;
 
 	ndev = cmdq->ndev;
-	cancel_work_sync(&cmdq->backlog_qflush);
+	cancel_work_sync_with_sync_wait(&cmdq->backlog_qflush);
 
 	dma_free_coherent(DEV(ndev), cmdq->qsize,
 			  cmdq->unalign_base, cmdq->unalign_dma);

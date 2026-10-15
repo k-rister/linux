@@ -319,7 +319,7 @@ static int tps6131x_brightness_set(struct led_classdev *cdev, enum led_brightnes
 	u8 reg0;
 	int ret;
 
-	cancel_delayed_work_sync(&tps6131x->torch_refresh_work);
+	cancel_delayed_work_sync_with_sync_wait(&tps6131x->torch_refresh_work);
 
 	/*
 	 * The brightness parameter uses the number of current steps as the unit (not the current
@@ -791,7 +791,7 @@ static void tps6131x_remove(struct i2c_client *client)
 
 	v4l2_flash_release(tps6131x->v4l2_flash);
 
-	cancel_delayed_work_sync(&tps6131x->torch_refresh_work);
+	cancel_delayed_work_sync_with_sync_wait(&tps6131x->torch_refresh_work);
 }
 
 static const struct of_device_id of_tps6131x_leds_match[] = {

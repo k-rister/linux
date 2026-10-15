@@ -539,7 +539,7 @@ static int da9150_fg_resume(struct platform_device *pdev)
 	 * since last check before suspend.
 	 */
 	if (fg->interval)
-		flush_delayed_work(&fg->work);
+		flush_delayed_work_with_sync_wait(&fg->work);
 
 	return 0;
 }

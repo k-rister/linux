@@ -923,7 +923,7 @@ static void cxusb_medion_v_stop_streaming(struct vb2_queue *q)
 		if (cxdev->streamurbs[i])
 			usb_kill_urb(cxdev->streamurbs[i]);
 
-	flush_work(&cxdev->urbwork);
+	flush_work_with_sync_wait(&cxdev->urbwork);
 
 	mutex_lock(cxdev->videodev->lock);
 

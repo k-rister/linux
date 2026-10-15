@@ -335,7 +335,7 @@ static void ledtrig_tty_deactivate(struct led_classdev *led_cdev)
 {
 	struct ledtrig_tty_data *trigger_data = led_get_trigger_data(led_cdev);
 
-	cancel_delayed_work_sync(&trigger_data->dwork);
+	cancel_delayed_work_sync_with_sync_wait(&trigger_data->dwork);
 
 	kfree(trigger_data->ttyname);
 	tty_kref_put(trigger_data->tty);

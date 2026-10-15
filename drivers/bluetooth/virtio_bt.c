@@ -72,7 +72,7 @@ static int virtbt_close_vdev(struct virtio_bluetooth *vbt)
 {
 	int i;
 
-	cancel_work_sync(&vbt->rx);
+	cancel_work_sync_with_sync_wait(&vbt->rx);
 
 	for (i = 0; i < ARRAY_SIZE(vbt->vqs); i++) {
 		struct virtqueue *vq = vbt->vqs[i];

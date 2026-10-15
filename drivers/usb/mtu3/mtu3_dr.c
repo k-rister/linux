@@ -326,6 +326,6 @@ void ssusb_otg_switch_exit(struct ssusb_mtk *ssusb)
 {
 	struct otg_switch_mtk *otg_sx = &ssusb->otg_switch;
 
-	cancel_work_sync(&otg_sx->dr_work);
+	cancel_work_sync_with_sync_wait(&otg_sx->dr_work);
 	usb_role_switch_unregister(otg_sx->role_sw);
 }

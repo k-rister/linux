@@ -185,7 +185,7 @@ static int dvb_usbv2_remote_exit(struct dvb_usb_device *d)
 	dev_dbg(&d->udev->dev, "%s:\n", __func__);
 
 	if (d->rc_dev) {
-		cancel_delayed_work_sync(&d->rc_query_work);
+		cancel_delayed_work_sync_with_sync_wait(&d->rc_query_work);
 		rc_unregister_device(d->rc_dev);
 		rc_free_device(d->rc_dev);
 		d->rc_dev = NULL;
@@ -1039,7 +1039,7 @@ int dvb_usbv2_suspend(struct usb_interface *intf, pm_message_t msg)
 
 	/* stop remote controller poll */
 	if (d->rc_polling_active)
-		cancel_delayed_work_sync(&d->rc_query_work);
+		cancel_delayed_work_sync_with_sync_wait(&d->rc_query_work);
 
 	for (i = MAX_NO_OF_ADAPTER_PER_DEVICE - 1; i >= 0; i--) {
 		active_fe = d->adapter[i].active_fe;

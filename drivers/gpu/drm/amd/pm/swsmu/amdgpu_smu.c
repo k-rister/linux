@@ -1692,7 +1692,7 @@ static void smu_wbrf_fini(struct smu_context *smu)
 
 	amd_wbrf_unregister_notifier(&smu->wbrf_notifier);
 
-	cancel_delayed_work_sync(&smu->wbrf_delayed_work);
+	cancel_delayed_work_sync_with_sync_wait(&smu->wbrf_delayed_work);
 }
 
 static int smu_smc_hw_setup(struct smu_context *smu)
@@ -2147,8 +2147,8 @@ static int smu_smc_hw_cleanup(struct smu_context *smu)
 
 	smu_wbrf_fini(smu);
 
-	cancel_work_sync(&smu->throttling_logging_work);
-	cancel_work_sync(&smu->interrupt_work);
+	cancel_work_sync_with_sync_wait(&smu->throttling_logging_work);
+	cancel_work_sync_with_sync_wait(&smu->interrupt_work);
 
 	ret = smu_disable_thermal_alert(smu);
 	if (ret) {
@@ -2156,7 +2156,7 @@ static int smu_smc_hw_cleanup(struct smu_context *smu)
 		return ret;
 	}
 
-	cancel_delayed_work_sync(&smu->swctf_delayed_work);
+	cancel_delayed_work_sync_with_sync_wait(&smu->swctf_delayed_work);
 
 	ret = smu_disable_dpms(smu);
 	if (ret) {

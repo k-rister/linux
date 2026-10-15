@@ -4023,7 +4023,7 @@ static int __maybe_unused tegra_xudc_suspend(struct device *dev)
 	xudc->suspended = true;
 	spin_unlock_irqrestore(&xudc->lock, flags);
 
-	flush_work(&xudc->usb_role_sw_work);
+	flush_work_with_sync_wait(&xudc->usb_role_sw_work);
 
 	if (!pm_runtime_status_suspended(dev)) {
 		/* Forcibly disconnect before powergating. */

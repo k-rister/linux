@@ -862,7 +862,7 @@ static void cvs_core_remove(struct device *dev)
 {
 	struct icvs *ctx = dev_get_drvdata(dev);
 
-	cancel_delayed_work_sync(&ctx->work);
+	cancel_delayed_work_sync_with_sync_wait(&ctx->work);
 	cvs_csi_remove(ctx);
 
 	if (ctx->ipu_link)
@@ -894,7 +894,7 @@ static int __maybe_unused cvs_suspend(struct device *dev)
 {
 	struct icvs *ctx = dev_get_drvdata(dev);
 
-	cancel_delayed_work_sync(&ctx->work);
+	cancel_delayed_work_sync_with_sync_wait(&ctx->work);
 
 	return 0;
 }

@@ -1093,7 +1093,7 @@ static void usdhi6_request(struct mmc_host *mmc, struct mmc_request *mrq)
 	struct usdhi6_host *host = mmc_priv(mmc);
 	int ret;
 
-	cancel_delayed_work_sync(&host->timeout_work);
+	cancel_delayed_work_sync_with_sync_wait(&host->timeout_work);
 
 	host->mrq = mrq;
 	host->sg = NULL;
@@ -1473,7 +1473,7 @@ static irqreturn_t usdhi6_sd_bh(int irq, void *dev_id)
 	struct mmc_data *data;
 	bool io_wait = false;
 
-	cancel_delayed_work_sync(&host->timeout_work);
+	cancel_delayed_work_sync_with_sync_wait(&host->timeout_work);
 
 	mrq = host->mrq;
 	if (!mrq)
@@ -1882,7 +1882,7 @@ static void usdhi6_remove(struct platform_device *pdev)
 	mmc_remove_host(host->mmc);
 
 	usdhi6_mask_all(host);
-	cancel_delayed_work_sync(&host->timeout_work);
+	cancel_delayed_work_sync_with_sync_wait(&host->timeout_work);
 	usdhi6_dma_release(host);
 	clk_disable_unprepare(host->clk);
 }

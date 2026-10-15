@@ -377,7 +377,7 @@ static void ir_close(struct rc_dev *dev)
 {
 	struct IR_i2c *ir = dev->priv;
 
-	cancel_delayed_work_sync(&ir->work);
+	cancel_delayed_work_sync_with_sync_wait(&ir->work);
 }
 
 /* Zilog Transmit Interface */
@@ -968,7 +968,7 @@ static void ir_remove(struct i2c_client *client)
 {
 	struct IR_i2c *ir = i2c_get_clientdata(client);
 
-	cancel_delayed_work_sync(&ir->work);
+	cancel_delayed_work_sync_with_sync_wait(&ir->work);
 
 	i2c_unregister_device(ir->tx_c);
 

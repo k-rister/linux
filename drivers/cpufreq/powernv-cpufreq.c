@@ -1097,7 +1097,7 @@ static inline void clean_chip_info(void)
 	/* flush any pending work items */
 	if (chips)
 		for (i = 0; i < nr_chips; i++)
-			cancel_work_sync(&chips[i].throttle);
+			cancel_work_sync_with_sync_wait(&chips[i].throttle);
 	kfree(chips);
 }
 

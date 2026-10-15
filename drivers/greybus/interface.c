@@ -693,7 +693,7 @@ static void gb_interface_release(struct device *dev)
 
 	trace_gb_interface_release(intf);
 
-	cancel_work_sync(&intf->mode_switch_work);
+	/* mode_switch_work may invoke this release from its final put_device(). */
 	kfree(intf);
 }
 

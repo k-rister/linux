@@ -2371,7 +2371,7 @@ static int adv76xx_set_edid(struct v4l2_subdev *sd, struct v4l2_edid *edid)
 			__func__, edid->pad, state->edid.present);
 
 	/* Disable hotplug and I2C access to EDID RAM from DDC port */
-	cancel_delayed_work_sync(&state->delayed_work_enable_hotplug);
+	cancel_delayed_work_sync_with_sync_wait(&state->delayed_work_enable_hotplug);
 	adv76xx_set_hpd(state, 0);
 	rep_write_clr_set(sd, info->edid_enable_reg, 0x0f, 0x00);
 
@@ -3744,7 +3744,7 @@ static void adv76xx_remove(struct i2c_client *client)
 	io_write(sd, 0x6e, 0);
 	io_write(sd, 0x73, 0);
 
-	cancel_delayed_work_sync(&state->delayed_work_enable_hotplug);
+	cancel_delayed_work_sync_with_sync_wait(&state->delayed_work_enable_hotplug);
 	v4l2_async_unregister_subdev(sd);
 	media_entity_cleanup(&sd->entity);
 	adv76xx_unregister_clients(to_state(sd));

@@ -1073,7 +1073,7 @@ static void mcp2221_remove(struct hid_device *hdev)
 	struct mcp2221 *mcp = hid_get_drvdata(hdev);
 
 	if (!gpio_mode_enforce)
-		cancel_delayed_work_sync(&mcp->init_work);
+		cancel_delayed_work_sync_with_sync_wait(&mcp->init_work);
 #endif
 }
 

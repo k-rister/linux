@@ -1192,7 +1192,7 @@ reset_drvdata:
 	dev_set_drvdata(dev, NULL);
 	fb_dealloc_cmap(&info->cmap);
 unregister_irqs:
-	cancel_work_sync(&sinfo->task);
+	cancel_work_sync_with_sync_wait(&sinfo->task);
 	free_irq(sinfo->irq_base, info);
 unmap_mmio:
 	exit_backlight(sinfo);
@@ -1230,7 +1230,7 @@ static void atmel_lcdfb_remove(struct platform_device *pdev)
 		return;
 	sinfo = info->par;
 
-	cancel_work_sync(&sinfo->task);
+	cancel_work_sync_with_sync_wait(&sinfo->task);
 	exit_backlight(sinfo);
 	atmel_lcdfb_power_control(sinfo, 0);
 	unregister_framebuffer(info);

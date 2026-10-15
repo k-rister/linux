@@ -226,7 +226,7 @@ int mhi_ep_ring_start(struct mhi_ep_cntrl *mhi_cntrl, struct mhi_ep_ring *ring,
 void mhi_ep_ring_reset(struct mhi_ep_cntrl *mhi_cntrl, struct mhi_ep_ring *ring)
 {
 	if (ring->type == RING_TYPE_ER)
-		cancel_delayed_work_sync(&ring->intmodt_work);
+		cancel_delayed_work_sync_with_sync_wait(&ring->intmodt_work);
 
 	ring->started = false;
 	kfree(ring->ring_cache);

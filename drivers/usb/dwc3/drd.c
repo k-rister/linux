@@ -604,7 +604,7 @@ void dwc3_drd_exit(struct dwc3 *dwc)
 		extcon_unregister_notifier(dwc->edev, EXTCON_USB_HOST,
 					   &dwc->edev_nb);
 
-	cancel_work_sync(&dwc->drd_work);
+	cancel_work_sync_with_sync_wait(&dwc->drd_work);
 
 	/* debug user might have changed role, clean based on current role */
 	switch (dwc->current_dr_role) {

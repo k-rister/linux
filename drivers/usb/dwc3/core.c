@@ -2501,7 +2501,7 @@ void dwc3_core_remove(struct dwc3 *dwc)
 		power_supply_unreg_notifier(&dwc->psy_nb);
 
 	if (dwc->usb_psy) {
-		cancel_work_sync(&dwc->vbus_draw_work);
+		cancel_work_sync_with_sync_wait(&dwc->vbus_draw_work);
 		power_supply_put(dwc->usb_psy);
 	}
 }

@@ -597,7 +597,7 @@ nouveau_display_fini(struct drm_device *dev, bool suspend, bool runtime)
 	drm_connector_list_iter_end(&conn_iter);
 
 	if (!runtime && !drm->headless)
-		cancel_work_sync(&drm->hpd_work);
+		cancel_work_sync_with_sync_wait(&drm->hpd_work);
 
 	drm_kms_helper_poll_disable(dev);
 	disp->fini(dev, runtime, suspend);

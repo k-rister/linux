@@ -69,7 +69,7 @@ nv04_display_fini(struct drm_device *dev, bool runtime, bool suspend)
 		NVWriteCRTC(dev, 1, NV_PCRTC_INTR_EN_0, 0);
 
 	if (!runtime && !drm->headless)
-		cancel_work_sync(&drm->hpd_work);
+		cancel_work_sync_with_sync_wait(&drm->hpd_work);
 
 	if (!suspend)
 		return;

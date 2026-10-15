@@ -946,7 +946,7 @@ nouveau_svm_fault_buffer_fini(struct nouveau_svm *svm, int id)
 	struct nouveau_svm_fault_buffer *buffer = &svm->buffer[id];
 
 	nvif_event_block(&buffer->notify);
-	flush_work(&buffer->work);
+	flush_work_with_sync_wait(&buffer->work);
 }
 
 static int

@@ -214,7 +214,7 @@ nouveau_cli_fini(struct nouveau_cli *cli)
 	 *
 	 * So, after flushing the workqueue, there should be nothing left.
 	 */
-	flush_work(&cli->work);
+	flush_work_with_sync_wait(&cli->work);
 	WARN_ON(!list_empty(&cli->worker));
 
 	if (cli->sched)

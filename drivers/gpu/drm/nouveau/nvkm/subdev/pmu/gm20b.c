@@ -202,7 +202,7 @@ gm20b_pmu_fini(struct nvkm_pmu *pmu)
 {
 	/*TODO: shutdown RTOS. */
 
-	flush_work(&pmu->recv.work);
+	flush_work_with_sync_wait(&pmu->recv.work);
 	nvkm_falcon_cmdq_fini(pmu->lpq);
 	nvkm_falcon_cmdq_fini(pmu->hpq);
 

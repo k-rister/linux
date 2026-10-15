@@ -580,7 +580,7 @@ static int
 nvkm_clk_fini(struct nvkm_subdev *subdev, enum nvkm_suspend_state suspend)
 {
 	struct nvkm_clk *clk = nvkm_clk(subdev);
-	flush_work(&clk->work);
+	flush_work_with_sync_wait(&clk->work);
 	if (clk->func->fini)
 		clk->func->fini(clk);
 	return 0;

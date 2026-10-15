@@ -187,7 +187,7 @@ static void
 gv100_fault_fini(struct nvkm_fault *fault)
 {
 	nvkm_event_ntfy_block(&fault->nrpfb);
-	flush_work(&fault->nrpfb_work);
+	flush_work_with_sync_wait(&fault->nrpfb_work);
 
 	if (fault->buffer[0])
 		fault->func->buffer.fini(fault->buffer[0]);

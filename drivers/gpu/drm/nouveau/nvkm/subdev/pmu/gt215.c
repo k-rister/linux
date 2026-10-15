@@ -178,7 +178,7 @@ void
 gt215_pmu_fini(struct nvkm_pmu *pmu)
 {
 	nvkm_wr32(pmu->subdev.device, 0x10a014, 0x00000060);
-	flush_work(&pmu->recv.work);
+	flush_work_with_sync_wait(&pmu->recv.work);
 }
 
 static void

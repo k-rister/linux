@@ -184,7 +184,7 @@ static void stop_streaming(struct vb2_queue *vq)
 	int irq = xdma_get_user_irq(mgbdev->xdev, voutdev->config->irq);
 
 	xdma_disable_user_irq(mgbdev->xdev, irq);
-	cancel_work_sync(&voutdev->dma_work);
+	cancel_work_sync_with_sync_wait(&voutdev->dma_work);
 
 	mgb4_mask_reg(&mgbdev->video, voutdev->config->regs.config, 0x2, 0x0);
 	mgb4_write_reg(&mgbdev->video, voutdev->config->regs.padding, 0);

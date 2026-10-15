@@ -298,7 +298,7 @@ static void stop_streaming(struct vb2_queue *vq)
 	mgb4_write_reg(video, vindev->config->regs.padding, 0);
 	set_loopback_padding(vindev, 0);
 
-	cancel_work_sync(&vindev->dma_work);
+	cancel_work_sync_with_sync_wait(&vindev->dma_work);
 	return_all_buffers(vindev, VB2_BUF_STATE_ERROR);
 }
 

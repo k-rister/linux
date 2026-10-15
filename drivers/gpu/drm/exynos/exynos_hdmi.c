@@ -2088,7 +2088,7 @@ static void hdmi_remove(struct platform_device *pdev)
 {
 	struct hdmi_context *hdata = platform_get_drvdata(pdev);
 
-	cancel_delayed_work_sync(&hdata->hotplug_work);
+	cancel_delayed_work_sync_with_sync_wait(&hdata->hotplug_work);
 
 	component_del(&pdev->dev, &hdmi_component_ops);
 	platform_device_unregister(hdata->audio.pdev);

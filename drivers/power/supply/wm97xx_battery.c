@@ -137,7 +137,7 @@ static irqreturn_t wm97xx_chrg_irq(int irq, void *data)
 #ifdef CONFIG_PM
 static int wm97xx_bat_suspend(struct device *dev)
 {
-	flush_work(&bat_work);
+	flush_work_with_sync_wait(&bat_work);
 	return 0;
 }
 
@@ -244,7 +244,7 @@ static void wm97xx_bat_remove(struct platform_device *dev)
 {
 	if (charge_gpiod)
 		free_irq(gpiod_to_irq(charge_gpiod), dev);
-	cancel_work_sync(&bat_work);
+	cancel_work_sync_with_sync_wait(&bat_work);
 }
 
 static struct platform_driver wm97xx_bat_driver = {

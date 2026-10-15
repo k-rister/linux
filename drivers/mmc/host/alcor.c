@@ -1121,7 +1121,7 @@ static void alcor_pci_sdmmc_drv_remove(struct platform_device *pdev)
 	struct alcor_sdmmc_host *host = dev_get_drvdata(&pdev->dev);
 	struct mmc_host *mmc = mmc_from_priv(host);
 
-	if (cancel_delayed_work_sync(&host->timeout_work))
+	if (cancel_delayed_work_sync_with_sync_wait(&host->timeout_work))
 		alcor_request_complete(host, 0);
 
 	alcor_hw_uninit(host);
@@ -1132,7 +1132,7 @@ static int alcor_pci_sdmmc_suspend(struct device *dev)
 {
 	struct alcor_sdmmc_host *host = dev_get_drvdata(dev);
 
-	if (cancel_delayed_work_sync(&host->timeout_work))
+	if (cancel_delayed_work_sync_with_sync_wait(&host->timeout_work))
 		alcor_request_complete(host, 0);
 
 	alcor_hw_uninit(host);

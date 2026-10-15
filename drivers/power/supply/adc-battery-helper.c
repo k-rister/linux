@@ -261,7 +261,7 @@ static void adc_battery_helper_start_work(struct adc_battery_helper *help)
 	help->ocv_avg_index = 0;
 
 	queue_delayed_work(system_percpu_wq, &help->work, 0);
-	flush_delayed_work(&help->work);
+	flush_delayed_work_with_sync_wait(&help->work);
 }
 
 int adc_battery_helper_init(struct adc_battery_helper *help, struct power_supply *psy,
@@ -308,7 +308,7 @@ int adc_battery_helper_suspend(struct device *dev)
 {
 	struct adc_battery_helper *help = dev_get_drvdata(dev);
 
-	cancel_delayed_work_sync(&help->work);
+	cancel_delayed_work_sync_with_sync_wait(&help->work);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(adc_battery_helper_suspend);

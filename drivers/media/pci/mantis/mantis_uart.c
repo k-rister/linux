@@ -181,6 +181,6 @@ void mantis_uart_exit(struct mantis_pci *mantis)
 	/* disable interrupt */
 	mantis_mask_ints(mantis, MANTIS_INT_IRQ1);
 	mmwrite(mmread(MANTIS_UART_CTL) & 0xffef, MANTIS_UART_CTL);
-	flush_work(&mantis->uart_work);
+	flush_work_with_sync_wait(&mantis->uart_work);
 }
 EXPORT_SYMBOL_GPL(mantis_uart_exit);

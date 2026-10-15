@@ -974,8 +974,8 @@ static void loader_ishtp_cl_remove(struct ishtp_cl_device *cl_device)
 	 * work_ishtp_reset, so first cancel work_fw_load then
 	 * cancel work_ishtp_reset.
 	 */
-	cancel_work_sync(&client_data->work_fw_load);
-	cancel_work_sync(&client_data->work_ishtp_reset);
+	cancel_work_sync_with_sync_wait(&client_data->work_fw_load);
+	cancel_work_sync_with_sync_wait(&client_data->work_ishtp_reset);
 	loader_deinit(loader_ishtp_cl);
 	ishtp_put_device(cl_device);
 }

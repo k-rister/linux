@@ -337,7 +337,7 @@ static void axp288_put_role_sw(void *data)
 {
 	struct axp288_extcon_info *info = data;
 
-	cancel_work_sync(&info->role_work);
+	cancel_work_sync_with_sync_wait(&info->role_work);
 	usb_role_switch_put(info->role_sw);
 }
 
@@ -462,7 +462,7 @@ static int axp288_extcon_probe(struct platform_device *pdev)
 	/* Make sure the role-sw is set correctly before doing BC detection */
 	if (info->role_sw) {
 		queue_work(system_long_wq, &info->role_work);
-		flush_work(&info->role_work);
+		flush_work_with_sync_wait(&info->role_work);
 	}
 
 	/* Start charger cable type detection */

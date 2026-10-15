@@ -1416,8 +1416,8 @@ static void extcon_rtk_type_c_remove(struct platform_device *pdev)
 		type_c->port = NULL;
 	}
 
-	cancel_delayed_work_sync(&type_c->delayed_work);
-	flush_delayed_work(&type_c->delayed_work);
+	cancel_delayed_work_sync_with_sync_wait(&type_c->delayed_work);
+	flush_delayed_work_with_sync_wait(&type_c->delayed_work);
 	WARN_ON_ONCE(delayed_work_pending(&type_c->delayed_work));
 
 	spin_lock_irqsave(&type_c->lock, flags);
@@ -1722,8 +1722,8 @@ static int extcon_rtk_type_c_prepare(struct device *dev)
 	u32 default_ctrl;
 	unsigned long flags;
 
-	cancel_delayed_work_sync(&type_c->delayed_work);
-	flush_delayed_work(&type_c->delayed_work);
+	cancel_delayed_work_sync_with_sync_wait(&type_c->delayed_work);
+	flush_delayed_work_with_sync_wait(&type_c->delayed_work);
 	WARN_ON_ONCE(delayed_work_pending(&type_c->delayed_work));
 
 	spin_lock_irqsave(&type_c->lock, flags);

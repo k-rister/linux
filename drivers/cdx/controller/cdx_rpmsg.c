@@ -151,7 +151,7 @@ static void cdx_rpmsg_remove(struct rpmsg_device *rpdev)
 	struct cdx_controller *cdx_c = dev_get_drvdata(&rpdev->dev);
 	struct cdx_mcdi *cdx_mcdi = cdx_c->priv;
 
-	flush_work(&cdx_mcdi->work);
+	flush_work_with_sync_wait(&cdx_mcdi->work);
 	cdx_rpmsg_pre_remove(cdx_c);
 
 	rpmsg_destroy_ept(cdx_mcdi->ept);

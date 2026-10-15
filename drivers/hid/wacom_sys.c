@@ -2910,11 +2910,11 @@ static void wacom_remove(struct hid_device *hdev)
 	hid_hw_stop(hdev);
 
 	cancel_delayed_work_sync_with_sync_wait(&wacom->init_work);
-	cancel_delayed_work_sync(&wacom->aes_battery_work);
-	cancel_work_sync(&wacom->wireless_work);
-	cancel_work_sync(&wacom->battery_work);
-	cancel_work_sync(&wacom->remote_work);
-	cancel_work_sync(&wacom->mode_change_work);
+	cancel_delayed_work_sync_with_sync_wait(&wacom->aes_battery_work);
+	cancel_work_sync_with_sync_wait(&wacom->wireless_work);
+	cancel_work_sync_with_sync_wait(&wacom->battery_work);
+	cancel_work_sync_with_sync_wait(&wacom->remote_work);
+	cancel_work_sync_with_sync_wait(&wacom->mode_change_work);
 	timer_delete_sync(&wacom->idleprox_timer);
 	if (hdev->bus == BUS_BLUETOOTH)
 		device_remove_file(&hdev->dev, &dev_attr_speed);

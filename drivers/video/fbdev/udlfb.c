@@ -963,7 +963,7 @@ static void dlfb_ops_destroy(struct fb_info *info)
 {
 	struct dlfb_data *dlfb = info->par;
 
-	cancel_work_sync(&dlfb->damage_work);
+	cancel_work_sync_with_sync_wait(&dlfb->damage_work);
 
 	mutex_destroy(&dlfb->render_mutex);
 

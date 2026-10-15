@@ -192,6 +192,6 @@ int gb_svc_watchdog_disable(struct gb_svc *svc)
 		return 0;
 
 	watchdog->enabled = false;
-	cancel_delayed_work_sync(&watchdog->work);
+	cancel_delayed_work_sync_with_sync_wait(&watchdog->work);
 	return 0;
 }

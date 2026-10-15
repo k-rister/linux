@@ -928,7 +928,7 @@ static void dell_cleanup_rfkill(void)
 	} else {
 		i8042_remove_filter(dell_laptop_i8042_filter);
 	}
-	cancel_delayed_work_sync(&dell_rfkill_work);
+	cancel_delayed_work_sync_with_sync_wait(&dell_rfkill_work);
 	if (wifi_rfkill) {
 		rfkill_unregister(wifi_rfkill);
 		rfkill_destroy(wifi_rfkill);

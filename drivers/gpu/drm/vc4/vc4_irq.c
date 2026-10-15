@@ -278,7 +278,7 @@ vc4_irq_disable(struct drm_device *dev)
 	/* Finish any interrupt handler still in flight. */
 	synchronize_irq(vc4->irq);
 
-	cancel_work_sync(&vc4->overflow_mem_work);
+	cancel_work_sync_with_sync_wait(&vc4->overflow_mem_work);
 }
 
 int vc4_irq_install(struct drm_device *dev, int irq)

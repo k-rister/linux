@@ -1049,7 +1049,7 @@ static void vc4_bo_cache_destroy(struct drm_device *dev, void *unused)
 	int i;
 
 	timer_shutdown_sync(&vc4->bo_cache.time_timer);
-	cancel_work_sync(&vc4->bo_cache.time_work);
+	cancel_work_sync_with_sync_wait(&vc4->bo_cache.time_work);
 
 	vc4_bo_cache_purge(dev);
 

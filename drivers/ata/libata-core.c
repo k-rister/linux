@@ -5483,7 +5483,7 @@ static void ata_port_suspend(struct ata_port *ap, pm_message_t mesg,
 	 * The next resume will schedule the rescan again. So cancel any rescan
 	 * that is not done yet.
 	 */
-	cancel_delayed_work_sync(&ap->scsi_rescan_task);
+	cancel_delayed_work_sync_with_sync_wait(&ap->scsi_rescan_task);
 
 	/*
 	 * On some hardware, device fails to respond after spun down for
@@ -6409,11 +6409,11 @@ static void ata_port_detach(struct ata_port *ap)
 	WARN_ON(!(ap->pflags & ATA_PFLAG_UNLOADED));
 
 	cancel_delayed_work_sync(&ap->hotplug_task);
-	cancel_delayed_work_sync(&ap->scsi_rescan_task);
+	cancel_delayed_work_sync_with_sync_wait(&ap->scsi_rescan_task);
 
 	ata_for_each_link(link, ap, PMP_FIRST) {
 		WARN_ON(link->deferred_qc);
-		cancel_work_sync(&link->deferred_qc_work);
+		cancel_work_sync_with_sync_wait(&link->deferred_qc_work);
 	}
 
 	/* Delete port multiplier link transport devices */

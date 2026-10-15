@@ -1350,7 +1350,7 @@ static void acpi_battery_notify_dwork_cleanup(void *data)
 {
 	struct acpi_battery *battery = data;
 
-	cancel_delayed_work_sync(&battery->acpi_notif_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&battery->acpi_notif_dwork);
 	kfifo_free(&battery->acpi_notif_fifo);
 }
 

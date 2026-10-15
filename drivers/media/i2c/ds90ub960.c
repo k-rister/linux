@@ -5229,7 +5229,7 @@ static void ub960_remove(struct i2c_client *client)
 	struct v4l2_subdev *sd = i2c_get_clientdata(client);
 	struct ub960_data *priv = sd_to_ub960(sd);
 
-	cancel_delayed_work_sync(&priv->poll_work);
+	cancel_delayed_work_sync_with_sync_wait(&priv->poll_work);
 
 	ub960_destroy_subdev(priv);
 	ub960_rxport_remove_serializers(priv);

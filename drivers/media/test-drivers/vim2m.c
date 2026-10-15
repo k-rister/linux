@@ -1266,7 +1266,7 @@ static void vim2m_stop_streaming(struct vb2_queue *q)
 	struct vim2m_ctx *ctx = vb2_get_drv_priv(q);
 	struct vb2_v4l2_buffer *vbuf;
 
-	cancel_delayed_work_sync(&ctx->work_run);
+	cancel_delayed_work_sync_with_sync_wait(&ctx->work_run);
 
 	for (;;) {
 		if (V4L2_TYPE_IS_OUTPUT(q->type))

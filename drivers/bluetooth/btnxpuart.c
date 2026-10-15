@@ -417,14 +417,14 @@ static void ps_start_timer(struct btnxpuart_dev *nxpdev)
 		mod_timer(&psdata->ps_timer, jiffies + msecs_to_jiffies(psdata->h2c_ps_interval));
 
 	if (psdata->ps_state == PS_STATE_AWAKE && psdata->ps_cmd == PS_CMD_ENTER_PS)
-		cancel_work_sync(&psdata->work);
+		cancel_work_sync_with_sync_wait(&psdata->work);
 }
 
 static void ps_cancel_timer(struct btnxpuart_dev *nxpdev)
 {
 	struct ps_data *psdata = &nxpdev->psdata;
 
-	flush_work(&psdata->work);
+	flush_work_with_sync_wait(&psdata->work);
 	timer_shutdown_sync(&psdata->ps_timer);
 }
 
@@ -595,7 +595,7 @@ static void ps_cleanup(struct btnxpuart_dev *nxpdev)
 		ps_control(psdata->hdev, PS_STATE_AWAKE);
 
 	ps_cancel_timer(nxpdev);
-	cancel_work_sync(&psdata->work);
+	cancel_work_sync_with_sync_wait(&psdata->work);
 	mutex_destroy(&psdata->ps_lock);
 }
 
@@ -1735,7 +1735,7 @@ static int btnxpuart_flush(struct hci_dev *hdev)
 	serdev_device_write_flush(nxpdev->serdev);
 	skb_queue_purge(&nxpdev->txq);
 
-	cancel_work_sync(&nxpdev->tx_work);
+	cancel_work_sync_with_sync_wait(&nxpdev->tx_work);
 
 	if (!IS_ERR_OR_NULL(nxpdev->rx_skb)) {
 		kfree_skb(nxpdev->rx_skb);

@@ -100,7 +100,7 @@ static void rpi_hwmon_cancel_poll_work(void *res)
 {
 	struct rpi_hwmon_data *data = res;
 
-	disable_delayed_work_sync(&data->get_values_poll_work);
+	disable_delayed_work_sync_with_sync_wait(&data->get_values_poll_work);
 }
 
 static int rpi_read(struct device *dev, enum hwmon_sensor_types type,
@@ -259,7 +259,7 @@ static int rpi_hwmon_suspend(struct device *dev)
 {
 	struct rpi_hwmon_data *data = dev_get_drvdata(dev);
 
-	cancel_delayed_work_sync(&data->get_values_poll_work);
+	cancel_delayed_work_sync_with_sync_wait(&data->get_values_poll_work);
 
 	return 0;
 }

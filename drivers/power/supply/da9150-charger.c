@@ -628,7 +628,7 @@ static void da9150_charger_remove(struct platform_device *pdev)
 
 	if (!IS_ERR_OR_NULL(charger->usb_phy))
 		usb_unregister_notifier(charger->usb_phy, &charger->otg_nb);
-	cancel_work_sync(&charger->otg_work);
+	cancel_work_sync_with_sync_wait(&charger->otg_work);
 }
 
 static struct platform_driver da9150_charger_driver = {

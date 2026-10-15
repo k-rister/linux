@@ -1760,7 +1760,7 @@ static int vdec_close(struct file *file)
 	struct venus_inst *inst = to_inst(file);
 
 	vdec_pm_get(inst);
-	cancel_work_sync(&inst->delayed_process_work);
+	cancel_work_sync_with_sync_wait(&inst->delayed_process_work);
 	venus_close_common(inst, file);
 	ida_destroy(&inst->dpb_ids);
 	vdec_pm_put(inst, false);

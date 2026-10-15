@@ -811,7 +811,7 @@ static void usbhs_remove(struct platform_device *pdev)
 
 	dev_dbg(&pdev->dev, "usb remove\n");
 
-	flush_delayed_work(&priv->notify_hotplug_work);
+	flush_delayed_work_with_sync_wait(&priv->notify_hotplug_work);
 
 	/*
 	 * Explicitly free the IRQ to ensure the interrupt handler is

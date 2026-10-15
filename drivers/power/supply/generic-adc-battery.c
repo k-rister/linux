@@ -261,7 +261,7 @@ static int __maybe_unused gab_suspend(struct device *dev)
 {
 	struct gab *adc_bat = dev_get_drvdata(dev);
 
-	cancel_delayed_work_sync(&adc_bat->bat_work);
+	cancel_delayed_work_sync_with_sync_wait(&adc_bat->bat_work);
 	adc_bat->status = POWER_SUPPLY_STATUS_UNKNOWN;
 	return 0;
 }

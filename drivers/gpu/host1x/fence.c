@@ -149,6 +149,6 @@ void host1x_fence_cancel(struct dma_fence *f)
 	struct host1x_syncpt_fence *sf = to_host1x_fence(f);
 
 	schedule_delayed_work(&sf->timeout_work, 0);
-	flush_delayed_work(&sf->timeout_work);
+	flush_delayed_work_with_sync_wait(&sf->timeout_work);
 }
 EXPORT_SYMBOL(host1x_fence_cancel);

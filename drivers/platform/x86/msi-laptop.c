@@ -1020,9 +1020,9 @@ static void msi_scm_model_exit(void)
 		return;
 
 	i8042_remove_filter(msi_laptop_i8042_filter);
-	cancel_delayed_work_sync(&msi_touchpad_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&msi_touchpad_dwork);
 	input_unregister_device(msi_laptop_input_dev);
-	cancel_delayed_work_sync(&msi_rfkill_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&msi_rfkill_dwork);
 	rfkill_cleanup();
 }
 

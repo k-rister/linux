@@ -336,7 +336,7 @@ static int si2157_sleep(struct dvb_frontend *fe)
 	dev->active = false;
 
 	/* stop statistics polling */
-	cancel_delayed_work_sync(&dev->stat_work);
+	cancel_delayed_work_sync_with_sync_wait(&dev->stat_work);
 
 	/* standby */
 	memcpy(cmd.args, "\x16\x00", 2);
@@ -1079,7 +1079,7 @@ static void si2157_remove(struct i2c_client *client)
 	dev_dbg(&client->dev, "\n");
 
 	/* stop statistics polling */
-	cancel_delayed_work_sync(&dev->stat_work);
+	cancel_delayed_work_sync_with_sync_wait(&dev->stat_work);
 
 #ifdef CONFIG_MEDIA_CONTROLLER_DVB
 	if (dev->mdev)

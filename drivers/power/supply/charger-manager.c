@@ -1663,7 +1663,7 @@ static void charger_manager_remove(struct platform_device *pdev)
 	list_del(&cm->entry);
 	mutex_unlock(&cm_list_mtx);
 
-	cancel_work_sync(&setup_polling);
+	cancel_work_sync_with_sync_wait(&setup_polling);
 	cancel_delayed_work_sync(&cm_monitor_work);
 
 	try_charger_enable(cm, false);
@@ -1720,7 +1720,7 @@ static int cm_suspend_prepare(struct device *dev)
 	cm_timer_set = cm_setup_timer();
 
 	if (cm_timer_set) {
-		cancel_work_sync(&setup_polling);
+		cancel_work_sync_with_sync_wait(&setup_polling);
 		cancel_delayed_work_sync(&cm_monitor_work);
 	}
 

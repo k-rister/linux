@@ -306,7 +306,7 @@ void qxl_device_fini(struct qxl_device *qdev)
 	wait_event_timeout(qdev->release_event,
 			   atomic_read(&qdev->release_count) == 0,
 			   HZ);
-	flush_work(&qdev->gc_work);
+	flush_work_with_sync_wait(&qdev->gc_work);
 	qxl_surf_evict(qdev);
 	qxl_vram_evict(qdev);
 

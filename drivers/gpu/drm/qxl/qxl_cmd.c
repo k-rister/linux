@@ -204,7 +204,7 @@ bool qxl_queue_garbage_collect(struct qxl_device *qdev, bool flush)
 	if (!qxl_check_idle(qdev->release_ring)) {
 		schedule_work(&qdev->gc_work);
 		if (flush)
-			flush_work(&qdev->gc_work);
+			flush_work_with_sync_wait(&qdev->gc_work);
 		return true;
 	}
 	return false;

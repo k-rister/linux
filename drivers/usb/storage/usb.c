@@ -936,7 +936,7 @@ static void quiesce_and_remove_host(struct us_data *us)
 	 * Prevent SCSI scanning (if it hasn't started yet)
 	 * or wait for the SCSI-scanning routine to stop.
 	 */
-	cancel_delayed_work_sync(&us->scan_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&us->scan_dwork);
 
 	/* Balance autopm calls if scanning was cancelled */
 	if (test_bit(US_FLIDX_SCAN_PENDING, &us->dflags))

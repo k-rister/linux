@@ -1589,7 +1589,7 @@ static int pdc_probe(struct platform_device *pdev)
 	return PDC_SUCCESS;
 
 cleanup_buf_pool:
-	cancel_work_sync(&pdcs->rx_work);
+	cancel_work_sync_with_sync_wait(&pdcs->rx_work);
 	dma_pool_destroy(pdcs->rx_buf_pool);
 
 cleanup_ring_pool:
@@ -1605,7 +1605,7 @@ static void pdc_remove(struct platform_device *pdev)
 
 	pdc_free_debugfs();
 
-	cancel_work_sync(&pdcs->rx_work);
+	cancel_work_sync_with_sync_wait(&pdcs->rx_work);
 
 	pdc_hw_disable(pdcs);
 

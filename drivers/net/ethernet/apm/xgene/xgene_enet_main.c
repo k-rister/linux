@@ -1036,7 +1036,7 @@ static int xgene_enet_close(struct net_device *ndev)
 	if (ndev->phydev)
 		phy_stop(ndev->phydev);
 	else
-		cancel_delayed_work_sync(&pdata->link_work);
+		cancel_delayed_work_sync_with_sync_wait(&pdata->link_work);
 
 	xgene_enet_free_irq(ndev);
 	xgene_enet_napi_disable(pdata);

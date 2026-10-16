@@ -800,7 +800,7 @@ static void __exit powerclamp_exit(void)
 
 	thermal_cooling_device_unregister(cooling_dev);
 
-	cancel_delayed_work_sync(&poll_pkg_cstate_work);
+	cancel_delayed_work_sync_with_sync_wait(&poll_pkg_cstate_work);
 	debugfs_remove_recursive(debug_dir);
 
 	if (cpumask_available(idle_injection_cpu_mask))

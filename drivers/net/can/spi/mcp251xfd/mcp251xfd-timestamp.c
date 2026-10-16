@@ -60,5 +60,5 @@ void mcp251xfd_timestamp_start(struct mcp251xfd_priv *priv)
 
 void mcp251xfd_timestamp_stop(struct mcp251xfd_priv *priv)
 {
-	cancel_delayed_work_sync(&priv->timestamp);
+	cancel_delayed_work_sync_with_sync_wait(&priv->timestamp);
 }

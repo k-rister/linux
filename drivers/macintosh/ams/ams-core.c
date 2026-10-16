@@ -213,7 +213,7 @@ void ams_sensor_detach(void)
 	 * We do this after ams_info.exit(), because an interrupt might
 	 * have arrived before disabling them.
 	 */
-	flush_work(&ams_info.worker);
+	flush_work_with_sync_wait(&ams_info.worker);
 
 	/* Remove device */
 	of_device_unregister(ams_info.of_dev);

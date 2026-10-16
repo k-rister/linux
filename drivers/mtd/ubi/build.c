@@ -1157,7 +1157,7 @@ int ubi_detach_mtd_dev(int ubi_num, int anyway)
 		kthread_stop(ubi->bgt_thread);
 
 #ifdef CONFIG_MTD_UBI_FASTMAP
-	cancel_work_sync(&ubi->fm_work);
+	cancel_work_sync_with_sync_wait(&ubi->fm_work);
 #endif
 	ubi_debugfs_exit_dev(ubi);
 	uif_close(ubi);

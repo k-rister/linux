@@ -378,7 +378,7 @@ static void dpi_pfvf_mbox_destroy(struct dpipf *dpi)
 
 	for (vf = 0; vf < DPI_MAX_VFS; vf++) {
 		if (work_pending(&dpi->mbox[vf]->work))
-			cancel_work_sync(&dpi->mbox[vf]->work);
+			cancel_work_sync_with_sync_wait(&dpi->mbox[vf]->work);
 
 		dpi->mbox[vf] = NULL;
 	}

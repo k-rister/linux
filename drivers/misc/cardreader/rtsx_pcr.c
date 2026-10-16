@@ -1623,7 +1623,7 @@ static void rtsx_pci_remove(struct pci_dev *pcidev)
 	pcr->bier = 0;
 	spin_unlock_irq(&pcr->lock);
 
-	cancel_delayed_work_sync(&pcr->carddet_work);
+	cancel_delayed_work_sync_with_sync_wait(&pcr->carddet_work);
 
 	mfd_remove_devices(&pcidev->dev);
 
@@ -1658,7 +1658,7 @@ static int __maybe_unused rtsx_pci_suspend(struct device *dev_d)
 
 	dev_dbg(&(pcidev->dev), "--> %s\n", __func__);
 
-	cancel_delayed_work_sync(&pcr->carddet_work);
+	cancel_delayed_work_sync_with_sync_wait(&pcr->carddet_work);
 
 	mutex_lock(&pcr->pcr_mutex);
 
@@ -1776,7 +1776,7 @@ static int rtsx_pci_runtime_suspend(struct device *device)
 
 	dev_dbg(device, "--> %s\n", __func__);
 
-	cancel_delayed_work_sync(&pcr->carddet_work);
+	cancel_delayed_work_sync_with_sync_wait(&pcr->carddet_work);
 
 	mutex_lock(&pcr->pcr_mutex);
 	rtsx_pci_power_off(pcr, HOST_ENTER_S3, true);

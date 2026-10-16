@@ -690,7 +690,7 @@ static void imx_mu_shutdown(struct mbox_chan *chan)
 	}
 
 	if (cp->type == IMX_MU_TYPE_TXDB) {
-		cancel_work_sync(&cp->txdb_work);
+		cancel_work_sync_with_sync_wait(&cp->txdb_work);
 		pm_runtime_put_sync(priv->dev);
 		return;
 	}

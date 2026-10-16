@@ -492,7 +492,7 @@ static void gs_usb_timestamp_init(struct gs_usb *parent)
 
 static void gs_usb_timestamp_stop(struct gs_usb *parent)
 {
-	cancel_delayed_work_sync(&parent->timestamp);
+	cancel_delayed_work_sync_with_sync_wait(&parent->timestamp);
 }
 
 static void gs_update_state(struct gs_can *dev, struct can_frame *cf)

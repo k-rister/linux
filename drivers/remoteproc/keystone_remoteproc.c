@@ -178,7 +178,7 @@ static int keystone_rproc_start(struct rproc *rproc)
 
 	ret = keystone_rproc_dsp_boot(ksproc, rproc->bootaddr);
 	if (ret) {
-		flush_work(&ksproc->workqueue);
+		flush_work_with_sync_wait(&ksproc->workqueue);
 		return ret;
 	}
 
@@ -198,7 +198,7 @@ static int keystone_rproc_stop(struct rproc *rproc)
 	keystone_rproc_dsp_reset(ksproc);
 	disable_irq(ksproc->irq_fault);
 	disable_irq(ksproc->irq_ring);
-	flush_work(&ksproc->workqueue);
+	flush_work_with_sync_wait(&ksproc->workqueue);
 
 	return 0;
 }

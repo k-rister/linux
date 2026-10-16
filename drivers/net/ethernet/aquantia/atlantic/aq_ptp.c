@@ -502,7 +502,7 @@ static int aq_ptp_extts_pin_configure(struct ptp_clock_info *ptp,
 	aq_ptp->extts_pin_enabled = !!on;
 	if (on) {
 		aq_ptp->poll_timeout_ms = POLL_SYNC_TIMER_MS;
-		cancel_delayed_work_sync(&aq_ptp->poll_sync);
+		cancel_delayed_work_sync_with_sync_wait(&aq_ptp->poll_sync);
 		schedule_delayed_work(&aq_ptp->poll_sync,
 				      msecs_to_jiffies(aq_ptp->poll_timeout_ms));
 	}
@@ -1545,7 +1545,7 @@ void aq_ptp_free(struct aq_nic_s *aq_nic)
 	if (!aq_ptp)
 		return;
 
-	cancel_delayed_work_sync(&aq_ptp->poll_sync);
+	cancel_delayed_work_sync_with_sync_wait(&aq_ptp->poll_sync);
 
 	/* disable ptp */
 	if (aq_ptp->a1_ptp) {
@@ -1611,7 +1611,7 @@ int aq_ptp_link_change(struct aq_nic_s *aq_nic)
 	if (aq_nic->aq_hw->aq_link_status.mbps)
 		aq_ptp_start_work(aq_ptp);
 	else
-		cancel_delayed_work_sync(&aq_ptp->poll_sync);
+		cancel_delayed_work_sync_with_sync_wait(&aq_ptp->poll_sync);
 
 	return 0;
 }

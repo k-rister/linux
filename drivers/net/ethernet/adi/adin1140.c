@@ -407,7 +407,7 @@ static int adin1140_close(struct net_device *netdev)
 {
 	struct adin1140_priv *priv = netdev_priv(netdev);
 
-	cancel_delayed_work_sync(&priv->stats_work);
+	cancel_delayed_work_sync_with_sync_wait(&priv->stats_work);
 
 	netif_stop_queue(netdev);
 	phy_stop(netdev->phydev);

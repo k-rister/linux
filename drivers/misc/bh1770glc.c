@@ -619,7 +619,7 @@ static irqreturn_t bh1770_irq(int irq, void *data)
 		 * Simulate missing no-proximity interrupt 50ms after the
 		 * next expected interrupt time.
 		 */
-		cancel_delayed_work_sync(&chip->prox_work);
+		cancel_delayed_work_sync_with_sync_wait(&chip->prox_work);
 		schedule_delayed_work(&chip->prox_work,
 				msecs_to_jiffies(rate + 50));
 	}
@@ -1293,7 +1293,7 @@ static void bh1770_remove(struct i2c_client *client)
 	if (chip->pdata->release_resources)
 		chip->pdata->release_resources();
 
-	cancel_delayed_work_sync(&chip->prox_work);
+	cancel_delayed_work_sync_with_sync_wait(&chip->prox_work);
 
 	if (!pm_runtime_suspended(&client->dev))
 		bh1770_chip_off(chip);

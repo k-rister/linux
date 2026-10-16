@@ -498,7 +498,7 @@ void free_arcdev(struct net_device *dev)
 	/* Do not cancel this at ->ndo_close(), as the workqueue itself
 	 * indirectly calls the ifdown path through dev_close().
 	 */
-	cancel_work_sync(&lp->reset_work);
+	cancel_work_sync_with_sync_wait(&lp->reset_work);
 	free_netdev(dev);
 }
 EXPORT_SYMBOL(free_arcdev);
@@ -621,7 +621,7 @@ int arcnet_close(struct net_device *dev)
 	netif_stop_queue(dev);
 	netif_carrier_off(dev);
 
-	cancel_work_sync(&lp->reply_work);
+	cancel_work_sync_with_sync_wait(&lp->reply_work);
 
 	/* flush TX and disable RX */
 	lp->hw.intmask(dev, 0);

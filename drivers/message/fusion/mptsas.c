@@ -372,7 +372,7 @@ mptsas_cleanup_fw_event_q(MPT_ADAPTER *ioc)
 					    struct fw_event_work, list);
 		fw_event->users++;
 		spin_unlock_irqrestore(&ioc->fw_event_lock, flags);
-		if (cancel_delayed_work_sync(&fw_event->work))
+		if (cancel_delayed_work_sync_with_sync_wait(&fw_event->work))
 			canceled = true;
 
 		spin_lock_irqsave(&ioc->fw_event_lock, flags);

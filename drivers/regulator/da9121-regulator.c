@@ -1187,7 +1187,7 @@ static void da9121_i2c_remove(struct i2c_client *i2c)
 	int ret;
 
 	free_irq(chip->chip_irq, chip);
-	cancel_delayed_work_sync(&chip->work);
+	cancel_delayed_work_sync_with_sync_wait(&chip->work);
 
 	ret = regmap_bulk_write(chip->regmap, DA9121_REG_SYS_MASK_0, mask_all, 4);
 	if (ret != 0)

@@ -1879,7 +1879,7 @@ static void kvaser_usb_leaf_remove_channel(struct kvaser_usb_net_priv *priv)
 	struct kvaser_usb_net_leaf_priv *leaf = priv->sub_priv;
 
 	if (leaf)
-		cancel_delayed_work_sync(&leaf->chip_state_req_work);
+		cancel_delayed_work_sync_with_sync_wait(&leaf->chip_state_req_work);
 }
 
 static int kvaser_usb_leaf_set_bittiming(const struct net_device *netdev,

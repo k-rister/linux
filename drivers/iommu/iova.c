@@ -891,7 +891,7 @@ static void free_iova_rcaches(struct iova_domain *iovad)
 			iova_magazine_free(cpu_rcache->prev);
 		}
 		free_percpu(rcache->cpu_rcaches);
-		cancel_delayed_work_sync(&rcache->work);
+		cancel_delayed_work_sync_with_sync_wait(&rcache->work);
 		while (rcache->depot)
 			iova_magazine_free(iova_depot_pop(rcache));
 	}

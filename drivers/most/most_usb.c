@@ -249,7 +249,7 @@ static int hdm_poison_channel(struct most_interface *iface, int channel)
 	mdev->is_channel_healthy[channel] = false;
 	spin_unlock_irqrestore(lock, flags);
 
-	cancel_work_sync(&mdev->clear_work[channel].ws);
+	cancel_work_sync_with_sync_wait(&mdev->clear_work[channel].ws);
 
 	mutex_lock(&mdev->io_mutex);
 	usb_kill_anchored_urbs(&mdev->busy_urbs[channel]);
@@ -258,7 +258,7 @@ static int hdm_poison_channel(struct most_interface *iface, int channel)
 
 	if (mdev->conf[channel].data_type == MOST_CH_ASYNC) {
 		timer_delete_sync(&mdev->link_stat_timer);
-		cancel_work_sync(&mdev->poll_work_obj);
+		cancel_work_sync_with_sync_wait(&mdev->poll_work_obj);
 	}
 	mutex_unlock(&mdev->io_mutex);
 	return 0;
@@ -1114,7 +1114,7 @@ static void hdm_disconnect(struct usb_interface *interface)
 	mutex_unlock(&mdev->io_mutex);
 
 	timer_delete_sync(&mdev->link_stat_timer);
-	cancel_work_sync(&mdev->poll_work_obj);
+	cancel_work_sync_with_sync_wait(&mdev->poll_work_obj);
 
 	if (mdev->dci)
 		device_unregister(&mdev->dci->dev);

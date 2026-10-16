@@ -1216,7 +1216,7 @@ static int menelaus_probe(struct i2c_client *client)
 	return 0;
 fail:
 	free_irq(client->irq, menelaus);
-	flush_work(&menelaus->work);
+	flush_work_with_sync_wait(&menelaus->work);
 	return err;
 }
 
@@ -1225,7 +1225,7 @@ static void menelaus_remove(struct i2c_client *client)
 	struct menelaus_chip	*menelaus = i2c_get_clientdata(client);
 
 	free_irq(client->irq, menelaus);
-	flush_work(&menelaus->work);
+	flush_work_with_sync_wait(&menelaus->work);
 	the_menelaus = NULL;
 }
 

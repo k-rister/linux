@@ -907,7 +907,7 @@ ax88796c_close(struct net_device *ndev)
 
 	mutex_unlock(&ax_local->spi_lock);
 
-	cancel_work_sync(&ax_local->ax_work);
+	cancel_work_sync_with_sync_wait(&ax_local->ax_work);
 
 	free_irq(ndev->irq, ndev);
 

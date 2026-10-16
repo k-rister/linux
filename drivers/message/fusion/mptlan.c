@@ -1430,7 +1430,7 @@ mptlan_remove(struct pci_dev *pdev)
 	struct net_device	*dev = ioc->netdev;
 	struct mpt_lan_priv *priv = netdev_priv(dev);
 
-	cancel_delayed_work_sync(&priv->post_buckets_task);
+	cancel_delayed_work_sync_with_sync_wait(&priv->post_buckets_task);
 	if(dev != NULL) {
 		unregister_netdev(dev);
 		free_netdev(dev);

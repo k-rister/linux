@@ -250,7 +250,7 @@ int can_restart_now(struct net_device *dev)
 	if (priv->state != CAN_STATE_BUS_OFF)
 		return -EBUSY;
 
-	cancel_delayed_work_sync(&priv->restart_work);
+	cancel_delayed_work_sync_with_sync_wait(&priv->restart_work);
 
 	return can_restart(dev);
 }
@@ -532,7 +532,7 @@ void close_candev(struct net_device *dev)
 {
 	struct can_priv *priv = netdev_priv(dev);
 
-	cancel_delayed_work_sync(&priv->restart_work);
+	cancel_delayed_work_sync_with_sync_wait(&priv->restart_work);
 	can_flush_echo_skb(dev);
 }
 EXPORT_SYMBOL_GPL(close_candev);

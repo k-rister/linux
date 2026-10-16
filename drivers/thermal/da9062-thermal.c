@@ -244,7 +244,7 @@ static void da9062_thermal_remove(struct platform_device *pdev)
 	struct	da9062_thermal *thermal = platform_get_drvdata(pdev);
 
 	free_irq(thermal->irq, thermal);
-	cancel_delayed_work_sync(&thermal->work);
+	cancel_delayed_work_sync_with_sync_wait(&thermal->work);
 	thermal_zone_device_unregister(thermal->zone);
 }
 

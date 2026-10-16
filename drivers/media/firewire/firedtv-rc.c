@@ -161,7 +161,7 @@ fail:
 
 void fdtv_unregister_rc(struct firedtv *fdtv)
 {
-	cancel_work_sync(&fdtv->remote_ctrl_work);
+	cancel_work_sync_with_sync_wait(&fdtv->remote_ctrl_work);
 	kfree(fdtv->remote_ctrl_dev->keycode);
 	input_unregister_device(fdtv->remote_ctrl_dev);
 }

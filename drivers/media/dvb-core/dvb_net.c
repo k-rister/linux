@@ -1412,8 +1412,8 @@ static int dvb_net_remove_if(struct dvb_net *dvbnet, unsigned long num)
 		return -EBUSY;
 
 	dvb_net_stop(net);
-	flush_work(&priv->set_multicast_list_wq);
-	flush_work(&priv->restart_net_feed_wq);
+	flush_work_with_sync_wait(&priv->set_multicast_list_wq);
+	flush_work_with_sync_wait(&priv->restart_net_feed_wq);
 	pr_info("removed network interface %s\n", net->name);
 	unregister_netdev(net);
 	dvbnet->state[num]=0;

@@ -355,7 +355,7 @@ static void peak_pciec_start_led_work(struct peak_pciec_card *card)
 /* stop LEDs delayed work */
 static void peak_pciec_stop_led_work(struct peak_pciec_card *card)
 {
-	cancel_delayed_work_sync(&card->led_work);
+	cancel_delayed_work_sync_with_sync_wait(&card->led_work);
 }
 
 /* initialize the PCA9553 4-bit I2C-bus LED chip */

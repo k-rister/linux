@@ -1858,7 +1858,7 @@ static void __exit vmballoon_exit(void)
 {
 	vmballoon_unregister_shrinker(&balloon);
 	vmballoon_vmci_cleanup(&balloon);
-	cancel_delayed_work_sync(&balloon.dwork);
+	cancel_delayed_work_sync_with_sync_wait(&balloon.dwork);
 
 	vmballoon_debugfs_exit(&balloon);
 

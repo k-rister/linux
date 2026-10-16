@@ -834,7 +834,7 @@ static void __exit dryice_rtc_remove(struct platform_device *pdev)
 {
 	struct imxdi_dev *imxdi = platform_get_drvdata(pdev);
 
-	flush_work(&imxdi->work);
+	flush_work_with_sync_wait(&imxdi->work);
 
 	/* mask all interrupts */
 	writel(0, imxdi->ioaddr + DIER);

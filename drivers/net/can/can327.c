@@ -1069,7 +1069,7 @@ static void can327_ldisc_close(struct tty_struct *tty)
 	 * No need to clear TTY_DO_WRITE_WAKEUP since .write_wakeup() is
 	 * serialised against .close() and will not be called once we return.
 	 */
-	flush_work(&elm->tx_work);
+	flush_work_with_sync_wait(&elm->tx_work);
 
 	/* Mark channel as dead */
 	spin_lock_bh(&elm->lock);

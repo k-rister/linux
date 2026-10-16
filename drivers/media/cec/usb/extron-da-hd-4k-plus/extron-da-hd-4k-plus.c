@@ -573,7 +573,7 @@ no_edid:
 	extron->edid_reading = false;
 unlock:
 	mutex_unlock(&extron->edid_lock);
-	cancel_delayed_work_sync(&extron->work_update_edid);
+	cancel_delayed_work_sync_with_sync_wait(&extron->work_update_edid);
 	if (manufacturer_name[0])
 		schedule_delayed_work(&extron->work_update_edid,
 				      msecs_to_jiffies(1000));
@@ -1360,9 +1360,9 @@ static void extron_disconnect(struct serio *serio)
 		if (!port)
 			continue;
 		port->disconnected = true;
-		cancel_work_sync(&port->irq_work);
+		cancel_work_sync_with_sync_wait(&port->irq_work);
 	}
-	cancel_delayed_work_sync(&extron->work_update_edid);
+	cancel_delayed_work_sync_with_sync_wait(&extron->work_update_edid);
 	for (p = 0; p < extron->num_ports; p++) {
 		struct extron_port *port = extron->ports[p];
 
@@ -1729,7 +1729,7 @@ static int extron_setup_thread(void *_extron)
 			 * Sinks were lost, so see if the input edid needs to
 			 * be updated.
 			 */
-			cancel_delayed_work_sync(&extron->work_update_edid);
+			cancel_delayed_work_sync_with_sync_wait(&extron->work_update_edid);
 			schedule_delayed_work(&extron->work_update_edid,
 					      msecs_to_jiffies(1000));
 		}
@@ -1744,12 +1744,12 @@ disable_ports:
 		if (!port)
 			continue;
 		port->disconnected = true;
-		cancel_work_sync(&port->irq_work);
+		cancel_work_sync_with_sync_wait(&port->irq_work);
 		video_unregister_device(&port->vdev);
 		if (port->cec_was_registered)
 			cec_unregister_adapter(port->adap);
 	}
-	cancel_delayed_work_sync(&extron->work_update_edid);
+	cancel_delayed_work_sync_with_sync_wait(&extron->work_update_edid);
 	complete(&extron->edid_completion);
 	dev_err(extron->dev, "Setup failed with error %d\n", err);
 	while (!kthread_should_stop())

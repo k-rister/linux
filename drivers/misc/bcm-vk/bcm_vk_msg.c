@@ -194,7 +194,7 @@ void bcm_vk_hb_deinit(struct bcm_vk *vk)
 {
 	struct bcm_vk_hb_ctrl *hb = &vk->hb_ctrl;
 
-	cancel_delayed_work_sync(&hb->work);
+	cancel_delayed_work_sync_with_sync_wait(&hb->work);
 }
 
 static void bcm_vk_msgid_bitmap_clear(struct bcm_vk *vk,

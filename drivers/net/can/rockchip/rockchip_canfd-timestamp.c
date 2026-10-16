@@ -101,5 +101,5 @@ void rkcanfd_timestamp_stop(struct rkcanfd_priv *priv)
 
 void rkcanfd_timestamp_stop_sync(struct rkcanfd_priv *priv)
 {
-	cancel_delayed_work_sync(&priv->timestamp);
+	cancel_delayed_work_sync_with_sync_wait(&priv->timestamp);
 }

@@ -194,7 +194,7 @@ disable_irq:
 	if (client->irq)
 		disable_irq(client->irq);
 	else
-		cancel_delayed_work_sync(&core->status_monitor);
+		cancel_delayed_work_sync_with_sync_wait(&core->status_monitor);
 
 	gpiod_set_value_cansleep(core->reset, 1);
 
@@ -238,7 +238,7 @@ int si476x_core_stop(struct si476x_core *core, bool soft)
 	if (core->client->irq)
 		disable_irq(core->client->irq);
 	else
-		cancel_delayed_work_sync(&core->status_monitor);
+		cancel_delayed_work_sync_with_sync_wait(&core->status_monitor);
 
 	if (!soft)
 		gpiod_set_value_cansleep(core->reset, 1);
@@ -831,7 +831,7 @@ static void si476x_core_remove(struct i2c_client *client)
 	if (client->irq)
 		disable_irq(client->irq);
 	else
-		cancel_delayed_work_sync(&core->status_monitor);
+		cancel_delayed_work_sync_with_sync_wait(&core->status_monitor);
 
 	kfifo_free(&core->rds_fifo);
 }

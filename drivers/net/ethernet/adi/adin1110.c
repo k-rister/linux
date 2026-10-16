@@ -955,7 +955,7 @@ static int adin1110_net_stop(struct net_device *net_dev)
 		return ret;
 
 	netif_stop_queue(port_priv->netdev);
-	flush_work(&port_priv->tx_work);
+	flush_work_with_sync_wait(&port_priv->tx_work);
 	phy_stop(port_priv->phydev);
 
 	return 0;

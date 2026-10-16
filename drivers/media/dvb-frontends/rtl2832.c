@@ -1117,7 +1117,7 @@ static void rtl2832_remove(struct i2c_client *client)
 
 	i2c_mux_del_adapters(dev->muxc);
 
-	cancel_delayed_work_sync(&dev->i2c_gate_work);
+	cancel_delayed_work_sync_with_sync_wait(&dev->i2c_gate_work);
 
 	regmap_exit(dev->regmap);
 

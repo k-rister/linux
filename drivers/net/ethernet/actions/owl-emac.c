@@ -1583,7 +1583,7 @@ static void owl_emac_remove(struct platform_device *pdev)
 
 	netif_napi_del(&priv->napi);
 	phy_disconnect(priv->netdev->phydev);
-	cancel_work_sync(&priv->mac_reset_task);
+	cancel_work_sync_with_sync_wait(&priv->mac_reset_task);
 }
 
 static const struct of_device_id owl_emac_of_match[] = {

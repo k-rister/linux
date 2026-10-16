@@ -1818,7 +1818,7 @@ static int mceusb_dev_probe(struct usb_interface *intf,
 
 	/* Error-handling path */
 rc_dev_fail:
-	cancel_work_sync(&ir->kevent);
+	cancel_work_sync_with_sync_wait(&ir->kevent);
 	usb_kill_urb(ir->urb_in);
 	usb_free_urb(ir->urb_in);
 urb_in_alloc_fail:
@@ -1845,7 +1845,7 @@ static void mceusb_dev_disconnect(struct usb_interface *intf)
 		return;
 
 	ir->usbdev = NULL;
-	cancel_work_sync(&ir->kevent);
+	cancel_work_sync_with_sync_wait(&ir->kevent);
 	rc_unregister_device(ir->rc);
 	usb_kill_urb(ir->urb_in);
 	usb_free_urb(ir->urb_in);

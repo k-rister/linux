@@ -1001,7 +1001,7 @@ static int ps3av_remove(struct ps3_system_bus_device *dev)
 	dev_dbg(&dev->core, " -> %s:%d\n", __func__, __LINE__);
 	if (ps3av) {
 		ps3av_cmd_fin();
-		flush_work(&ps3av->work);
+		flush_work_with_sync_wait(&ps3av->work);
 		kfree(ps3av);
 		ps3av = NULL;
 	}

@@ -328,7 +328,7 @@ static u8 idt82p33_extts_enable_mask(struct idt82p33_channel *channel,
 		return 0;
 
 	if (enable == false)
-		cancel_delayed_work_sync(&idt82p33->extts_work);
+		cancel_delayed_work_sync_with_sync_wait(&idt82p33->extts_work);
 
 	for (i = 0; i < MAX_PHC_PLL; i++) {
 		mask = 1 << i;
@@ -920,7 +920,7 @@ static void idt82p33_ptp_clock_unregister_all(struct idt82p33 *idt82p33)
 
 	for (i = 0; i < MAX_PHC_PLL; i++) {
 		channel = &idt82p33->channel[i];
-		cancel_delayed_work_sync(&channel->adjtime_work);
+		cancel_delayed_work_sync_with_sync_wait(&channel->adjtime_work);
 		if (channel->ptp_clock)
 			ptp_clock_unregister(channel->ptp_clock);
 	}
@@ -1442,7 +1442,7 @@ static void idt82p33_remove(struct platform_device *pdev)
 {
 	struct idt82p33 *idt82p33 = platform_get_drvdata(pdev);
 
-	cancel_delayed_work_sync(&idt82p33->extts_work);
+	cancel_delayed_work_sync_with_sync_wait(&idt82p33->extts_work);
 
 	idt82p33_ptp_clock_unregister_all(idt82p33);
 }

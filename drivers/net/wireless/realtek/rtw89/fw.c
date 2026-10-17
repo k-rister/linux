@@ -2130,7 +2130,7 @@ void rtw89_unload_firmware(struct rtw89_dev *rtwdev)
 {
 	struct rtw89_fw_info *fw = &rtwdev->fw;
 
-	cancel_work_sync(&rtwdev->load_firmware_work);
+	cancel_work_sync_with_sync_wait(&rtwdev->load_firmware_work);
 
 	if (fw->req.firmware) {
 		release_firmware(fw->req.firmware);

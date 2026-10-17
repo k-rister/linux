@@ -804,7 +804,7 @@ int rtw89_ser_deinit(struct rtw89_dev *rtwdev)
 
 	set_bit(RTW89_SER_DRV_STOP_RUN, ser->flags);
 	cancel_delayed_work_sync(&ser->ser_alarm_work);
-	cancel_work_sync(&ser->ser_hdl_work);
+	cancel_work_sync_with_sync_wait(&ser->ser_hdl_work);
 	clear_bit(RTW89_SER_DRV_STOP_RUN, ser->flags);
 	return 0;
 }

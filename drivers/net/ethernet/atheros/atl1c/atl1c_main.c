@@ -2499,7 +2499,7 @@ static int atl1c_close(struct net_device *netdev)
 
 	WARN_ON(test_bit(__AT_RESETTING, &adapter->flags));
 	set_bit(__AT_DOWN, &adapter->flags);
-	cancel_work_sync(&adapter->common_task);
+	cancel_work_sync_with_sync_wait(&adapter->common_task);
 	atl1c_down(adapter);
 	atl1c_free_ring_resources(adapter);
 	return 0;

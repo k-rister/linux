@@ -635,7 +635,7 @@ mwifiex_fw_dump_info_event(struct mwifiex_private *priv,
 	return;
 
 upload_dump:
-	cancel_delayed_work_sync(&adapter->devdump_work);
+	cancel_delayed_work_sync_with_sync_wait(&adapter->devdump_work);
 	mwifiex_upload_device_dump(adapter);
 }
 

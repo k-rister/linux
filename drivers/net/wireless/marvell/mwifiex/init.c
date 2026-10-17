@@ -392,7 +392,7 @@ static void
 mwifiex_adapter_cleanup(struct mwifiex_adapter *adapter)
 {
 	timer_delete_sync(&adapter->wakeup_timer);
-	cancel_delayed_work_sync(&adapter->devdump_work);
+	cancel_delayed_work_sync_with_sync_wait(&adapter->devdump_work);
 	mwifiex_cancel_all_pending_cmd(adapter);
 	wake_up_interruptible(&adapter->cmd_wait_q.wait);
 	wake_up_interruptible(&adapter->hs_activate_wait_q);

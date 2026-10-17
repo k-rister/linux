@@ -3015,7 +3015,7 @@ static void mwifiex_cleanup_pcie(struct mwifiex_adapter *adapter)
 	 */
 	if (!card->pci_reset_ongoing) {
 		mwifiex_dbg(adapter, MSG, "performing cancel_work_sync()...\n");
-		cancel_work_sync(&card->work);
+		cancel_work_sync_with_sync_wait(&card->work);
 		mwifiex_dbg(adapter, MSG, "cancel_work_sync() done\n");
 	} else {
 		mwifiex_dbg(adapter, MSG,

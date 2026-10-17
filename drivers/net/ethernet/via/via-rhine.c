@@ -1660,8 +1660,8 @@ static void rhine_task_disable(struct rhine_private *rp)
 	rp->task_enable = false;
 	mutex_unlock(&rp->task_lock);
 
-	cancel_work_sync(&rp->slow_event_task);
-	cancel_work_sync(&rp->reset_task);
+	cancel_work_sync_with_sync_wait(&rp->slow_event_task);
+	cancel_work_sync_with_sync_wait(&rp->reset_task);
 }
 
 static void rhine_task_enable(struct rhine_private *rp)

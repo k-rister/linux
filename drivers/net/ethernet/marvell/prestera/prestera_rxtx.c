@@ -576,7 +576,7 @@ static void prestera_sdma_tx_fini(struct prestera_sdma *sdma)
 	int bnum = PRESTERA_SDMA_TX_DESC_PER_Q;
 	int b;
 
-	cancel_work_sync(&sdma->tx_work);
+	cancel_work_sync_with_sync_wait(&sdma->tx_work);
 
 	if (!ring->bufs)
 		return;

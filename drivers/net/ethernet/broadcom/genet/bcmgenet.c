@@ -3462,7 +3462,7 @@ static void bcmgenet_netif_stop(struct net_device *dev, bool stop_phy)
 	/* Wait for pending work items to complete. Since interrupts are
 	 * disabled no new work will be scheduled.
 	 */
-	cancel_work_sync(&priv->bcmgenet_irq_work);
+	cancel_work_sync_with_sync_wait(&priv->bcmgenet_irq_work);
 
 	/* tx reclaim */
 	bcmgenet_tx_reclaim_all(dev);

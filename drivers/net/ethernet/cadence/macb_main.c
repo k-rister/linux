@@ -701,7 +701,7 @@ static void macb_mac_disable_tx_lpi(struct phylink_config *config)
 	struct macb *bp = netdev_priv(netdev);
 	unsigned long flags;
 
-	cancel_delayed_work_sync(&bp->tx_lpi_work);
+	cancel_delayed_work_sync_with_sync_wait(&bp->tx_lpi_work);
 
 	spin_lock_irqsave(&bp->lock, flags);
 	bp->eee_active = false;
@@ -3216,7 +3216,7 @@ static int macb_close(struct net_device *netdev)
 		netdev_tx_reset_queue(netdev_get_tx_queue(netdev, q));
 	}
 
-	cancel_delayed_work_sync(&bp->tx_lpi_work);
+	cancel_delayed_work_sync_with_sync_wait(&bp->tx_lpi_work);
 
 	phylink_stop(bp->phylink);
 	phylink_disconnect_phy(bp->phylink);
@@ -6018,8 +6018,8 @@ static void macb_remove(struct platform_device *pdev)
 		}
 
 		device_set_wakeup_enable(&bp->pdev->dev, 0);
-		cancel_delayed_work_sync(&bp->tx_lpi_work);
-		cancel_work_sync(&bp->hresp_err_bh_work);
+		cancel_delayed_work_sync_with_sync_wait(&bp->tx_lpi_work);
+		cancel_work_sync_with_sync_wait(&bp->hresp_err_bh_work);
 		pm_runtime_disable(&pdev->dev);
 		pm_runtime_dont_use_autosuspend(&pdev->dev);
 		pm_runtime_set_suspended(&pdev->dev);

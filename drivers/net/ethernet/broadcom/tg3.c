@@ -7244,7 +7244,7 @@ static inline void tg3_reset_task_schedule(struct tg3 *tp)
 static inline void tg3_reset_task_cancel(struct tg3 *tp)
 {
 	if (test_and_clear_bit(TG3_FLAG_RESET_TASK_PENDING, tp->tg3_flags))
-		cancel_work_sync(&tp->reset_task);
+		cancel_work_sync_with_sync_wait(&tp->reset_task);
 	tg3_flag_clear(tp, TX_RECOVERY_PENDING);
 }
 

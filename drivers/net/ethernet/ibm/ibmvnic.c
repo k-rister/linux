@@ -6593,8 +6593,8 @@ ibmvnic_init_fail:
 	 */
 	adapter->state = VNIC_REMOVING;
 	complete(&adapter->probe_done);
-	flush_work(&adapter->ibmvnic_reset);
-	flush_delayed_work(&adapter->ibmvnic_delayed_reset);
+	flush_work_with_sync_wait(&adapter->ibmvnic_reset);
+	flush_delayed_work_with_sync_wait(&adapter->ibmvnic_delayed_reset);
 
 	flush_reset_queue(adapter);
 
@@ -6627,8 +6627,8 @@ static void ibmvnic_remove(struct vio_dev *dev)
 
 	ibmvnic_cpu_notif_remove(adapter);
 
-	flush_work(&adapter->ibmvnic_reset);
-	flush_delayed_work(&adapter->ibmvnic_delayed_reset);
+	flush_work_with_sync_wait(&adapter->ibmvnic_reset);
+	flush_delayed_work_with_sync_wait(&adapter->ibmvnic_delayed_reset);
 
 	rtnl_lock();
 	unregister_netdevice(netdev);

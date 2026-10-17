@@ -1946,7 +1946,7 @@ static void ibmveth_remove(struct vio_dev *dev)
 	struct ibmveth_adapter *adapter = netdev_priv(netdev);
 	int i;
 
-	cancel_work_sync(&adapter->work);
+	cancel_work_sync_with_sync_wait(&adapter->work);
 
 	for (i = 0; i < IBMVETH_NUM_BUFF_POOLS; i++)
 		kobject_put(&adapter->rx_buff_pool[i].kobj);
@@ -2234,7 +2234,7 @@ static void ibmveth_remove_buffer_from_pool_test(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, -EFAULT, ibmveth_remove_buffer_from_pool(adapter, correlator, false));
 	KUNIT_EXPECT_EQ(test, -EFAULT, ibmveth_remove_buffer_from_pool(adapter, correlator, true));
 
-	flush_work(&adapter->work);
+	flush_work_with_sync_wait(&adapter->work);
 }
 
 /**
@@ -2284,7 +2284,7 @@ static void ibmveth_rxq_get_buffer_test(struct kunit *test)
 	adapter->rx_queue.queue_addr[0].correlator = (u64)0 << 32 | 0;
 	KUNIT_EXPECT_PTR_EQ(test, skb, ibmveth_rxq_get_buffer(adapter));
 
-	flush_work(&adapter->work);
+	flush_work_with_sync_wait(&adapter->work);
 }
 
 static struct kunit_case ibmveth_test_cases[] = {

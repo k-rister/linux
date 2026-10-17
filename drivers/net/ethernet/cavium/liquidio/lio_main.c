@@ -1099,7 +1099,7 @@ static void octeon_destroy_resources(struct octeon_device *oct)
 		fallthrough;
 	case OCT_DEV_DISPATCH_INIT_DONE:
 		octeon_delete_dispatch_list(oct);
-		cancel_delayed_work_sync(&oct->nic_poll_work.work);
+		cancel_delayed_work_sync_with_sync_wait(&oct->nic_poll_work.work);
 
 		fallthrough;
 	case OCT_DEV_PCI_MAP_DONE:
@@ -1875,7 +1875,7 @@ static int liquidio_stop(struct net_device *netdev)
 		cleanup_tx_poll_fn(netdev);
 	}
 
-	cancel_delayed_work_sync(&lio->stats_wk.work);
+	cancel_delayed_work_sync_with_sync_wait(&lio->stats_wk.work);
 
 	if (lio->ptp_clock) {
 		ptp_clock_unregister(lio->ptp_clock);

@@ -270,7 +270,7 @@ static void cn23xx_vf_mbox_thread(struct work_struct *work)
 
 static int cn23xx_free_vf_mbox(struct octeon_device *oct)
 {
-	cancel_delayed_work_sync(&oct->mbox[0]->mbox_poll_wk.work);
+	cancel_delayed_work_sync_with_sync_wait(&oct->mbox[0]->mbox_poll_wk.work);
 	vfree(oct->mbox[0]);
 	return 0;
 }

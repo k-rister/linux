@@ -559,7 +559,7 @@ cleanup:
 		oct->vf_rep_list.ndev[i] = NULL;
 		if (ndev) {
 			vf_rep = netdev_priv(ndev);
-			cancel_delayed_work_sync
+			cancel_delayed_work_sync_with_sync_wait
 				(&vf_rep->stats_wk.work);
 			unregister_netdev(ndev);
 			free_netdev(ndev);
@@ -589,7 +589,7 @@ lio_vf_rep_destroy(struct octeon_device *oct)
 		oct->vf_rep_list.ndev[i] = NULL;
 		if (ndev) {
 			vf_rep = netdev_priv(ndev);
-			cancel_delayed_work_sync
+			cancel_delayed_work_sync_with_sync_wait
 				(&vf_rep->stats_wk.work);
 			netif_tx_disable(ndev);
 			netif_carrier_off(ndev);

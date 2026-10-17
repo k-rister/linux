@@ -5009,7 +5009,7 @@ static void sky2_remove(struct pci_dev *pdev)
 		return;
 
 	timer_shutdown_sync(&hw->watchdog_timer);
-	cancel_work_sync(&hw->restart_work);
+	cancel_work_sync_with_sync_wait(&hw->restart_work);
 
 	for (i = hw->ports-1; i >= 0; --i)
 		unregister_netdev(hw->dev[i]);
@@ -5051,7 +5051,7 @@ static int sky2_suspend(struct device *dev)
 		return 0;
 
 	timer_delete_sync(&hw->watchdog_timer);
-	cancel_work_sync(&hw->restart_work);
+	cancel_work_sync_with_sync_wait(&hw->restart_work);
 
 	rtnl_lock();
 

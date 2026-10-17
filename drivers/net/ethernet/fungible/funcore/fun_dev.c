@@ -682,7 +682,7 @@ static void fun_serv_handler(struct work_struct *work)
 void fun_serv_stop(struct fun_dev *fd)
 {
 	set_bit(FUN_SERV_DISABLED, &fd->service_flags);
-	cancel_work_sync(&fd->service_task);
+	cancel_work_sync_with_sync_wait(&fd->service_task);
 }
 EXPORT_SYMBOL_GPL(fun_serv_stop);
 

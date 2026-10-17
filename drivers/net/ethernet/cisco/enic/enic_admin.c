@@ -394,7 +394,7 @@ static void enic_admin_teardown_intr(struct enic *enic)
 
 	free_irq(enic->msix_entry[intr_index].vector,
 		 enic->msix[intr_index].devid);
-	cancel_delayed_work_sync(&enic->admin_poll_work);
+	cancel_delayed_work_sync_with_sync_wait(&enic->admin_poll_work);
 	enic->msix[intr_index].requested = 0;
 }
 
@@ -611,7 +611,7 @@ disable_queues:
 		netdev_warn(enic->netdev, "Failed to disable admin WQ\n");
 	if (vnic_rq_disable(&enic->admin_rq))
 		netdev_warn(enic->netdev, "Failed to disable admin RQ\n");
-	cancel_work_sync(&enic->admin_msg_work);
+	cancel_work_sync_with_sync_wait(&enic->admin_msg_work);
 	enic_admin_msg_drain(enic);
 	enic_admin_rq_drain(enic);
 free_resources:
@@ -639,8 +639,8 @@ void enic_admin_channel_close(struct enic *enic)
 
 	vnic_intr_mask(&enic->admin_intr);
 	enic_admin_teardown_intr(enic);
-	cancel_work_sync(&enic->link_notify_work);
-	cancel_work_sync(&enic->admin_msg_work);
+	cancel_work_sync_with_sync_wait(&enic->link_notify_work);
+	cancel_work_sync_with_sync_wait(&enic->admin_msg_work);
 	enic_admin_msg_drain(enic);
 
 	enic_admin_qp_type_set(enic, QP_DISABLE);

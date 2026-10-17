@@ -2915,7 +2915,7 @@ static void enic_sriov_v2_disable(struct enic *enic)
 	 * before vf_state is freed, closing a use-after-free window.
 	 */
 	enic->priv_flags &= ~ENIC_SRIOV_ENABLED;
-	cancel_work_sync(&enic->link_notify_work);
+	cancel_work_sync_with_sync_wait(&enic->link_notify_work);
 
 	pci_disable_sriov(enic->pdev);
 	enic_admin_channel_close(enic);
@@ -3420,7 +3420,7 @@ static void enic_remove(struct pci_dev *pdev)
 		 * unconditionally to cover the narrow window where
 		 * enic_link_check() scheduled it just as SR-IOV was disabled.
 		 */
-		cancel_work_sync(&enic->link_notify_work);
+		cancel_work_sync_with_sync_wait(&enic->link_notify_work);
 #ifdef CONFIG_PCI_IOV
 		if (enic_sriov_enabled(enic)) {
 			if (enic->vf_type == ENIC_VF_TYPE_V2)

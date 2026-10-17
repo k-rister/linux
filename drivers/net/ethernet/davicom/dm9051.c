@@ -997,8 +997,8 @@ static int dm9051_stop(struct net_device *ndev)
 	if (ret)
 		return ret;
 
-	flush_work(&db->tx_work);
-	flush_work(&db->rxctrl_work);
+	flush_work_with_sync_wait(&db->tx_work);
+	flush_work_with_sync_wait(&db->rxctrl_work);
 
 	phy_stop(db->phydev);
 

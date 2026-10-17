@@ -1800,7 +1800,7 @@ static void cpsw_remove(struct platform_device *pdev)
 
 		priv = netdev_priv(ndev);
 		unregister_netdev(ndev);
-		disable_work_sync(&priv->rx_mode_work);
+		disable_work_sync_with_sync_wait(&priv->rx_mode_work);
 	}
 
 	cpts_release(cpsw->cpts);

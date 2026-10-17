@@ -1829,7 +1829,7 @@ tc35815_close(struct net_device *dev)
 	napi_disable(&lp->napi);
 	if (dev->phydev)
 		phy_stop(dev->phydev);
-	cancel_work_sync(&lp->restart_work);
+	cancel_work_sync_with_sync_wait(&lp->restart_work);
 
 	/* Flush the Tx and disable Rx here. */
 	tc35815_chip_reset(dev);

@@ -1290,7 +1290,7 @@ static void hix5hd2_dev_remove(struct platform_device *pdev)
 		hix5hd2_destroy_sg_desc_queue(priv);
 	hix5hd2_destroy_hw_desc_queue(priv);
 	of_node_put(priv->phy_node);
-	cancel_work_sync(&priv->tx_timeout_task);
+	cancel_work_sync_with_sync_wait(&priv->tx_timeout_task);
 	free_netdev(ndev);
 }
 

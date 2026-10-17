@@ -1037,7 +1037,7 @@ static void hip04_remove(struct platform_device *pdev)
 	hip04_free_ring(ndev, d);
 	unregister_netdev(ndev);
 	of_node_put(priv->phy_node);
-	cancel_work_sync(&priv->tx_timeout_task);
+	cancel_work_sync_with_sync_wait(&priv->tx_timeout_task);
 	free_netdev(ndev);
 }
 

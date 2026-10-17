@@ -9321,7 +9321,7 @@ static void bnx2x_stop_ptp(struct bnx2x *bp)
 	/* Cancel PTP work queue. Should be done after the Tx queues are
 	 * drained to prevent additional scheduling.
 	 */
-	cancel_work_sync(&bp->ptp_task);
+	cancel_work_sync_with_sync_wait(&bp->ptp_task);
 
 	if (bp->ptp_tx_skb) {
 		dev_kfree_skb_any(bp->ptp_tx_skb);
@@ -14092,7 +14092,7 @@ static void __bnx2x_remove(struct pci_dev *pdev,
 		bnx2x_set_power_state(bp, PCI_D3hot);
 
 	/* Make sure RESET task is not scheduled before continuing */
-	cancel_delayed_work_sync(&bp->sp_rtnl_task);
+	cancel_delayed_work_sync_with_sync_wait(&bp->sp_rtnl_task);
 
 	/* send message via vfpf channel to release the resources of this vf */
 	if (IS_VF(bp))

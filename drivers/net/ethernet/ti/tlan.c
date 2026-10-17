@@ -300,7 +300,7 @@ static void tlan_remove_one(struct pci_dev *pdev)
 	pci_release_regions(pdev);
 #endif
 
-	cancel_work_sync(&priv->tlan_tqueue);
+	cancel_work_sync_with_sync_wait(&priv->tlan_tqueue);
 	free_netdev(dev);
 }
 

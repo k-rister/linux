@@ -1154,7 +1154,7 @@ static int emac_ndo_stop(struct net_device *ndev)
 	cancel_work_sync_with_sync_wait(&emac->rx_mode_work);
 
 	/* Destroying the queued work in ndo_stop() */
-	cancel_delayed_work_sync(&emac->stats_work);
+	cancel_delayed_work_sync_with_sync_wait(&emac->stats_work);
 
 	/* stop PRUs */
 	if (prueth->emacs_initialized == 1)

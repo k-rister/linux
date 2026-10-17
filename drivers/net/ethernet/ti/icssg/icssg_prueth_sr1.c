@@ -695,7 +695,7 @@ static int emac_ndo_stop(struct net_device *ndev)
 	napi_disable(&emac->napi_rx);
 
 	/* Destroying the queued work in ndo_stop() */
-	cancel_delayed_work_sync(&emac->stats_work);
+	cancel_delayed_work_sync_with_sync_wait(&emac->stats_work);
 
 	/* stop PRUs */
 	prueth_emac_stop(emac);

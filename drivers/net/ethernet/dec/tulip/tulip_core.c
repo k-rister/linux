@@ -741,7 +741,7 @@ static void tulip_down (struct net_device *dev)
 	void __iomem *ioaddr = tp->base_addr;
 	unsigned long flags;
 
-	cancel_work_sync(&tp->media_work);
+	cancel_work_sync_with_sync_wait(&tp->media_work);
 
 #ifdef CONFIG_TULIP_NAPI
 	napi_disable(&tp->napi);

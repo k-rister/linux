@@ -7513,7 +7513,7 @@ static void rtl8xxxu_stop(struct ieee80211_hw *hw, bool suspend)
 	 * it drained via rtl8xxxu_submit_rx_urb(), so a worker still running
 	 * after the kill could submit a URB that escapes it.
 	 */
-	cancel_work_sync(&priv->rx_urb_wq);
+	cancel_work_sync_with_sync_wait(&priv->rx_urb_wq);
 
 	usb_kill_anchored_urbs(&priv->rx_anchor);
 	usb_kill_anchored_urbs(&priv->tx_anchor);
@@ -7530,9 +7530,9 @@ static void rtl8xxxu_stop(struct ieee80211_hw *hw, bool suspend)
 	if (priv->usb_interrupts)
 		rtl8xxxu_write32(priv, REG_USB_HIMR, 0);
 
-	cancel_work_sync(&priv->c2hcmd_work);
-	cancel_delayed_work_sync(&priv->ra_watchdog);
-	cancel_delayed_work_sync(&priv->update_beacon_work);
+	cancel_work_sync_with_sync_wait(&priv->c2hcmd_work);
+	cancel_delayed_work_sync_with_sync_wait(&priv->ra_watchdog);
+	cancel_delayed_work_sync_with_sync_wait(&priv->update_beacon_work);
 
 	rtl8xxxu_free_rx_resources(priv);
 	rtl8xxxu_free_tx_resources(priv);

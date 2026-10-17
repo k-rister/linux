@@ -1260,8 +1260,8 @@ static void __alx_stop(struct alx_priv *alx)
 
 	alx_free_irq(alx);
 
-	cancel_work_sync(&alx->link_check_wk);
-	cancel_work_sync(&alx->reset_wk);
+	cancel_work_sync_with_sync_wait(&alx->link_check_wk);
+	cancel_work_sync_with_sync_wait(&alx->reset_wk);
 
 	alx_halt(alx);
 	alx_free_rings(alx);

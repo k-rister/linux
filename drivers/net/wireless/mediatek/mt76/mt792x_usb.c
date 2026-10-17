@@ -508,7 +508,7 @@ void mt792xu_disconnect(struct usb_interface *usb_intf)
 	skb_queue_purge(&dev->mt76.mcu.res_q);
 
 	cancel_work_sync(&dev->reset_work);
-	cancel_work_sync(&dev->init_work);
+	cancel_work_sync_with_sync_wait(&dev->init_work);
 	mt76_worker_disable(&dev->mt76.tx_worker);
 	mt792xu_reset_work_cleanup(dev);
 	if (!test_bit(MT76_STATE_INITIALIZED, &dev->mphy.state)) {

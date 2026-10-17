@@ -1305,7 +1305,7 @@ static void rtl8187_bss_info_changed(struct ieee80211_hw *dev,
 		vif_priv->enable_beacon = info->enable_beacon;
 
 	if (changed & (BSS_CHANGED_BEACON_ENABLED | BSS_CHANGED_BEACON)) {
-		cancel_delayed_work_sync(&vif_priv->beacon_work);
+		cancel_delayed_work_sync_with_sync_wait(&vif_priv->beacon_work);
 		if (vif_priv->enable_beacon)
 			schedule_work(&vif_priv->beacon_work.work);
 	}

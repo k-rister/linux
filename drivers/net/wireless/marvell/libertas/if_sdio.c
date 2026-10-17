@@ -1240,7 +1240,7 @@ err_activate_card:
 	lbs_remove_card(priv);
 free:
 	cancel_work_sync(&card->packet_worker);
-	cancel_work_sync(&card->reset_worker);
+	cancel_work_sync_with_sync_wait(&card->reset_worker);
 	destroy_workqueue(card->workqueue);
 err_queue:
 	list_for_each_entry_safe(packet, tmp, &card->packets, list)
@@ -1283,7 +1283,7 @@ static void if_sdio_remove(struct sdio_func *func)
 	lbs_remove_card(card->priv);
 
 	cancel_work_sync(&card->packet_worker);
-	cancel_work_sync(&card->reset_worker);
+	cancel_work_sync_with_sync_wait(&card->reset_worker);
 	destroy_workqueue(card->workqueue);
 
 	list_for_each_entry_safe(packet, tmp, &card->packets, list)

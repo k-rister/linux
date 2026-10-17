@@ -201,7 +201,7 @@ int lbs_stop_iface(struct lbs_private *priv)
 	priv->tx_pending_len = 0;
 	spin_unlock_irqrestore(&priv->driver_lock, flags);
 
-	cancel_work_sync(&priv->mcast_work);
+	cancel_work_sync_with_sync_wait(&priv->mcast_work);
 	timer_delete_sync(&priv->tx_lockup_timer);
 
 	/* Disable command processing, and wait for all commands to complete */

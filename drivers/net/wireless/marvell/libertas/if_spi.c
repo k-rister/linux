@@ -1205,7 +1205,7 @@ static void libertas_spi_remove(struct spi_device *spi)
 
 	lbs_deb_spi("libertas_spi_remove\n");
 
-	cancel_work_sync(&card->resume_work);
+	cancel_work_sync_with_sync_wait(&card->resume_work);
 
 	lbs_stop_card(priv);
 	lbs_remove_card(priv); /* will call free_netdev */

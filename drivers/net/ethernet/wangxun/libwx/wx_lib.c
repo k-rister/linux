@@ -1804,8 +1804,8 @@ void wx_napi_disable_all(struct wx *wx)
 	for (q_idx = 0; q_idx < wx->num_q_vectors; q_idx++) {
 		q_vector = wx->q_vector[q_idx];
 		napi_disable(&q_vector->napi);
-		disable_work_sync(&q_vector->rx.dim.work);
-		disable_work_sync(&q_vector->tx.dim.work);
+		disable_work_sync_with_sync_wait(&q_vector->rx.dim.work);
+		disable_work_sync_with_sync_wait(&q_vector->tx.dim.work);
 	}
 }
 EXPORT_SYMBOL(wx_napi_disable_all);

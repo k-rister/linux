@@ -1367,7 +1367,7 @@ int nicvf_stop(struct net_device *netdev)
 	tasklet_kill(&nic->rbdr_task);
 	tasklet_kill(&nic->qs_err_task);
 	if (nic->rb_work_scheduled)
-		cancel_delayed_work_sync(&nic->rbdr_work);
+		cancel_delayed_work_sync_with_sync_wait(&nic->rbdr_work);
 
 	for (qidx = 0; qidx < nic->qs->cq_cnt; qidx++) {
 		cq_poll = nic->napi[qidx];

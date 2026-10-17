@@ -573,7 +573,7 @@ static int mse102x_net_stop(struct net_device *ndev)
 	netif_carrier_off(mse->ndev);
 
 	/* stop any outstanding work */
-	flush_work(&mses->tx_work);
+	flush_work_with_sync_wait(&mses->tx_work);
 
 	netif_stop_queue(ndev);
 

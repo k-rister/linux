@@ -356,7 +356,7 @@ static int otx2_ptp_enable(struct ptp_clock_info *ptp_info,
 		if (on)
 			schedule_delayed_work(&ptp->extts_work, msecs_to_jiffies(200));
 		else
-			cancel_delayed_work_sync(&ptp->extts_work);
+			cancel_delayed_work_sync_with_sync_wait(&ptp->extts_work);
 
 		return 0;
 	case PTP_CLK_REQ_PEROUT:
@@ -491,7 +491,7 @@ void otx2_ptp_destroy(struct otx2_nic *pfvf)
 	if (!ptp)
 		return;
 
-	cancel_delayed_work_sync(&pfvf->ptp->synctstamp_work);
+	cancel_delayed_work_sync_with_sync_wait(&pfvf->ptp->synctstamp_work);
 
 	ptp_clock_unregister(ptp->ptp_clock);
 	kfree(ptp);

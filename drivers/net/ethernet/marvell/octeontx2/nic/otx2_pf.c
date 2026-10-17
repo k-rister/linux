@@ -3538,7 +3538,7 @@ static void otx2_remove(struct pci_dev *pdev)
 		otx2_config_priority_flow_ctrl(pf);
 	}
 #endif
-	cancel_work_sync(&pf->reset_task);
+	cancel_work_sync_with_sync_wait(&pf->reset_task);
 	/* Disable link notifications */
 	otx2_cgx_config_linkevents(pf, false);
 

@@ -5499,7 +5499,7 @@ fec_drv_remove(struct platform_device *pdev)
 			"Failed to resume device in remove callback (%pe)\n",
 			ERR_PTR(ret));
 
-	cancel_work_sync(&fep->tx_timeout_work);
+	cancel_work_sync_with_sync_wait(&fep->tx_timeout_work);
 	if (fep->bufdesc_ex)
 		fec_ptp_stop(pdev);
 	unregister_netdev(ndev);

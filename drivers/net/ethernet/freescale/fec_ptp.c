@@ -859,7 +859,7 @@ void fec_ptp_stop(struct platform_device *pdev)
 	if (fep->pps_enable)
 		fec_ptp_enable_pps(fep, 0);
 
-	cancel_delayed_work_sync(&fep->time_keep);
+	cancel_delayed_work_sync_with_sync_wait(&fep->time_keep);
 	hrtimer_cancel(&fep->perout_timer);
 	if (fep->ptp_clock)
 		ptp_clock_unregister(fep->ptp_clock);

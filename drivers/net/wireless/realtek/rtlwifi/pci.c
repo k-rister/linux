@@ -1693,7 +1693,7 @@ static void rtl_pci_deinit(struct ieee80211_hw *hw)
 	synchronize_irq(rtlpci->pdev->irq);
 	tasklet_kill(&rtlpriv->works.irq_tasklet);
 	tasklet_kill(&rtlpriv->works.irq_prepare_bcn_tasklet);
-	cancel_work_sync(&rtlpriv->works.lps_change_work);
+	cancel_work_sync_with_sync_wait(&rtlpriv->works.lps_change_work);
 }
 
 static int rtl_pci_init(struct ieee80211_hw *hw, struct pci_dev *pdev)
@@ -1783,7 +1783,7 @@ static void rtl_pci_stop(struct ieee80211_hw *hw)
 
 	rtlpci->driver_is_goingto_unload = true;
 	rtlpriv->cfg->ops->disable_interrupt(hw);
-	cancel_work_sync(&rtlpriv->works.lps_change_work);
+	cancel_work_sync_with_sync_wait(&rtlpriv->works.lps_change_work);
 
 	spin_lock_irqsave(&rtlpriv->locks.rf_ps_lock, flags);
 	while (ppsc->rfchange_inprogress) {

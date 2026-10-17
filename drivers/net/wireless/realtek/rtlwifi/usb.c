@@ -627,7 +627,7 @@ static void _rtl_usb_cleanup_rx(struct ieee80211_hw *hw)
 	usb_kill_anchored_urbs(&rtlusb->rx_submitted);
 
 	tasklet_kill(&rtlusb->rx_work_tasklet);
-	cancel_work_sync(&rtlpriv->works.lps_change_work);
+	cancel_work_sync_with_sync_wait(&rtlpriv->works.lps_change_work);
 
 	skb_queue_purge(&rtlusb->rx_queue);
 
@@ -743,7 +743,7 @@ static void rtl_usb_stop(struct ieee80211_hw *hw)
 
 	/* should after adapter start and interrupt enable. */
 	set_hal_stop(rtlhal);
-	cancel_work_sync(&rtlpriv->works.fill_h2c_cmd);
+	cancel_work_sync_with_sync_wait(&rtlpriv->works.fill_h2c_cmd);
 	/* Enable software */
 	SET_USB_STOP(rtlusb);
 
@@ -751,8 +751,8 @@ static void rtl_usb_stop(struct ieee80211_hw *hw)
 	usb_kill_anchored_urbs(&rtlusb->rx_submitted);
 
 	tasklet_kill(&rtlusb->rx_work_tasklet);
-	cancel_work_sync(&rtlpriv->works.lps_change_work);
-	cancel_work_sync(&rtlpriv->works.update_beacon_work);
+	cancel_work_sync_with_sync_wait(&rtlpriv->works.lps_change_work);
+	cancel_work_sync_with_sync_wait(&rtlpriv->works.update_beacon_work);
 
 	flush_workqueue(rtlpriv->works.rtl_wq);
 

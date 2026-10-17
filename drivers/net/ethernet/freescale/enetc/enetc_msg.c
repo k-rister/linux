@@ -330,7 +330,7 @@ static void enetc_msg_psi_free(struct enetc_pf *pf)
 	/* de-register message passing interrupt handler */
 	free_irq(pci_irq_vector(si->pdev, ENETC_SI_INT_IDX), si);
 
-	cancel_work_sync(&pf->msg_task);
+	cancel_work_sync_with_sync_wait(&pf->msg_task);
 
 	/* MR interrupts may be re-enabled by workqueue */
 	enetc_msg_disable_mr_int(pf);

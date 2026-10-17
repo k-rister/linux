@@ -2885,7 +2885,7 @@ static int gfar_close(struct net_device *dev)
 {
 	struct gfar_private *priv = netdev_priv(dev);
 
-	cancel_work_sync(&priv->reset_task);
+	cancel_work_sync_with_sync_wait(&priv->reset_task);
 	stop_gfar(dev);
 
 	/* Disconnect from the PHY */

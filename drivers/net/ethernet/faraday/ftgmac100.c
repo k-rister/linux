@@ -2114,7 +2114,7 @@ static void ftgmac100_remove(struct platform_device *pdev)
 	/* There's a small chance the reset task will have been re-queued,
 	 * during stop, make sure it's gone before we free the structure.
 	 */
-	cancel_work_sync(&priv->reset_task);
+	cancel_work_sync_with_sync_wait(&priv->reset_task);
 
 	ftgmac100_phy_disconnect(netdev);
 }

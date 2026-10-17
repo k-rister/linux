@@ -3222,7 +3222,7 @@ static int ucc_geth_close(struct net_device *dev)
 
 	napi_disable(&ugeth->napi);
 
-	cancel_work_sync(&ugeth->timeout_work);
+	cancel_work_sync_with_sync_wait(&ugeth->timeout_work);
 	ucc_geth_stop(ugeth);
 	phylink_disconnect_phy(ugeth->phylink);
 

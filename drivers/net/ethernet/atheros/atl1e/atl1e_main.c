@@ -237,8 +237,8 @@ static void atl1e_del_timer(struct atl1e_adapter *adapter)
 
 static void atl1e_cancel_work(struct atl1e_adapter *adapter)
 {
-	cancel_work_sync(&adapter->reset_task);
-	cancel_work_sync(&adapter->link_chg_task);
+	cancel_work_sync_with_sync_wait(&adapter->reset_task);
+	cancel_work_sync_with_sync_wait(&adapter->link_chg_task);
 }
 
 /**

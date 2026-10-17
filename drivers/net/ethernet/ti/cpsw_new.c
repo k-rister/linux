@@ -1477,7 +1477,7 @@ static void cpsw_unregister_ports(struct cpsw_common *cpsw)
 
 		priv = netdev_priv(ndev);
 		unregister_netdev(ndev);
-		disable_work_sync(&priv->rx_mode_work);
+		disable_work_sync_with_sync_wait(&priv->rx_mode_work);
 	}
 }
 

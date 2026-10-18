@@ -1933,7 +1933,7 @@ static void sis190_remove_one(struct pci_dev *pdev)
 	struct sis190_private *tp = netdev_priv(dev);
 
 	sis190_mii_remove(dev);
-	cancel_work_sync(&tp->phy_task);
+	cancel_work_sync_with_sync_wait(&tp->phy_task);
 	unregister_netdev(dev);
 	sis190_release_board(pdev);
 }

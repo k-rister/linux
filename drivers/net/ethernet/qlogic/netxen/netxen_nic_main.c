@@ -1631,7 +1631,7 @@ static void netxen_nic_remove(struct pci_dev *pdev)
 
 	unregister_netdev(netdev);
 
-	cancel_work_sync(&adapter->tx_timeout_task);
+	cancel_work_sync_with_sync_wait(&adapter->tx_timeout_task);
 
 	netxen_free_ip_list(adapter, false);
 	netxen_nic_detach(adapter);
@@ -1671,7 +1671,7 @@ static void netxen_nic_detach_func(struct netxen_adapter *adapter)
 	if (netif_running(netdev))
 		netxen_nic_down(adapter, netdev);
 
-	cancel_work_sync(&adapter->tx_timeout_task);
+	cancel_work_sync_with_sync_wait(&adapter->tx_timeout_task);
 
 	netxen_nic_detach(adapter);
 
@@ -2482,7 +2482,7 @@ netxen_cancel_fw_work(struct netxen_adapter *adapter)
 	while (test_and_set_bit(__NX_RESETTING, &adapter->state))
 		msleep(10);
 
-	cancel_delayed_work_sync(&adapter->fw_work);
+	cancel_delayed_work_sync_with_sync_wait(&adapter->fw_work);
 }
 
 static void

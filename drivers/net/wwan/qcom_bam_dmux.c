@@ -856,7 +856,7 @@ static void bam_dmux_remove(struct platform_device *pdev)
 	int i;
 
 	/* Unregister network interfaces */
-	cancel_work_sync(&dmux->register_netdev_work);
+	cancel_work_sync_with_sync_wait(&dmux->register_netdev_work);
 	rtnl_lock();
 	for (i = 0; i < BAM_DMUX_NUM_CH; ++i)
 		if (dmux->netdevs[i])

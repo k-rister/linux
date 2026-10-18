@@ -3974,7 +3974,7 @@ static void myri10ge_remove(struct pci_dev *pdev)
 	if (mgp == NULL)
 		return;
 
-	cancel_work_sync(&mgp->watchdog_work);
+	cancel_work_sync_with_sync_wait(&mgp->watchdog_work);
 	netdev = mgp->dev;
 	unregister_netdev(netdev);
 

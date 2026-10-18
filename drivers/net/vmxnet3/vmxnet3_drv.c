@@ -4356,7 +4356,7 @@ vmxnet3_remove_device(struct pci_dev *pdev)
 				    VMXNET3_DEVICE_DEFAULT_RX_QUEUES);
 	}
 
-	cancel_work_sync(&adapter->work);
+	cancel_work_sync_with_sync_wait(&adapter->work);
 
 	unregister_netdev(netdev);
 

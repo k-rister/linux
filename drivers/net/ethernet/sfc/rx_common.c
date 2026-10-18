@@ -283,7 +283,7 @@ void efx_fini_rx_queue(struct efx_rx_queue *rx_queue)
 
 	timer_delete_sync(&rx_queue->slow_fill);
 	if (rx_queue->grant_credits)
-		flush_work(&rx_queue->grant_work);
+		flush_work_with_sync_wait(&rx_queue->grant_work);
 
 	/* Release RX buffers from the current read ptr to the write ptr */
 	if (rx_queue->buffer) {
@@ -799,7 +799,7 @@ void efx_remove_filters(struct efx_nic *efx)
 	struct efx_channel *channel;
 
 	efx_for_each_channel(channel, efx) {
-		cancel_delayed_work_sync(&channel->filter_work);
+		cancel_delayed_work_sync_with_sync_wait(&channel->filter_work);
 		kfree(channel->rps_flow_id);
 		channel->rps_flow_id = NULL;
 	}

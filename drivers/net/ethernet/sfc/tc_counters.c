@@ -39,7 +39,7 @@ static void efx_tc_counter_free(void *ptr, void *__unused)
 	 * threads could still be obtaining new pointers to *cnt if they can
 	 * race against this function at all.
 	 */
-	flush_work(&cnt->work);
+	flush_work_with_sync_wait(&cnt->work);
 	EFX_WARN_ON_PARANOID(spin_is_locked(&cnt->lock));
 	kfree(cnt);
 }
@@ -189,7 +189,7 @@ void efx_tc_flower_release_counter(struct efx_nic *efx,
 	 * is handled by the generation count.
 	 */
 	synchronize_rcu();
-	flush_work(&cnt->work);
+	flush_work_with_sync_wait(&cnt->work);
 	EFX_WARN_ON_PARANOID(spin_is_locked(&cnt->lock));
 	kfree(cnt);
 }
@@ -307,7 +307,7 @@ static void efx_tc_stop_channel(struct efx_channel *channel)
 			   "Failed to stop MAE counters streaming, rc=%d.\n",
 			   rc);
 	rx_queue->grant_credits = false;
-	flush_work(&rx_queue->grant_work);
+	flush_work_with_sync_wait(&rx_queue->grant_work);
 }
 
 static void efx_tc_remove_channel(struct efx_channel *channel)

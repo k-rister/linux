@@ -784,7 +784,7 @@ void efx_selftest_async_start(struct efx_nic *efx)
 
 void efx_selftest_async_cancel(struct efx_nic *efx)
 {
-	cancel_delayed_work_sync(&efx->selftest_work);
+	cancel_delayed_work_sync_with_sync_wait(&efx->selftest_work);
 }
 
 static void efx_selftest_async_work(struct work_struct *data)

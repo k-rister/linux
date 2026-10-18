@@ -1343,7 +1343,7 @@ static int ath9k_htc_sta_remove(struct ieee80211_hw *hw,
 	struct ath9k_htc_sta *ista = (struct ath9k_htc_sta *) sta->drv_priv;
 	int ret;
 
-	cancel_work_sync(&ista->rc_update_work);
+	cancel_work_sync_with_sync_wait(&ista->rc_update_work);
 
 	mutex_lock(&priv->mutex);
 	ath9k_htc_ps_wakeup(priv);

@@ -204,6 +204,6 @@ int wfx_cancel_remain_on_channel(struct ieee80211_hw *hw, struct ieee80211_vif *
 	struct wfx_vif *wvif = (struct wfx_vif *)vif->drv_priv;
 
 	wfx_hif_stop_scan(wvif);
-	flush_work(&wvif->remain_on_channel_work);
+	flush_work_with_sync_wait(&wvif->remain_on_channel_work);
 	return 0;
 }

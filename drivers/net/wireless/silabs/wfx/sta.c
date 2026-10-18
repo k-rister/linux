@@ -276,7 +276,7 @@ void wfx_reset(struct wfx_vif *wvif)
 		wfx_hif_set_block_ack_policy(wvif, 0xFF, 0xFF);
 	wfx_tx_unlock(wdev);
 	wvif->join_in_progress = false;
-	cancel_delayed_work_sync(&wvif->beacon_loss_work);
+	cancel_delayed_work_sync_with_sync_wait(&wvif->beacon_loss_work);
 	wvif =  NULL;
 	while ((wvif = wvif_iterate(wdev, wvif)) != NULL)
 		wfx_update_pm(wvif);
@@ -789,7 +789,7 @@ void wfx_remove_interface(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 	wfx_hif_set_macaddr(wvif, NULL);
 	wfx_tx_policy_init(wvif);
 
-	cancel_delayed_work_sync(&wvif->beacon_loss_work);
+	cancel_delayed_work_sync_with_sync_wait(&wvif->beacon_loss_work);
 	wdev->vif[wvif->id] = NULL;
 
 	mutex_unlock(&wdev->conf_mutex);

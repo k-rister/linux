@@ -3569,7 +3569,7 @@ static int lan78xx_stop(struct net_device *net)
 	clear_bit(EVENT_PHY_INT_ACK, &dev->flags);
 	clear_bit(EVENT_STAT_UPDATE, &dev->flags);
 
-	cancel_delayed_work_sync(&dev->wq);
+	cancel_delayed_work_sync_with_sync_wait(&dev->wq);
 
 	usb_autopm_put_interface(dev->intf);
 
@@ -3835,8 +3835,8 @@ out2:
 
 out1:
 	netdev_warn(dev->net, "Bind routine FAILED");
-	cancel_work_sync(&pdata->set_multicast);
-	cancel_work_sync(&pdata->set_vlan);
+	cancel_work_sync_with_sync_wait(&pdata->set_multicast);
+	cancel_work_sync_with_sync_wait(&pdata->set_vlan);
 	kfree(pdata);
 	return ret;
 }
@@ -3850,8 +3850,8 @@ static void lan78xx_unbind(struct lan78xx_net *dev, struct usb_interface *intf)
 	lan78xx_remove_mdio(dev);
 
 	if (pdata) {
-		cancel_work_sync(&pdata->set_multicast);
-		cancel_work_sync(&pdata->set_vlan);
+		cancel_work_sync_with_sync_wait(&pdata->set_multicast);
+		cancel_work_sync_with_sync_wait(&pdata->set_vlan);
 		netif_dbg(dev, ifdown, dev->net, "free pdata");
 		kfree(pdata);
 		pdata = NULL;
@@ -4589,7 +4589,7 @@ static void lan78xx_disconnect(struct usb_interface *intf)
 
 	timer_shutdown_sync(&dev->stat_monitor);
 	set_bit(EVENT_DEV_DISCONNECT, &dev->flags);
-	cancel_delayed_work_sync(&dev->wq);
+	cancel_delayed_work_sync_with_sync_wait(&dev->wq);
 
 	phylink_destroy(dev->phylink);
 

@@ -633,7 +633,7 @@ static void lb_exit(struct team *team)
 	team_options_unregister(team, lb_options,
 				ARRAY_SIZE(lb_options));
 	lb_bpf_func_free(team);
-	cancel_delayed_work_sync(&lb_priv->ex->stats.refresh_dw);
+	cancel_delayed_work_sync_with_sync_wait(&lb_priv->ex->stats.refresh_dw);
 	free_percpu(lb_priv->pcpu_stats);
 	kfree(lb_priv->ex);
 }

@@ -683,7 +683,7 @@ static void team_notify_peers_init(struct team *team)
 
 static void team_notify_peers_fini(struct team *team)
 {
-	cancel_delayed_work_sync(&team->notify_peers.dw);
+	cancel_delayed_work_sync_with_sync_wait(&team->notify_peers.dw);
 }
 
 
@@ -729,7 +729,7 @@ static void team_mcast_rejoin_init(struct team *team)
 
 static void team_mcast_rejoin_fini(struct team *team)
 {
-	cancel_delayed_work_sync(&team->mcast_rejoin.dw);
+	cancel_delayed_work_sync_with_sync_wait(&team->mcast_rejoin.dw);
 }
 
 

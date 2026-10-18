@@ -154,7 +154,7 @@ int framer_exit(struct framer *framer)
 	if (framer->init_count == 0) {
 		if (framer->ops->flags & FRAMER_FLAG_POLL_STATUS) {
 			mutex_unlock(&framer->mutex);
-			cancel_delayed_work_sync(&framer->polling_work);
+			cancel_delayed_work_sync_with_sync_wait(&framer->polling_work);
 			mutex_lock(&framer->mutex);
 		}
 
@@ -684,8 +684,8 @@ void framer_destroy(struct framer *framer)
 	/* polling_work should already be stopped but if framer_exit() was not
 	 * called (bug), here it's the last time to do that ...
 	 */
-	cancel_delayed_work_sync(&framer->polling_work);
-	cancel_work_sync(&framer->notify_status_work);
+	cancel_delayed_work_sync_with_sync_wait(&framer->polling_work);
+	cancel_work_sync_with_sync_wait(&framer->notify_status_work);
 	pm_runtime_disable(&framer->dev);
 	device_unregister(&framer->dev); /* calls framer_release() which frees resources */
 }

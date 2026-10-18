@@ -753,7 +753,7 @@ static void sierra_net_unbind(struct usbnet *dev, struct usb_interface *intf)
 
 	/* kill the timer and work */
 	timer_shutdown_sync(&priv->sync_timer);
-	cancel_work_sync(&priv->sierra_net_kevent);
+	cancel_work_sync_with_sync_wait(&priv->sierra_net_kevent);
 
 	/* tell modem we are going away */
 	status = sierra_net_send_cmd(dev, priv->shdwn_msg,

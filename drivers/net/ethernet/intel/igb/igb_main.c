@@ -6607,7 +6607,7 @@ cleanup_tx_tstamp:
 		dev_kfree_skb_any(adapter->ptp_tx_skb);
 		adapter->ptp_tx_skb = NULL;
 		if (adapter->hw.mac.type == e1000_82576)
-			cancel_work_sync(&adapter->ptp_tx_work);
+			cancel_work_sync_with_sync_wait(&adapter->ptp_tx_work);
 		clear_bit_unlock(__IGB_PTP_TX_IN_PROGRESS, &adapter->state);
 	}
 

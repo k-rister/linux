@@ -358,7 +358,7 @@ static int ionic_qcq_disable(struct ionic_lif *lif, struct ionic_qcq *qcq, int f
 
 		if (lif->doorbell_wa)
 			cancel_work_sync(&qcq->doorbell_napi_work);
-		cancel_work_sync(&qcq->dim.work);
+		cancel_work_sync_with_sync_wait(&qcq->dim.work);
 		ionic_intr_mask(idev->intr_ctrl, qcq->intr.index,
 				IONIC_INTR_MASK_SET);
 		synchronize_irq(qcq->intr.vector);
@@ -3558,7 +3558,7 @@ void ionic_lif_deinit(struct ionic_lif *lif)
 
 	if (!test_bit(IONIC_LIF_F_FW_RESET, lif->state)) {
 		cancel_work_sync(&lif->deferred.work);
-		cancel_work_sync(&lif->tx_timeout_work);
+		cancel_work_sync_with_sync_wait(&lif->tx_timeout_work);
 		ionic_rx_filters_deinit(lif);
 		if (lif->netdev->features & NETIF_F_RXHASH)
 			ionic_lif_rss_deinit(lif);

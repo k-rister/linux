@@ -7120,7 +7120,7 @@ static int rtl8152_open(struct net_device *netdev)
 	int res = 0;
 
 	if (work_busy(&tp->hw_phy_work.work) & WORK_BUSY_PENDING) {
-		cancel_delayed_work_sync(&tp->hw_phy_work);
+		cancel_delayed_work_sync_with_sync_wait(&tp->hw_phy_work);
 		rtl_hw_phy_work_func_t(&tp->hw_phy_work.work);
 	}
 
@@ -7180,7 +7180,7 @@ static int rtl8152_close(struct net_device *netdev)
 	tasklet_disable(&tp->tx_tl);
 	clear_bit(WORK_ENABLE, &tp->flags);
 	usb_kill_urb(tp->intr_urb);
-	cancel_delayed_work_sync(&tp->schedule);
+	cancel_delayed_work_sync_with_sync_wait(&tp->schedule);
 	napi_disable(&tp->napi);
 	netif_stop_queue(netdev);
 
@@ -8564,7 +8564,7 @@ static int rtl8152_pre_reset(struct usb_interface *intf)
 	tasklet_disable(&tp->tx_tl);
 	clear_bit(WORK_ENABLE, &tp->flags);
 	usb_kill_urb(tp->intr_urb);
-	cancel_delayed_work_sync(&tp->schedule);
+	cancel_delayed_work_sync_with_sync_wait(&tp->schedule);
 	napi_disable(&tp->napi);
 	if (netif_carrier_ok(netdev)) {
 		mutex_lock(&tp->control);
@@ -8767,7 +8767,7 @@ static int rtl8152_system_suspend(struct r8152 *tp)
 		usb_kill_urb(tp->intr_urb);
 		tasklet_disable(&tp->tx_tl);
 		napi_disable(napi);
-		cancel_delayed_work_sync(&tp->schedule);
+		cancel_delayed_work_sync_with_sync_wait(&tp->schedule);
 		tp->rtl_ops.down(tp);
 		napi_enable(napi);
 		tasklet_enable(&tp->tx_tl);
@@ -10328,7 +10328,7 @@ out2:
 
 out1:
 	tasklet_kill(&tp->tx_tl);
-	cancel_delayed_work_sync(&tp->hw_phy_work);
+	cancel_delayed_work_sync_with_sync_wait(&tp->hw_phy_work);
 	if (tp->rtl_ops.unload)
 		tp->rtl_ops.unload(tp);
 	rtl8152_release_firmware(tp);
@@ -10384,7 +10384,7 @@ static void rtl8152_disconnect(struct usb_interface *intf)
 
 		unregister_netdev(tp->netdev);
 		tasklet_kill(&tp->tx_tl);
-		cancel_delayed_work_sync(&tp->hw_phy_work);
+		cancel_delayed_work_sync_with_sync_wait(&tp->hw_phy_work);
 		if (tp->rtl_ops.unload)
 			tp->rtl_ops.unload(tp);
 		rtl8152_release_firmware(tp);

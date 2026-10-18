@@ -2516,7 +2516,7 @@ void mana_dim_change(struct mana_cq *cq, bool enable)
 		cq->dim.mode = DIM_CQ_PERIOD_MODE_START_FROM_EQE;
 		INIT_WORK(&cq->dim.work, work_func);
 	} else {
-		cancel_work_sync(&cq->dim.work);
+		cancel_work_sync_with_sync_wait(&cq->dim.work);
 		mana_gd_ring_dim(cq->gdma_cq, usec, true, comp, true);
 	}
 }
@@ -2660,7 +2660,7 @@ static void mana_destroy_txq(struct mana_port_context *apc)
 		if (apc->tx_qp[i]->txq.napi_initialized) {
 			napi_synchronize(napi);
 			napi_disable_locked(napi);
-			cancel_work_sync(&apc->tx_qp[i]->tx_cq.dim.work);
+			cancel_work_sync_with_sync_wait(&apc->tx_qp[i]->tx_cq.dim.work);
 			netif_napi_del_locked(napi);
 			apc->tx_qp[i]->txq.napi_initialized = false;
 		}
@@ -2873,7 +2873,7 @@ static void mana_destroy_rxq(struct mana_port_context *apc,
 		napi_synchronize(napi);
 
 		napi_disable_locked(napi);
-		cancel_work_sync(&rxq->rx_cq.dim.work);
+		cancel_work_sync_with_sync_wait(&rxq->rx_cq.dim.work);
 		netif_napi_del_locked(napi);
 	}
 
@@ -4208,8 +4208,8 @@ void mana_remove(struct gdma_dev *gd, bool suspending)
 
 	dev = gc->dev;
 
-	disable_work_sync(&ac->link_change_work);
-	cancel_delayed_work_sync(&ac->gf_stats_work);
+	disable_work_sync_with_sync_wait(&ac->link_change_work);
+	cancel_delayed_work_sync_with_sync_wait(&ac->gf_stats_work);
 
 	/* adev currently doesn't support suspending, always remove it */
 	if (gd->adev)

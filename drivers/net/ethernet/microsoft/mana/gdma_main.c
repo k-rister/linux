@@ -2758,7 +2758,7 @@ static void __exit mana_driver_exit(void)
 	struct mana_dev_recovery *dev;
 	unsigned long flags;
 
-	disable_delayed_work_sync(&mana_dev_recovery_work.work);
+	disable_delayed_work_sync_with_sync_wait(&mana_dev_recovery_work.work);
 
 	spin_lock_irqsave(&mana_dev_recovery_work.lock, flags);
 	while (!list_empty(&mana_dev_recovery_work.dev_list)) {

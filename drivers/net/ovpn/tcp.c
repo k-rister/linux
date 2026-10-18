@@ -245,7 +245,7 @@ void ovpn_tcp_socket_wait_finish(struct ovpn_socket *sock)
 	 * was invoked by that worker.
 	 */
 
-	cancel_work_sync(&sock->tcp_tx_work);
+	cancel_work_sync_with_sync_wait(&sock->tcp_tx_work);
 	strp_done(&peer->tcp.strp);
 
 	skb_queue_purge(&peer->tcp.out_queue);

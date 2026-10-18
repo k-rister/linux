@@ -1258,7 +1258,7 @@ static int korina_close(struct net_device *dev)
 
 	napi_disable(&lp->napi);
 
-	cancel_work_sync(&lp->restart_task);
+	cancel_work_sync_with_sync_wait(&lp->restart_task);
 
 	korina_free_ring(dev);
 

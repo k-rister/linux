@@ -730,7 +730,7 @@ static void emac_remove(struct platform_device *pdev)
 	netif_napi_del(&adpt->rx_q.napi);
 
 	free_irq(adpt->irq.irq, &adpt->irq);
-	cancel_work_sync(&adpt->work_thread);
+	cancel_work_sync_with_sync_wait(&adpt->work_thread);
 
 	emac_clks_teardown(adpt);
 

@@ -705,7 +705,7 @@ void rmnet_map_tx_aggregate_init(struct rmnet_port *port)
 void rmnet_map_tx_aggregate_exit(struct rmnet_port *port)
 {
 	hrtimer_cancel(&port->hrtimer);
-	cancel_work_sync(&port->agg_wq);
+	cancel_work_sync_with_sync_wait(&port->agg_wq);
 
 	spin_lock_bh(&port->agg_lock);
 	if (port->agg_state == -EINPROGRESS) {

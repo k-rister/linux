@@ -6157,7 +6157,7 @@ out_err:
 
 static void niu_full_shutdown(struct niu *np, struct net_device *dev)
 {
-	cancel_work_sync(&np->reset_task);
+	cancel_work_sync_with_sync_wait(&np->reset_task);
 
 	niu_disable_napi(np);
 	netif_tx_stop_all_queues(dev);
@@ -9939,7 +9939,7 @@ static int __maybe_unused niu_suspend(struct device *dev_d)
 	if (!netif_running(dev))
 		return 0;
 
-	flush_work(&np->reset_task);
+	flush_work_with_sync_wait(&np->reset_task);
 	niu_netif_stop(np);
 
 	timer_delete_sync(&np->timer);

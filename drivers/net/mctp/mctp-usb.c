@@ -309,7 +309,7 @@ static int mctp_usb_stop(struct net_device *dev)
 	cancel_delayed_work(&mctp_usb->rx_retry_work);
 	spin_unlock_irqrestore(&mctp_usb->rx_lock, flags);
 
-	flush_delayed_work(&mctp_usb->rx_retry_work);
+	flush_delayed_work_with_sync_wait(&mctp_usb->rx_retry_work);
 
 	usb_kill_urb(mctp_usb->rx_urb);
 

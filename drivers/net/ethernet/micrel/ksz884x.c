@@ -5007,7 +5007,7 @@ static int netdev_close(struct net_device *dev)
 	hw_priv->opened--;
 	if (!(hw_priv->opened)) {
 		ksz_stop_timer(&hw_priv->mib_timer_info);
-		flush_work(&hw_priv->mib_read);
+		flush_work_with_sync_wait(&hw_priv->mib_read);
 
 		hw_dis_intr(hw);
 		hw_disable(hw);

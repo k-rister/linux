@@ -493,7 +493,7 @@ static int ks8851_net_stop(struct net_device *dev)
 
 	/* stop any outstanding work */
 	ks8851_flush_tx_work(ks);
-	flush_work(&ks->rxctrl_work);
+	flush_work_with_sync_wait(&ks->rxctrl_work);
 
 	ks8851_lock(ks);
 	/* shutdown RX process */

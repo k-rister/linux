@@ -351,7 +351,7 @@ static void ks8851_flush_tx_work_spi(struct ks8851_net *ks)
 {
 	struct ks8851_net_spi *kss = to_ks8851_spi(ks);
 
-	flush_work(&kss->tx_work);
+	flush_work_with_sync_wait(&kss->tx_work);
 }
 
 /**

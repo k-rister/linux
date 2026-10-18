@@ -1640,7 +1640,7 @@ err_rx_irq:
 err_tx_irq:
 	napi_disable(&lp->napi_tx);
 	napi_disable(&lp->napi_rx);
-	cancel_work_sync(&lp->dma_err_task);
+	cancel_work_sync_with_sync_wait(&lp->dma_err_task);
 	dev_err(lp->dev, "request_irq() failed\n");
 	return ret;
 }
@@ -1706,8 +1706,8 @@ err_free_eth_irq:
 	if (lp->eth_irq > 0)
 		free_irq(lp->eth_irq, ndev);
 err_phy:
-	cancel_work_sync(&lp->rx_dim.work);
-	cancel_delayed_work_sync(&lp->stats_work);
+	cancel_work_sync_with_sync_wait(&lp->rx_dim.work);
+	cancel_delayed_work_sync_with_sync_wait(&lp->stats_work);
 	phylink_stop(lp->phylink);
 	phylink_disconnect_phy(lp->phylink);
 	return ret;
@@ -1730,14 +1730,14 @@ static int axienet_stop(struct net_device *ndev)
 
 	if (!lp->use_dmaengine) {
 		WRITE_ONCE(lp->stopping, true);
-		flush_work(&lp->dma_err_task);
+		flush_work_with_sync_wait(&lp->dma_err_task);
 
 		napi_disable(&lp->napi_tx);
 		napi_disable(&lp->napi_rx);
 	}
 
-	cancel_work_sync(&lp->rx_dim.work);
-	cancel_delayed_work_sync(&lp->stats_work);
+	cancel_work_sync_with_sync_wait(&lp->rx_dim.work);
+	cancel_delayed_work_sync_with_sync_wait(&lp->stats_work);
 
 	phylink_stop(lp->phylink);
 	phylink_disconnect_phy(lp->phylink);
@@ -1747,7 +1747,7 @@ static int axienet_stop(struct net_device *ndev)
 
 	if (!lp->use_dmaengine) {
 		axienet_dma_stop(lp);
-		cancel_work_sync(&lp->dma_err_task);
+		cancel_work_sync_with_sync_wait(&lp->dma_err_task);
 		free_irq(lp->tx_irq, ndev);
 		free_irq(lp->rx_irq, ndev);
 		axienet_dma_bd_release(ndev);
@@ -2257,7 +2257,7 @@ axienet_ethtools_set_coalesce(struct net_device *ndev,
 		if (old_dim) {
 			WRITE_ONCE(lp->rx_dim_enabled, false);
 			napi_synchronize(&lp->napi_rx);
-			flush_work(&lp->rx_dim.work);
+			flush_work_with_sync_wait(&lp->rx_dim.work);
 		}
 
 		cr = axienet_calc_cr(lp, ecoalesce->rx_max_coalesced_frames,

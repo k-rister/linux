@@ -710,7 +710,7 @@ void nfp_flower_lag_cleanup(struct nfp_fl_lag *lag)
 {
 	struct nfp_fl_lag_group *entry, *storage;
 
-	cancel_delayed_work_sync(&lag->work);
+	cancel_delayed_work_sync_with_sync_wait(&lag->work);
 
 	__skb_queue_purge(&lag->retrans_skbs);
 

@@ -863,7 +863,7 @@ static void nfp_flower_clean(struct nfp_app *app)
 
 	skb_queue_purge(&app_priv->cmsg_skbs_high);
 	skb_queue_purge(&app_priv->cmsg_skbs_low);
-	flush_work(&app_priv->cmsg_work);
+	flush_work_with_sync_wait(&app_priv->cmsg_work);
 
 	if (app_priv->flower_ext_feats & NFP_FL_FEATS_VF_RLIM)
 		nfp_flower_qos_cleanup(app);

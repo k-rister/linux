@@ -316,7 +316,7 @@ nfp_flower_remove_rate_limiter(struct nfp_app *app, struct net_device *netdev,
 	memset(&repr_priv->qos_table, 0, sizeof(struct nfp_fl_qos));
 	fl_priv->qos_rate_limiters--;
 	if (!fl_priv->qos_rate_limiters)
-		cancel_delayed_work_sync(&fl_priv->qos_stats_work);
+		cancel_delayed_work_sync_with_sync_wait(&fl_priv->qos_stats_work);
 	for (i = 0 ; i < NFP_FL_QOS_TYPE_MAX; i++) {
 		if (i == NFP_FL_QOS_TYPE_PPS && !pps_support)
 			break;
@@ -515,7 +515,7 @@ void nfp_flower_qos_cleanup(struct nfp_app *app)
 {
 	struct nfp_flower_priv *fl_priv = app->priv;
 
-	cancel_delayed_work_sync(&fl_priv->qos_stats_work);
+	cancel_delayed_work_sync_with_sync_wait(&fl_priv->qos_stats_work);
 }
 
 int nfp_flower_setup_qos_offload(struct nfp_app *app, struct net_device *netdev,
@@ -615,7 +615,7 @@ static void nfp_flower_del_meter_entry(struct nfp_app *app, u32 meter_id)
 	kfree(meter_entry);
 	priv->qos_rate_limiters--;
 	if (!priv->qos_rate_limiters)
-		cancel_delayed_work_sync(&priv->qos_stats_work);
+		cancel_delayed_work_sync_with_sync_wait(&priv->qos_stats_work);
 }
 
 int nfp_flower_setup_meter_entry(struct nfp_app *app,

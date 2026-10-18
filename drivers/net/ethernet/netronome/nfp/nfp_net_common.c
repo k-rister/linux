@@ -1084,10 +1084,10 @@ static void nfp_net_close_stack(struct nfp_net *nn)
 		napi_disable(&r_vec->napi);
 
 		if (r_vec->rx_ring)
-			cancel_work_sync(&r_vec->rx_dim.work);
+			cancel_work_sync_with_sync_wait(&r_vec->rx_dim.work);
 
 		if (r_vec->tx_ring)
-			cancel_work_sync(&r_vec->tx_dim.work);
+			cancel_work_sync_with_sync_wait(&r_vec->tx_dim.work);
 	}
 
 	netif_tx_disable(nn->dp.netdev);
@@ -2947,6 +2947,6 @@ void nfp_net_clean(struct nfp_net *nn)
 	nfp_net_ipsec_clean(nn);
 	nfp_ccm_mbox_clean(nn);
 	nfp_net_fs_clean(nn);
-	flush_work(&nn->mbox_amsg.work);
+	flush_work_with_sync_wait(&nn->mbox_amsg.work);
 	nfp_net_reconfig_wait_posted(nn);
 }

@@ -228,7 +228,7 @@ static void cx82310_unbind(struct usbnet *dev, struct usb_interface *intf)
 	struct cx82310_priv *priv = dev->driver_priv;
 
 	kfree((void *)dev->partial_data);
-	cancel_work_sync(&priv->reenable_work);
+	cancel_work_sync_with_sync_wait(&priv->reenable_work);
 	kfree(dev->driver_priv);
 }
 

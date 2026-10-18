@@ -708,8 +708,8 @@ void mlx5_crypto_dek_pool_destroy(struct mlx5_crypto_dek_pool *pool)
 {
 	struct mlx5_crypto_dek_bulk *bulk, *tmp;
 
-	cancel_work_sync(&pool->sync_work);
-	cancel_work_sync(&pool->destroy_work);
+	cancel_work_sync_with_sync_wait(&pool->sync_work);
+	cancel_work_sync_with_sync_wait(&pool->destroy_work);
 
 	mlx5_crypto_dek_pool_free_wait_keys(pool);
 

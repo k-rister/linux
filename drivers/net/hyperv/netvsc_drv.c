@@ -984,7 +984,7 @@ static int netvsc_detach(struct net_device *ndev,
 	int ret;
 
 	/* Don't try continuing to try and setup sub channels */
-	if (cancel_work_sync(&nvdev->subchan_work))
+	if (cancel_work_sync_with_sync_wait(&nvdev->subchan_work))
 		nvdev->num_chn = 1;
 
 	netvsc_xdp_set(ndev, NULL, NULL, nvdev);
@@ -2447,7 +2447,7 @@ static int netvsc_unregister_vf(struct net_device *vf_netdev)
 		return NOTIFY_DONE;
 
 	net_device_ctx = netdev_priv(ndev);
-	cancel_delayed_work_sync(&net_device_ctx->vf_takeover);
+	cancel_delayed_work_sync_with_sync_wait(&net_device_ctx->vf_takeover);
 
 	netdev_info(ndev, "VF unregistering: %s\n", vf_netdev->name);
 
@@ -2658,14 +2658,14 @@ static void netvsc_remove(struct hv_device *dev)
 
 	ndev_ctx = netdev_priv(net);
 
-	cancel_delayed_work_sync(&ndev_ctx->dwork);
+	cancel_delayed_work_sync_with_sync_wait(&ndev_ctx->dwork);
 
 	rtnl_lock();
-	cancel_delayed_work_sync(&ndev_ctx->vfns_work);
+	cancel_delayed_work_sync_with_sync_wait(&ndev_ctx->vfns_work);
 
 	nvdev = rtnl_dereference(ndev_ctx->nvdev);
 	if (nvdev) {
-		cancel_work_sync(&nvdev->subchan_work);
+		cancel_work_sync_with_sync_wait(&nvdev->subchan_work);
 		netvsc_xdp_set(net, NULL, NULL, nvdev);
 	}
 
@@ -2701,10 +2701,10 @@ static int netvsc_suspend(struct hv_device *dev)
 	net = hv_get_drvdata(dev);
 
 	ndev_ctx = netdev_priv(net);
-	cancel_delayed_work_sync(&ndev_ctx->dwork);
+	cancel_delayed_work_sync_with_sync_wait(&ndev_ctx->dwork);
 
 	rtnl_lock();
-	cancel_delayed_work_sync(&ndev_ctx->vfns_work);
+	cancel_delayed_work_sync_with_sync_wait(&ndev_ctx->vfns_work);
 
 	nvdev = rtnl_dereference(ndev_ctx->nvdev);
 	if (nvdev == NULL) {

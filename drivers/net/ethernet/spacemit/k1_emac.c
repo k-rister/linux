@@ -1729,7 +1729,7 @@ static int emac_down(struct emac_priv *priv)
 	napi_disable(&priv->napi);
 
 	timer_delete_sync(&priv->txtimer);
-	cancel_work_sync(&priv->tx_timeout_task);
+	cancel_work_sync_with_sync_wait(&priv->tx_timeout_task);
 
 	timer_delete_sync(&priv->stats_timer);
 
@@ -2008,7 +2008,7 @@ static void emac_remove(struct platform_device *pdev)
 	struct emac_priv *priv = platform_get_drvdata(pdev);
 
 	timer_shutdown_sync(&priv->txtimer);
-	cancel_work_sync(&priv->tx_timeout_task);
+	cancel_work_sync_with_sync_wait(&priv->tx_timeout_task);
 
 	timer_shutdown_sync(&priv->stats_timer);
 

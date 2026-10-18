@@ -1148,7 +1148,7 @@ static int cc2520_probe(struct spi_device *spi)
 
 err_hw_init:
 	mutex_destroy(&priv->buffer_mutex);
-	flush_work(&priv->fifop_irqwork);
+	flush_work_with_sync_wait(&priv->fifop_irqwork);
 	return ret;
 }
 
@@ -1156,7 +1156,7 @@ static void cc2520_remove(struct spi_device *spi)
 {
 	struct cc2520_private *priv = spi_get_drvdata(spi);
 
-	disable_work_sync(&priv->fifop_irqwork);
+	disable_work_sync_with_sync_wait(&priv->fifop_irqwork);
 	ieee802154_unregister_hw(priv->hw);
 	ieee802154_free_hw(priv->hw);
 	mutex_destroy(&priv->buffer_mutex);

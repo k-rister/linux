@@ -200,7 +200,7 @@ static void virt_wifi_cancel_scan(struct wiphy *wiphy)
 {
 	struct virt_wifi_wiphy_priv *priv = wiphy_priv(wiphy);
 
-	cancel_delayed_work_sync(&priv->scan_result);
+	cancel_delayed_work_sync_with_sync_wait(&priv->scan_result);
 	/* Clean up dangling callbacks if necessary. */
 	if (priv->scan_request) {
 		struct cfg80211_scan_info scan_info = { .aborted = true };
@@ -290,7 +290,7 @@ static void virt_wifi_cancel_connect(struct net_device *netdev)
 	struct virt_wifi_netdev_priv *priv = netdev_priv(netdev);
 
 	/* If there is work pending, clean up dangling callbacks. */
-	if (cancel_delayed_work_sync(&priv->connect)) {
+	if (cancel_delayed_work_sync_with_sync_wait(&priv->connect)) {
 		/* Schedules an event that acquires the rtnl lock. */
 		cfg80211_connect_result(priv->upperdev,
 					priv->connect_requested_bss, NULL, 0,

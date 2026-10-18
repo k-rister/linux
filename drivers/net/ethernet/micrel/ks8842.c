@@ -1014,7 +1014,7 @@ static int ks8842_close(struct net_device *netdev)
 
 	netdev_dbg(netdev, "%s - entry\n", __func__);
 
-	cancel_work_sync(&adapter->timeout_work);
+	cancel_work_sync_with_sync_wait(&adapter->timeout_work);
 
 	if (KS8842_USE_DMA(adapter))
 		ks8842_dealloc_dma_bufs(adapter);

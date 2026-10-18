@@ -3748,8 +3748,8 @@ static int mtk_stop(struct net_device *dev)
 	napi_disable(&eth->tx_napi);
 	napi_disable(&eth->rx_napi);
 
-	cancel_work_sync(&eth->rx_dim.work);
-	cancel_work_sync(&eth->tx_dim.work);
+	cancel_work_sync_with_sync_wait(&eth->rx_dim.work);
+	cancel_work_sync_with_sync_wait(&eth->tx_dim.work);
 
 	if (MTK_HAS_CAPS(eth->soc->caps, MTK_QDMA))
 		mtk_stop_dma(eth, eth->soc->reg_map->qdma.glo_cfg);
@@ -4528,8 +4528,8 @@ static int mtk_cleanup(struct mtk_eth *eth)
 	mtk_sgmii_destroy(eth);
 	mtk_unreg_dev(eth);
 	mtk_free_dev(eth);
-	cancel_work_sync(&eth->pending_work);
-	cancel_delayed_work_sync(&eth->reset.monitor_work);
+	cancel_work_sync_with_sync_wait(&eth->pending_work);
+	cancel_delayed_work_sync_with_sync_wait(&eth->reset.monitor_work);
 
 	return 0;
 }

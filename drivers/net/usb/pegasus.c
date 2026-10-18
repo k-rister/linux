@@ -1250,7 +1250,7 @@ static void pegasus_disconnect(struct usb_interface *intf)
 	}
 
 	pegasus->flags |= PEGASUS_UNPLUG;
-	cancel_delayed_work_sync(&pegasus->carrier_check);
+	cancel_delayed_work_sync_with_sync_wait(&pegasus->carrier_check);
 	unregister_netdev(pegasus->net);
 	unlink_all_urbs(pegasus);
 	free_all_urbs(pegasus);
@@ -1266,7 +1266,7 @@ static int pegasus_suspend(struct usb_interface *intf, pm_message_t message)
 	struct pegasus *pegasus = usb_get_intfdata(intf);
 
 	netif_device_detach(pegasus->net);
-	cancel_delayed_work_sync(&pegasus->carrier_check);
+	cancel_delayed_work_sync_with_sync_wait(&pegasus->carrier_check);
 	if (netif_running(pegasus->net)) {
 		usb_kill_urb(pegasus->rx_urb);
 		usb_kill_urb(pegasus->intr_urb);

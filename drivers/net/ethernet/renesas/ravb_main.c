@@ -2407,7 +2407,7 @@ static int ravb_close(struct net_device *ndev)
 		}
 	}
 
-	cancel_work_sync(&priv->work);
+	cancel_work_sync_with_sync_wait(&priv->work);
 
 	if (info->nc_queues)
 		napi_disable(&priv->napi[RAVB_NC]);

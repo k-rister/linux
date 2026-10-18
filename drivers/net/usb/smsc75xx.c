@@ -1496,7 +1496,7 @@ static int smsc75xx_bind(struct usbnet *dev, struct usb_interface *intf)
 	return 0;
 
 cancel_work:
-	cancel_work_sync(&pdata->set_multicast);
+	cancel_work_sync_with_sync_wait(&pdata->set_multicast);
 free_pdata:
 	kfree(pdata);
 	dev->data[0] = 0;
@@ -1507,7 +1507,7 @@ static void smsc75xx_unbind(struct usbnet *dev, struct usb_interface *intf)
 {
 	struct smsc75xx_priv *pdata = (struct smsc75xx_priv *)(dev->data[0]);
 	if (pdata) {
-		cancel_work_sync(&pdata->set_multicast);
+		cancel_work_sync_with_sync_wait(&pdata->set_multicast);
 		netif_dbg(dev, ifdown, dev->net, "free pdata\n");
 		kfree(pdata);
 		dev->data[0] = 0;

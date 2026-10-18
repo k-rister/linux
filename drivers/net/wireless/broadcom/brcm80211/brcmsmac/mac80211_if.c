@@ -1335,7 +1335,7 @@ static int __init brcms_module_init(void)
  */
 static void __exit brcms_module_exit(void)
 {
-	cancel_work_sync(&brcms_driver_work);
+	cancel_work_sync_with_sync_wait(&brcms_driver_work);
 	bcma_driver_unregister(&brcms_bcma_driver);
 	brcms_debugfs_exit();
 }

@@ -116,7 +116,7 @@ static void ipvlan_port_destroy(struct ipvl_port *port)
 		ipvlan_l3s_unregister(port);
 
 	netdev_rx_handler_unregister(dev);
-	cancel_work_sync(&port->wq);
+	cancel_work_sync_with_sync_wait(&port->wq);
 	netdev_put(dev, &port->dev_tracker);
 
 	while ((skb = __skb_dequeue(&port->backlog)) != NULL) {

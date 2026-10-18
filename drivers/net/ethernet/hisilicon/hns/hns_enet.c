@@ -2385,7 +2385,7 @@ static int hns_nic_dev_probe(struct platform_device *pdev)
 	return 0;
 
 out_notify_fail:
-	(void)cancel_work_sync(&priv->service_task);
+	(void)cancel_work_sync_with_sync_wait(&priv->service_task);
 out_read_prop_fail:
 	/* safe for ACPI FW */
 	of_node_put(to_of_node(priv->fwnode));
@@ -2416,7 +2416,7 @@ static void hns_nic_dev_remove(struct platform_device *pdev)
 	priv->notifier_block.notifier_call = NULL;
 
 	set_bit(NIC_STATE_REMOVING, &priv->state);
-	(void)cancel_work_sync(&priv->service_task);
+	(void)cancel_work_sync_with_sync_wait(&priv->service_task);
 
 	/* safe for ACPI FW */
 	of_node_put(to_of_node(priv->fwnode));

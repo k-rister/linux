@@ -64,7 +64,7 @@ static int mhi_ndo_stop(struct net_device *ndev)
 
 	netif_stop_queue(ndev);
 	netif_carrier_off(ndev);
-	cancel_delayed_work_sync(&mhi_netdev->rx_refill);
+	cancel_delayed_work_sync_with_sync_wait(&mhi_netdev->rx_refill);
 
 	return 0;
 }

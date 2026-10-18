@@ -1340,7 +1340,7 @@ static void mm81x_mac_beacon_finish(struct mm81x_vif *mors_vif)
 	struct mm81x *mors = mm81x_vif_to_mors(mors_vif);
 
 	mm81x_mac_beacon_irq_enable(mors_vif, false);
-	cancel_work_sync(&mors_vif->u.ap.beacon_work);
+	cancel_work_sync_with_sync_wait(&mors_vif->u.ap.beacon_work);
 	/*
 	 * Side effect of the restarting required when
 	 * reacting to regdom changes...

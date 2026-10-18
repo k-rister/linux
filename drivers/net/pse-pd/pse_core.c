@@ -1118,7 +1118,7 @@ void pse_controller_unregister(struct pse_controller_dev *pcdev)
 	pse_release_pis(pcdev);
 	if (pcdev->irq)
 		disable_irq(pcdev->irq);
-	cancel_work_sync(&pcdev->ntf_work);
+	cancel_work_sync_with_sync_wait(&pcdev->ntf_work);
 	kfifo_free(&pcdev->ntf_fifo);
 	mutex_lock(&pse_list_mutex);
 	list_del(&pcdev->list);

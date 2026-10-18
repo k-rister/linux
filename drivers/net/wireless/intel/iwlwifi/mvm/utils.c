@@ -1098,7 +1098,7 @@ void iwl_mvm_pause_tcm(struct iwl_mvm *mvm, bool with_cancel)
 	mvm->tcm.paused = true;
 	spin_unlock_bh(&mvm->tcm.lock);
 	if (with_cancel)
-		cancel_delayed_work_sync(&mvm->tcm.work);
+		cancel_delayed_work_sync_with_sync_wait(&mvm->tcm.work);
 }
 
 void iwl_mvm_resume_tcm(struct iwl_mvm *mvm)

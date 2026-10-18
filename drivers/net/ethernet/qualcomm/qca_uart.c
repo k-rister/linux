@@ -171,7 +171,7 @@ static int qcauart_netdev_close(struct net_device *dev)
 	struct qcauart *qca = netdev_priv(dev);
 
 	netif_stop_queue(dev);
-	flush_work(&qca->tx_work);
+	flush_work_with_sync_wait(&qca->tx_work);
 
 	spin_lock_bh(&qca->lock);
 	qca->tx_left = 0;
@@ -360,7 +360,7 @@ static int qca_uart_probe(struct serdev_device *serdev)
 		dev_err(&serdev->dev, "Unable to register net device %s\n",
 			qcauart_dev->name);
 		serdev_device_close(serdev);
-		cancel_work_sync(&qca->tx_work);
+		cancel_work_sync_with_sync_wait(&qca->tx_work);
 		goto free;
 	}
 
@@ -379,7 +379,7 @@ static void qca_uart_remove(struct serdev_device *serdev)
 
 	/* Flush any pending characters in the driver. */
 	serdev_device_close(serdev);
-	cancel_work_sync(&qca->tx_work);
+	cancel_work_sync_with_sync_wait(&qca->tx_work);
 
 	free_netdev(qca->net_dev);
 }

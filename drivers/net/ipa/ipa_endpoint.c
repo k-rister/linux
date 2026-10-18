@@ -1955,7 +1955,7 @@ static void ipa_endpoint_teardown_one(struct ipa_endpoint *endpoint)
 	__clear_bit(endpoint->endpoint_id, endpoint->ipa->set_up);
 
 	if (!endpoint->toward_ipa)
-		cancel_delayed_work_sync(&endpoint->replenish_work);
+		cancel_delayed_work_sync_with_sync_wait(&endpoint->replenish_work);
 
 	ipa_endpoint_reset(endpoint);
 }

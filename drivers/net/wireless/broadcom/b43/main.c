@@ -5681,7 +5681,7 @@ static void b43_bcma_remove(struct bcma_device *core)
 	/* We must cancel any work here before unregistering from ieee80211,
 	 * as the ieee80211 unreg will destroy the workqueue. */
 	cancel_work_sync(&wldev->restart_work);
-	cancel_work_sync(&wl->firmware_load);
+	cancel_work_sync_with_sync_wait(&wl->firmware_load);
 
 	B43_WARN_ON(!wl);
 	if (!wldev->fw.ucode.data)
@@ -5764,7 +5764,7 @@ static void b43_ssb_remove(struct ssb_device *sdev)
 	/* We must cancel any work here before unregistering from ieee80211,
 	 * as the ieee80211 unreg will destroy the workqueue. */
 	cancel_work_sync(&wldev->restart_work);
-	cancel_work_sync(&wl->firmware_load);
+	cancel_work_sync_with_sync_wait(&wl->firmware_load);
 
 	B43_WARN_ON(!wl);
 	if (!wldev->fw.ucode.data)

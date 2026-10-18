@@ -419,7 +419,7 @@ static void lan865x_remove(struct spi_device *spi)
 {
 	struct lan865x_priv *priv = spi_get_drvdata(spi);
 
-	cancel_work_sync(&priv->multicast_work);
+	cancel_work_sync_with_sync_wait(&priv->multicast_work);
 	unregister_netdev(priv->netdev);
 	oa_tc6_exit(priv->tc6);
 	free_netdev(priv->netdev);

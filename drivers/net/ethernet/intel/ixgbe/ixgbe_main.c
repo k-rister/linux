@@ -9537,7 +9537,7 @@ cleanup_tx_timestamp:
 	if (unlikely(tx_flags & IXGBE_TX_FLAGS_TSTAMP)) {
 		dev_kfree_skb_any(adapter->ptp_tx_skb);
 		adapter->ptp_tx_skb = NULL;
-		cancel_work_sync(&adapter->ptp_tx_work);
+		cancel_work_sync_with_sync_wait(&adapter->ptp_tx_work);
 		clear_bit_unlock(__IXGBE_PTP_TX_IN_PROGRESS, &adapter->state);
 	}
 

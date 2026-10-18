@@ -1066,7 +1066,7 @@ static void atusb_disconnect(struct usb_interface *interface)
 	dev_dbg(&atusb->usb_dev->dev, "%s\n", __func__);
 
 	atusb->shutdown = 1;
-	cancel_delayed_work_sync(&atusb->work);
+	cancel_delayed_work_sync_with_sync_wait(&atusb->work);
 
 	usb_kill_anchored_urbs(&atusb->rx_urbs);
 	atusb_free_urbs(atusb);

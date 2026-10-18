@@ -416,7 +416,7 @@ static void qtnf_pcie_remove(struct pci_dev *dev)
 
 	priv = get_bus_priv(bus);
 
-	cancel_work_sync(&bus->fw_work);
+	cancel_work_sync_with_sync_wait(&bus->fw_work);
 
 	if (qtnf_fw_is_attached(bus))
 		qtnf_core_detach(bus);

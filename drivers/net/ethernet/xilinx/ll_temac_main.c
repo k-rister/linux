@@ -1204,7 +1204,7 @@ static int temac_stop(struct net_device *ndev)
 
 	dev_dbg(&ndev->dev, "temac_close()\n");
 
-	cancel_delayed_work_sync(&lp->restart_work);
+	cancel_delayed_work_sync_with_sync_wait(&lp->restart_work);
 
 	free_irq(lp->tx_irq, ndev);
 	free_irq(lp->rx_irq, ndev);

@@ -2798,7 +2798,7 @@ static void gem_remove_one(struct pci_dev *pdev)
 		unregister_netdev(dev);
 
 		/* Ensure reset task is truly gone */
-		cancel_work_sync(&gp->reset_task);
+		cancel_work_sync_with_sync_wait(&gp->reset_task);
 
 		/* Free resources */
 		dma_free_coherent(&pdev->dev, sizeof(struct gem_init_block),

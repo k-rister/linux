@@ -2484,7 +2484,7 @@ static void pch_gbe_remove(struct pci_dev *pdev)
 	struct net_device *netdev = pci_get_drvdata(pdev);
 	struct pch_gbe_adapter *adapter = netdev_priv(netdev);
 
-	cancel_work_sync(&adapter->reset_task);
+	cancel_work_sync_with_sync_wait(&adapter->reset_task);
 	unregister_netdev(netdev);
 
 	pch_gbe_phy_hw_reset(&adapter->hw);

@@ -208,7 +208,7 @@ void wg_ratelimiter_uninit(void)
 	if (!init_refcnt || --init_refcnt)
 		goto out;
 
-	cancel_delayed_work_sync(&gc_work);
+	cancel_delayed_work_sync_with_sync_wait(&gc_work);
 	wg_ratelimiter_gc_entries(NULL);
 	rcu_barrier();
 	kvfree(table_v4);

@@ -113,9 +113,9 @@ static void peer_remove_after_dead(struct wg_peer *peer)
 	 */
 
 	/* a) For encrypt/decrypt. */
-	flush_workqueue(peer->device->packet_crypt_wq);
+	flush_workqueue_with_sync_wait(peer->device->packet_crypt_wq);
 	/* b.1) For send (but not receive, since that's napi). */
-	flush_workqueue(peer->device->packet_crypt_wq);
+	flush_workqueue_with_sync_wait(peer->device->packet_crypt_wq);
 	/* b.2.1) For receive (but not send, since that's wq). */
 	napi_disable(&peer->napi);
 	/* b.2.1) It's now safe to remove the napi struct, which must be done

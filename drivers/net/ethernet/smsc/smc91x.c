@@ -980,7 +980,7 @@ static void smc_phy_powerdown(struct net_device *dev)
 	/* We need to ensure that no calls to smc_phy_configure are
 	   pending.
 	*/
-	cancel_work_sync(&lp->phy_configure);
+	cancel_work_sync_with_sync_wait(&lp->phy_configure);
 
 	bmcr = smc_phy_read(dev, phy, MII_BMCR);
 	smc_phy_write(dev, phy, MII_BMCR, bmcr | BMCR_PDOWN);

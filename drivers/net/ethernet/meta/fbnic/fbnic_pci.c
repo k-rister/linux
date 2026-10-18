@@ -413,7 +413,7 @@ static void fbnic_remove(struct pci_dev *pdev)
 		struct net_device *netdev = fbd->netdev;
 
 		fbnic_netdev_unregister(netdev);
-		cancel_delayed_work_sync(&fbd->service_task);
+		cancel_delayed_work_sync_with_sync_wait(&fbd->service_task);
 		fbnic_ptp_destroy(fbd);
 		fbnic_netdev_free(fbd);
 	}

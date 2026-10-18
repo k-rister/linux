@@ -410,7 +410,7 @@ static void mctp_serial_uninit(struct net_device *ndev)
 {
 	struct mctp_serial *dev = netdev_priv(ndev);
 
-	cancel_work_sync(&dev->tx_work);
+	cancel_work_sync_with_sync_wait(&dev->tx_work);
 }
 
 static const struct net_device_ops mctp_serial_netdev_ops = {

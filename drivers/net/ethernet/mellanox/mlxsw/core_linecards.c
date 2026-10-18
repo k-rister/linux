@@ -42,7 +42,7 @@ static void
 mlxsw_linecard_status_event_to_schedule(struct mlxsw_linecard *linecard,
 					enum mlxsw_linecard_status_event_type status_event_type)
 {
-	cancel_delayed_work_sync(&linecard->status_event_to_dw);
+	cancel_delayed_work_sync_with_sync_wait(&linecard->status_event_to_dw);
 	linecard->status_event_type_to = status_event_type;
 	mlxsw_core_schedule_dw(&linecard->status_event_to_dw,
 			       msecs_to_jiffies(MLXSW_LINECARD_STATUS_EVENT_TO));
@@ -53,7 +53,7 @@ mlxsw_linecard_status_event_done(struct mlxsw_linecard *linecard,
 				 enum mlxsw_linecard_status_event_type status_event_type)
 {
 	if (linecard->status_event_type_to == status_event_type)
-		cancel_delayed_work_sync(&linecard->status_event_to_dw);
+		cancel_delayed_work_sync_with_sync_wait(&linecard->status_event_to_dw);
 }
 
 static const char *

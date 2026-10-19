@@ -526,7 +526,7 @@ static void octep_vdpa_remove_vf(struct pci_dev *pdev)
 	status = atomic_read(&mgmt_dev->status);
 	atomic_set(&mgmt_dev->status, OCTEP_VDPA_DEV_STATUS_UNINIT);
 
-	cancel_work_sync(&mgmt_dev->setup_task);
+	cancel_work_sync_with_sync_wait(&mgmt_dev->setup_task);
 	if ((status == OCTEP_VDPA_DEV_STATUS_READY) || (status == OCTEP_VDPA_DEV_STATUS_ADDED) ||
 	    (status == OCTEP_VDPA_DEV_STATUS_REMOVED))
 		vdpa_mgmtdev_unregister(&mgmt_dev->mdev);

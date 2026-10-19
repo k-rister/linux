@@ -955,7 +955,7 @@ static int ur_set_offline_force(struct ccw_device *cdev, int force)
 		rc = -EBUSY;
 		goto fail_urdev_put;
 	}
-	if (cancel_work_sync(&urd->uevent_work)) {
+	if (cancel_work_sync_with_sync_wait(&urd->uevent_work)) {
 		/* Work not run yet - need to release reference here */
 		urdev_put(urd);
 	}

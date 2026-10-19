@@ -540,7 +540,7 @@ static void flush_sndbuf_sync(struct hvc_iucv_private *priv)
 {
 	int sync_wait;
 
-	cancel_delayed_work_sync(&priv->sndbuf_work);
+	cancel_delayed_work_sync_with_sync_wait(&priv->sndbuf_work);
 
 	spin_lock_bh(&priv->lock);
 	hvc_iucv_send(priv);		/* force sending buffered data */

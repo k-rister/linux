@@ -846,7 +846,7 @@ static void _gb_power_supply_release(struct gb_power_supply *gbpsy)
 {
 	gbpsy->update_interval = 0;
 
-	cancel_delayed_work_sync(&gbpsy->work);
+	cancel_delayed_work_sync_with_sync_wait(&gbpsy->work);
 
 	if (gbpsy->registered)
 		power_supply_unregister(gbpsy->psy);

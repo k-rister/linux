@@ -749,8 +749,8 @@ static void hvsi_flush_output(struct hvsi_struct *hp)
 	wait_event_timeout(hp->emptyq, (hp->n_outbuf <= 0), HVSI_TIMEOUT);
 
 	/* 'writer' could still be pending if it didn't see n_outbuf = 0 yet */
-	cancel_delayed_work_sync(&hp->writer);
-	flush_work(&hp->handshaker);
+	cancel_delayed_work_sync_with_sync_wait(&hp->writer);
+	flush_work_with_sync_wait(&hp->handshaker);
 
 	/*
 	 * it's also possible that our timeout expired and hvsi_write_worker

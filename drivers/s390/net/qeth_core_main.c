@@ -5406,7 +5406,7 @@ int qeth_set_offline(struct qeth_card *card, const struct qeth_discipline *disc,
 	netif_carrier_off(card->dev);
 	rtnl_unlock();
 
-	cancel_work_sync(&card->rx_mode_work);
+	cancel_work_sync_with_sync_wait(&card->rx_mode_work);
 
 	disc->set_offline(card);
 
@@ -7082,7 +7082,7 @@ int qeth_stop(struct net_device *dev)
 	QETH_CARD_TEXT(card, 4, "qethstop");
 
 	napi_disable(&card->napi);
-	cancel_delayed_work_sync(&card->buffer_reclaim_work);
+	cancel_delayed_work_sync_with_sync_wait(&card->buffer_reclaim_work);
 	qdio_stop_irq(CARD_DDEV(card));
 
 	/* Quiesce the NAPI instances: */

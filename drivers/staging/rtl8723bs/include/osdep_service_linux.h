@@ -70,7 +70,7 @@ static inline void _set_workitem(struct work_struct *pwork)
 
 static inline void _cancel_workitem_sync(struct work_struct *pwork)
 {
-	cancel_work_sync(pwork);
+	cancel_work_sync_with_sync_wait(pwork);
 }
 
 static inline int rtw_netif_queue_stopped(struct net_device *pnetdev)

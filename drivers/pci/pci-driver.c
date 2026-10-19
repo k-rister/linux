@@ -453,7 +453,7 @@ static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
 
 void pci_probe_flush_workqueue(void)
 {
-	flush_workqueue(pci_probe_wq);
+	flush_workqueue_with_sync_wait(pci_probe_wq);
 }
 
 /**

@@ -76,7 +76,7 @@ static void xen_pcibk_disconnect(struct xen_pcibk_device *pdev)
 	/* If the driver domain started an op, make sure we complete it
 	 * before releasing the shared memory */
 
-	flush_work(&pdev->op_work);
+	flush_work_with_sync_wait(&pdev->op_work);
 
 	if (pdev->sh_info != NULL) {
 		xenbus_unmap_ring_vfree(pdev->xdev, pdev->sh_info);

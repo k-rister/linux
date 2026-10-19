@@ -1543,8 +1543,8 @@ void qcom_smd_unregister_edge(struct qcom_smd_edge *edge)
 	int ret;
 
 	disable_irq(edge->irq);
-	cancel_work_sync(&edge->scan_work);
-	cancel_work_sync(&edge->state_work);
+	cancel_work_sync_with_sync_wait(&edge->scan_work);
+	cancel_work_sync_with_sync_wait(&edge->state_work);
 
 	ret = device_for_each_child(&edge->dev, NULL, qcom_smd_remove_device);
 	if (ret)

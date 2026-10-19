@@ -1374,7 +1374,7 @@ int iscsi_target_start_negotiation(
 	}
 	if (ret != 0) {
 		iscsit_stop_login_timer(conn);
-		cancel_delayed_work_sync(&conn->login_work);
+		cancel_delayed_work_sync_with_sync_wait(&conn->login_work);
 		iscsi_target_nego_release(conn);
 	}
 

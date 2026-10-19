@@ -197,7 +197,7 @@ static void __exit smsgiucv_app_exit(void)
 	smsg_unregister_callback(SMSG_PREFIX, smsg_app_callback);
 
 	/* cancel pending work and flush any queued event work */
-	cancel_work_sync(&smsg_event_work);
+	cancel_work_sync_with_sync_wait(&smsg_event_work);
 	smsg_event_work_fn(&smsg_event_work);
 
 	device_unregister(smsg_app_dev);

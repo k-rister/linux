@@ -596,7 +596,7 @@ static int ad5933_ring_postdisable(struct iio_dev *indio_dev)
 {
 	struct ad5933_state *st = iio_priv(indio_dev);
 
-	cancel_delayed_work_sync(&st->work);
+	cancel_delayed_work_sync_with_sync_wait(&st->work);
 	return ad5933_cmd(st, AD5933_CTRL_POWER_DOWN);
 }
 

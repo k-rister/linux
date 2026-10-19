@@ -1318,7 +1318,7 @@ static void stdev_kill(struct switchtec_dev *stdev)
 
 	pci_clear_master(stdev->pdev);
 
-	cancel_delayed_work_sync(&stdev->mrpc_timeout);
+	cancel_delayed_work_sync_with_sync_wait(&stdev->mrpc_timeout);
 
 	/* Mark the hardware as unavailable and complete all completions */
 	scoped_guard (mutex, &stdev->mrpc_mutex) {

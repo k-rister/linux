@@ -1088,7 +1088,7 @@ static void qedi_ep_disconnect(struct iscsi_endpoint *ep)
 	qedi_ep = ep->dd_data;
 	qedi = qedi_ep->qedi;
 
-	flush_work(&qedi_ep->offload_work);
+	flush_work_with_sync_wait(&qedi_ep->offload_work);
 
 	if (qedi_ep->state == EP_STATE_OFLDCONN_START)
 		goto ep_exit_recover;

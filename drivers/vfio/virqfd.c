@@ -88,7 +88,7 @@ static void virqfd_shutdown(struct work_struct *work)
 	u64 cnt;
 
 	eventfd_ctx_remove_wait_queue(virqfd->eventfd, &virqfd->wait, &cnt);
-	flush_work(&virqfd->inject);
+	flush_work_with_sync_wait(&virqfd->inject);
 	eventfd_ctx_put(virqfd->eventfd);
 
 	kfree(virqfd);
@@ -105,7 +105,7 @@ static void virqfd_flush_inject(struct work_struct *work)
 {
 	struct virqfd *virqfd = container_of(work, struct virqfd, flush_inject);
 
-	flush_work(&virqfd->inject);
+	flush_work_with_sync_wait(&virqfd->inject);
 }
 
 int vfio_virqfd_enable(void *opaque,

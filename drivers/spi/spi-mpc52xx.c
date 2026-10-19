@@ -516,7 +516,7 @@ static int mpc52xx_spi_probe(struct platform_device *op)
 		free_irq(ms->irq0, ms);
 		free_irq(ms->irq1, ms);
 	}
-	cancel_work_sync(&ms->work);
+	cancel_work_sync_with_sync_wait(&ms->work);
  err_gpio:
 	while (i-- > 0)
 		gpiod_put(ms->gpio_cs[i]);
@@ -543,7 +543,7 @@ static void mpc52xx_spi_remove(struct platform_device *op)
 		free_irq(ms->irq1, ms);
 	}
 
-	cancel_work_sync(&ms->work);
+	cancel_work_sync_with_sync_wait(&ms->work);
 
 	for (i = 0; i < ms->gpio_cs_count; i++)
 		gpiod_put(ms->gpio_cs[i]);

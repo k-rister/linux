@@ -387,7 +387,7 @@ static int cros_ec_create_console_log(struct cros_ec_debugfs *debug_info)
 static void cros_ec_cleanup_console_log(struct cros_ec_debugfs *debug_info)
 {
 	if (debug_info->log_buffer.buf) {
-		cancel_delayed_work_sync(&debug_info->log_poll_work);
+		cancel_delayed_work_sync_with_sync_wait(&debug_info->log_poll_work);
 		mutex_destroy(&debug_info->log_mutex);
 	}
 }
@@ -466,7 +466,7 @@ static int cros_ec_debugfs_panic_event(struct notifier_block *nb,
 		/* Force log poll work to run immediately */
 		mod_delayed_work(debug_info->log_poll_work.wq, &debug_info->log_poll_work, 0);
 		/* Block until log poll work finishes */
-		flush_delayed_work(&debug_info->log_poll_work);
+		flush_delayed_work_with_sync_wait(&debug_info->log_poll_work);
 	}
 
 	return NOTIFY_DONE;
@@ -542,7 +542,7 @@ static int __maybe_unused cros_ec_debugfs_suspend(struct device *dev)
 	struct cros_ec_dev *ec = dev_get_drvdata(dev);
 
 	if (ec->debug_info->log_buffer.buf)
-		cancel_delayed_work_sync(&ec->debug_info->log_poll_work);
+		cancel_delayed_work_sync_with_sync_wait(&ec->debug_info->log_poll_work);
 
 	return 0;
 }

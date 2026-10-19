@@ -417,8 +417,8 @@ static void nfcsim_device_free(struct nfcsim *dev)
 
 	nfcsim_link_shutdown(dev->link_in);
 
-	cancel_delayed_work_sync(&dev->send_work);
-	cancel_work_sync(&dev->recv_work);
+	cancel_delayed_work_sync_with_sync_wait(&dev->send_work);
+	cancel_work_sync_with_sync_wait(&dev->recv_work);
 
 	nfc_digital_free_device(dev->nfc_digital_dev);
 

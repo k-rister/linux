@@ -582,7 +582,7 @@ int fdomain_destroy(struct Scsi_Host *sh)
 {
 	struct fdomain *fd = shost_priv(sh);
 
-	cancel_work_sync(&fd->work);
+	cancel_work_sync_with_sync_wait(&fd->work);
 	scsi_remove_host(sh);
 	if (sh->irq)
 		free_irq(sh->irq, fd);

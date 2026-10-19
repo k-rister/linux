@@ -722,7 +722,7 @@ void pdr_handle_release(struct pdr_handle *pdr)
 	}
 	mutex_unlock(&pdr->list_lock);
 
-	cancel_work_sync(&pdr->locator_work);
+	cancel_work_sync_with_sync_wait(&pdr->locator_work);
 	cancel_work_sync(&pdr->notifier_work);
 	cancel_work_sync(&pdr->indack_work);
 

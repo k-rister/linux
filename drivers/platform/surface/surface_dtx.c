@@ -1033,7 +1033,7 @@ static int sdtx_device_init(struct sdtx_device *ddev, struct device *dev,
 
 err_notif:
 	ssam_notifier_unregister(ddev->ctrl, &ddev->notif);
-	cancel_delayed_work_sync(&ddev->mode_work);
+	cancel_delayed_work_sync_with_sync_wait(&ddev->mode_work);
 err_mdev:
 	input_unregister_device(ddev->mode_switch);
 	return status;
@@ -1071,10 +1071,10 @@ static void sdtx_device_destroy(struct sdtx_device *ddev)
 	ssam_notifier_unregister(ddev->ctrl, &ddev->notif);
 
 	/* Stop mode_work, prevent access to mode_switch. */
-	cancel_delayed_work_sync(&ddev->mode_work);
+	cancel_delayed_work_sync_with_sync_wait(&ddev->mode_work);
 
 	/* Stop state_work. */
-	cancel_delayed_work_sync(&ddev->state_work);
+	cancel_delayed_work_sync_with_sync_wait(&ddev->state_work);
 
 	/* With mode_work canceled, we can unregister the mode_switch. */
 	input_unregister_device(ddev->mode_switch);

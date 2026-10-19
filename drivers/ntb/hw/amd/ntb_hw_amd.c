@@ -1160,7 +1160,7 @@ static int amd_init_dev(struct amd_ntb_dev *ndev)
 
 static void amd_deinit_dev(struct amd_ntb_dev *ndev)
 {
-	cancel_delayed_work_sync(&ndev->hb_timer);
+	cancel_delayed_work_sync_with_sync_wait(&ndev->hb_timer);
 
 	ndev_deinit_isr(ndev);
 }

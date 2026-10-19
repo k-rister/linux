@@ -110,7 +110,7 @@ static void cvm_oct_remove_device(int port)
 		struct net_device *dev = cvm_oct_device[port];
 		struct octeon_ethernet *priv = netdev_priv(dev);
 
-		cancel_delayed_work_sync(&priv->port_periodic_work);
+		cancel_delayed_work_sync_with_sync_wait(&priv->port_periodic_work);
 
 		cvm_oct_tx_shutdown_dev(dev);
 		unregister_netdev(dev);
@@ -987,7 +987,7 @@ static void cvm_oct_remove(struct platform_device *pdev)
 	cvmx_ipd_disable();
 
 	atomic_inc_return(&cvm_oct_poll_queue_stopping);
-	cancel_delayed_work_sync(&plat->rx_refill_work);
+	cancel_delayed_work_sync_with_sync_wait(&plat->rx_refill_work);
 
 	cvm_oct_rx_shutdown(pdev);
 	cvm_oct_tx_shutdown();

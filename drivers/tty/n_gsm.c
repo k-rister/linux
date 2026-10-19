@@ -3149,7 +3149,7 @@ static void gsm_cleanup_mux(struct gsm_mux *gsm, bool disc)
 	timer_delete_sync(&gsm->ka_timer);
 
 	/* Finish writing to ldisc */
-	flush_work(&gsm->tx_work);
+	flush_work_with_sync_wait(&gsm->tx_work);
 
 	/* Free up any link layer users and finally the control channel */
 	if (gsm->has_devices) {

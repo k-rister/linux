@@ -321,7 +321,7 @@ static int wled_module_enable(struct wled *wled, int val)
 			 */
 			schedule_delayed_work(&wled->ovp_work, HZ / 100);
 		} else {
-			if (!cancel_delayed_work_sync(&wled->ovp_work))
+			if (!cancel_delayed_work_sync_with_sync_wait(&wled->ovp_work))
 				disable_irq(wled->ovp_irq);
 		}
 	}
@@ -1760,7 +1760,7 @@ static void wled_remove(struct platform_device *pdev)
 	struct wled *wled = platform_get_drvdata(pdev);
 
 	mutex_destroy(&wled->lock);
-	cancel_delayed_work_sync(&wled->ovp_work);
+	cancel_delayed_work_sync_with_sync_wait(&wled->ovp_work);
 	disable_irq(wled->short_irq);
 	disable_irq(wled->ovp_irq);
 }

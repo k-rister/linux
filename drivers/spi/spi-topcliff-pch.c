@@ -1239,7 +1239,7 @@ static void pch_spi_free_resources(struct pch_spi_board_data *board_dat,
 {
 	dev_dbg(&board_dat->pdev->dev, "%s ENTRY\n", __func__);
 
-	flush_work(&data->work);
+	flush_work_with_sync_wait(&data->work);
 }
 
 static int pch_spi_get_resources(struct pch_spi_board_data *board_dat,

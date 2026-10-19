@@ -2664,8 +2664,8 @@ static inline void aac_safw_rescan_worker(struct work_struct *work)
 
 static inline void aac_cancel_rescan_worker(struct aac_dev *dev)
 {
-	cancel_delayed_work_sync(&dev->safw_rescan_work);
-	cancel_delayed_work_sync(&dev->src_reinit_aif_worker);
+	cancel_delayed_work_sync_with_sync_wait(&dev->safw_rescan_work);
+	cancel_delayed_work_sync_with_sync_wait(&dev->src_reinit_aif_worker);
 }
 
 enum aac_cmd_owner {

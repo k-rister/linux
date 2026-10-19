@@ -739,7 +739,7 @@ static void gb_tty_port_shutdown(struct tty_port *port)
 
 	gb_tty->close_pending = true;
 
-	cancel_work_sync(&gb_tty->tx_work);
+	cancel_work_sync_with_sync_wait(&gb_tty->tx_work);
 
 	spin_lock_irqsave(&gb_tty->write_lock, flags);
 	kfifo_reset_out(&gb_tty->write_fifo);

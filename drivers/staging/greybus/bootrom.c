@@ -95,7 +95,7 @@ static void gb_bootrom_set_timeout(struct gb_bootrom *bootrom,
 
 static void gb_bootrom_cancel_timeout(struct gb_bootrom *bootrom)
 {
-	cancel_delayed_work_sync(&bootrom->dwork);
+	cancel_delayed_work_sync_with_sync_wait(&bootrom->dwork);
 }
 
 /*

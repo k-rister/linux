@@ -197,7 +197,7 @@ void optee_remove_common(struct optee *optee)
 {
 	blocking_notifier_chain_unregister(&optee_rpmb_intf_added,
 					   &optee->rpmb_intf);
-	cancel_work_sync(&optee->rpmb_scan_bus_work);
+	cancel_work_sync_with_sync_wait(&optee->rpmb_scan_bus_work);
 	/* Unregister OP-TEE specific client devices on TEE bus */
 	optee_unregister_devices();
 

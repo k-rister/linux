@@ -904,8 +904,8 @@ static void tegra_nvec_remove(struct platform_device *pdev)
 	nvec_toggle_global_events(nvec, false);
 	mfd_remove_devices(nvec->dev);
 	nvec_unregister_notifier(nvec, &nvec->nvec_status_notifier);
-	cancel_work_sync(&nvec->rx_work);
-	cancel_work_sync(&nvec->tx_work);
+	cancel_work_sync_with_sync_wait(&nvec->rx_work);
+	cancel_work_sync_with_sync_wait(&nvec->tx_work);
 	if (pm_power_off == nvec_power_off)
 		pm_power_off = NULL;
 }

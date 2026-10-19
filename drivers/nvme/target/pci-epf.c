@@ -1331,7 +1331,7 @@ static u16 nvmet_pci_epf_delete_cq(struct nvmet_ctrl *tctrl, u16 cqid)
 	if (!test_and_clear_bit(NVMET_PCI_EPF_Q_LIVE, &cq->flags))
 		return NVME_SC_QID_INVALID | NVME_STATUS_DNR;
 
-	cancel_delayed_work_sync(&cq->work);
+	cancel_delayed_work_sync_with_sync_wait(&cq->work);
 	nvmet_pci_epf_drain_queue(cq);
 	if (test_and_clear_bit(NVMET_PCI_EPF_Q_IRQ_ENABLED, &cq->flags))
 		nvmet_pci_epf_remove_irq_vector(ctrl, cq->vector);
@@ -1905,7 +1905,7 @@ static void nvmet_pci_epf_disable_ctrl(struct nvmet_pci_epf_ctrl *ctrl,
 		 shutdown ? "Shutting down" : "Disabling");
 
 	ctrl->enabled = false;
-	cancel_delayed_work_sync(&ctrl->poll_sqs);
+	cancel_delayed_work_sync_with_sync_wait(&ctrl->poll_sqs);
 
 	/* Delete all I/O queues first. */
 	for (qid = 1; qid < ctrl->nr_queues; qid++)
@@ -2105,7 +2105,7 @@ static void nvmet_pci_epf_stop_ctrl(struct nvmet_pci_epf_ctrl *ctrl)
 	dev_info(ctrl->dev, "PCI link down\n");
 	ctrl->link_up = false;
 
-	cancel_delayed_work_sync(&ctrl->poll_cc);
+	cancel_delayed_work_sync_with_sync_wait(&ctrl->poll_cc);
 
 	nvmet_pci_epf_disable_ctrl(ctrl, false);
 	nvmet_pci_epf_clear_ctrl_config(ctrl);

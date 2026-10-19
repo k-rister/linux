@@ -342,7 +342,7 @@ static void wcnss_ctrl_remove(struct rpmsg_device *rpdev)
 {
 	struct wcnss_ctrl *wcnss = dev_get_drvdata(&rpdev->dev);
 
-	cancel_work_sync(&wcnss->probe_work);
+	cancel_work_sync_with_sync_wait(&wcnss->probe_work);
 	of_platform_depopulate(&rpdev->dev);
 }
 

@@ -676,7 +676,7 @@ static int pmu_sbi_event_map(struct perf_event *event, u64 *econfig)
 	 * Ensure we are finished checking standard hardware events for
 	 * validity before allowing userspace to configure any events.
 	 */
-	flush_work(&check_std_events_work);
+	flush_work_with_sync_wait(&check_std_events_work);
 
 	return riscv_pmu_get_event_info(type, config, econfig);
 }

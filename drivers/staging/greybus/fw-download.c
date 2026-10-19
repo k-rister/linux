@@ -297,7 +297,7 @@ static int fw_download_fetch_firmware(struct gb_operation *op)
 	}
 
 	/* Make sure work handler isn't running in parallel */
-	cancel_delayed_work_sync(&fw_req->dwork);
+	cancel_delayed_work_sync_with_sync_wait(&fw_req->dwork);
 
 	/* We timed-out before reaching here ? */
 	if (fw_req->disabled) {
@@ -373,7 +373,7 @@ static int fw_download_release_firmware(struct gb_operation *op)
 		return -EINVAL;
 	}
 
-	cancel_delayed_work_sync(&fw_req->dwork);
+	cancel_delayed_work_sync_with_sync_wait(&fw_req->dwork);
 
 	free_firmware(fw_download, fw_req);
 	put_fw_req(fw_req);
@@ -455,7 +455,7 @@ void gb_fw_download_connection_exit(struct gb_connection *connection)
 
 	/* Release pending firmware packages */
 	list_for_each_entry_safe(fw_req, tmp, &fw_download->fw_requests, node) {
-		cancel_delayed_work_sync(&fw_req->dwork);
+		cancel_delayed_work_sync_with_sync_wait(&fw_req->dwork);
 		free_firmware(fw_download, fw_req);
 		put_fw_req(fw_req);
 	}

@@ -249,7 +249,7 @@ csio_hw_init_workers(struct csio_hw *hw)
 static void
 csio_hw_exit_workers(struct csio_hw *hw)
 {
-	cancel_work_sync(&hw->evtq_work);
+	cancel_work_sync_with_sync_wait(&hw->evtq_work);
 }
 
 static int

@@ -250,7 +250,7 @@ void dasd_alias_disconnect_device_from_lcu(struct dasd_device *device)
 	/* make sure that the workers don't use this device */
 	if (device == lcu->suc_data.device) {
 		spin_unlock_irqrestore(&lcu->lock, flags);
-		cancel_work_sync(&lcu->suc_data.worker);
+		cancel_work_sync_with_sync_wait(&lcu->suc_data.worker);
 		spin_lock_irqsave(&lcu->lock, flags);
 		if (device == lcu->suc_data.device) {
 			dasd_put_device(device);
@@ -261,7 +261,7 @@ void dasd_alias_disconnect_device_from_lcu(struct dasd_device *device)
 	if (device == lcu->ruac_data.device) {
 		spin_unlock_irqrestore(&lcu->lock, flags);
 		was_pending = 1;
-		cancel_delayed_work_sync(&lcu->ruac_data.dwork);
+		cancel_delayed_work_sync_with_sync_wait(&lcu->ruac_data.dwork);
 		spin_lock_irqsave(&lcu->lock, flags);
 		if (device == lcu->ruac_data.device) {
 			dasd_put_device(device);

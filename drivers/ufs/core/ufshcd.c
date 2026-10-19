@@ -6817,7 +6817,7 @@ static void ufshcd_err_handling_prepare(struct ufs_hba *hba)
 	}
 	/* Wait for ongoing ufshcd_queuecommand() calls to finish. */
 	blk_mq_quiesce_tagset(&hba->host->tag_set);
-	cancel_work_sync(&hba->eeh_work);
+	cancel_work_sync_with_sync_wait(&hba->eeh_work);
 }
 
 static void ufshcd_err_handling_unprepare(struct ufs_hba *hba)
@@ -10318,8 +10318,8 @@ static int __ufshcd_wl_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	if (req_dev_pwr_mode == UFS_ACTIVE_PWR_MODE &&
 			req_link_state == UIC_LINK_ACTIVE_STATE) {
 		ufshcd_disable_auto_bkops(hba);
-		flush_work(&hba->eeh_work);
-		cancel_delayed_work_sync(&hba->ufs_rtc_update_work);
+		flush_work_with_sync_wait(&hba->eeh_work);
+		cancel_delayed_work_sync_with_sync_wait(&hba->ufs_rtc_update_work);
 		goto vops_suspend;
 	}
 
@@ -10371,8 +10371,8 @@ static int __ufshcd_wl_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 			ufshcd_wb_need_flush(hba));
 	}
 
-	flush_work(&hba->eeh_work);
-	cancel_delayed_work_sync(&hba->ufs_rtc_update_work);
+	flush_work_with_sync_wait(&hba->eeh_work);
+	cancel_delayed_work_sync_with_sync_wait(&hba->ufs_rtc_update_work);
 
 	ret = ufshcd_vops_suspend(hba, pm_op, PRE_CHANGE);
 	if (ret)
@@ -10907,7 +10907,7 @@ void ufshcd_remove(struct ufs_hba *hba)
 	ufs_bsg_remove(hba);
 	ufs_rpmb_remove(hba);
 	ufs_sysfs_remove_nodes(hba->dev);
-	cancel_delayed_work_sync(&hba->ufs_rtc_update_work);
+	cancel_delayed_work_sync_with_sync_wait(&hba->ufs_rtc_update_work);
 	blk_mq_destroy_queue(hba->tmf_queue);
 	blk_put_queue(hba->tmf_queue);
 	blk_mq_free_tag_set(&hba->tmf_tag_set);

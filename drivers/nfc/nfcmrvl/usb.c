@@ -198,7 +198,7 @@ static int nfcmrvl_usb_nci_close(struct nfcmrvl_private *priv)
 	struct nfcmrvl_usb_drv_data *drv_data = priv->drv_data;
 	int err;
 
-	cancel_work_sync(&drv_data->waker);
+	cancel_work_sync_with_sync_wait(&drv_data->waker);
 
 	clear_bit(NFCMRVL_USB_BULK_RUNNING, &drv_data->flags);
 

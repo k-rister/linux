@@ -209,7 +209,7 @@ int intel_stop_bus(struct sdw_intel *sdw, bool clock_stop)
 	bool wake_enable = false;
 	int ret;
 
-	cancel_delayed_work_sync(&cdns->attach_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&cdns->attach_dwork);
 
 	if (clock_stop) {
 		ret = sdw_cdns_clock_stop(cdns, true);

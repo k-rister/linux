@@ -2023,7 +2023,7 @@ static int vfio_ap_mdev_reset_queues(struct ap_matrix_mdev *matrix_mdev)
 		vfio_ap_mdev_reset_queue(q);
 
 	hash_for_each(matrix_mdev->qtable.queues, loop_cursor, q, mdev_qnode) {
-		flush_work(&q->reset_work);
+		flush_work_with_sync_wait(&q->reset_work);
 
 		if (q->reset_status.response_code)
 			ret = -EIO;
@@ -2041,7 +2041,7 @@ static int vfio_ap_mdev_reset_qlist(struct list_head *qlist)
 		vfio_ap_mdev_reset_queue(q);
 
 	list_for_each_entry(q, qlist, reset_qnode) {
-		flush_work(&q->reset_work);
+		flush_work_with_sync_wait(&q->reset_work);
 
 		if (q->reset_status.response_code)
 			ret = -EIO;
@@ -2533,7 +2533,7 @@ void vfio_ap_mdev_remove_queue(struct ap_device *apdev)
 	if (test_bit_inv(apid, (unsigned long *)matrix_dev->info.apm) &&
 	    test_bit_inv(apqi, (unsigned long *)matrix_dev->info.aqm)) {
 		vfio_ap_mdev_reset_queue(q);
-		flush_work(&q->reset_work);
+		flush_work_with_sync_wait(&q->reset_work);
 	}
 
 done:

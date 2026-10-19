@@ -1888,3 +1888,18 @@ The implementation checkpoints are:
     ``workqueue_sync_wait_begin`` caller symbol. The broader Phase 8 wait-site
     audit and CPA lockup investigation remain open; INVLPGB testing remains
     deferred until suitable AMD hardware is available.
+
+    On 2026-10-19, all 12 Phase 8 teardown cases passed on
+    ``7.3.0-rc3-accel-tlbfix-p8-941fcea6-01435-g941fcea6a42b``, including the
+    vmalloc-purge re-entry case. The CPA regression harness then ran with the
+    ring-3 owner on CPU2 and five seconds of fork/COW churn on CPU3 (43,303
+    forks and 86,606 forced COW writes). Loading the test-only probe triggered
+    global flush ID 3 with eight targets and one owner. The trace showed the
+    stop request sent to CPU2 owner 15, the matching owner exit with
+    ``stop_requested=1`` and ``unscoped=1``, and completion of the same flush
+    ID. A subsequent duplicate stop request was recorded as ``sent=0``; it
+    did not replace the successful request. No trace events were lost, and
+    the run's kernel-alert scan was empty. The probe unloaded and the tracefs
+    instance was removed. This regression run does not reproduce the original
+    intermittent 00604 lockup; retain the synchronous fallback and existing
+    stop/ack protocol while the investigation continues.

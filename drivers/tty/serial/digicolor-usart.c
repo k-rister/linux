@@ -280,7 +280,7 @@ static void digicolor_uart_shutdown(struct uart_port *port)
 		container_of(port, struct digicolor_port, port);
 
 	writeb_relaxed(0, port->membase + UA_ENABLE);
-	cancel_delayed_work_sync(&dp->rx_poll_work);
+	cancel_delayed_work_sync_with_sync_wait(&dp->rx_poll_work);
 }
 
 static void digicolor_uart_set_termios(struct uart_port *port,

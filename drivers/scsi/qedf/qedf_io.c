@@ -152,7 +152,7 @@ free_cmd_pool:
 			dma_free_coherent(&qedf->pdev->dev,
 			    QEDF_SCSI_SENSE_BUFFERSIZE, io_req->sense_buffer,
 			    io_req->sense_buffer_dma);
-		cancel_delayed_work_sync(&io_req->rrq_work);
+		cancel_delayed_work_sync_with_sync_wait(&io_req->rrq_work);
 	}
 
 	/* Free command manager itself */
@@ -1565,7 +1565,7 @@ static void qedf_flush_els_req(struct qedf_ctx *qedf,
 	clear_bit(QEDF_CMD_OUTSTANDING, &els_req->flags);
 
 	/* Cancel the timer */
-	cancel_delayed_work_sync(&els_req->timeout_work);
+	cancel_delayed_work_sync_with_sync_wait(&els_req->timeout_work);
 
 	/* Call callback function to complete command */
 	if (els_req->cb_func && els_req->cb_arg) {
@@ -1683,8 +1683,7 @@ void qedf_flush_active_ios(struct qedf_rport *fcport, u64 lun)
 			 */
 			if (atomic_read(&io_req->state) ==
 			    QEDFC_CMD_ST_RRQ_WAIT) {
-				if (cancel_delayed_work_sync
-				    (&io_req->rrq_work)) {
+				if (cancel_delayed_work_sync_with_sync_wait(&io_req->rrq_work)) {
 					QEDF_INFO(&qedf->dbg_ctx, QEDF_LOG_IO,
 						  "Putting reference for pending RRQ work xid=0x%x.\n",
 						  io_req->xid);
@@ -1732,14 +1731,14 @@ void qedf_flush_active_ios(struct qedf_rport *fcport, u64 lun)
 			QEDF_INFO(&qedf->dbg_ctx, QEDF_LOG_IO,
 			    "Flushing abort xid=0x%x.\n", io_req->xid);
 
-			if (cancel_delayed_work_sync(&io_req->rrq_work)) {
+			if (cancel_delayed_work_sync_with_sync_wait(&io_req->rrq_work)) {
 				QEDF_INFO(&qedf->dbg_ctx, QEDF_LOG_IO,
 					  "Putting ref for cancelled RRQ work xid=0x%x.\n",
 					  io_req->xid);
 				kref_put(&io_req->refcount, qedf_release_cmd);
 			}
 
-			if (cancel_delayed_work_sync(&io_req->timeout_work)) {
+			if (cancel_delayed_work_sync_with_sync_wait(&io_req->timeout_work)) {
 				QEDF_INFO(&qedf->dbg_ctx, QEDF_LOG_IO,
 					  "Putting ref for cancelled tmo work xid=0x%x.\n",
 					  io_req->xid);

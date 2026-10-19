@@ -564,7 +564,7 @@ static void qedf_srr_compl(struct qedf_els_cb_arg *cb_arg)
 
 	if (srr_req->event != QEDF_IOREQ_EV_ELS_TMO &&
 	    srr_req->event != QEDF_IOREQ_EV_ELS_ERR_DETECT)
-		cancel_delayed_work_sync(&orig_io_req->timeout_work);
+		cancel_delayed_work_sync_with_sync_wait(&orig_io_req->timeout_work);
 
 	refcount = kref_read(&orig_io_req->refcount);
 	QEDF_INFO(&(qedf->dbg_ctx), QEDF_LOG_ELS, "Entered: orig_io=%p,"
@@ -756,7 +756,7 @@ void qedf_process_seq_cleanup_compl(struct qedf_ctx *qedf,
 	}
 
 	/* Kill the timer we put on the request */
-	cancel_delayed_work_sync(&io_req->timeout_work);
+	cancel_delayed_work_sync_with_sync_wait(&io_req->timeout_work);
 
 	rc = qedf_send_srr(io_req, cb_arg->offset, cb_arg->r_ctl);
 	if (rc)
@@ -863,7 +863,7 @@ static void qedf_rec_compl(struct qedf_els_cb_arg *cb_arg)
 
 	if (rec_req->event != QEDF_IOREQ_EV_ELS_TMO &&
 	    rec_req->event != QEDF_IOREQ_EV_ELS_ERR_DETECT)
-		cancel_delayed_work_sync(&orig_io_req->timeout_work);
+		cancel_delayed_work_sync_with_sync_wait(&orig_io_req->timeout_work);
 
 	refcount = kref_read(&orig_io_req->refcount);
 	QEDF_INFO(&(qedf->dbg_ctx), QEDF_LOG_ELS, "Entered: orig_io=%p,"

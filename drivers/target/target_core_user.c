@@ -244,7 +244,7 @@ static int tcmu_set_global_max_data_area(const char *str,
 	if (atomic_read(&global_page_count) > tcmu_global_max_pages)
 		schedule_delayed_work(&tcmu_unmap_work, 0);
 	else
-		cancel_delayed_work_sync(&tcmu_unmap_work);
+		cancel_delayed_work_sync_with_sync_wait(&tcmu_unmap_work);
 
 	return 0;
 }
@@ -3386,7 +3386,7 @@ out_free_cache:
 
 static void __exit tcmu_module_exit(void)
 {
-	cancel_delayed_work_sync(&tcmu_unmap_work);
+	cancel_delayed_work_sync_with_sync_wait(&tcmu_unmap_work);
 	target_backend_unregister(&tcmu_ops);
 	kfree(tcmu_attrs);
 	genl_unregister_family(&tcmu_genl_family);

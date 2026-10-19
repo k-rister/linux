@@ -160,7 +160,7 @@ static int __init loongson_hwmon_init(void)
 
 static void __exit loongson_hwmon_exit(void)
 {
-	cancel_delayed_work_sync(&thermal_work);
+	cancel_delayed_work_sync_with_sync_wait(&thermal_work);
 	hwmon_device_unregister(cpu_hwmon_dev);
 }
 

@@ -242,7 +242,7 @@ static int cros_ec_rpmsg_probe(struct rpmsg_device *rpdev)
 	ret = cros_ec_register(ec_dev);
 	if (ret < 0) {
 		rpmsg_destroy_ept(ec_rpmsg->ept);
-		cancel_work_sync(&ec_rpmsg->host_event_work);
+		cancel_work_sync_with_sync_wait(&ec_rpmsg->host_event_work);
 		return ret;
 	}
 
@@ -261,7 +261,7 @@ static void cros_ec_rpmsg_remove(struct rpmsg_device *rpdev)
 
 	cros_ec_unregister(ec_dev);
 	rpmsg_destroy_ept(ec_rpmsg->ept);
-	cancel_work_sync(&ec_rpmsg->host_event_work);
+	cancel_work_sync_with_sync_wait(&ec_rpmsg->host_event_work);
 }
 
 #ifdef CONFIG_PM_SLEEP

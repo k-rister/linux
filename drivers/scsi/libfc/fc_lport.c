@@ -621,7 +621,7 @@ int fc_fabric_logoff(struct fc_lport *lport)
 	mutex_lock(&lport->lp_mutex);
 	fc_lport_enter_logo(lport);
 	mutex_unlock(&lport->lp_mutex);
-	cancel_delayed_work_sync(&lport->retry_work);
+	cancel_delayed_work_sync_with_sync_wait(&lport->retry_work);
 	return 0;
 }
 EXPORT_SYMBOL(fc_fabric_logoff);
@@ -647,7 +647,7 @@ int fc_lport_destroy(struct fc_lport *lport)
 	lport->tt.fcp_abort_io(lport);
 	lport->tt.disc_stop_final(lport);
 	lport->tt.exch_mgr_reset(lport, 0, 0);
-	cancel_delayed_work_sync(&lport->retry_work);
+	cancel_delayed_work_sync_with_sync_wait(&lport->retry_work);
 	fc_fc4_del_lport(lport);
 	return 0;
 }
@@ -984,7 +984,7 @@ EXPORT_SYMBOL(fc_lport_recv);
  */
 int fc_lport_reset(struct fc_lport *lport)
 {
-	cancel_delayed_work_sync(&lport->retry_work);
+	cancel_delayed_work_sync_with_sync_wait(&lport->retry_work);
 	mutex_lock(&lport->lp_mutex);
 	fc_lport_enter_reset(lport);
 	mutex_unlock(&lport->lp_mutex);

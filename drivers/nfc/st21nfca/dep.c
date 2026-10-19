@@ -655,6 +655,6 @@ void st21nfca_dep_deinit(struct nfc_hci_dev *hdev)
 {
 	struct st21nfca_hci_info *info = nfc_hci_get_clientdata(hdev);
 
-	cancel_work_sync(&info->dep_info.tx_work);
+	cancel_work_sync_with_sync_wait(&info->dep_info.tx_work);
 }
 EXPORT_SYMBOL(st21nfca_dep_deinit);

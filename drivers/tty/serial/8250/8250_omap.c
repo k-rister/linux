@@ -772,7 +772,7 @@ static void omap_8250_shutdown(struct uart_port *port)
 
 	guard(serial8250_rpm)(up);
 
-	flush_work(&priv->qos_work);
+	flush_work_with_sync_wait(&priv->qos_work);
 	if (up->dma)
 		omap_8250_rx_dma_flush(up);
 
@@ -1605,7 +1605,7 @@ static int omap8250_probe(struct platform_device *pdev)
 err:
 	pm_runtime_dont_use_autosuspend(&pdev->dev);
 	pm_runtime_put_sync(&pdev->dev);
-	flush_work(&priv->qos_work);
+	flush_work_with_sync_wait(&priv->qos_work);
 	pm_runtime_disable(&pdev->dev);
 	cpu_latency_qos_remove_request(&priv->pm_qos_request);
 	return ret;
@@ -1627,7 +1627,7 @@ static void omap8250_remove(struct platform_device *pdev)
 	priv->line = -ENODEV;
 	pm_runtime_dont_use_autosuspend(&pdev->dev);
 	pm_runtime_put_sync(&pdev->dev);
-	flush_work(&priv->qos_work);
+	flush_work_with_sync_wait(&priv->qos_work);
 	pm_runtime_disable(&pdev->dev);
 	cpu_latency_qos_remove_request(&priv->pm_qos_request);
 	device_set_wakeup_capable(&pdev->dev, false);
@@ -1675,7 +1675,7 @@ static int omap8250_suspend(struct device *dev)
 	serial_out(up, UART_OMAP_WER, priv->wer);
 	if (uart_console(&up->port) && console_suspend_enabled)
 		err = pm_runtime_force_suspend(dev);
-	flush_work(&priv->qos_work);
+	flush_work_with_sync_wait(&priv->qos_work);
 
 	return err;
 }

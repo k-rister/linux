@@ -267,7 +267,7 @@ static void qcom_glink_channel_release(struct kref *ref)
 	int iid;
 
 	/* cancel pending rx_done work */
-	cancel_work_sync(&channel->intent_work);
+	cancel_work_sync_with_sync_wait(&channel->intent_work);
 
 	spin_lock_irqsave(&channel->intent_lock, flags);
 	/* Free all non-reuse intents pending rx_done work */
@@ -1722,7 +1722,7 @@ static void qcom_glink_rx_close(struct qcom_glink *glink, unsigned int rcid)
 		return;
 
 	/* cancel pending rx_done work */
-	cancel_work_sync(&channel->intent_work);
+	cancel_work_sync_with_sync_wait(&channel->intent_work);
 
 	qcom_glink_remove_rpmsg_device(glink, channel);
 
@@ -1825,7 +1825,7 @@ static void qcom_glink_cancel_rx_work(struct qcom_glink *glink)
 	struct glink_defer_cmd *tmp;
 
 	/* cancel any pending deferred rx_work */
-	cancel_work_sync(&glink->rx_work);
+	cancel_work_sync_with_sync_wait(&glink->rx_work);
 
 	list_for_each_entry_safe(dcmd, tmp, &glink->rx_queue, node)
 		kfree(dcmd);

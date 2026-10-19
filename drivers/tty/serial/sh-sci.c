@@ -1587,7 +1587,7 @@ static void sci_dma_tx_release(struct sci_port *s)
 {
 	struct dma_chan *chan = s->chan_tx_saved;
 
-	cancel_work_sync(&s->work_tx);
+	cancel_work_sync_with_sync_wait(&s->work_tx);
 	s->chan_tx_saved = s->chan_tx = NULL;
 	s->cookie_tx = -EINVAL;
 	dmaengine_terminate_sync(chan);

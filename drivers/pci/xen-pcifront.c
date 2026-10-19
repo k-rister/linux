@@ -726,7 +726,7 @@ static void free_pdev(struct pcifront_device *pdev)
 
 	pcifront_free_roots(pdev);
 
-	cancel_work_sync(&pdev->op_work);
+	cancel_work_sync_with_sync_wait(&pdev->op_work);
 
 	if (pdev->irq >= 0)
 		unbind_from_irqhandler(pdev->irq, pdev);

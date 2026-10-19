@@ -662,7 +662,7 @@ static void mlxreg_hotplug_unset_irq(struct mlxreg_hotplug_priv_data *priv)
 	pdata = dev_get_platdata(&priv->pdev->dev);
 	item = pdata->items;
 	disable_irq(priv->irq);
-	cancel_delayed_work_sync(&priv->dwork_irq);
+	cancel_delayed_work_sync_with_sync_wait(&priv->dwork_irq);
 
 	/* Mask low aggregation event, if defined. */
 	if (pdata->cell_low)

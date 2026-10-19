@@ -288,7 +288,7 @@ void ndlc_remove(struct llt_ndlc *ndlc)
 	ndlc->t2_active = false;
 	ndlc->t1_active = false;
 	/* cancel work */
-	cancel_work_sync(&ndlc->sm_work);
+	cancel_work_sync_with_sync_wait(&ndlc->sm_work);
 
 	st_nci_remove(ndlc->ndev);
 

@@ -1900,6 +1900,14 @@ The implementation checkpoints are:
     ID. A subsequent duplicate stop request was recorded as ``sent=0``; it
     did not replace the successful request. No trace events were lost, and
     the run's kernel-alert scan was empty. The probe unloaded and the tracefs
-    instance was removed. This regression run does not reproduce the original
-    intermittent 00604 lockup; retain the synchronous fallback and existing
-    stop/ack protocol while the investigation continues.
+    instance was removed. Two additional runs used the same kernel and CPU
+    placement. Run 2 completed global flush ID 4 during 40,664 forks and 81,328
+    forced COW writes; run 3 completed ID 5 during 42,648 forks and 85,296
+    forced COW writes. Both traces paired the stop request, owner exit, and
+    flush completion. In run 2, the flush-completion record preceded the
+    owner-exit trace by a few microseconds, an ordering the harness allows.
+    Both repeats had no lost trace events or kernel-alert records, and each
+    removed the test probe and tracefs instance. These three candidate runs do
+    not reproduce the original intermittent 00604 lockup; retain the
+    synchronous fallback and existing stop/ack protocol while the
+    investigation continues.

@@ -351,7 +351,7 @@ static void mtk_rpmsg_stop(struct rproc_subdev *subdev, bool crashed)
 		mtk_subdev->ns_ept = NULL;
 	}
 
-	cancel_work_sync(&mtk_subdev->register_work);
+	cancel_work_sync_with_sync_wait(&mtk_subdev->register_work);
 
 	mutex_lock(&mtk_subdev->channels_lock);
 	list_for_each_entry(info, &mtk_subdev->channels, list) {

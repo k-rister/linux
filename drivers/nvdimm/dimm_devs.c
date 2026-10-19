@@ -632,7 +632,7 @@ void nvdimm_delete(struct nvdimm *nvdimm)
 		set_bit(NVDIMM_SECURITY_FROZEN, &nvdimm->sec.flags);
 		dev_put = test_and_clear_bit(NDD_WORK_PENDING, &nvdimm->flags);
 	}
-	cancel_delayed_work_sync(&nvdimm->dwork);
+	cancel_delayed_work_sync_with_sync_wait(&nvdimm->dwork);
 	if (dev_put)
 		put_device(dev);
 	nd_device_unregister(dev, ND_SYNC);

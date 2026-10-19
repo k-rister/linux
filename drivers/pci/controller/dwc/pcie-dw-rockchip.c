@@ -309,7 +309,7 @@ static void rockchip_pcie_ltssm_trace(struct rockchip_pcie *rockchip,
 		rockchip_pcie_writel_apb(rockchip,
 					 PCIE_CLIENT_DBG_DIS,
 					 PCIE_CLIENT_DBG_FIFO_MODE_CON);
-		cancel_delayed_work_sync(&rockchip->trace_work);
+		cancel_delayed_work_sync_with_sync_wait(&rockchip->trace_work);
 	}
 }
 #else

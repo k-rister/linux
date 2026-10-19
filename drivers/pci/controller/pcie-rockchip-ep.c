@@ -505,7 +505,7 @@ static void rockchip_pcie_ep_stop(struct pci_epc *epc)
 		disable_irq(ep->perst_irq);
 	}
 
-	cancel_delayed_work_sync(&ep->link_training);
+	cancel_delayed_work_sync_with_sync_wait(&ep->link_training);
 
 	/* Stop link training and disable configuration */
 	rockchip_pcie_write(rockchip,
@@ -605,7 +605,7 @@ static void rockchip_pcie_ep_perst_assert(struct rockchip_pcie_ep *ep)
 
 	ep->perst_asserted = true;
 
-	cancel_delayed_work_sync(&ep->link_training);
+	cancel_delayed_work_sync_with_sync_wait(&ep->link_training);
 
 	if (ep->link_up) {
 		pci_epc_linkdown(ep->epc);

@@ -198,7 +198,7 @@ static void ssam_hub_remove(struct ssam_device *sdev)
 	struct ssam_hub *hub = ssam_device_get_drvdata(sdev);
 
 	ssam_device_notifier_unregister(sdev, &hub->notif);
-	cancel_delayed_work_sync(&hub->update_work);
+	cancel_delayed_work_sync_with_sync_wait(&hub->update_work);
 	ssam_remove_clients(&sdev->dev);
 }
 

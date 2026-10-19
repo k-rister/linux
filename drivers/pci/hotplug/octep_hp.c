@@ -292,7 +292,7 @@ static void octep_hp_irq_cleanup(void *data)
 	struct octep_hp_controller *hp_ctrl = data;
 
 	pci_free_irq_vectors(hp_ctrl->pdev);
-	flush_work(&hp_ctrl->work);
+	flush_work_with_sync_wait(&hp_ctrl->work);
 }
 
 static int octep_hp_request_irq(struct octep_hp_controller *hp_ctrl,

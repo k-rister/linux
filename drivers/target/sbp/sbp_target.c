@@ -219,7 +219,7 @@ static void sbp_session_release(struct sbp_session *sess, bool cancel_work)
 	spin_unlock_bh(&sess->lock);
 
 	if (cancel_work)
-		cancel_delayed_work_sync(&sess->maint_work);
+		cancel_delayed_work_sync_with_sync_wait(&sess->maint_work);
 
 	target_remove_session(sess->se_sess);
 

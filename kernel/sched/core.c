@@ -11175,7 +11175,7 @@ void sched_mm_cid_exit(struct task_struct *t)
 	 * can queue this work anymore.
 	 */
 	irq_work_sync(&mm->mm_cid.irq_work);
-	cancel_work_sync(&mm->mm_cid.work);
+	cancel_work_sync_with_sync_wait(&mm->mm_cid.work);
 }
 
 /* Deactivate MM CID allocation across execve() */

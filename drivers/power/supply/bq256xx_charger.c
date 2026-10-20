@@ -893,7 +893,7 @@ static void bq256xx_charger_reset(void *data)
 	if (!IS_ERR_OR_NULL(bq->usb3_phy))
 		usb_unregister_notifier(bq->usb3_phy, &bq->usb_nb);
 
-	cancel_work_sync(&bq->usb_work);
+	cancel_work_sync_with_sync_wait(&bq->usb_work);
 }
 
 static int bq256xx_set_charger_property(struct power_supply *psy,

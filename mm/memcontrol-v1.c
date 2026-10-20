@@ -1635,7 +1635,7 @@ void vmpressure_v1_cleanup(struct vmpressure *vmpr)
 	 * Make sure there is no pending work before eventfd infrastructure
 	 * goes away.
 	 */
-	flush_work(&vmpr->work);
+	flush_work_with_sync_wait(&vmpr->work);
 }
 
 /**

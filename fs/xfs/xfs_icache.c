@@ -2221,7 +2221,7 @@ xfs_inodegc_queue(
 
 	if (xfs_inodegc_want_flush_work(ip, items, shrinker_hits)) {
 		trace_xfs_inodegc_throttle(mp, __return_address);
-		flush_delayed_work(&gc->work);
+		flush_delayed_work_with_sync_wait(&gc->work);
 	}
 }
 

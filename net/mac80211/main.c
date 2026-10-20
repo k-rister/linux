@@ -1730,7 +1730,7 @@ void ieee80211_unregister_hw(struct ieee80211_hw *hw)
 	wiphy_unlock(local->hw.wiphy);
 	rtnl_unlock();
 
-	cancel_work_sync(&local->restart_work);
+	cancel_work_sync_with_sync_wait(&local->restart_work);
 
 	ieee80211_clear_tx_pending(local);
 	rate_control_deinitialize(local);

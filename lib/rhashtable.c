@@ -1296,7 +1296,7 @@ void rhashtable_free_and_destroy(struct rhashtable *ht,
 	unsigned int i;
 
 	irq_work_sync(&ht->run_irq_work);
-	cancel_work_sync(&ht->run_work);
+	cancel_work_sync_with_sync_wait(&ht->run_work);
 
 	/*
 	 * Do NOT take ht->mutex here. The rehash worker establishes

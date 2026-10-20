@@ -1238,7 +1238,7 @@ static void rpcrdma_mrs_destroy(struct rpcrdma_xprt *r_xprt)
 	struct rpcrdma_buffer *buf = &r_xprt->rx_buf;
 	struct rpcrdma_mr *mr;
 
-	cancel_work_sync(&buf->rb_refresh_worker);
+	cancel_work_sync_with_sync_wait(&buf->rb_refresh_worker);
 
 	spin_lock(&buf->rb_lock);
 	while ((mr = list_first_entry_or_null(&buf->rb_all_mrs,

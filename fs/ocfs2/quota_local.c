@@ -781,7 +781,7 @@ out_err:
 			ocfs2_inode_unlock(lqinode, 1);
 		ocfs2_release_local_quota_bitmaps(&oinfo->dqi_chunk);
 		if (global_read)
-			cancel_delayed_work_sync(&oinfo->dqi_sync_work);
+			cancel_delayed_work_sync_with_sync_wait(&oinfo->dqi_sync_work);
 		kfree(oinfo);
 	}
 	brelse(bh);

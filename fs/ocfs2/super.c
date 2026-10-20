@@ -892,7 +892,7 @@ static int ocfs2_susp_quotas(struct ocfs2_super *osb, int unsuspend)
 
 			/* Cancel periodic syncing before suspending */
 			oinfo = sb_dqinfo(sb, type)->dqi_priv;
-			cancel_delayed_work_sync(&oinfo->dqi_sync_work);
+			cancel_delayed_work_sync_with_sync_wait(&oinfo->dqi_sync_work);
 			status = dquot_suspend(sb, type);
 		}
 		if (status < 0)
@@ -958,7 +958,7 @@ static void ocfs2_disable_quotas(struct ocfs2_super *osb)
 			continue;
 		if (!sb_has_quota_suspended(sb, type)) {
 			oinfo = sb_dqinfo(sb, type)->dqi_priv;
-			cancel_delayed_work_sync(&oinfo->dqi_sync_work);
+			cancel_delayed_work_sync_with_sync_wait(&oinfo->dqi_sync_work);
 		}
 		inode = igrab(sb->s_dquot.files[type]);
 		/* Turn off quotas. This will remove all dquot structures from

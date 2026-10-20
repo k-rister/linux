@@ -564,7 +564,7 @@ void pstore_unregister(struct pstore_info *psi)
 
 	/* Stop timer and make sure all work has finished. */
 	timer_delete_sync(&pstore_timer);
-	flush_work(&pstore_work);
+	flush_work_with_sync_wait(&pstore_work);
 
 	/* Remove all backend records from filesystem tree. */
 	pstore_put_backend_records(psi);

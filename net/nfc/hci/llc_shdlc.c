@@ -768,7 +768,7 @@ static void llc_shdlc_deinit(struct nfc_llc *llc)
 	shdlc->t1_active = false;
 	shdlc->t2_active = false;
 
-	cancel_work_sync(&shdlc->sm_work);
+	cancel_work_sync_with_sync_wait(&shdlc->sm_work);
 
 	skb_queue_purge(&shdlc->rcv_q);
 	skb_queue_purge(&shdlc->send_q);

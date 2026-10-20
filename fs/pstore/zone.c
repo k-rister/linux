@@ -1449,7 +1449,7 @@ void unregister_pstore_zone(struct pstore_zone_info *info)
 
 	/* Flush any pending writes. */
 	psz_flush_all_dirty_zones(NULL);
-	flush_delayed_work(&psz_cleaner);
+	flush_delayed_work_with_sync_wait(&psz_cleaner);
 
 	/* Clean up allocations. */
 	kfree(cxt->pstore.buf);

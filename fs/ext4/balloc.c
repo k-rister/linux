@@ -710,7 +710,7 @@ int ext4_should_retry_alloc(struct super_block *sb, int *retries)
 	if (atomic_read(&sbi->s_mb_free_pending) == 0) {
 		if (test_opt(sb, DISCARD)) {
 			atomic_inc(&sbi->s_retry_alloc_pending);
-			flush_work(&sbi->s_discard_work);
+			flush_work_with_sync_wait(&sbi->s_discard_work);
 			atomic_dec(&sbi->s_retry_alloc_pending);
 		}
 		return ext4_has_free_clusters(sbi, 1, 0);

@@ -446,7 +446,7 @@ static inline int ext4_journal_destroy(struct ext4_sb_info *sbi, journal_t *jour
 	ext4_set_mount_flag(sbi->s_sb, EXT4_MF_JOURNAL_DESTROY);
 
 	ext4_force_commit(sbi->s_sb);
-	flush_work(&sbi->s_sb_upd_work);
+	flush_work_with_sync_wait(&sbi->s_sb_upd_work);
 
 	err = jbd2_journal_destroy(journal);
 	sbi->s_journal = NULL;

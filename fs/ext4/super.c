@@ -1304,7 +1304,7 @@ static void ext4_put_super(struct super_block *sb)
 
 	ext4_unregister_li_request(sb);
 	/* Drain deferred EA inode iputs while quota is still active. */
-	flush_delayed_work(&sbi->s_ea_inode_work);
+	flush_delayed_work_with_sync_wait(&sbi->s_ea_inode_work);
 	ext4_quotas_off(sb, EXT4_MAXQUOTAS);
 
 	destroy_workqueue(sbi->rsv_conversion_wq);
@@ -1317,7 +1317,7 @@ static void ext4_put_super(struct super_block *sb)
 			ext4_abort(sb, -err, "Couldn't clean up the journal");
 		}
 	} else
-		flush_work(&sbi->s_sb_upd_work);
+		flush_work_with_sync_wait(&sbi->s_sb_upd_work);
 
 	ext4_es_unregister_shrinker(sbi);
 	timer_shutdown_sync(&sbi->s_err_report);
@@ -5769,7 +5769,7 @@ static int __ext4_fill_super(struct fs_context *fc, struct super_block *sb)
 
 failed_mount9:
 	/* Drain deferred EA inode iputs before quota shutdown */
-	flush_delayed_work(&sbi->s_ea_inode_work);
+	flush_delayed_work_with_sync_wait(&sbi->s_ea_inode_work);
 	ext4_quotas_off(sb, EXT4_MAXQUOTAS);
 failed_mount8: __maybe_unused
 	ext4_release_orphan_info(sb);
@@ -5791,7 +5791,7 @@ failed_mount4:
 		destroy_workqueue(EXT4_SB(sb)->rsv_conversion_wq);
 failed_mount_wq:
 	/* Drain deferred EA inode iputs before freeing structures */
-	flush_delayed_work(&sbi->s_ea_inode_work);
+	flush_delayed_work_with_sync_wait(&sbi->s_ea_inode_work);
 	ext4_xattr_destroy_cache(sbi->s_ea_inode_cache);
 	sbi->s_ea_inode_cache = NULL;
 
@@ -5803,11 +5803,11 @@ failed_mount_wq:
 	}
 failed_mount3a:
 	/* Drain deferred EA inode iputs from journal replay */
-	flush_delayed_work(&sbi->s_ea_inode_work);
+	flush_delayed_work_with_sync_wait(&sbi->s_ea_inode_work);
 	ext4_es_unregister_shrinker(sbi);
 failed_mount3:
 	/* flush s_sb_upd_work before sbi destroy */
-	flush_work(&sbi->s_sb_upd_work);
+	flush_work_with_sync_wait(&sbi->s_sb_upd_work);
 	ext4_stop_mmpd(sbi);
 	timer_delete_sync(&sbi->s_err_report);
 	ext4_group_desc_free(sbi);
@@ -6474,7 +6474,7 @@ static int ext4_sync_fs(struct super_block *sb, int wait)
 
 	trace_ext4_sync_fs(sb, wait);
 	flush_workqueue(sbi->rsv_conversion_wq);
-	flush_delayed_work(&sbi->s_ea_inode_work);
+	flush_delayed_work_with_sync_wait(&sbi->s_ea_inode_work);
 	/*
 	 * Writeback quota in non-journalled quota case - journalled quota has
 	 * no dirty dquots
@@ -6706,7 +6706,7 @@ static int __ext4_remount(struct fs_context *fc, struct super_block *sb)
 	}
 
 	/* Flush outstanding errors before changing fs state */
-	flush_work(&sbi->s_sb_upd_work);
+	flush_work_with_sync_wait(&sbi->s_sb_upd_work);
 
 	if ((bool)(fc->sb_flags & SB_RDONLY) != sb_rdonly(sb)) {
 		if (ext4_emergency_state(sb)) {

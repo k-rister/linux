@@ -808,7 +808,7 @@ static void chan_close_cb(struct l2cap_chan *chan)
 	if (!err && last && dev && !atomic_read(&dev->peer_count)) {
 		spin_unlock(&devices_lock);
 
-		cancel_delayed_work_sync(&dev->notify_peers);
+		cancel_delayed_work_sync_with_sync_wait(&dev->notify_peers);
 
 		ifdown(dev->netdev);
 

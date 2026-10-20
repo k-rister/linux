@@ -898,7 +898,7 @@ void rfkill_pause_polling(struct rfkill *rfkill)
 		return;
 
 	rfkill->polling_paused = true;
-	cancel_delayed_work_sync(&rfkill->poll_work);
+	cancel_delayed_work_sync_with_sync_wait(&rfkill->poll_work);
 }
 EXPORT_SYMBOL(rfkill_pause_polling);
 
@@ -925,7 +925,7 @@ static int rfkill_suspend(struct device *dev)
 	struct rfkill *rfkill = to_rfkill(dev);
 
 	rfkill->suspended = true;
-	cancel_delayed_work_sync(&rfkill->poll_work);
+	cancel_delayed_work_sync_with_sync_wait(&rfkill->poll_work);
 
 	return 0;
 }
@@ -1149,10 +1149,10 @@ void rfkill_unregister(struct rfkill *rfkill)
 	BUG_ON(!rfkill);
 
 	if (rfkill->ops->poll)
-		cancel_delayed_work_sync(&rfkill->poll_work);
+		cancel_delayed_work_sync_with_sync_wait(&rfkill->poll_work);
 
 	cancel_work_sync_with_sync_wait(&rfkill->uevent_work);
-	cancel_work_sync(&rfkill->sync_work);
+	cancel_work_sync_with_sync_wait(&rfkill->sync_work);
 
 	rfkill->registered = false;
 

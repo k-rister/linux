@@ -513,7 +513,7 @@ static void tps65010_remove(struct i2c_client *client)
 		board->teardown(client, &tps->chip);
 	if (client->irq > 0)
 		free_irq(client->irq, tps);
-	cancel_delayed_work_sync(&tps->work);
+	cancel_delayed_work_sync_with_sync_wait(&tps->work);
 	the_tps = NULL;
 }
 

@@ -113,7 +113,7 @@ static void set_grace_period(struct net *net)
 	struct lockd_net *ln = net_generic(net, lockd_net_id);
 
 	locks_start_grace(net, &ln->lockd_manager);
-	cancel_delayed_work_sync(&ln->grace_period_end);
+	cancel_delayed_work_sync_with_sync_wait(&ln->grace_period_end);
 	schedule_delayed_work(&ln->grace_period_end, grace_period);
 }
 
@@ -145,7 +145,7 @@ lockd(void *vrqstp)
 	if (rcu_access_pointer(nlmsvc_ops))
 		nlmsvc_invalidate_all();
 	nlm_shutdown_hosts();
-	cancel_delayed_work_sync(&ln->grace_period_end);
+	cancel_delayed_work_sync_with_sync_wait(&ln->grace_period_end);
 	locks_end_grace(&ln->lockd_manager);
 
 	dprintk("lockd_down: service stopped\n");
@@ -251,7 +251,7 @@ static void lockd_down_net(struct svc_serv *serv, struct net *net)
 	if (ln->nlmsvc_users) {
 		if (--ln->nlmsvc_users == 0) {
 			nlm_shutdown_hosts_net(net);
-			cancel_delayed_work_sync(&ln->grace_period_end);
+			cancel_delayed_work_sync_with_sync_wait(&ln->grace_period_end);
 			locks_end_grace(&ln->lockd_manager);
 			svc_xprt_destroy_all(serv, net, true);
 		}

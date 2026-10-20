@@ -442,7 +442,7 @@ static void fbcon_del_cursor_work(struct fb_info *info)
 {
 	struct fbcon_par *par = info->fbcon_par;
 
-	cancel_delayed_work_sync(&par->cursor_work);
+	cancel_delayed_work_sync_with_sync_wait(&par->cursor_work);
 }
 
 void fbcon_fill_cursor_mask(struct fbcon_par *par, struct vc_data *vc, unsigned char *mask)

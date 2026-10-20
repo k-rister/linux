@@ -421,7 +421,7 @@ void page_reporting_unregister(struct page_reporting_dev_info *prdev)
 		synchronize_rcu();
 
 		/* Flush any existing work, and lock it out */
-		cancel_delayed_work_sync(&prdev->work);
+		cancel_delayed_work_sync_with_sync_wait(&prdev->work);
 	}
 
 	mutex_unlock(&page_reporting_mutex);

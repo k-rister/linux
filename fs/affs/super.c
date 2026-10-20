@@ -52,7 +52,7 @@ affs_put_super(struct super_block *sb)
 	struct affs_sb_info *sbi = AFFS_SB(sb);
 	pr_debug("%s()\n", __func__);
 
-	cancel_delayed_work_sync(&sbi->sb_work);
+	cancel_delayed_work_sync_with_sync_wait(&sbi->sb_work);
 }
 
 static int
@@ -527,7 +527,7 @@ static int affs_reconfigure(struct fs_context *fc)
 	sync_filesystem(sb);
 	fc->sb_flags |= SB_NODIRATIME;
 
-	flush_delayed_work(&sbi->sb_work);
+	flush_delayed_work_with_sync_wait(&sbi->sb_work);
 
 	/*
 	 * NB: Historically, only mount_flags, mode, uid, gic, prefix,

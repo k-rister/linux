@@ -1361,19 +1361,19 @@ void wiphy_unregister(struct wiphy *wiphy)
 	rtnl_unlock();
 
 	/* this has nothing to do now but make sure it's gone */
-	cancel_work_sync(&rdev->wiphy_work);
+	cancel_work_sync_with_sync_wait(&rdev->wiphy_work);
 
 	cancel_work_sync(&rdev->sched_scan_res_wk);
-	cancel_work_sync(&rdev->rfkill_block);
-	cancel_work_sync(&rdev->conn_work);
+	cancel_work_sync_with_sync_wait(&rdev->rfkill_block);
+	cancel_work_sync_with_sync_wait(&rdev->conn_work);
 	flush_work(&rdev->event_work);
 	cancel_delayed_work_sync(&rdev->dfs_update_channels_wk);
 	cancel_delayed_work_sync(&rdev->background_cac_done_wk);
-	flush_work(&rdev->destroy_work);
-	flush_work(&rdev->reg_leave_nan_wk);
+	flush_work_with_sync_wait(&rdev->destroy_work);
+	flush_work_with_sync_wait(&rdev->reg_leave_nan_wk);
 	flush_work(&rdev->propagate_radar_detect_wk);
 	flush_work(&rdev->propagate_cac_done_wk);
-	flush_work(&rdev->mgmt_registrations_update_wk);
+	flush_work_with_sync_wait(&rdev->mgmt_registrations_update_wk);
 	flush_work(&rdev->background_cac_abort_wk);
 
 	cfg80211_rdev_free_wowlan(rdev);
@@ -1391,7 +1391,7 @@ void cfg80211_dev_free(struct cfg80211_registered_device *rdev)
 	spin_lock_irqsave(&rdev->wiphy_work_lock, flags);
 	WARN_ON(!list_empty(&rdev->wiphy_work_list));
 	spin_unlock_irqrestore(&rdev->wiphy_work_lock, flags);
-	cancel_work_sync(&rdev->wiphy_work);
+	cancel_work_sync_with_sync_wait(&rdev->wiphy_work);
 
 	rfkill_destroy(rdev->wiphy.rfkill);
 	list_for_each_entry_safe(reg, treg, &rdev->beacon_registrations, list) {

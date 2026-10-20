@@ -5167,7 +5167,7 @@ ptp_ocp_remove(struct pci_dev *pdev)
 	struct devlink *devlink = priv_to_devlink(bp);
 	int i;
 
-	cancel_delayed_work_sync(&bp->sync_work);
+	cancel_delayed_work_sync_with_sync_wait(&bp->sync_work);
 	for (i = 0; i < OCP_SMA_NUM; i++) {
 		if (bp->sma[i].dpll_pin) {
 			dpll_pin_unregister(bp->dpll, bp->sma[i].dpll_pin, &dpll_pins_ops, &bp->sma[i]);

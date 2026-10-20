@@ -2239,9 +2239,9 @@ void smc_llc_lgr_clear(struct smc_link_group *lgr)
 	smc_llc_event_flush(lgr);
 	wake_up_all(&lgr->llc_flow_waiter);
 	wake_up_all(&lgr->llc_msg_waiter);
-	cancel_work_sync(&lgr->llc_event_work);
-	cancel_work_sync(&lgr->llc_add_link_work);
-	cancel_work_sync(&lgr->llc_del_link_work);
+	cancel_work_sync_with_sync_wait(&lgr->llc_event_work);
+	cancel_work_sync_with_sync_wait(&lgr->llc_add_link_work);
+	cancel_work_sync_with_sync_wait(&lgr->llc_del_link_work);
 	if (lgr->delayed_event) {
 		kfree(lgr->delayed_event);
 		lgr->delayed_event = NULL;
@@ -2284,7 +2284,7 @@ void smc_llc_link_clear(struct smc_link *link, bool log)
 				    SMC_LGR_ID_SIZE, &link->peer_link_uid,
 				    link->smcibdev->ibdev->name, link->ibport);
 	complete(&link->llc_testlink_resp);
-	cancel_delayed_work_sync(&link->llc_testlink_wrk);
+	cancel_delayed_work_sync_with_sync_wait(&link->llc_testlink_wrk);
 }
 
 /* register a new rtoken at the remote peer (for all links) */

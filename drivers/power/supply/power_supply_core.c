@@ -1916,7 +1916,7 @@ void power_supply_unregister(struct power_supply *psy)
 	WARN_ON(atomic_dec_return(&psy->use_cnt));
 	psy->removing = true;
 	cancel_work_sync_with_sync_wait(&psy->changed_work);
-	cancel_delayed_work_sync(&psy->deferred_register_work);
+	cancel_delayed_work_sync_with_sync_wait(&psy->deferred_register_work);
 	sysfs_remove_link(&psy->dev.kobj, "powers");
 	power_supply_remove_hwmon_sysfs(psy);
 	power_supply_remove_triggers(psy);

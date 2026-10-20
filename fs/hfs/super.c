@@ -53,7 +53,7 @@ static int hfs_sync_fs(struct super_block *sb, int wait)
  */
 static void hfs_put_super(struct super_block *sb)
 {
-	cancel_delayed_work_sync(&HFS_SB(sb)->mdb_work);
+	cancel_delayed_work_sync_with_sync_wait(&HFS_SB(sb)->mdb_work);
 	hfs_mdb_close(sb);
 	/* release the MDB's resources */
 	hfs_mdb_put(sb);

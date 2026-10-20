@@ -1214,7 +1214,7 @@ static void hidp_session_remove(struct l2cap_conn *conn,
 
 	hidp_session_terminate(session);
 
-	cancel_work_sync(&session->dev_init);
+	cancel_work_sync_with_sync_wait(&session->dev_init);
 	if (session->input ||
 	    atomic_read(&session->state) > HIDP_SESSION_PREPARING)
 		hidp_session_dev_del(session);

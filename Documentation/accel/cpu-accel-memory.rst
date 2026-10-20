@@ -729,6 +729,19 @@ Representative runtime callers fall into these lifecycle groups:
   rules described above; kexec-time page transitions still use CPA's
   synchronous completion.
 
+The lower-level ``set_direct_map_*_noflush()`` helpers only change page-table
+entries; their callers own the invalidation and backing lifetime. The current
+runtime callers pair direct-map revocation with the synchronous kernel-range
+flush: secretmem flushes after removing the direct mapping and before exposing
+the page, hibernation flushes after temporarily removing the mapping around a
+restore-page copy, and ``VM_FLUSH_RESET_PERMS`` flushes a range that includes
+the direct-map aliases before its pages return to the allocator. Execmem uses
+that vmalloc flag when freeing executable-memory backing. These flushes route
+through the x86 kernel-range path, which includes active accelerator owners in
+its completion protocol. Hibernation's direct-map restore is temporary and is
+followed by another revocation and flush; secretmem and vmalloc restore the
+direct map only after the protected alias lifetime has ended.
+
 Most remaining x86 callers establish platform mappings during startup: IDT
 protection, the real-mode trampoline, EFI and legacy PCI BIOS attributes,
 kernel section permissions, and initial direct-map 4K splits, including KFENCE

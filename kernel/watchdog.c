@@ -1374,7 +1374,7 @@ static int __init lockup_detector_check(void)
 	allow_lockup_detector_init_retry = false;
 
 	/* Make sure no work is pending. */
-	flush_work(&detector_work);
+	flush_work_with_sync_wait(&detector_work);
 
 	watchdog_sysctl_init();
 

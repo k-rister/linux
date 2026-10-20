@@ -137,7 +137,7 @@ static void p9_mux_poll_stop(struct p9_conn *m)
 	list_del_init(&m->poll_pending_link);
 	spin_unlock_irqrestore(&p9_poll_lock, flags);
 
-	flush_work(&p9_poll_work);
+	flush_work_with_sync_wait(&p9_poll_work);
 }
 
 /**
@@ -802,12 +802,12 @@ static void p9_conn_destroy(struct p9_conn *m)
 		 m, m->mux_list.prev, m->mux_list.next);
 
 	p9_mux_poll_stop(m);
-	cancel_work_sync(&m->rq);
+	cancel_work_sync_with_sync_wait(&m->rq);
 	if (m->rreq) {
 		p9_req_put(m->client, m->rreq);
 		m->rreq = NULL;
 	}
-	cancel_work_sync(&m->wq);
+	cancel_work_sync_with_sync_wait(&m->wq);
 	if (m->wreq) {
 		p9_req_put(m->client, m->wreq);
 		m->wreq = NULL;
@@ -1079,7 +1079,7 @@ static int __init p9_trans_fd_init(void)
 
 static void __exit p9_trans_fd_exit(void)
 {
-	flush_work(&p9_poll_work);
+	flush_work_with_sync_wait(&p9_poll_work);
 	v9fs_unregister_trans(&p9_tcp_trans);
 	v9fs_unregister_trans(&p9_unix_trans);
 	v9fs_unregister_trans(&p9_fd_trans);

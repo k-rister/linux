@@ -594,7 +594,7 @@ static void smp_send_cmd(struct l2cap_conn *conn, u8 code, u16 len, void *data)
 
 	smp = chan->data;
 
-	cancel_delayed_work_sync(&smp->security_timer);
+	cancel_delayed_work_sync_with_sync_wait(&smp->security_timer);
 	schedule_delayed_work(&smp->security_timer, SMP_TIMEOUT);
 }
 
@@ -727,7 +727,7 @@ static void smp_chan_destroy(struct l2cap_conn *conn)
 
 	BUG_ON(!smp);
 
-	cancel_delayed_work_sync(&smp->security_timer);
+	cancel_delayed_work_sync_with_sync_wait(&smp->security_timer);
 
 	complete = test_bit(SMP_FLAG_COMPLETE, &smp->flags);
 	mgmt_smp_complete(hcon, complete);
@@ -3166,7 +3166,7 @@ static int smp_recv_cb(struct l2cap_chan *chan, struct sk_buff *skb)
 		struct smp_chan *smp = chan->data;
 
 		if (smp)
-			cancel_delayed_work_sync(&smp->security_timer);
+			cancel_delayed_work_sync_with_sync_wait(&smp->security_timer);
 
 		hci_disconnect(chan->conn->hcon, HCI_ERROR_AUTH_FAILURE);
 	}

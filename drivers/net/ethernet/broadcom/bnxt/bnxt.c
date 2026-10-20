@@ -7623,7 +7623,7 @@ static void bnxt_cancel_dim(struct bnxt *bp)
 		struct bnxt_rx_ring_info *rxr = &bp->rx_ring[i];
 		struct bnxt_napi *bnapi = rxr->bnapi;
 
-		cancel_work_sync(&bnapi->cp_ring.dim.work);
+		cancel_work_sync_with_sync_wait(&bnapi->cp_ring.dim.work);
 	}
 }
 
@@ -16633,7 +16633,7 @@ static int bnxt_queue_stop(struct net_device *dev, void *qmem, int idx)
 	rxr = &bp->rx_ring[idx];
 	bnapi = rxr->bnapi;
 	cpr = &bnapi->cp_ring;
-	cancel_work_sync(&cpr->dim.work);
+	cancel_work_sync_with_sync_wait(&cpr->dim.work);
 	bnxt_hwrm_rx_ring_free(bp, rxr, false);
 	bnxt_hwrm_rx_agg_ring_free(bp, rxr, false);
 	page_pool_disable_direct_recycling(rxr->page_pool);
@@ -16697,8 +16697,8 @@ static void bnxt_remove_one(struct pci_dev *pdev)
 	WARN_ON(bp->num_rss_ctx);
 	clear_bit(BNXT_STATE_IN_FW_RESET, &bp->state);
 	/* Flush any pending tasks */
-	cancel_work_sync(&bp->sp_task);
-	cancel_delayed_work_sync(&bp->fw_reset_task);
+	cancel_work_sync_with_sync_wait(&bp->sp_task);
+	cancel_delayed_work_sync_with_sync_wait(&bp->fw_reset_task);
 	bp->sp_event = 0;
 
 	bnxt_dl_fw_reporters_destroy(bp);

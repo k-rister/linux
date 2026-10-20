@@ -394,7 +394,7 @@ void regulator_irq_helper_cancel(void **handle)
 
 		free_irq(h->irq, h);
 		if (h->desc.irq_off_ms)
-			cancel_delayed_work_sync(&h->isr_work);
+			cancel_delayed_work_sync_with_sync_wait(&h->isr_work);
 
 		h = NULL;
 	}

@@ -922,7 +922,7 @@ static int rt9455_irq_handler_check_irq1_register(struct rt9455_info *info,
 		 * When the battery is absent, max_charging_time_work is
 		 * cancelled, since no charging is done.
 		 */
-		cancel_delayed_work_sync(&info->max_charging_time_work);
+		cancel_delayed_work_sync_with_sync_wait(&info->max_charging_time_work);
 		/*
 		 * Since no interrupt is triggered when the battery is
 		 * reconnected, max_charging_time_work is not rescheduled.
@@ -1000,7 +1000,7 @@ static int rt9455_irq_handler_check_irq2_register(struct rt9455_info *info,
 				 */
 				mask2 = mask2 | GET_MASK(F_CHTERMIM);
 			}
-			cancel_delayed_work_sync(&info->max_charging_time_work);
+			cancel_delayed_work_sync_with_sync_wait(&info->max_charging_time_work);
 			alert_userspace = true;
 		}
 	}
@@ -1457,7 +1457,7 @@ static void rt9455_pwr_rdy_work_callback(struct work_struct *work)
 	switch (pwr_rdy) {
 	case RT9455_PWR_FAULT:
 		dev_dbg(dev, "Charger disconnected from power source\n");
-		cancel_delayed_work_sync(&info->max_charging_time_work);
+		cancel_delayed_work_sync_with_sync_wait(&info->max_charging_time_work);
 		break;
 	case RT9455_PWR_GOOD:
 		dev_dbg(dev, "Charger connected to power source\n");
@@ -1590,9 +1590,9 @@ static void rt9455_cancel_all_delayed_works(void *data)
 	 * Both pwr_rdy_work and batt_presence_work can queue
 	 * max_charging_time_work, so cancel them first.
 	 */
-	cancel_delayed_work_sync(&info->pwr_rdy_work);
-	cancel_delayed_work_sync(&info->batt_presence_work);
-	cancel_delayed_work_sync(&info->max_charging_time_work);
+	cancel_delayed_work_sync_with_sync_wait(&info->pwr_rdy_work);
+	cancel_delayed_work_sync_with_sync_wait(&info->batt_presence_work);
+	cancel_delayed_work_sync_with_sync_wait(&info->max_charging_time_work);
 }
 
 static int rt9455_probe(struct i2c_client *client)

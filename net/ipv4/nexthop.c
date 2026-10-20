@@ -1924,7 +1924,7 @@ static void nh_res_table_upkeep_dw(struct work_struct *work)
 
 static void nh_res_table_cancel_upkeep(struct nh_res_table *res_table)
 {
-	cancel_delayed_work_sync(&res_table->upkeep_dw);
+	cancel_delayed_work_sync_with_sync_wait(&res_table->upkeep_dw);
 }
 
 static void nh_res_group_rebalance(struct nh_group *nhg,

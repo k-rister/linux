@@ -1450,7 +1450,7 @@ static void bq25890_non_devm_cleanup(void *data)
 {
 	struct bq25890_device *bq = data;
 
-	cancel_delayed_work_sync(&bq->pump_express_work);
+	cancel_delayed_work_sync_with_sync_wait(&bq->pump_express_work);
 
 	if (bq->id >= 0) {
 		mutex_lock(&bq25890_id_mutex);
@@ -1553,7 +1553,7 @@ static void bq25890_remove(struct i2c_client *client)
 
 	if (!IS_ERR_OR_NULL(bq->usb_phy)) {
 		usb_unregister_notifier(bq->usb_phy, &bq->usb_nb);
-		cancel_work_sync(&bq->usb_work);
+		cancel_work_sync_with_sync_wait(&bq->usb_work);
 	}
 
 	if (!bq->skip_reset) {

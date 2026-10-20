@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
 #include <errno.h>
+#include <pthread.h>
 #include <sched.h>
 #include <signal.h>
 #include <stdbool.h>
@@ -15,6 +16,12 @@
 
 #define CHURN_PAGES 64
 #define MAX_DURATION_MS 30000
+
+struct cow_peer {
+	unsigned char *mapping;
+	size_t page_size;
+	bool stop;
+};
 
 static int parse_uint(const char *text, unsigned int *value)
 {
@@ -48,13 +55,31 @@ static int transfer_byte(int fd, char *byte, bool write_byte)
 	return ret == 1 ? 0 : -1;
 }
 
+static void *touch_cow_mapping(void *data)
+{
+	struct cow_peer *peer = data;
+	size_t i;
+
+	while (!__atomic_load_n(&peer->stop, __ATOMIC_RELAXED)) {
+		for (i = 0; i < CHURN_PAGES; i++)
+			(void)__atomic_load_n(&peer->mapping[i * peer->page_size],
+					      __ATOMIC_RELAXED);
+	}
+	return NULL;
+}
+
 int main(int argc, char **argv)
 {
 	long page_size = sysconf(_SC_PAGESIZE);
 	unsigned int cpu;
 	unsigned int duration_ms;
+	unsigned int peer_cpu = 0;
 	cpu_set_t cpus;
 	unsigned char *mapping;
+	struct cow_peer peer = { 0 };
+	pthread_t peer_thread;
+	bool use_peer = argc == 4;
+	bool peer_started = false;
 	int child_ready[2] = { -1, -1 };
 	int parent_go[2] = { -1, -1 };
 	uint64_t deadline;
@@ -63,10 +88,13 @@ int main(int argc, char **argv)
 	int status;
 	char byte = 'x';
 
-	if (argc != 3 || parse_uint(argv[1], &cpu) ||
+	if ((argc != 3 && argc != 4) || parse_uint(argv[1], &cpu) ||
 	    parse_uint(argv[2], &duration_ms) || !duration_ms ||
-	    duration_ms > MAX_DURATION_MS || cpu >= CPU_SETSIZE || page_size <= 0) {
-		fprintf(stderr, "usage: %s CPU DURATION_MS (1..%u)\n", argv[0],
+	    (use_peer && parse_uint(argv[3], &peer_cpu)) ||
+	    duration_ms > MAX_DURATION_MS || cpu >= CPU_SETSIZE ||
+	    (use_peer && (peer_cpu >= CPU_SETSIZE || peer_cpu == cpu)) ||
+	    page_size <= 0) {
+		fprintf(stderr, "usage: %s CPU DURATION_MS [PEER_CPU] (1..%u)\n", argv[0],
 			MAX_DURATION_MS);
 		return EXIT_FAILURE;
 	}
@@ -89,6 +117,36 @@ int main(int argc, char **argv)
 	if (pipe(child_ready) || pipe(parent_go)) {
 		perror("pipe");
 		return EXIT_FAILURE;
+	}
+	if (use_peer) {
+		pthread_attr_t attr;
+		int ret;
+
+		CPU_ZERO(&cpus);
+		CPU_SET(peer_cpu, &cpus);
+		ret = pthread_attr_init(&attr);
+		if (ret) {
+			errno = ret;
+			perror("pthread_attr_init");
+			return EXIT_FAILURE;
+		}
+		ret = pthread_attr_setaffinity_np(&attr, sizeof(cpus), &cpus);
+		if (ret) {
+			pthread_attr_destroy(&attr);
+			errno = ret;
+			perror("pthread_attr_setaffinity_np");
+			return EXIT_FAILURE;
+		}
+		peer.mapping = mapping;
+		peer.page_size = (size_t)page_size;
+		ret = pthread_create(&peer_thread, &attr, touch_cow_mapping, &peer);
+		pthread_attr_destroy(&attr);
+		if (ret) {
+			errno = ret;
+			perror("pthread_create");
+			return EXIT_FAILURE;
+		}
+		peer_started = true;
 	}
 	deadline = monotonic_ns() + (uint64_t)duration_ms * 1000000ULL;
 	while (monotonic_ns() < deadline) {
@@ -133,12 +191,26 @@ int main(int argc, char **argv)
 	close(child_ready[1]);
 	close(parent_go[0]);
 	close(parent_go[1]);
+	if (peer_started) {
+		int ret;
+
+		__atomic_store_n(&peer.stop, true, __ATOMIC_RELAXED);
+		ret = pthread_join(peer_thread, NULL);
+		if (ret) {
+			errno = ret;
+			perror("pthread_join");
+			return EXIT_FAILURE;
+		}
+	}
 	munmap((void *)mapping, CHURN_PAGES * (size_t)page_size);
 	if (!forks) {
 		fprintf(stderr, "duration elapsed before a fork completed\n");
 		return EXIT_FAILURE;
 	}
-	printf("PASS: forks=%lu cow_write_faults=%lu cpu=%u duration_ms=%u\n",
-	       forks, forks * 2, cpu, duration_ms);
+	printf("PASS: forks=%lu cow_write_faults=%lu cpu=%u",
+	       forks, forks * 2, cpu);
+	if (use_peer)
+		printf(" peer_cpu=%u", peer_cpu);
+	printf(" duration_ms=%u\n", duration_ms);
 	return EXIT_SUCCESS;
 }

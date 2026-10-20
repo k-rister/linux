@@ -12,6 +12,11 @@ target_cpu=${CPU_ACCEL_CPU:-2}
 escape_ms=${CPU_ACCEL_ESCAPE_AFTER_MS:-3000}
 cow_churn_ms=${CPU_ACCEL_COW_CHURN_MS:-0}
 stress_cpu=${CPU_ACCEL_STRESS_CPU:-3}
+# Optional second CPU runs a thread in the COW process's mm to force remote
+# page-table invalidations during write-protect faults.
+stress_peer_cpu=${CPU_ACCEL_STRESS_PEER_CPU:-}
+# Full per-CPU traces are large; set CPU_ACCEL_PRINT_TRACE=1 to dump one.
+print_trace=${CPU_ACCEL_PRINT_TRACE:-0}
 cow_churn_tool=${CPU_ACCEL_TLB_COW_CHURN:-$script_dir/test-tlb-cow-churn}
 trace_root=${TRACEFS:-/sys/kernel/tracing}
 instance="$trace_root/instances/cpu_accel_tlb_flush_$$"
@@ -102,6 +107,14 @@ esac
 case "$stress_cpu" in
 	''|*[!0-9]*) fail "stress CPU must be a nonnegative integer" ;;
 esac
+case "$stress_peer_cpu" in
+	'' ) ;;
+	*[!0-9]*) fail "COW peer CPU must be a nonnegative integer" ;;
+esac
+case "$print_trace" in
+	0|1) ;;
+	*) fail "CPU_ACCEL_PRINT_TRACE must be 0 or 1" ;;
+esac
 [ "$escape_ms" -gt 0 ] || fail "escape delay must be positive"
 [ "$escape_ms" -lt 5000 ] || fail "escape delay must be shorter than the workload"
 [ "$cow_churn_ms" -le 30000 ] || fail "COW churn duration must be at most 30000 ms"
@@ -112,8 +125,18 @@ if [ "$cow_churn_ms" -gt 0 ]; then
 		fail "stress CPU must differ from owner CPU $target_cpu"
 	[ "$(cat "/sys/devices/system/cpu/cpu$stress_cpu/online")" = 1 ] || \
 		fail "stress CPU $stress_cpu is offline"
+	if [ -n "$stress_peer_cpu" ]; then
+		[ "$stress_peer_cpu" -ne "$target_cpu" ] || \
+			fail "COW peer CPU must differ from owner CPU $target_cpu"
+		[ "$stress_peer_cpu" -ne "$stress_cpu" ] || \
+			fail "COW peer CPU must differ from stress CPU $stress_cpu"
+		[ "$(cat "/sys/devices/system/cpu/cpu$stress_peer_cpu/online")" = 1 ] || \
+			fail "COW peer CPU $stress_peer_cpu is offline"
+	fi
 	[ -x "$cow_churn_tool" ] || \
 		fail "COW churn helper is not executable: $cow_churn_tool"
+elif [ -n "$stress_peer_cpu" ]; then
+	fail "COW peer CPU requires COW churn to be enabled"
 fi
 
 if [ "$load_mode" = modprobe ]; then
@@ -153,6 +176,12 @@ for event in \
 		echo 1 >"$instance/events/$event/enable"
 	fi
 done
+if [ -n "$stress_peer_cpu" ]; then
+	for event in csd/csd_queue_cpu csd/csd_function_entry; do
+		[ -e "$instance/events/$event/enable" ] || \
+			fail "remote COW validation requires trace event $event"
+	done
+fi
 
 dmesg --follow-new >"$outdir/dmesg-new.log" 2>&1 &
 dmesg_pid=$!
@@ -161,8 +190,13 @@ trace_pid=$!
 echo 1 >"$instance/tracing_on"
 
 if [ "$cow_churn_ms" -gt 0 ]; then
-	"$cow_churn_tool" "$stress_cpu" "$cow_churn_ms" \
-		>"$outdir/cow-churn.log" 2>&1 &
+	if [ -n "$stress_peer_cpu" ]; then
+		"$cow_churn_tool" "$stress_cpu" "$cow_churn_ms" "$stress_peer_cpu" \
+			>"$outdir/cow-churn.log" 2>&1 &
+	else
+		"$cow_churn_tool" "$stress_cpu" "$cow_churn_ms" \
+			>"$outdir/cow-churn.log" 2>&1 &
+	fi
 	churn_pid=$!
 	sleep 0.1
 fi
@@ -225,6 +259,31 @@ grep -Ei 'soft lockup|task .* blocked for more than|RCU.*stall|(^|[[:space:]])BU
 if [ "$cow_churn_ms" -gt 0 ]; then
 	grep -q '^PASS: forks=[1-9][0-9]* cow_write_faults=[1-9][0-9]* ' \
 		"$outdir/cow-churn.log" || fail "fork/COW churn did not complete"
+fi
+if [ -n "$stress_peer_cpu" ]; then
+	if ! awk -v stress="$stress_cpu" -v peer="$stress_peer_cpu" '
+		index($0, "test-tlb-cow-ch-") &&
+		index($0, sprintf("[%03d]", stress)) &&
+		index($0, "csd_queue_cpu:") &&
+		index($0, "cpu=" peer " ") &&
+		index($0, "callsite=kvm_flush_tlb_multi") &&
+		index($0, "func=flush_tlb_func") { found = 1; exit }
+		END { exit !found }
+	' "$outdir/trace.log"; then
+		fail "COW workload did not queue a KVM TLB callback from CPU $stress_cpu to peer CPU $stress_peer_cpu"
+	fi
+	if ! awk -v peer="$stress_peer_cpu" '
+		index($0, "test-tlb-cow-ch-") &&
+		index($0, sprintf("[%03d]", peer)) &&
+		index($0, "csd_function_entry: func=flush_tlb_func") {
+			found = 1
+			exit
+		}
+		END { exit !found }
+	' "$outdir/trace.log"; then
+		fail "peer CPU $stress_peer_cpu did not service the COW TLB callback"
+	fi
+	echo "PASS: remote COW TLB callback queued to and serviced by CPU $stress_peer_cpu"
 fi
 grep -q 'state=7 ' "$outdir/ctl.log" || fail "owner did not report ESCAPED"
 grep -q 'recovery_state=2' "$outdir/ctl.log" || \
@@ -291,7 +350,11 @@ END {
 		exit 0
 	exit 1
 }' "$outdir/trace.log"; then
-	cat "$outdir/trace.log" >&2
+	if [ "$print_trace" -eq 1 ]; then
+		cat "$outdir/trace.log" >&2
+	else
+		echo "trace retained at $outdir/trace.log" >&2
+	fi
 	fail "trace did not pair every flush or show a completed stop/exit/flush sequence"
 fi
 if grep -Eq 'LOST [0-9]+ EVENTS' "$outdir/trace.log"; then
@@ -307,5 +370,9 @@ if [ "$cow_churn_ms" -gt 0 ]; then
 	cat "$outdir/cow-churn.log"
 fi
 cat "$outdir/ctl.log"
-cat "$outdir/trace.log"
+if [ "$print_trace" -eq 1 ]; then
+	cat "$outdir/trace.log"
+else
+	echo "trace: $outdir/trace.log"
+fi
 echo "logs: $outdir"

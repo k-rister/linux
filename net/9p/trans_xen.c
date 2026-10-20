@@ -281,7 +281,7 @@ static void xen_9pfs_front_free(struct xen_9pfs_front_priv *priv)
 		for (i = 0; i < XEN_9PFS_NUM_RINGS; i++) {
 			struct xen_9pfs_dataring *ring = &priv->rings[i];
 
-			cancel_work_sync(&ring->work);
+			cancel_work_sync_with_sync_wait(&ring->work);
 
 			if (!ring->intf)
 				break;

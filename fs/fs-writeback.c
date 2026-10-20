@@ -2638,7 +2638,7 @@ static int dirtytime_interval_handler(const struct ctl_table *table, int write,
 		if (dirtytime_expire_interval)
 			mod_delayed_work(system_percpu_wq, &dirtytime_work, 0);
 		else
-			cancel_delayed_work_sync(&dirtytime_work);
+			cancel_delayed_work_sync_with_sync_wait(&dirtytime_work);
 	}
 	return ret;
 }

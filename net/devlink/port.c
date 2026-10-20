@@ -1006,7 +1006,7 @@ static void devlink_port_type_warn_cancel(struct devlink_port *devlink_port)
 {
 	if (!devlink_port_type_should_warn(devlink_port))
 		return;
-	cancel_delayed_work_sync(&devlink_port->type_warn_dw);
+	cancel_delayed_work_sync_with_sync_wait(&devlink_port->type_warn_dw);
 }
 
 /**

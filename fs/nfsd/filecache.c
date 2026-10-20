@@ -1051,7 +1051,7 @@ nfsd_file_cache_shutdown(void)
 	 * make sure all callers of nfsd_file_lru_cb are done before
 	 * calling nfsd_file_cache_purge
 	 */
-	cancel_delayed_work_sync(&nfsd_filecache_laundrette);
+	cancel_delayed_work_sync_with_sync_wait(&nfsd_filecache_laundrette);
 	__nfsd_file_cache_purge(NULL);
 	list_lru_destroy(&nfsd_file_lru);
 	rcu_barrier();

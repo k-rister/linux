@@ -1545,7 +1545,7 @@ static DECLARE_WORK(free_hpage_work, free_hpage_workfn);
 static inline void flush_free_hpage_work(struct hstate *h)
 {
 	if (hugetlb_vmemmap_optimizable(h))
-		flush_work(&free_hpage_work);
+		flush_work_with_sync_wait(&free_hpage_work);
 }
 
 static void update_and_free_hugetlb_folio(struct hstate *h, struct folio *folio,
@@ -2811,7 +2811,7 @@ void wait_for_freed_hugetlb_folios(void)
 	if (llist_empty(&hpage_freelist))
 		return;
 
-	flush_work(&free_hpage_work);
+	flush_work_with_sync_wait(&free_hpage_work);
 }
 
 /**

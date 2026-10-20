@@ -597,7 +597,7 @@ restart:
 	spin_unlock(&sdp->sd_jindex_spin);
 
 	/* Wait for withdraw to complete */
-	flush_work(&sdp->sd_withdraw_work);
+	flush_work_with_sync_wait(&sdp->sd_withdraw_work);
 
 	if (!sb_rdonly(sb))
 		gfs2_make_fs_ro(sdp);

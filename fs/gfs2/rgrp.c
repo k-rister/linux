@@ -728,7 +728,7 @@ void gfs2_clear_rgrpd(struct gfs2_sbd *sdp)
 		if (gl) {
 			if (gl->gl_state != LM_ST_UNLOCKED) {
 				gfs2_glock_cb(gl, LM_ST_UNLOCKED);
-				flush_delayed_work(&gl->gl_work);
+				flush_delayed_work_with_sync_wait(&gl->gl_work);
 			}
 			gfs2_rgrp_brelse(rgd);
 			glock_clear_object(gl, rgd);

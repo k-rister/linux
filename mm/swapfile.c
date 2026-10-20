@@ -3161,8 +3161,8 @@ SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
 	synchronize_rcu();
 	wait_for_completion(&p->comp);
 
-	flush_work(&p->discard_work);
-	flush_work(&p->reclaim_work);
+	flush_work_with_sync_wait(&p->discard_work);
+	flush_work_with_sync_wait(&p->reclaim_work);
 	flush_percpu_swap_cluster(p);
 
 	destroy_swap_extents(p, p->swap_file);

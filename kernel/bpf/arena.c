@@ -382,7 +382,7 @@ static void arena_map_free(struct bpf_map *map)
 
 	/* Ensure no pending deferred frees */
 	irq_work_sync(&arena->free_irq);
-	flush_work(&arena->free_work);
+	flush_work_with_sync_wait(&arena->free_work);
 
 	/*
 	 * free_vm_area() calls remove_vm_area() that calls free_unmap_vmap_area().

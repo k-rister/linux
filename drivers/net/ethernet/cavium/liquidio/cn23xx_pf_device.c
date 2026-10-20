@@ -608,7 +608,7 @@ static int cn23xx_free_pf_mbox(struct octeon_device *oct)
 
 	for (i = 0; i < oct->sriov_info.max_vfs; i++) {
 		q_no = i * oct->sriov_info.rings_per_vf;
-		cancel_delayed_work_sync(
+		cancel_delayed_work_sync_with_sync_wait(
 		    &oct->mbox[q_no]->mbox_poll_wk.work);
 		vfree(oct->mbox[q_no]);
 	}

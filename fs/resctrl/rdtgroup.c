@@ -4531,7 +4531,7 @@ void resctrl_offline_ctrl_domain(struct rdt_resource *r, struct rdt_ctrl_domain 
 
 		list_for_each_entry_rcu(mon_d, &l3->mon_domains, hdr.list, lockdep_is_cpus_held()) {
 			if (mon_d->hdr.id == d->hdr.id) {
-				cancel_delayed_work_sync(&mon_d->mbm_over);
+				cancel_delayed_work_sync_with_sync_wait(&mon_d->mbm_over);
 				break;
 			}
 		}
@@ -4562,9 +4562,9 @@ void resctrl_offline_mon_domain(struct rdt_resource *r, struct rdt_domain_hdr *h
 	    domain_header_is_valid(hdr, RESCTRL_MON_DOMAIN, RDT_RESOURCE_L3)) {
 		d = container_of(hdr, struct rdt_l3_mon_domain, hdr);
 		if (resctrl_is_mbm_enabled())
-			cancel_delayed_work_sync(&d->mbm_over);
+			cancel_delayed_work_sync_with_sync_wait(&d->mbm_over);
 		if (resctrl_is_mon_event_enabled(QOS_L3_OCCUP_EVENT_ID))
-			cancel_delayed_work_sync(&d->cqm_limbo);
+			cancel_delayed_work_sync_with_sync_wait(&d->cqm_limbo);
 	}
 
 	mutex_lock(&rdtgroup_mutex);
@@ -4774,14 +4774,14 @@ void resctrl_offline_cpu(unsigned int cpu)
 	if (d) {
 		if (resctrl_is_mbm_enabled() && cpu == d->mbm_work_cpu) {
 			mutex_unlock(&rdtgroup_mutex);
-			cancel_delayed_work_sync(&d->mbm_over);
+			cancel_delayed_work_sync_with_sync_wait(&d->mbm_over);
 			mutex_lock(&rdtgroup_mutex);
 			mbm_setup_overflow_handler(d, 0, cpu);
 		}
 		if (resctrl_is_mon_event_enabled(QOS_L3_OCCUP_EVENT_ID) &&
 		    cpu == d->cqm_work_cpu && has_busy_rmid(d)) {
 			mutex_unlock(&rdtgroup_mutex);
-			cancel_delayed_work_sync(&d->cqm_limbo);
+			cancel_delayed_work_sync_with_sync_wait(&d->cqm_limbo);
 			mutex_lock(&rdtgroup_mutex);
 			cqm_setup_limbo_handler(d, 0, cpu);
 		}

@@ -1628,7 +1628,7 @@ static void htb_destroy(struct Qdisc *sch)
 	struct htb_class *cl;
 	unsigned int i;
 
-	cancel_work_sync(&q->work);
+	cancel_work_sync_with_sync_wait(&q->work);
 	qdisc_watchdog_cancel(&q->watchdog);
 	/* This line used to be after htb_destroy_class call below
 	 * and surprisingly it worked in 2.4. But it must precede it

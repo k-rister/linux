@@ -284,7 +284,7 @@ static void max17040_stop_work(void *data)
 {
 	struct max17040_chip *chip = data;
 
-	cancel_delayed_work_sync(&chip->work);
+	cancel_delayed_work_sync_with_sync_wait(&chip->work);
 }
 
 static void max17040_work(struct work_struct *work)
@@ -580,7 +580,7 @@ static int max17040_suspend(struct device *dev)
 		// disable soc alert to prevent wakeup
 		max17040_set_soc_alert(chip, 0);
 	else
-		cancel_delayed_work_sync(&chip->work);
+		cancel_delayed_work_sync_with_sync_wait(&chip->work);
 
 	if (client->irq && device_may_wakeup(dev))
 		enable_irq_wake(client->irq);

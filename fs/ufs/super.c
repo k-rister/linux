@@ -686,7 +686,7 @@ static void ufs_put_super(struct super_block *sb)
 
 	if (!sb_rdonly(sb))
 		ufs_put_super_internal(sb);
-	cancel_delayed_work_sync(&sbi->sync_work);
+	cancel_delayed_work_sync_with_sync_wait(&sbi->sync_work);
 
 	ubh_brelse_uspi (sbi->s_uspi);
 	kfree (sbi->s_uspi);

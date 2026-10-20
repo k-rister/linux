@@ -1983,7 +1983,8 @@ int stop_sync_thread(struct netns_ipvs *ipvs, int state)
 			tinfo = &ti[id];
 			pr_info("stopping master sync thread %d ...\n",
 				task_pid_nr(tinfo->task));
-			cancel_delayed_work_sync(&ms->master_wakeup_work);
+			cancel_delayed_work_sync_with_sync_wait(
+				&ms->master_wakeup_work);
 			ret = kthread_stop(tinfo->task);
 			if (retc >= 0)
 				retc = ret;

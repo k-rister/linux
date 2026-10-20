@@ -1998,7 +1998,7 @@ static void kick_deferred_free(struct zs_pool *pool)
 
 static void zs_flush_migration(struct zs_pool *pool)
 {
-	flush_work(&pool->free_work);
+	flush_work_with_sync_wait(&pool->free_work);
 }
 
 static void init_deferred_free(struct zs_pool *pool)

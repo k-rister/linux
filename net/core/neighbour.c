@@ -1886,8 +1886,8 @@ int neigh_table_clear(int index, struct neigh_table *tbl)
 	synchronize_rcu();
 
 	/* It is not clean... Fix it to unload IPv6 module safely */
-	cancel_delayed_work_sync(&tbl->managed_work);
-	cancel_delayed_work_sync(&tbl->gc_work);
+	cancel_delayed_work_sync_with_sync_wait(&tbl->managed_work);
+	cancel_delayed_work_sync_with_sync_wait(&tbl->gc_work);
 	timer_delete_sync(&tbl->proxy_timer);
 	pneigh_queue_purge(&tbl->proxy_queue, NULL, tbl->family);
 	neigh_ifdown(tbl, NULL);

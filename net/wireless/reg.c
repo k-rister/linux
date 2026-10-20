@@ -539,7 +539,7 @@ static void cancel_crda_timeout(void)
 
 static void cancel_crda_timeout_sync(void)
 {
-	cancel_delayed_work_sync(&crda_timeout);
+	cancel_delayed_work_sync_with_sync_wait(&crda_timeout);
 }
 
 static void reset_crda_timeouts(void)
@@ -4386,9 +4386,9 @@ void regulatory_exit(void)
 	struct regulatory_request *reg_request, *tmp;
 	struct reg_beacon *reg_beacon, *btmp;
 
-	cancel_work_sync(&reg_work);
+	cancel_work_sync_with_sync_wait(&reg_work);
 	cancel_crda_timeout_sync();
-	cancel_delayed_work_sync(&reg_check_chans);
+	cancel_delayed_work_sync_with_sync_wait(&reg_check_chans);
 
 	/* Lock to suppress warnings */
 	rtnl_lock();

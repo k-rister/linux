@@ -2166,7 +2166,7 @@ module_init(vmci_transport_init);
 
 static void __exit vmci_transport_exit(void)
 {
-	cancel_work_sync(&vmci_transport_cleanup_work);
+	cancel_work_sync_with_sync_wait(&vmci_transport_cleanup_work);
 	vmci_transport_free_resources(&vmci_transport_cleanup_list);
 
 	if (!vmci_handle_is_invalid(vmci_transport_stream_handle)) {

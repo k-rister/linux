@@ -2102,7 +2102,7 @@ static void f2fs_put_super(struct super_block *sb)
 	f2fs_destroy_segment_manager(sbi);
 
 	/* flush s_error_work before sbi destroy */
-	flush_work(&sbi->s_error_work);
+	flush_work_with_sync_wait(&sbi->s_error_work);
 
 	f2fs_destroy_wq(sbi);
 
@@ -2894,7 +2894,7 @@ static int __f2fs_remount(struct fs_context *fc, struct super_block *sb)
 		goto restore_opts;
 
 	/* flush outstanding errors before changing fs state */
-	flush_work(&sbi->s_error_work);
+	flush_work_with_sync_wait(&sbi->s_error_work);
 
 	/*
 	 * Previous and new state of filesystem is RO,
@@ -5555,7 +5555,7 @@ free_sm:
 stop_ckpt_thread:
 	f2fs_stop_ckpt_thread(sbi);
 	/* flush s_error_work before sbi destroy */
-	flush_work(&sbi->s_error_work);
+	flush_work_with_sync_wait(&sbi->s_error_work);
 	f2fs_destroy_wq(sbi);
 free_devices:
 	destroy_device_list(sbi);

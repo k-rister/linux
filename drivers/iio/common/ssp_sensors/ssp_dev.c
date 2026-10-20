@@ -190,7 +190,7 @@ static void ssp_enable_wdt_timer(struct ssp_data *data)
 static void ssp_disable_wdt_timer(struct ssp_data *data)
 {
 	timer_delete_sync(&data->wdt_timer);
-	cancel_work_sync(&data->work_wdt);
+	cancel_work_sync_with_sync_wait(&data->work_wdt);
 }
 
 /**
@@ -418,7 +418,7 @@ static void ssp_refresh_task(struct work_struct *work)
 
 int ssp_queue_ssp_refresh_task(struct ssp_data *data, unsigned int delay)
 {
-	cancel_delayed_work_sync(&data->work_refresh);
+	cancel_delayed_work_sync_with_sync_wait(&data->work_refresh);
 
 	return queue_delayed_work(system_power_efficient_wq,
 				  &data->work_refresh,
@@ -589,10 +589,10 @@ static void ssp_remove(struct spi_device *spi)
 	ssp_clean_pending_list(data);
 
 	free_irq(data->spi->irq, data);
-	cancel_delayed_work_sync(&data->work_refresh);
+	cancel_delayed_work_sync_with_sync_wait(&data->work_refresh);
 
 	timer_delete_sync(&data->wdt_timer);
-	cancel_work_sync(&data->work_wdt);
+	cancel_work_sync_with_sync_wait(&data->work_wdt);
 
 	mutex_destroy(&data->comm_lock);
 	mutex_destroy(&data->pending_lock);

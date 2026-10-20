@@ -1187,7 +1187,7 @@ void nfc_remove_device(struct nfc_dev *dev)
 {
 	if (dev->ops->check_presence) {
 		timer_delete_sync(&dev->check_pres_timer);
-		cancel_work_sync(&dev->check_pres_work);
+		cancel_work_sync_with_sync_wait(&dev->check_pres_work);
 	}
 
 	nfc_llcp_unregister_device(dev);

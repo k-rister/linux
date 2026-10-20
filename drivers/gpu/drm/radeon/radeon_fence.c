@@ -872,7 +872,8 @@ void radeon_fence_driver_fini(struct radeon_device *rdev)
 			/* no need to trigger GPU reset as we are unloading */
 			radeon_fence_driver_force_completion(rdev, ring);
 		}
-		cancel_delayed_work_sync(&rdev->fence_drv[ring].lockup_work);
+		cancel_delayed_work_sync_with_sync_wait(
+			&rdev->fence_drv[ring].lockup_work);
 		wake_up_all(&rdev->fence_queue);
 		radeon_scratch_free(rdev, rdev->fence_drv[ring].scratch_reg);
 		rdev->fence_drv[ring].initialized = false;
@@ -893,7 +894,8 @@ void radeon_fence_driver_force_completion(struct radeon_device *rdev, int ring)
 {
 	if (rdev->fence_drv[ring].initialized) {
 		radeon_fence_write(rdev, rdev->fence_drv[ring].sync_seq[ring], ring);
-		cancel_delayed_work_sync(&rdev->fence_drv[ring].lockup_work);
+		cancel_delayed_work_sync_with_sync_wait(
+			&rdev->fence_drv[ring].lockup_work);
 	}
 }
 

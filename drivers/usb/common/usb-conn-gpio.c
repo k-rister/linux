@@ -292,7 +292,7 @@ static void usb_conn_remove(struct platform_device *pdev)
 {
 	struct usb_conn_info *info = platform_get_drvdata(pdev);
 
-	cancel_delayed_work_sync(&info->dw_det);
+	cancel_delayed_work_sync_with_sync_wait(&info->dw_det);
 
 	if (info->charger)
 		ida_free(&usb_conn_ida, info->conn_id);

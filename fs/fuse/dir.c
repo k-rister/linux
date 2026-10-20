@@ -66,7 +66,7 @@ static int inval_wq_set(const char *val, const struct kernel_param *kp)
 		schedule_delayed_work(&dentry_tree_work,
 				      secs_to_jiffies(num));
 	else if (!num && old)
-		cancel_delayed_work_sync(&dentry_tree_work);
+		cancel_delayed_work_sync_with_sync_wait(&dentry_tree_work);
 
 	return 0;
 }
@@ -231,7 +231,7 @@ void fuse_dentry_tree_cleanup(void)
 	int i;
 
 	inval_wq = 0;
-	cancel_delayed_work_sync(&dentry_tree_work);
+	cancel_delayed_work_sync_with_sync_wait(&dentry_tree_work);
 
 	for (i = 0; i < FUSE_HASH_SIZE; i++)
 		WARN_ON_ONCE(!RB_EMPTY_ROOT(&dentry_hash[i].tree));

@@ -1947,7 +1947,7 @@ static void tps6598x_remove(struct i2c_client *client)
 	struct tps6598x *tps = i2c_get_clientdata(client);
 
 	if (!client->irq)
-		cancel_delayed_work_sync(&tps->wq_poll);
+		cancel_delayed_work_sync_with_sync_wait(&tps->wq_poll);
 	else
 		devm_free_irq(tps->dev, client->irq, tps);
 
@@ -1978,7 +1978,7 @@ static int __maybe_unused tps6598x_suspend(struct device *dev)
 	}
 
 	if (!client->irq)
-		cancel_delayed_work_sync(&tps->wq_poll);
+		cancel_delayed_work_sync_with_sync_wait(&tps->wq_poll);
 
 	return 0;
 }

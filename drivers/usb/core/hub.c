@@ -1413,10 +1413,10 @@ static void hub_quiesce(struct usb_hub *hub, enum hub_quiescing_type type)
 
 	/* Stop hub_wq and related activity */
 	timer_delete_sync(&hub->irq_urb_retry);
-	flush_delayed_work(&hub->post_resume_work);
+	flush_delayed_work_with_sync_wait(&hub->post_resume_work);
 	usb_kill_urb(hub->urb);
 	if (hub->has_indicators)
-		cancel_delayed_work_sync(&hub->leds);
+		cancel_delayed_work_sync_with_sync_wait(&hub->leds);
 	if (hub->tt.hub)
 		flush_work_with_sync_wait(&hub->tt.clear_work);
 }

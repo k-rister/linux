@@ -555,7 +555,7 @@ static DECLARE_DELAYED_WORK(delayed_fput_work, delayed_fput);
 void flush_delayed_fput(void)
 {
 	delayed_fput(NULL);
-	flush_delayed_work(&delayed_fput_work);
+	flush_delayed_work_with_sync_wait(&delayed_fput_work);
 }
 EXPORT_SYMBOL_GPL(flush_delayed_fput);
 

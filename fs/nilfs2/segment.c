@@ -2776,7 +2776,7 @@ static void nilfs_segctor_write_out(struct nilfs_sc_info *sci)
 		ret = nilfs_segctor_construct(sci, SC_LSEG_SR);
 		nilfs_transaction_unlock(sci->sc_super);
 
-		flush_work(&sci->sc_iput_work);
+		flush_work_with_sync_wait(&sci->sc_iput_work);
 
 	} while (ret && ret != -EROFS && retrycount-- > 0);
 }
@@ -2818,7 +2818,7 @@ static void nilfs_segctor_destroy(struct nilfs_sc_info *sci)
 	 */
 	nilfs_segctor_wakeup(sci, 0, true);
 
-	if (flush_work(&sci->sc_iput_work))
+	if (flush_work_with_sync_wait(&sci->sc_iput_work))
 		flag = true;
 
 	if (flag || !nilfs_segctor_confirm(sci))

@@ -332,7 +332,7 @@ static void hfsplus_put_super(struct super_block *sb)
 
 	hfs_dbg("starting...\n");
 
-	cancel_delayed_work_sync(&sbi->sync_work);
+	cancel_delayed_work_sync_with_sync_wait(&sbi->sync_work);
 
 	if (!sb_rdonly(sb) && sbi->s_vhdr) {
 		struct hfsplus_vh *vhdr = sbi->s_vhdr;
@@ -660,7 +660,7 @@ static int hfsplus_fill_super(struct super_block *sb, struct fs_context *fc)
 	return 0;
 
 out_put_hidden_dir:
-	cancel_delayed_work_sync(&sbi->sync_work);
+	cancel_delayed_work_sync_with_sync_wait(&sbi->sync_work);
 	iput(sbi->hidden_dir);
 out_put_root:
 	dput(sb->s_root);

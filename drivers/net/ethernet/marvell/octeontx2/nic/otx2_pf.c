@@ -2193,7 +2193,8 @@ int otx2_stop(struct net_device *netdev)
 	netif_tx_disable(netdev);
 
 	for (wrk = 0; wrk < pf->qset.cq_cnt; wrk++)
-		cancel_delayed_work_sync(&pf->refill_wrk[wrk].pool_refill_work);
+		cancel_delayed_work_sync_with_sync_wait(
+			&pf->refill_wrk[wrk].pool_refill_work);
 	devm_kfree(pf->dev, pf->refill_wrk);
 
 	otx2_free_hw_resources(pf);
@@ -3054,7 +3055,8 @@ static void otx2_sriov_vfcfg_cleanup(struct otx2_nic *pf)
 		return;
 
 	for (i = 0; i < pf->total_vfs; i++) {
-		cancel_delayed_work_sync(&pf->vf_configs[i].link_event_work);
+		cancel_delayed_work_sync_with_sync_wait(
+			&pf->vf_configs[i].link_event_work);
 		otx2_set_vf_permissions(pf, i, OTX2_RESET_VF_PERM);
 	}
 }

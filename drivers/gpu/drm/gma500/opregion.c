@@ -291,7 +291,7 @@ void psb_intel_opregion_fini(struct drm_device *dev)
 		unregister_acpi_notifier(&psb_intel_opregion_notifier);
 	}
 
-	cancel_work_sync(&opregion->asle_work);
+	cancel_work_sync_with_sync_wait(&opregion->asle_work);
 
 	/* just clear all opregion memory pointers now */
 	iounmap(opregion->header);

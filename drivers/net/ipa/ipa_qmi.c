@@ -523,7 +523,7 @@ err_server_handle_release:
 /* Tear down IPA QMI handles */
 void ipa_qmi_teardown(struct ipa *ipa)
 {
-	cancel_work_sync(&ipa->qmi.init_driver_work);
+	cancel_work_sync_with_sync_wait(&ipa->qmi.init_driver_work);
 
 	qmi_handle_release(&ipa->qmi.client_handle);
 	memset(&ipa->qmi.client_handle, 0, sizeof(ipa->qmi.client_handle));

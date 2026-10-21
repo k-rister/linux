@@ -379,8 +379,8 @@ static void o2hb_queue_nego_timeout(struct o2hb_region *reg,
 
 static void o2hb_disarm_timeout(struct o2hb_region *reg)
 {
-	cancel_delayed_work_sync(&reg->hr_write_timeout_work);
-	cancel_delayed_work_sync(&reg->hr_nego_timeout_work);
+	cancel_delayed_work_sync_with_sync_wait(&reg->hr_write_timeout_work);
+	cancel_delayed_work_sync_with_sync_wait(&reg->hr_nego_timeout_work);
 }
 
 static void o2hb_set_region_stopping(struct o2hb_region *reg, bool stopping)

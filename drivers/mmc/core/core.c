@@ -2365,7 +2365,7 @@ void __mmc_stop_host(struct mmc_host *host)
 	}
 
 	host->rescan_disable = 1;
-	cancel_delayed_work_sync(&host->detect);
+	cancel_delayed_work_sync_with_sync_wait(&host->detect);
 }
 
 void mmc_stop_host(struct mmc_host *host)

@@ -522,7 +522,7 @@ void mmc_cleanup_queue(struct mmc_queue *mq)
 	 * leaving a complete_work with nothing to do. Such a work item might
 	 * still be queued at this point. Flush it.
 	 */
-	flush_work(&mq->complete_work);
+	flush_work_with_sync_wait(&mq->complete_work);
 
 	mq->card = NULL;
 }

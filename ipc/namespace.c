@@ -52,7 +52,7 @@ static struct ipc_namespace *create_ipc_ns(struct user_namespace *user_ns,
 		 * If frees were pending, flush_work will wait, and
 		 * return true. Fail the allocation if no frees are pending.
 		 */
-		if (flush_work(&free_ipc_work))
+		if (flush_work_with_sync_wait(&free_ipc_work))
 			goto again;
 		goto fail;
 	}

@@ -155,7 +155,7 @@ void ima_process_queued_keys(void)
 		return;
 
 	if (!timer_expired)
-		cancel_delayed_work_sync(&ima_keys_delayed_work);
+		cancel_delayed_work_sync_with_sync_wait(&ima_keys_delayed_work);
 
 	list_for_each_entry_safe(entry, tmp, &ima_keys, list) {
 		if (!timer_expired)

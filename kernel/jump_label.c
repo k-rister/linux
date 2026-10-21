@@ -359,7 +359,7 @@ EXPORT_SYMBOL_GPL(__static_key_slow_dec_deferred);
 void __static_key_deferred_flush(void *key, struct delayed_work *work)
 {
 	STATIC_KEY_CHECK_USE(key);
-	flush_delayed_work(work);
+	flush_delayed_work_with_sync_wait(work);
 }
 EXPORT_SYMBOL_GPL(__static_key_deferred_flush);
 

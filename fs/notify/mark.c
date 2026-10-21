@@ -1180,7 +1180,7 @@ static void fsnotify_mark_destroy_workfn(struct work_struct *work)
 /* Wait for all marks queued for destruction to be actually destroyed */
 void fsnotify_wait_marks_destroyed(void)
 {
-	flush_delayed_work(&reaper_work);
+	flush_delayed_work_with_sync_wait(&reaper_work);
 }
 EXPORT_SYMBOL_GPL(fsnotify_wait_marks_destroyed);
 

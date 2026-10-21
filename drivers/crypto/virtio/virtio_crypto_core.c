@@ -500,7 +500,7 @@ static void virtcrypto_remove(struct virtio_device *vdev)
 	if (virtcrypto_dev_started(vcrypto))
 		virtcrypto_dev_stop(vcrypto);
 	for (i = 0; i < vcrypto->max_data_queues; i++)
-		cancel_work_sync(&vcrypto->data_vq[i].done_work);
+		cancel_work_sync_with_sync_wait(&vcrypto->data_vq[i].done_work);
 	virtio_reset_device(vdev);
 	virtcrypto_free_unused_reqs(vcrypto);
 	virtcrypto_clear_crypto_engines(vcrypto);

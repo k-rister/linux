@@ -288,7 +288,7 @@ static int adp8860_led_probe(struct i2c_client *client)
  err:
 	for (i = i - 1; i >= 0; --i) {
 		led_classdev_unregister(&led[i].cdev);
-		cancel_work_sync(&led[i].work);
+		cancel_work_sync_with_sync_wait(&led[i].work);
 	}
 
 	return ret;
@@ -303,7 +303,7 @@ static int adp8860_led_remove(struct i2c_client *client)
 
 	for (i = 0; i < pdata->num_leds; i++) {
 		led_classdev_unregister(&data->led[i].cdev);
-		cancel_work_sync(&data->led[i].work);
+		cancel_work_sync_with_sync_wait(&data->led[i].work);
 	}
 
 	return 0;

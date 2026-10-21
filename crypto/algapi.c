@@ -601,7 +601,7 @@ void crypto_unregister_template(struct crypto_template *tmpl)
 	}
 	crypto_remove_final(&users);
 
-	flush_work(&tmpl->free_work);
+	flush_work_with_sync_wait(&tmpl->free_work);
 }
 EXPORT_SYMBOL_GPL(crypto_unregister_template);
 

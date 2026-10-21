@@ -221,7 +221,7 @@ static void iso_sock_disable_timer(struct sock *sk)
 	lockdep_assert(!lockdep_sock_is_held(sk));
 
 	BT_DBG("sock %p state %d", sk, sk->sk_state);
-	disable_delayed_work_sync(&iso_pi(sk)->timeout_work);
+	disable_delayed_work_sync_with_sync_wait(&iso_pi(sk)->timeout_work);
 }
 
 /* ---- ISO connections ---- */

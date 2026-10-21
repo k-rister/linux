@@ -499,8 +499,8 @@ static void hns3_irq_disable(struct hns3_enet_tqp_vector *tqp_vector)
 {
 	disable_irq(tqp_vector->vector_irq);
 	napi_disable(&tqp_vector->napi);
-	cancel_work_sync(&tqp_vector->rx_group.dim.work);
-	cancel_work_sync(&tqp_vector->tx_group.dim.work);
+	net_dim_work_cancel(&tqp_vector->rx_group.dim);
+	net_dim_work_cancel(&tqp_vector->tx_group.dim);
 }
 
 void hns3_set_vector_coalesce_rl(struct hns3_enet_tqp_vector *tqp_vector,

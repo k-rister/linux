@@ -379,7 +379,7 @@ err:
 
 void usbtv_audio_free(struct usbtv *usbtv)
 {
-	cancel_work_sync(&usbtv->snd_trigger);
+	cancel_work_sync_with_sync_wait(&usbtv->snd_trigger);
 
 	if (usbtv->snd && usbtv->udev) {
 		snd_card_free_when_closed(usbtv->snd);

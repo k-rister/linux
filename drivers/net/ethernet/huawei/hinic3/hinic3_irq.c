@@ -261,7 +261,7 @@ err_release_irqs:
 						irq_cfg->msix_entry_idx,
 						HINIC3_CLR_MSIX_AUTO_MASK);
 		hinic3_release_irq(irq_cfg);
-		disable_work_sync(&irq_cfg->rxq->dim.work);
+		disable_work_sync_with_sync_wait(&irq_cfg->rxq->dim.work);
 	}
 
 	return err;
@@ -286,6 +286,6 @@ void hinic3_qps_irq_uninit(struct net_device *netdev)
 						irq_cfg->msix_entry_idx,
 						HINIC3_CLR_MSIX_AUTO_MASK);
 		hinic3_release_irq(irq_cfg);
-		disable_work_sync(&irq_cfg->rxq->dim.work);
+		disable_work_sync_with_sync_wait(&irq_cfg->rxq->dim.work);
 	}
 }

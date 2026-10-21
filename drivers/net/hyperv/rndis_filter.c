@@ -1208,7 +1208,7 @@ static int rndis_filter_close_device(struct rndis_device *dev)
 		return 0;
 
 	/* Make sure rndis_set_multicast doesn't re-enable filter! */
-	cancel_work_sync(&dev->mcast_work);
+	cancel_work_sync_with_sync_wait(&dev->mcast_work);
 
 	ret = rndis_filter_set_packet_filter(dev, 0);
 	if (ret == -ENODEV)

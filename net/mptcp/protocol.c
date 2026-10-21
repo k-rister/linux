@@ -3274,7 +3274,7 @@ void mptcp_cancel_work(struct sock *sk)
 {
 	struct mptcp_sock *msk = mptcp_sk(sk);
 
-	if (cancel_work_sync(&msk->work))
+	if (cancel_work_sync_with_sync_wait(&msk->work))
 		__sock_put(sk);
 }
 

@@ -3580,7 +3580,7 @@ static void enetc_int_vector_destroy(struct enetc_ndev_priv *priv, int i)
 	xdp_rxq_info_unreg_mem_model(&rx_ring->xdp.rxq);
 	xdp_rxq_info_unreg(&rx_ring->xdp.rxq);
 	netif_napi_del(&v->napi);
-	cancel_work_sync(&v->rx_dim.work);
+	net_dim_work_cancel(&v->rx_dim);
 
 	for (j = 0; j < v->count_tx_rings; j++) {
 		tx_ring_index = priv->bdr_int_num * j + i;

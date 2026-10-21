@@ -801,7 +801,7 @@ void cxl_cper_unregister_prot_err_work(void)
 	}
 
 	if (old)
-		cancel_work_sync(old);
+		cancel_work_sync_with_sync_wait(old);
 
 	/* Discard stale entries so they are not replayed on next module load */
 	kfifo_reset(&cxl_cper_prot_err_fifo);
@@ -876,7 +876,7 @@ void cxl_cper_unregister_work(struct work_struct *work)
 		cxl_cper_work = NULL;
 	}
 
-	cancel_work_sync(work);
+	cancel_work_sync_with_sync_wait(work);
 
 	/* Discard stale entries so they are not replayed on next module load */
 	kfifo_reset(&cxl_cper_fifo);

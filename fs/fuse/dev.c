@@ -330,7 +330,7 @@ void fuse_chan_release(struct fuse_chan *fch)
 		fiq->ops->release(fiq);
 
 	if (fch->timeout.req_timeout)
-		cancel_delayed_work_sync(&fch->timeout.work);
+		cancel_delayed_work_sync_with_sync_wait(&fch->timeout.work);
 }
 
 void fuse_chan_free(struct fuse_chan *fch)

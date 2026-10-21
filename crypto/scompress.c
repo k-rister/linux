@@ -289,7 +289,7 @@ static void crypto_exit_scomp_ops_async(struct crypto_tfm *tfm)
 
 	crypto_free_scomp(*ctx);
 
-	flush_work(&scomp_scratch_work);
+	flush_work_with_sync_wait(&scomp_scratch_work);
 	mutex_lock(&scomp_lock);
 	if (!--scomp_scratch_users)
 		crypto_scomp_free_scratches();

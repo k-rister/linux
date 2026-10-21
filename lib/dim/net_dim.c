@@ -185,7 +185,7 @@ EXPORT_SYMBOL(net_dim_setting);
 
 void net_dim_work_cancel(struct dim *dim)
 {
-	cancel_work_sync(&dim->work);
+	cancel_work_sync_with_sync_wait(&dim->work);
 }
 EXPORT_SYMBOL(net_dim_work_cancel);
 

@@ -399,7 +399,7 @@ void firmware_upload_unregister(struct fw_upload *fw_upload)
 	mutex_unlock(&fw_upload_priv->lock);
 
 	/* Ensure lower-level device-driver is finished */
-	flush_work(&fw_upload_priv->work);
+	flush_work_with_sync_wait(&fw_upload_priv->work);
 
 unregister:
 	device_unregister(&fw_sysfs->dev);

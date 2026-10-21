@@ -5717,7 +5717,7 @@ static void css_free_rwork_fn(struct work_struct *work)
 		atomic_dec(&cgrp->root->nr_cgrps);
 		if (!cgroup_on_dfl(cgrp))
 			cgroup1_pidlist_destroy_all(cgrp);
-		cancel_work_sync(&cgrp->release_agent_work);
+		cancel_work_sync_with_sync_wait(&cgrp->release_agent_work);
 		bpf_cgrp_storage_free(cgrp);
 
 		if (cgroup_parent(cgrp)) {

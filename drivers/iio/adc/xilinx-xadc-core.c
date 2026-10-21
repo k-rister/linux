@@ -1313,7 +1313,7 @@ static void xadc_cancel_delayed_work(void *data)
 {
 	struct delayed_work *work = data;
 
-	cancel_delayed_work_sync(work);
+	cancel_delayed_work_sync_with_sync_wait(work);
 }
 
 static int xadc_probe(struct platform_device *pdev)

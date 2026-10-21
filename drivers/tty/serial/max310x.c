@@ -1538,9 +1538,9 @@ static void max310x_remove(struct device *dev)
 	int i;
 
 	for (i = 0; i < s->devtype->nr; i++) {
-		cancel_work_sync(&s->p[i].tx_work);
-		cancel_work_sync(&s->p[i].md_work);
-		cancel_work_sync(&s->p[i].rs_work);
+		cancel_work_sync_with_sync_wait(&s->p[i].tx_work);
+		cancel_work_sync_with_sync_wait(&s->p[i].md_work);
+		cancel_work_sync_with_sync_wait(&s->p[i].rs_work);
 
 		if (test_and_clear_bit(s->p[i].port.line, max310x_lines))
 			uart_remove_one_port(&max310x_uart, &s->p[i].port);

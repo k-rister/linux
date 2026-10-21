@@ -387,7 +387,7 @@ void crypto_acomp_free_streams(struct crypto_acomp_streams *s)
 	if (!streams)
 		return;
 
-	cancel_work_sync(&s->stream_work);
+	cancel_work_sync_with_sync_wait(&s->stream_work);
 	free_ctx = s->free_ctx;
 
 	for_each_possible_cpu(i) {

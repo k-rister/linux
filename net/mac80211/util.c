@@ -1941,7 +1941,7 @@ int ieee80211_reconfig(struct ieee80211_local *local)
 	 * so we can't deadlock in this case.
 	 */
 	if (suspended && local->in_reconfig && !reconfig_due_to_wowlan)
-		cancel_work_sync(&local->restart_work);
+		cancel_work_sync_with_sync_wait(&local->restart_work);
 
 	local->started = false;
 

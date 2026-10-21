@@ -113,7 +113,7 @@ static void kvm_flush_and_free_async_pf_work(struct kvm_async_pf *work)
 	if (work->wakeup_all)
 		WARN_ON_ONCE(work->work.func);
 	else
-		flush_work(&work->work);
+		flush_work_with_sync_wait(&work->work);
 	kmem_cache_free(async_pf_cache, work);
 }
 
@@ -127,9 +127,9 @@ void kvm_clear_async_pf_completion_queue(struct kvm_vcpu *vcpu)
 		list_del(&work->queue);
 
 #ifdef CONFIG_KVM_ASYNC_PF_SYNC
-		flush_work(&work->work);
+		flush_work_with_sync_wait(&work->work);
 #else
-		if (cancel_work_sync(&work->work))
+		if (cancel_work_sync_with_sync_wait(&work->work))
 			kmem_cache_free(async_pf_cache, work);
 #endif
 	}

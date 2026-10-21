@@ -809,7 +809,7 @@ static void airoha_npu_remove(struct platform_device *pdev)
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(npu->cores); i++)
-		cancel_work_sync(&npu->cores[i].wdt_work);
+		cancel_work_sync_with_sync_wait(&npu->cores[i].wdt_work);
 }
 
 static struct platform_driver airoha_npu_driver = {

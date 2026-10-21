@@ -1933,7 +1933,7 @@ static void intel_pstate_disable_hwp_interrupt(struct cpudata *cpudata)
 	raw_spin_unlock_irq(&hwp_notify_lock);
 
 	if (cancel_work)
-		cancel_delayed_work_sync(&cpudata->hwp_notify_work);
+		cancel_delayed_work_sync_with_sync_wait(&cpudata->hwp_notify_work);
 }
 
 #define HWP_GUARANTEED_PERF_CHANGE_REQ BIT(0)

@@ -2989,7 +2989,7 @@ static void bcmgenet_disable_rx_napi(struct bcmgenet_priv *priv)
 	for (i = 0; i <= priv->hw_params->rx_queues; ++i) {
 		ring = &priv->rx_rings[i];
 		napi_disable(&ring->napi);
-		cancel_work_sync(&ring->dim.dim.work);
+		net_dim_work_cancel(&ring->dim.dim);
 	}
 }
 

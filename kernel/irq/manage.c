@@ -579,7 +579,7 @@ int irq_set_affinity_notifier(unsigned int irq, struct irq_affinity_notify *noti
 	}
 
 	if (old_notify) {
-		if (cancel_work_sync(&old_notify->work)) {
+		if (cancel_work_sync_with_sync_wait(&old_notify->work)) {
 			/* Pending work had a ref, put that one too */
 			kref_put(&old_notify->kref, old_notify->release);
 		}

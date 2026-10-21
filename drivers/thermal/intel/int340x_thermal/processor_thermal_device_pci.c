@@ -232,7 +232,7 @@ static int sys_set_trip_temp(struct thermal_zone_device *tzd,
 	int tjmax, _temp;
 
 	if (temp <= 0) {
-		cancel_delayed_work_sync(&pci_info->work);
+		cancel_delayed_work_sync_with_sync_wait(&pci_info->work);
 		proc_thermal_mmio_write(pci_info, PROC_THERMAL_MMIO_INT_ENABLE_0, 0);
 		proc_thermal_mmio_write(pci_info, PROC_THERMAL_MMIO_THRES_0, 0);
 		pci_info->stored_thres = 0;
@@ -420,7 +420,7 @@ static void proc_thermal_pci_remove(struct pci_dev *pdev)
 	struct proc_thermal_device *proc_priv = pci_get_drvdata(pdev);
 	struct proc_thermal_pci *pci_info = proc_priv->priv_data;
 
-	cancel_delayed_work_sync(&pci_info->work);
+	cancel_delayed_work_sync_with_sync_wait(&pci_info->work);
 
 	proc_thermal_mmio_write(pci_info, PROC_THERMAL_MMIO_THRES_0, 0);
 	proc_thermal_mmio_write(pci_info, PROC_THERMAL_MMIO_INT_ENABLE_0, 0);

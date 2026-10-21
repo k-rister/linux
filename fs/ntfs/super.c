@@ -1714,7 +1714,7 @@ static void ntfs_put_super(struct super_block *sb)
 
 	pr_info("Entering %s, dev %s\n", __func__, sb->s_id);
 
-	cancel_work_sync(&vol->precalc_work);
+	cancel_work_sync_with_sync_wait(&vol->precalc_work);
 
 	/*
 	 * Commit all inodes while they are still open in case some of them

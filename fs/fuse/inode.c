@@ -1009,7 +1009,7 @@ void fuse_conn_put(struct fuse_conn *fc)
 
 	if (IS_ENABLED(CONFIG_FUSE_DAX))
 		fuse_dax_conn_free(fc);
-	cancel_work_sync(&fc->epoch_work);
+	cancel_work_sync_with_sync_wait(&fc->epoch_work);
 	fuse_chan_release(fc->chan);
 	put_pid_ns(fc->pid_ns);
 	bucket = rcu_dereference_protected(fc->curr_bucket, 1);

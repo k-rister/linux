@@ -2017,8 +2017,8 @@ static void balloon_remove(struct hv_device *dev)
 
 	hv_balloon_debugfs_exit(dm);
 
-	cancel_work_sync(&dm->balloon_wrk.wrk);
-	cancel_work_sync(&dm->ha_wrk.wrk);
+	cancel_work_sync_with_sync_wait(&dm->balloon_wrk.wrk);
+	cancel_work_sync_with_sync_wait(&dm->ha_wrk.wrk);
 
 	kthread_stop(dm->thread);
 
@@ -2053,8 +2053,8 @@ static int balloon_suspend(struct hv_device *hv_dev)
 
 	tasklet_disable(&hv_dev->channel->callback_event);
 
-	cancel_work_sync(&dm->balloon_wrk.wrk);
-	cancel_work_sync(&dm->ha_wrk.wrk);
+	cancel_work_sync_with_sync_wait(&dm->balloon_wrk.wrk);
+	cancel_work_sync_with_sync_wait(&dm->ha_wrk.wrk);
 
 	if (dm->thread) {
 		kthread_stop(dm->thread);

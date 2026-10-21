@@ -3070,7 +3070,7 @@ static void do_free_init(struct work_struct *w)
 
 void flush_module_init_free_work(void)
 {
-	flush_work(&init_free_wq);
+	flush_work_with_sync_wait(&init_free_wq);
 }
 
 #undef MODULE_PARAM_PREFIX

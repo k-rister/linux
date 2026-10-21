@@ -1133,7 +1133,7 @@ void psi_cgroup_free(struct cgroup *cgroup)
 	if (!static_branch_likely(&psi_cgroups_enabled))
 		return;
 
-	cancel_delayed_work_sync(&cgroup->psi->avgs_work);
+	cancel_delayed_work_sync_with_sync_wait(&cgroup->psi->avgs_work);
 	/*
 	 * A psi_schedule_rtpoll_work() call racing the last trigger's
 	 * destruction may have re-armed the timer after psi_trigger_destroy()

@@ -321,7 +321,7 @@ void hbg_np_link_fail_task_schedule(struct hbg_priv *priv)
 
 static void hbg_cancel_delayed_work_sync(void *data)
 {
-	cancel_delayed_work_sync(data);
+	cancel_delayed_work_sync_with_sync_wait(data);
 }
 
 static int hbg_delaywork_init(struct hbg_priv *priv)

@@ -503,7 +503,7 @@ static void afs_drop_open_mmap(struct afs_vnode *vnode)
 	read_sequnlock_excl(&vnode->cb_lock);
 
 	up_write(&vnode->volume->open_mmaps_lock);
-	flush_work(&vnode->cb_work);
+	flush_work_with_sync_wait(&vnode->cb_work);
 }
 
 /*

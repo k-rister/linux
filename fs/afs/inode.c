@@ -680,7 +680,7 @@ void afs_evict_inode(struct inode *inode)
 		inode->i_mapping->a_ops->writepages(inode->i_mapping, &wbc);
 	}
 
-	flush_delayed_work(&vnode->lock_work);
+	flush_delayed_work_with_sync_wait(&vnode->lock_work);
 	netfs_wait_for_outstanding_io(inode);
 	truncate_inode_pages_final(&inode->i_data);
 	netfs_free_folioq_buffer(vnode->directory);

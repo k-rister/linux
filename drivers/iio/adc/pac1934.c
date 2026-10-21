@@ -1211,7 +1211,7 @@ static int pac1934_fw_parse_channel_config(struct i2c_client *client,
 
 static void pac1934_cancel_delayed_work(void *dwork)
 {
-	cancel_delayed_work_sync(dwork);
+	cancel_delayed_work_sync_with_sync_wait(dwork);
 }
 
 static int pac1934_chip_configure(struct pac1934_chip_info *info)

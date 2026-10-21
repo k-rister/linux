@@ -438,7 +438,7 @@ static int pkg_thermal_cpu_offline(unsigned int cpu)
 		 * we might deadlock if the work needs to be flushed.
 		 */
 		raw_spin_unlock_irq(&pkg_temp_lock);
-		cancel_delayed_work_sync(&zonedev->work);
+		cancel_delayed_work_sync_with_sync_wait(&zonedev->work);
 		raw_spin_lock_irq(&pkg_temp_lock);
 		/*
 		 * If this is not the last cpu in the package and the work

@@ -3093,8 +3093,8 @@ static void hso_free_interface(struct usb_interface *interface)
 			mutex_lock(&serial->parent->mutex);
 			serial->parent->usb_gone = 1;
 			mutex_unlock(&serial->parent->mutex);
-			cancel_work_sync(&serial_table[i]->async_put_intf);
-			cancel_work_sync(&serial_table[i]->async_get_intf);
+			cancel_work_sync_with_sync_wait(&serial_table[i]->async_put_intf);
+			cancel_work_sync_with_sync_wait(&serial_table[i]->async_get_intf);
 			hso_serial_tty_unregister(serial);
 			kref_put(&serial->parent->ref, hso_serial_ref_free);
 		}
@@ -3108,8 +3108,8 @@ static void hso_free_interface(struct usb_interface *interface)
 			 * traffic needs to start it again when suspended */
 			netif_stop_queue(dev2net(network_table[i])->net);
 			hso_stop_net_device(network_table[i]);
-			cancel_work_sync(&network_table[i]->async_put_intf);
-			cancel_work_sync(&network_table[i]->async_get_intf);
+			cancel_work_sync_with_sync_wait(&network_table[i]->async_put_intf);
+			cancel_work_sync_with_sync_wait(&network_table[i]->async_get_intf);
 			if (rfk) {
 				rfkill_unregister(rfk);
 				rfkill_destroy(rfk);

@@ -1341,8 +1341,8 @@ static int btrfs_remount_ro(struct btrfs_fs_info *fs_info)
 	 * This also happens on 'umount -rf' or on shutdown, when the
 	 * filesystem is busy.
 	 */
-	cancel_work_sync(&fs_info->async_reclaim_work);
-	cancel_work_sync(&fs_info->async_data_reclaim_work);
+	cancel_work_sync_with_sync_wait(&fs_info->async_reclaim_work);
+	cancel_work_sync_with_sync_wait(&fs_info->async_data_reclaim_work);
 
 	btrfs_discard_cleanup(fs_info);
 

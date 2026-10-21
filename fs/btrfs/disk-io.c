@@ -4348,7 +4348,7 @@ void __cold close_ctree(struct btrfs_fs_info *fs_info)
 	 * parked and can not run delayed iputs - this will make us hang when
 	 * trying to stop the async reclaim task.
 	 */
-	cancel_work_sync(&fs_info->reclaim_bgs_work);
+	cancel_work_sync_with_sync_wait(&fs_info->reclaim_bgs_work);
 	/*
 	 * We don't want the cleaner to start new transactions, add more delayed
 	 * iputs, etc. while we're closing. We can't use kthread_stop() yet
@@ -4478,10 +4478,10 @@ void __cold close_ctree(struct btrfs_fs_info *fs_info)
 	 */
 	btrfs_run_delayed_iputs(fs_info);
 
-	cancel_work_sync(&fs_info->async_reclaim_work);
-	cancel_work_sync(&fs_info->async_data_reclaim_work);
-	cancel_work_sync(&fs_info->preempt_reclaim_work);
-	cancel_work_sync(&fs_info->em_shrinker_work);
+	cancel_work_sync_with_sync_wait(&fs_info->async_reclaim_work);
+	cancel_work_sync_with_sync_wait(&fs_info->async_data_reclaim_work);
+	cancel_work_sync_with_sync_wait(&fs_info->preempt_reclaim_work);
+	cancel_work_sync_with_sync_wait(&fs_info->em_shrinker_work);
 
 	/*
 	 * Reclaim workers can run writeback which can queue fixup.

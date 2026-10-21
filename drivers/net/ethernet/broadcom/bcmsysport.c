@@ -2063,7 +2063,7 @@ static void bcm_sysport_netif_stop(struct net_device *dev)
 	/* stop all software from updating hardware */
 	netif_tx_disable(dev);
 	napi_disable(&priv->napi);
-	cancel_work_sync(&priv->dim.dim.work);
+	net_dim_work_cancel(&priv->dim.dim);
 	phy_stop(dev->phydev);
 
 	/* mask all interrupts */

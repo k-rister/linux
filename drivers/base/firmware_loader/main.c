@@ -1557,7 +1557,7 @@ static void device_cache_fw_images(void)
 	pr_debug("%s\n", __func__);
 
 	/* cancel uncache work */
-	cancel_delayed_work_sync(&fwc->work);
+	cancel_delayed_work_sync_with_sync_wait(&fwc->work);
 
 	fw_fallback_set_cache_timeout();
 

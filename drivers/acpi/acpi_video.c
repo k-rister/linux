@@ -1947,7 +1947,7 @@ static void acpi_video_bus_remove_notify_handler(void *data)
 	mutex_lock(&video->device_list_lock);
 	list_for_each_entry(dev, &video->video_device_list, entry) {
 		acpi_video_dev_remove_notify_handler(dev);
-		cancel_delayed_work_sync(&dev->switch_brightness_work);
+		cancel_delayed_work_sync_with_sync_wait(&dev->switch_brightness_work);
 	}
 	mutex_unlock(&video->device_list_lock);
 

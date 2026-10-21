@@ -586,7 +586,7 @@ static void rvu_rep_rsrc_free(struct otx2_nic *priv)
 
 	for (wrk = 0; wrk < priv->qset.cq_cnt; wrk++) {
 		work = &priv->refill_wrk[wrk].pool_refill_work;
-		cancel_delayed_work_sync(work);
+		cancel_delayed_work_sync_with_sync_wait(work);
 	}
 	devm_kfree(priv->dev, priv->refill_wrk);
 

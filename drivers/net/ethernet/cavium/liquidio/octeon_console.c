@@ -722,8 +722,8 @@ void octeon_remove_consoles(struct octeon_device *oct)
 		if (!console->active)
 			continue;
 
-		cancel_delayed_work_sync(&oct->console_poll_work[i].
-						work);
+		cancel_delayed_work_sync_with_sync_wait(
+			&oct->console_poll_work[i].work);
 		console->addr = 0;
 		console->buffer_size = 0;
 		console->input_base_addr = 0;

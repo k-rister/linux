@@ -3443,7 +3443,7 @@ static void pmbus_regulator_notify_work_cancel(void *data)
 {
 	struct pmbus_data *pdata = data;
 
-	cancel_work_sync(&pdata->regulator_notify_work);
+	cancel_work_sync_with_sync_wait(&pdata->regulator_notify_work);
 }
 
 static void pmbus_regulator_notify_worker(struct work_struct *work)

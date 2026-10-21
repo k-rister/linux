@@ -507,7 +507,7 @@ xirc2ps_detach(struct pcmcia_device *link)
 
     netif_carrier_off(dev);
     netif_tx_disable(dev);
-    cancel_work_sync(&local->tx_timeout_task);
+    cancel_work_sync_with_sync_wait(&local->tx_timeout_task);
 
     dev_dbg(&link->dev, "detach\n");
 

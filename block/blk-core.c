@@ -263,7 +263,7 @@ blk_status_t tag_to_blk_status(const char *tag)
 void blk_sync_queue(struct request_queue *q)
 {
 	timer_delete_sync(&q->timeout);
-	cancel_work_sync(&q->timeout_work);
+	cancel_work_sync_with_sync_wait(&q->timeout_work);
 }
 EXPORT_SYMBOL(blk_sync_queue);
 

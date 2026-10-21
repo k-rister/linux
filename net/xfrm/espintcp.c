@@ -528,7 +528,7 @@ static void espintcp_close(struct sock *sk, long timeout)
 
 	synchronize_rcu();
 
-	disable_work_sync(&ctx->work);
+	disable_work_sync_with_sync_wait(&ctx->work);
 	strp_done(&ctx->strp);
 
 	skb_queue_purge(&ctx->out_queue);

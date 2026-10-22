@@ -1535,7 +1535,7 @@ void otx2_disable_napi(struct otx2_nic *pf)
 		cq_poll = &qset->napi[qidx];
 		work = &cq_poll->dim.work;
 		if (work->func)
-			cancel_work_sync(work);
+			cancel_work_sync_with_sync_wait(work);
 		napi_disable(&cq_poll->napi);
 		netif_napi_del(&cq_poll->napi);
 	}

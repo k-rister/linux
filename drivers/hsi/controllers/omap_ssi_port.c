@@ -1216,7 +1216,7 @@ static void ssi_port_remove(struct platform_device *pd)
 	ssi_debug_remove_port(port);
 #endif
 
-	cancel_delayed_work_sync(&omap_port->errqueue_work);
+	cancel_delayed_work_sync_with_sync_wait(&omap_port->errqueue_work);
 
 	hsi_port_unregister_clients(port);
 

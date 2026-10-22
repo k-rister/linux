@@ -2383,7 +2383,7 @@ static void cleanup_one_si(struct smi_info *smi_info)
 		return;
 
 	if (IS_ENABLED(CONFIG_IPMI_SI_ASYNC_INIT))
-		cancel_work_sync(&smi_info->init_work);
+		cancel_work_sync_with_sync_wait(&smi_info->init_work);
 
 	ipmi_unregister_smi(smi_info->intf);
 	kfree(smi_info);

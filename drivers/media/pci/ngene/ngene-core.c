@@ -1395,7 +1395,7 @@ static void release_channel(struct ngene_channel *chan)
 	if (chan->running)
 		set_transfer(chan, 0);
 
-	cancel_work_sync(&chan->demux_bh_work);
+	cancel_work_sync_with_sync_wait(&chan->demux_bh_work);
 
 	if (chan->ci_dev) {
 		dvb_unregister_device(chan->ci_dev);

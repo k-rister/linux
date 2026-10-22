@@ -1043,7 +1043,7 @@ static struct sbp_target_agent *sbp_target_agent_register(
 static void sbp_target_agent_unregister(struct sbp_target_agent *agent)
 {
 	fw_core_remove_address_handler(&agent->handler);
-	cancel_work_sync(&agent->work);
+	cancel_work_sync_with_sync_wait(&agent->work);
 	kfree(agent);
 }
 
@@ -1663,7 +1663,7 @@ static struct sbp_management_agent *sbp_management_agent_register(
 static void sbp_management_agent_unregister(struct sbp_management_agent *agent)
 {
 	fw_core_remove_address_handler(&agent->handler);
-	cancel_work_sync(&agent->work);
+	cancel_work_sync_with_sync_wait(&agent->work);
 	kfree(agent);
 }
 

@@ -130,7 +130,7 @@ static int amdgpu_reset_xgmi_reset_on_init_perform_reset(
 	/* For XGMI wait for all resets to complete before proceed */
 	if (!r) {
 		list_for_each_entry(tmp_adev, reset_device_list, reset_list) {
-			flush_work(&tmp_adev->xgmi_reset_work);
+			flush_work_with_sync_wait(&tmp_adev->xgmi_reset_work);
 			r = tmp_adev->asic_reset_res;
 			if (r)
 				break;

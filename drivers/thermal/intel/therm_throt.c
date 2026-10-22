@@ -832,8 +832,8 @@ static int thermal_throttle_offline(unsigned int cpu)
 
 	intel_hfi_offline(cpu);
 
-	cancel_delayed_work_sync(&state->package_throttle.therm_work);
-	cancel_delayed_work_sync(&state->core_throttle.therm_work);
+	cancel_delayed_work_sync_with_sync_wait(&state->package_throttle.therm_work);
+	cancel_delayed_work_sync_with_sync_wait(&state->core_throttle.therm_work);
 
 	state->package_throttle.rate_control_active = false;
 	state->core_throttle.rate_control_active = false;

@@ -76,7 +76,7 @@ static void rdma_dim_destroy(struct ib_cq *cq)
 	if (!cq->dim)
 		return;
 
-	cancel_work_sync(&cq->dim->work);
+	cancel_work_sync_with_sync_wait(&cq->dim->work);
 	kfree(cq->dim);
 }
 

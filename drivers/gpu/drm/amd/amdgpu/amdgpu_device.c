@@ -4166,7 +4166,7 @@ fence_driver_init:
 
 	if (amdgpu_sriov_vf(adev)) {
 		amdgpu_virt_release_full_gpu(adev, true);
-		flush_delayed_work(&adev->delayed_init_work);
+		flush_delayed_work_with_sync_wait(&adev->delayed_init_work);
 	}
 
 	/* Don't init kfd if whole hive need to be reset during init */
@@ -4273,7 +4273,7 @@ static void amdgpu_device_unmap_mmio(struct amdgpu_device *adev)
 void amdgpu_device_fini_hw(struct amdgpu_device *adev)
 {
 	dev_info(adev->dev, "finishing device.\n");
-	flush_delayed_work(&adev->delayed_init_work);
+	flush_delayed_work_with_sync_wait(&adev->delayed_init_work);
 
 	if (adev->mman.initialized)
 		drain_workqueue(adev->mman.bdev.wq);
@@ -4555,7 +4555,7 @@ int amdgpu_device_suspend(struct drm_device *dev, bool notify_clients)
 	if (notify_clients)
 		drm_client_dev_suspend(adev_to_drm(adev));
 
-	cancel_delayed_work_sync(&adev->delayed_init_work);
+	cancel_delayed_work_sync_with_sync_wait(&adev->delayed_init_work);
 
 	amdgpu_ras_suspend(adev);
 
@@ -4735,7 +4735,7 @@ exit:
 		return r;
 
 	/* Make sure IB tests flushed */
-	flush_delayed_work(&adev->delayed_init_work);
+	flush_delayed_work_with_sync_wait(&adev->delayed_init_work);
 
 	if (notify_clients)
 		drm_client_dev_resume(adev_to_drm(adev));
@@ -5527,7 +5527,7 @@ static void amdgpu_device_halt_activities(struct amdgpu_device *adev,
 
 		amdgpu_ras_set_error_query_ready(tmp_adev, false);
 
-		cancel_delayed_work_sync(&tmp_adev->delayed_init_work);
+		cancel_delayed_work_sync_with_sync_wait(&tmp_adev->delayed_init_work);
 
 		amdgpu_amdkfd_pre_reset(tmp_adev, reset_context);
 

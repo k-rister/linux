@@ -1277,7 +1277,7 @@ void smc_conn_free(struct smc_connection *conn)
 	} else {
 		smc_cdc_wait_pend_tx_wr(conn);
 		if (current_work() != &conn->abort_work)
-			cancel_work_sync(&conn->abort_work);
+			cancel_work_sync_with_sync_wait(&conn->abort_work);
 	}
 	if (!list_empty(&lgr->list)) {
 		smc_buf_unuse(conn, lgr); /* allow buffer reuse */

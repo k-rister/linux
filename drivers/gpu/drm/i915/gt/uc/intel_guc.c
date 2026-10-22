@@ -489,7 +489,7 @@ void intel_guc_fini(struct intel_guc *guc)
 	if (!intel_uc_fw_is_loadable(&guc->fw))
 		return;
 
-	flush_work(&guc->dead_guc_worker);
+	flush_work_with_sync_wait(&guc->dead_guc_worker);
 
 	if (intel_guc_slpc_is_used(guc))
 		intel_guc_slpc_fini(&guc->slpc);
@@ -687,7 +687,7 @@ int intel_guc_suspend(struct intel_guc *guc)
 		return 0;
 
 	if (intel_guc_submission_is_used(guc)) {
-		flush_work(&guc->dead_guc_worker);
+		flush_work_with_sync_wait(&guc->dead_guc_worker);
 
 		/*
 		 * This H2G MMIO command tears down the GuC in two steps. First it will

@@ -3331,7 +3331,7 @@ static void srpt_remove_one(struct ib_device *device, void *client_data)
 
 	/* Cancel any work queued by the just unregistered IB event handler. */
 	for (i = 0; i < sdev->device->phys_port_cnt; i++)
-		cancel_work_sync(&sdev->port[i].work);
+		cancel_work_sync_with_sync_wait(&sdev->port[i].work);
 
 	if (sdev->cm_id)
 		ib_destroy_cm_id(sdev->cm_id);

@@ -343,7 +343,7 @@ int smc_release(struct socket *sock)
 	if (smc->connect_nonblock && old_state == SMC_INIT)
 		tcp_abort(smc->clcsock->sk, ECONNABORTED);
 
-	if (cancel_work_sync(&smc->connect_work))
+	if (cancel_work_sync_with_sync_wait(&smc->connect_work))
 		sock_put(&smc->sk); /* sock_hold in smc_connect for passive closing */
 
 	if (sk->sk_state == SMC_LISTEN)

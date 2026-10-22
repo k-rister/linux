@@ -635,7 +635,7 @@ static void __eea_pci_remove(struct pci_dev *pci_dev, bool pci_remove)
 	eea_pci_free_ha_irq(edev);
 
 	if (pci_remove)
-		flush_work(&ep_dev->ha_handle_work);
+		flush_work_with_sync_wait(&ep_dev->ha_handle_work);
 
 	eea_net_remove(edev, !pci_remove);
 
@@ -702,7 +702,7 @@ static void eea_pci_shutdown(struct pci_dev *pci_dev)
 
 	mutex_lock(&edev->ha_lock);
 	eea_pci_free_ha_irq(edev);
-	flush_work(&ep_dev->ha_handle_work);
+	flush_work_with_sync_wait(&ep_dev->ha_handle_work);
 	mutex_unlock(&edev->ha_lock);
 
 	eea_net_shutdown(edev);

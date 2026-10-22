@@ -734,7 +734,7 @@ mtype_cancel_gc(struct ip_set *set)
 	struct htype *h = set->data;
 
 	if (SET_WITH_TIMEOUT(set))
-		disable_delayed_work_sync(&h->gc.dwork);
+		disable_delayed_work_sync_with_sync_wait(&h->gc.dwork);
 }
 
 static int

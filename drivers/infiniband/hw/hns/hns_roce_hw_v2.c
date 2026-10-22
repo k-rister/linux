@@ -7052,7 +7052,8 @@ err_request_failed:
 		free_irq(eq_table->eq[j - other_num].irq,
 			 &eq_table->eq[j - other_num]);
 		if (j < other_num + comp_num)
-			cancel_work_sync(&eq_table->eq[j - other_num].work);
+			cancel_work_sync_with_sync_wait(
+				&eq_table->eq[j - other_num].work);
 	}
 
 err_kzalloc_failed:
@@ -7077,7 +7078,8 @@ static void __hns_roce_free_irq(struct hns_roce_dev *hr_dev)
 	for (i = 0; i < eq_num; i++) {
 		free_irq(hr_dev->eq_table.eq[i].irq, &hr_dev->eq_table.eq[i]);
 		if (i < hr_dev->caps.num_comp_vectors)
-			cancel_work_sync(&hr_dev->eq_table.eq[i].work);
+			cancel_work_sync_with_sync_wait(
+				&hr_dev->eq_table.eq[i].work);
 	}
 
 	for (i = 0; i < irq_num; i++)

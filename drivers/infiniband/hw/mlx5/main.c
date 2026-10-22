@@ -5042,7 +5042,7 @@ static void mlx5_ib_stage_delay_drop_cleanup(struct mlx5_ib_dev *dev)
 	if (!(dev->ib_dev.attrs.raw_packet_caps & IB_RAW_PACKET_CAP_DELAY_DROP))
 		return;
 
-	cancel_work_sync(&dev->delay_drop.delay_drop_work);
+	cancel_work_sync_with_sync_wait(&dev->delay_drop.delay_drop_work);
 	if (!dev->delay_drop.dir_debugfs)
 		return;
 
@@ -5076,7 +5076,7 @@ static void mlx5_ib_stage_dev_notifier_cleanup(struct mlx5_ib_dev *dev)
 	mlx5_notifier_unregister(dev->mdev, &dev->mdev_events);
 
 	for (port = 0; port < ARRAY_SIZE(devr->ports); ++port)
-		cancel_work_sync(&devr->ports[port].pkey_change_work);
+		cancel_work_sync_with_sync_wait(&devr->ports[port].pkey_change_work);
 }
 
 void mlx5_ib_data_direct_bind(struct mlx5_ib_dev *ibdev,

@@ -508,7 +508,7 @@ nouveau_sched_fini(struct nouveau_sched *sched)
 	 * be in use.
 	 */
 	if (sched->wq)
-		destroy_workqueue(sched->wq);
+		destroy_workqueue_with_sync_wait(sched->wq);
 }
 
 void

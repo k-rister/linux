@@ -740,7 +740,7 @@ void stop_send_queue(struct rvt_qp *qp)
 	struct hfi1_qp_priv *priv = qp->priv;
 
 	iowait_cancel_work(&priv->s_iowait);
-	if (cancel_work_sync(&priv->tid_rdma.trigger_work))
+	if (cancel_work_sync_with_sync_wait(&priv->tid_rdma.trigger_work))
 		rvt_put_qp(qp);
 }
 

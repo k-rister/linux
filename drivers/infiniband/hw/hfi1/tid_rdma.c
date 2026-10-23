@@ -430,7 +430,7 @@ void hfi1_qp_priv_tid_free(struct rvt_dev_info *rdi, struct rvt_qp *qp)
 			kfree(priv);
 			qp->s_ack_queue[i].priv = NULL;
 		}
-		cancel_work_sync(&qpriv->opfn.opfn_work);
+		cancel_work_sync_with_sync_wait(&qpriv->opfn.opfn_work);
 		kfree(qpriv->pages);
 		qpriv->pages = NULL;
 	}

@@ -317,7 +317,7 @@ int opfn_init(void)
 void opfn_exit(void)
 {
 	if (opfn_wq) {
-		destroy_workqueue(opfn_wq);
+		destroy_workqueue_with_sync_wait(opfn_wq);
 		opfn_wq = NULL;
 	}
 }

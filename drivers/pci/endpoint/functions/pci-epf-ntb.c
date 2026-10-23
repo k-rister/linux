@@ -2094,7 +2094,7 @@ module_init(epf_ntb_init);
 static void __exit epf_ntb_exit(void)
 {
 	pci_epf_unregister_driver(&epf_ntb_driver);
-	destroy_workqueue(kpcintb_workqueue);
+	destroy_workqueue_with_sync_wait(kpcintb_workqueue);
 }
 module_exit(epf_ntb_exit);
 

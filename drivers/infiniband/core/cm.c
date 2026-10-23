@@ -4531,7 +4531,7 @@ static int __init ib_cm_init(void)
 
 	return 0;
 error3:
-	destroy_workqueue(cm.wq);
+	destroy_workqueue_with_sync_wait(cm.wq);
 error2:
 	return ret;
 }
@@ -4546,7 +4546,7 @@ static void __exit ib_cm_cleanup(void)
 	spin_unlock_irq(&cm.lock);
 
 	ib_unregister_client(&cm_client);
-	destroy_workqueue(cm.wq);
+	destroy_workqueue_with_sync_wait(cm.wq);
 
 	list_for_each_entry_safe(timewait_info, tmp, &cm.timewait_list, list) {
 		list_del(&timewait_info->list);

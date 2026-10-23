@@ -118,7 +118,7 @@ int ksmbd_workqueue_init(void)
 
 void ksmbd_workqueue_destroy(void)
 {
-	destroy_workqueue(ksmbd_wq);
+	destroy_workqueue_with_sync_wait(ksmbd_wq);
 	ksmbd_wq = NULL;
 }
 

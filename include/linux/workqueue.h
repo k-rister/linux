@@ -611,6 +611,8 @@ alloc_workqueue_lockdep_map(const char *fmt, unsigned int flags, int max_active,
 	container_of(callback_work, typeof(*var), work_fieldname)
 
 extern void destroy_workqueue(struct workqueue_struct *wq);
+/* Destroy a workqueue while coordinating active owners during per-CPU drain. */
+extern void destroy_workqueue_with_sync_wait(struct workqueue_struct *wq);
 
 struct workqueue_attrs *alloc_workqueue_attrs_noprof(void);
 #define alloc_workqueue_attrs(...)	alloc_hooks(alloc_workqueue_attrs_noprof(__VA_ARGS__))

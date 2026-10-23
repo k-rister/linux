@@ -6380,9 +6380,10 @@ static bool pwq_busy(struct pool_workqueue *pwq)
  * destroy_workqueue() would cleanly cancel all pending and non-pending
  * delayed_work.
  */
-void destroy_workqueue(struct workqueue_struct *wq)
+static void __destroy_workqueue(struct workqueue_struct *wq, bool sync_wait)
 {
 	struct pool_workqueue *pwq;
+	bool sync_waiting;
 	int cpu;
 
 	/*
@@ -6396,8 +6397,11 @@ void destroy_workqueue(struct workqueue_struct *wq)
 	wq->flags |= __WQ_DESTROYING;
 	mutex_unlock(&wq->mutex);
 
-	/* drain it before proceeding with destruction */
+	/* Drain before proceeding with destruction. */
+	sync_waiting = sync_wait && workqueue_sync_wait_begin(wq);
 	drain_workqueue(wq);
+	if (sync_waiting)
+		workqueue_sync_wait_end();
 
 	/* kill rescuer, if sanity checks fail, leave it w/o rescuer */
 	if (wq->rescuer) {
@@ -6453,7 +6457,27 @@ void destroy_workqueue(struct workqueue_struct *wq)
 
 	rcu_read_unlock();
 }
+
+void destroy_workqueue(struct workqueue_struct *wq)
+{
+	__destroy_workqueue(wq, false);
+}
 EXPORT_SYMBOL_GPL(destroy_workqueue);
+
+/**
+ * destroy_workqueue_with_sync_wait - destroy a workqueue with owner coordination
+ * @wq: target workqueue
+ *
+ * Like destroy_workqueue(), but requests active owners to stop while draining
+ * a per-CPU workqueue. Workqueues without WQ_PERCPU use the ordinary drain
+ * path. Use this only when destroying the queue may wait for work that needs
+ * to run on an accelerator-owned CPU.
+ */
+void destroy_workqueue_with_sync_wait(struct workqueue_struct *wq)
+{
+	__destroy_workqueue(wq, true);
+}
+EXPORT_SYMBOL_GPL(destroy_workqueue_with_sync_wait);
 
 /**
  * workqueue_set_max_active - adjust max_active of a workqueue

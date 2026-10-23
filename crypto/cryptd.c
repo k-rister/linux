@@ -1016,7 +1016,7 @@ err_destroy_wq:
 
 static void __exit cryptd_exit(void)
 {
-	destroy_workqueue(cryptd_wq);
+	destroy_workqueue_with_sync_wait(cryptd_wq);
 	cryptd_fini_queue(&queue);
 	crypto_unregister_template(&cryptd_tmpl);
 }

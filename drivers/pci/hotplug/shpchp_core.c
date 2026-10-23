@@ -130,7 +130,7 @@ void cleanup_slots(struct controller *ctrl)
 	list_for_each_entry_safe(slot, next, &ctrl->slot_list, slot_list) {
 		list_del(&slot->slot_list);
 		cancel_delayed_work(&slot->work);
-		destroy_workqueue(slot->wq);
+		destroy_workqueue_with_sync_wait(slot->wq);
 		pci_hp_deregister(&slot->hotplug_slot);
 		kfree(slot);
 	}

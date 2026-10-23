@@ -617,7 +617,7 @@ static void __exit exit_dlmfs_fs(void)
 {
 	unregister_filesystem(&dlmfs_fs_type);
 
-	destroy_workqueue(user_dlm_worker);
+	destroy_workqueue_with_sync_wait(user_dlm_worker);
 
 	/*
 	 * Make sure all delayed rcu free inodes are flushed before we

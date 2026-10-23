@@ -1587,7 +1587,7 @@ static void hidg_unbind(struct usb_configuration *c, struct usb_function *f)
 	struct f_hidg *hidg = func_to_hidg(f);
 
 	cdev_device_del(hidg->cdev, &hidg->dev);
-	destroy_workqueue(hidg->workqueue);
+	destroy_workqueue_with_sync_wait(hidg->workqueue);
 	usb_free_all_descriptors(f);
 }
 

@@ -747,7 +747,7 @@ void generic_shutdown_super(struct super_block *sb)
 		security_sb_delete(sb);
 
 		if (sb->s_dio_done_wq) {
-			destroy_workqueue(sb->s_dio_done_wq);
+			destroy_workqueue_with_sync_wait(sb->s_dio_done_wq);
 			sb->s_dio_done_wq = NULL;
 		}
 

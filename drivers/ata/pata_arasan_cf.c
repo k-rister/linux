@@ -667,8 +667,8 @@ static void arasan_cf_error_handler(struct ata_port *ap)
 	 * Abort them before handling error. Refer data_xfer() for further
 	 * details.
 	 */
-	cancel_work_sync(&acdev->work);
-	cancel_delayed_work_sync(&acdev->dwork);
+	cancel_work_sync_with_sync_wait(&acdev->work);
+	cancel_delayed_work_sync_with_sync_wait(&acdev->dwork);
 	return ata_sff_error_handler(ap);
 }
 

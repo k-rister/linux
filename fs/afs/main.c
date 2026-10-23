@@ -201,11 +201,11 @@ error_proc:
 error_fs:
 	unregister_pernet_device(&afs_net_ops);
 error_net:
-	destroy_workqueue(afs_lock_manager);
+	destroy_workqueue_with_sync_wait(afs_lock_manager);
 error_lockmgr:
 	destroy_workqueue(afs_async_calls);
 error_async:
-	destroy_workqueue(afs_wq);
+	destroy_workqueue_with_sync_wait(afs_wq);
 error_afs_wq:
 	rcu_barrier();
 	printk(KERN_ERR "kAFS: failed to register: %d\n", ret);
@@ -227,9 +227,9 @@ static void __exit afs_exit(void)
 	proc_remove(afs_proc_symlink);
 	afs_fs_exit();
 	unregister_pernet_device(&afs_net_ops);
-	destroy_workqueue(afs_lock_manager);
+	destroy_workqueue_with_sync_wait(afs_lock_manager);
 	destroy_workqueue(afs_async_calls);
-	destroy_workqueue(afs_wq);
+	destroy_workqueue_with_sync_wait(afs_wq);
 	afs_clean_up_permit_cache();
 	rcu_barrier();
 }

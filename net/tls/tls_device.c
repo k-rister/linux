@@ -1439,7 +1439,7 @@ err_free_dummy:
 void __exit tls_device_cleanup(void)
 {
 	unregister_netdevice_notifier(&tls_dev_notifier);
-	destroy_workqueue(destruct_wq);
+	destroy_workqueue_with_sync_wait(destruct_wq);
 	clean_acked_data_flush();
 	put_page(dummy_page);
 }

@@ -1060,7 +1060,7 @@ static void __exit iser_exit(void)
 	int connlist_empty;
 
 	iser_dbg("Removing iSER datamover...\n");
-	destroy_workqueue(release_wq);
+	destroy_workqueue_with_sync_wait(release_wq);
 
 	mutex_lock(&ig.connlist_mutex);
 	connlist_empty = list_empty(&ig.connlist);

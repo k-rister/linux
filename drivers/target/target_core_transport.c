@@ -161,8 +161,8 @@ out:
 
 void release_se_kmem_caches(void)
 {
-	destroy_workqueue(target_submission_wq);
-	destroy_workqueue(target_completion_wq);
+	destroy_workqueue_with_sync_wait(target_submission_wq);
+	destroy_workqueue_with_sync_wait(target_completion_wq);
 	kmem_cache_destroy(se_sess_cache);
 	kmem_cache_destroy(se_ua_cache);
 	kmem_cache_destroy(t10_pr_reg_cache);

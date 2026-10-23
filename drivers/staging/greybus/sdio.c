@@ -830,7 +830,7 @@ static int gb_sdio_probe(struct gbphy_device *gbphy_dev,
 	return ret;
 
 exit_wq_destroy:
-	destroy_workqueue(host->mrq_workqueue);
+	destroy_workqueue_with_sync_wait(host->mrq_workqueue);
 exit_connection_disable:
 	gb_connection_disable(connection);
 exit_connection_destroy:
@@ -858,7 +858,7 @@ static void gb_sdio_remove(struct gbphy_device *gbphy_dev)
 	gb_connection_set_data(connection, NULL);
 	mutex_unlock(&host->lock);
 
-	destroy_workqueue(host->mrq_workqueue);
+	destroy_workqueue_with_sync_wait(host->mrq_workqueue);
 	gb_connection_disable_rx(connection);
 	mmc_remove_host(mmc);
 	gb_connection_disable(connection);

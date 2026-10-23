@@ -3701,8 +3701,10 @@ retry_probe:
 	return 0;
 
 err7:
+	if (test_and_clear_bit(QEDF_LL2_STARTED, &qedf->flags))
+		qed_ops->ll2->stop(qedf->cdev);
 	if (qedf->ll2_recv_wq)
-		destroy_workqueue(qedf->ll2_recv_wq);
+		destroy_workqueue_with_sync_wait(qedf->ll2_recv_wq);
 	fc_remove_host(qedf->lport->host);
 	scsi_remove_host(qedf->lport->host);
 #ifdef CONFIG_DEBUG_FS
@@ -3781,17 +3783,17 @@ stag_in_prog:
 
 	/* Stop any link update handling */
 	cancel_delayed_work_sync_with_sync_wait(&qedf->link_update);
-	destroy_workqueue(qedf->link_update_wq);
+	destroy_workqueue_with_sync_wait(qedf->link_update_wq);
 	qedf->link_update_wq = NULL;
 
 	if (qedf->timer_work_queue)
-		destroy_workqueue(qedf->timer_work_queue);
+		destroy_workqueue_with_sync_wait(qedf->timer_work_queue);
 
 	/* Stop Light L2 */
 	clear_bit(QEDF_LL2_STARTED, &qedf->flags);
 	qed_ops->ll2->stop(qedf->cdev);
 	if (qedf->ll2_recv_wq)
-		destroy_workqueue(qedf->ll2_recv_wq);
+		destroy_workqueue_with_sync_wait(qedf->ll2_recv_wq);
 
 	/* Stop fastpath */
 	qedf_sync_free_irqs(qedf);
@@ -4215,7 +4217,7 @@ static void __exit qedf_cleanup(void)
 {
 	pci_unregister_driver(&qedf_pci_driver);
 
-	destroy_workqueue(qedf_io_wq);
+	destroy_workqueue_with_sync_wait(qedf_io_wq);
 
 	fc_release_transport(qedf_fc_vport_transport_template);
 	fc_release_transport(qedf_fc_transport_template);

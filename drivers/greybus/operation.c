@@ -1256,7 +1256,7 @@ err_destroy_message_cache:
 
 void gb_operation_exit(void)
 {
-	destroy_workqueue(gb_operation_completion_wq);
+	destroy_workqueue_with_sync_wait(gb_operation_completion_wq);
 	gb_operation_completion_wq = NULL;
 	kmem_cache_destroy(gb_operation_cache);
 	gb_operation_cache = NULL;

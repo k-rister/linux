@@ -8412,7 +8412,7 @@ void qlt_exit(void)
 	if (!QLA_TGT_MODE_ENABLED())
 		return;
 
-	destroy_workqueue(qla_tgt_wq);
+	destroy_workqueue_with_sync_wait(qla_tgt_wq);
 	mempool_destroy(qla_tgt_mgmt_cmd_mempool);
 	kmem_cache_destroy(qla_tgt_plogi_cachep);
 	kmem_cache_destroy(qla_tgt_mgmt_cmd_cachep);

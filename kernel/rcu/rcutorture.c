@@ -1967,7 +1967,7 @@ rcu_torture_writer(void *arg)
 			 torture_type);
 
 	if (IS_ENABLED(CONFIG_RCU_LAZY)) {
-		cancel_work_sync(&lazy_work);
+		cancel_work_sync_with_sync_wait(&lazy_work);
 		destroy_work_on_stack(&lazy_work);
 	}
 

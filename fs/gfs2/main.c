@@ -232,9 +232,9 @@ static void __exit exit_gfs2_fs(void)
 	gfs2_unregister_debugfs();
 	unregister_filesystem(&gfs2_fs_type);
 	unregister_filesystem(&gfs2meta_fs_type);
-	destroy_workqueue(gfs2_recovery_wq);
+	destroy_workqueue_with_sync_wait(gfs2_recovery_wq);
 	destroy_workqueue(gfs2_control_wq);
-	destroy_workqueue(gfs2_freeze_wq);
+	destroy_workqueue_with_sync_wait(gfs2_freeze_wq);
 	list_lru_destroy(&gfs2_qd_lru);
 
 	rcu_barrier();

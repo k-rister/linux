@@ -11092,7 +11092,7 @@ static __exit void md_exit(void)
 	}
 	spin_unlock(&all_mddevs_lock);
 
-	destroy_workqueue(md_misc_wq);
+	destroy_workqueue_with_sync_wait(md_misc_wq);
 	md_bitmap_exit();
 }
 

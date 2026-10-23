@@ -3306,11 +3306,11 @@ err_ibnl:
 err_comp_unbound:
 	destroy_workqueue(ib_comp_unbound_wq);
 err_comp:
-	destroy_workqueue(ib_comp_wq);
+	destroy_workqueue_with_sync_wait(ib_comp_wq);
 err_unbound:
 	destroy_workqueue(ib_unreg_wq);
 err:
-	destroy_workqueue(ib_wq);
+	destroy_workqueue_with_sync_wait(ib_wq);
 	return ret;
 }
 
@@ -3328,9 +3328,9 @@ static void __exit ib_core_cleanup(void)
 	rdma_nl_exit();
 	class_unregister(&ib_class);
 	destroy_workqueue(ib_comp_unbound_wq);
-	destroy_workqueue(ib_comp_wq);
+	destroy_workqueue_with_sync_wait(ib_comp_wq);
 	/* Make sure that any pending umem accounting work is done. */
-	destroy_workqueue(ib_wq);
+	destroy_workqueue_with_sync_wait(ib_wq);
 	destroy_workqueue(ib_unreg_wq);
 	rcu_barrier();
 	WARN_ON(!xa_empty(&clients));

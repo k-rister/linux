@@ -1739,8 +1739,8 @@ acpi_status acpi_os_terminate(void)
 	if (acpi_gbl_FADT.flags & ACPI_FADT_RESET_REGISTER)
 		acpi_os_unmap_generic_address(&acpi_gbl_FADT.reset_register);
 
-	destroy_workqueue(kacpid_wq);
-	destroy_workqueue(kacpi_notify_wq);
+	destroy_workqueue_with_sync_wait(kacpid_wq);
+	destroy_workqueue_with_sync_wait(kacpi_notify_wq);
 	destroy_workqueue(kacpi_hotplug_wq);
 
 	return AE_OK;

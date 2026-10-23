@@ -136,7 +136,7 @@ static inline void kunit_run_irq_test(struct kunit *test, bool (*func)(void *),
 
 	/* Cancel the timer and work. */
 	hrtimer_cancel(&state.timer);
-	flush_work(&state.bh_work);
+	flush_work_with_sync_wait(&state.bh_work);
 	destroy_hrtimer_on_stack(&state.timer);
 	destroy_work_on_stack(&state.bh_work);
 

@@ -34,7 +34,7 @@ static void backtrace_test_bh(void)
 	pr_info("The following trace is a kernel self test and not a bug!\n");
 
 	queue_work(system_bh_wq, &backtrace_bh_work);
-	flush_work(&backtrace_bh_work);
+	flush_work_with_sync_wait(&backtrace_bh_work);
 }
 
 #ifdef CONFIG_STACKTRACE

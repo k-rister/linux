@@ -1539,7 +1539,7 @@ module_init(pci_epf_test_init);
 static void __exit pci_epf_test_exit(void)
 {
 	if (kpcitest_workqueue)
-		destroy_workqueue(kpcitest_workqueue);
+		destroy_workqueue_with_sync_wait(kpcitest_workqueue);
 	pci_epf_unregister_driver(&test_driver);
 }
 module_exit(pci_epf_test_exit);

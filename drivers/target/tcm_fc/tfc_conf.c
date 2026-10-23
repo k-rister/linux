@@ -280,7 +280,7 @@ static void ft_del_tpg(struct se_portal_group *se_tpg)
 	pr_debug("del tpg %s\n",
 		    config_item_name(&tpg->se_tpg.tpg_group.cg_item));
 
-	destroy_workqueue(tpg->workqueue);
+	destroy_workqueue_with_sync_wait(tpg->workqueue);
 
 	/* Wait for sessions to be freed thru RCU, for BUG_ON below */
 	synchronize_rcu();

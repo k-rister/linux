@@ -209,7 +209,7 @@ void nitrox_mbox_cleanup(struct nitrox_device *ndev)
 	disable_pf2vf_mbox_interrupts(ndev);
 	/* destroy workqueue */
 	if (ndev->iov.pf2vf_wq)
-		destroy_workqueue(ndev->iov.pf2vf_wq);
+		destroy_workqueue_with_sync_wait(ndev->iov.pf2vf_wq);
 
 	kfree(ndev->iov.vfdev);
 	ndev->iov.pf2vf_wq = NULL;

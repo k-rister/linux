@@ -588,7 +588,7 @@ static int __init test_lockup_init(void)
 		preempt_enable();
 
 		for_each_online_cpu(cpu)
-			flush_work(per_cpu_ptr(&test_works, cpu));
+			flush_work_with_sync_wait(per_cpu_ptr(&test_works, cpu));
 
 		cpus_read_unlock();
 	} else {

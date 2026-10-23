@@ -2813,7 +2813,7 @@ err_io_stop:
 err_stop:
 	hid_hw_stop(hdev);
 err_wq:
-	destroy_workqueue(ctlr->rumble_queue);
+	destroy_workqueue_with_sync_wait(ctlr->rumble_queue);
 err:
 	hid_err(hdev, "probe - fail = %d\n", ret);
 	return ret;
@@ -2831,7 +2831,7 @@ static void nintendo_hid_remove(struct hid_device *hdev)
 	ctlr->ctlr_state = JOYCON_CTLR_STATE_REMOVED;
 	spin_unlock_irqrestore(&ctlr->lock, flags);
 
-	destroy_workqueue(ctlr->rumble_queue);
+	destroy_workqueue_with_sync_wait(ctlr->rumble_queue);
 	ida_free(&nintendo_player_id_allocator, ctlr->player_id);
 
 	hid_hw_close(hdev);

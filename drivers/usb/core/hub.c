@@ -6104,7 +6104,7 @@ int usb_hub_init(void)
 
 void usb_hub_cleanup(void)
 {
-	destroy_workqueue(hub_wq);
+	destroy_workqueue_with_sync_wait(hub_wq);
 
 	/*
 	 * Hub resources are freed for us by usb_deregister. It calls

@@ -2703,9 +2703,9 @@ static void crypt_dtr(struct dm_target *ti)
 		kthread_stop(cc->write_thread);
 
 	if (cc->io_queue)
-		destroy_workqueue(cc->io_queue);
+		destroy_workqueue_with_sync_wait(cc->io_queue);
 	if (cc->crypt_queue)
-		destroy_workqueue(cc->crypt_queue);
+		destroy_workqueue_with_sync_wait(cc->crypt_queue);
 
 	if (cc->workqueue_id)
 		ida_free(&workqueue_ida, cc->workqueue_id);

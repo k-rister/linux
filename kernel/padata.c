@@ -809,7 +809,7 @@ static void __padata_free(struct padata_instance *pinst)
 	free_cpumask_var(pinst->cpumask.pcpu);
 	free_cpumask_var(pinst->cpumask.cbcpu);
 	free_cpumask_var(pinst->validate_cpumask);
-	destroy_workqueue(pinst->serial_wq);
+	destroy_workqueue_with_sync_wait(pinst->serial_wq);
 	destroy_workqueue(pinst->parallel_wq);
 	kfree(pinst);
 }

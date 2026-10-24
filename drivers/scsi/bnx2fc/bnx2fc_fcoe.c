@@ -2734,7 +2734,7 @@ static int __init bnx2fc_mod_init(void)
 stop_thread:
 	kthread_stop(l2_thread);
 free_wq:
-	destroy_workqueue(bnx2fc_wq);
+	destroy_workqueue_with_sync_wait(bnx2fc_wq);
 release_bt:
 	bnx2fc_release_transport();
 detach_ft:
@@ -2792,7 +2792,7 @@ static void __exit bnx2fc_mod_exit(void)
 
 	cpuhp_remove_state(bnx2fc_online_state);
 
-	destroy_workqueue(bnx2fc_wq);
+	destroy_workqueue_with_sync_wait(bnx2fc_wq);
 	/*
 	 * detach from scsi transport
 	 * must happen after all destroys are done

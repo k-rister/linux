@@ -5507,7 +5507,7 @@ static void qla4xxx_free_adapter(struct scsi_qla_host *ha)
 
 	/* Kill the kernel thread for this host */
 	if (ha->task_wq)
-		destroy_workqueue(ha->task_wq);
+		destroy_workqueue_with_sync_wait(ha->task_wq);
 
 	/* Put firmware in known state */
 	ha->isp_ops->reset_firmware(ha);

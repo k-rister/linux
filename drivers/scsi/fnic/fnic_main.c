@@ -1518,7 +1518,7 @@ static int __init fnic_init_module(void)
 err_pci_register:
 	fc_release_transport(fnic_fc_transport);
 err_fc_transport:
-	destroy_workqueue(fnic_cmpl_queue);
+	destroy_workqueue_with_sync_wait(fnic_cmpl_queue);
 err_create_cmpl_workq:
 	destroy_workqueue(fnic_fip_queue);
 err_create_fip_workq:
@@ -1548,7 +1548,7 @@ err_create_fnic_sgl_slab_dflt:
 static void __exit fnic_cleanup_module(void)
 {
 	pci_unregister_driver(&fnic_driver);
-	destroy_workqueue(fnic_cmpl_queue);
+	destroy_workqueue_with_sync_wait(fnic_cmpl_queue);
 	destroy_workqueue(fnic_event_queue);
 
 	if (pc_rscn_handling_feature_flag == PC_RSCN_HANDLING_FEATURE_ON)

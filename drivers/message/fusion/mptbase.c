@@ -2000,7 +2000,7 @@ mpt_attach(struct pci_dev *pdev, const struct pci_device_id *id)
 		printk(MYIOC_s_ERR_FMT "didn't initialize properly! (%d)\n",
 		    ioc->name, r);
 
-		destroy_workqueue(ioc->fw_event_q);
+		destroy_workqueue_with_sync_wait(ioc->fw_event_q);
 		ioc->fw_event_q = NULL;
 
 		list_del(&ioc->list);
@@ -2012,7 +2012,7 @@ mpt_attach(struct pci_dev *pdev, const struct pci_device_id *id)
 		if (r != -5)
 			pci_release_selected_regions(pdev, ioc->bars);
 
-		destroy_workqueue(ioc->reset_work_q);
+		destroy_workqueue_with_sync_wait(ioc->reset_work_q);
 		ioc->reset_work_q = NULL;
 
 		kfree(ioc);
@@ -2051,7 +2051,7 @@ out_remove_ioc:
 	if (ioc->alt_ioc)
 		ioc->alt_ioc->alt_ioc = NULL;
 
-	destroy_workqueue(ioc->reset_work_q);
+	destroy_workqueue_with_sync_wait(ioc->reset_work_q);
 	ioc->reset_work_q = NULL;
 
 out_unmap_resources:
@@ -2088,13 +2088,13 @@ mpt_detach(struct pci_dev *pdev)
 	ioc->reset_work_q = NULL;
 	spin_unlock_irqrestore(&ioc->taskmgmt_lock, flags);
 	cancel_delayed_work(&ioc->fault_reset_work);
-	destroy_workqueue(wq);
+	destroy_workqueue_with_sync_wait(wq);
 
 	spin_lock_irqsave(&ioc->fw_event_lock, flags);
 	wq = ioc->fw_event_q;
 	ioc->fw_event_q = NULL;
 	spin_unlock_irqrestore(&ioc->fw_event_lock, flags);
-	destroy_workqueue(wq);
+	destroy_workqueue_with_sync_wait(wq);
 
 	snprintf(pname, sizeof(pname), MPT_PROCFS_MPTBASEDIR "/%s/summary", ioc->name);
 	remove_proc_entry(pname, NULL);

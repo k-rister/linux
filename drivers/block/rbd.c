@@ -7416,7 +7416,7 @@ err_out_blkdev:
 	if (single_major)
 		unregister_blkdev(rbd_major, RBD_DRV_NAME);
 err_out_wq:
-	destroy_workqueue(rbd_wq);
+	destroy_workqueue_with_sync_wait(rbd_wq);
 err_out_slab:
 	rbd_slab_exit();
 	return rc;
@@ -7428,7 +7428,7 @@ static void __exit rbd_exit(void)
 	rbd_sysfs_cleanup();
 	if (single_major)
 		unregister_blkdev(rbd_major, RBD_DRV_NAME);
-	destroy_workqueue(rbd_wq);
+	destroy_workqueue_with_sync_wait(rbd_wq);
 	rbd_slab_exit();
 }
 

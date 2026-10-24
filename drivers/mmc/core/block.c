@@ -3253,7 +3253,7 @@ out:
 	mmc_blk_remove_parts(card, md);
 	mmc_blk_remove_req(md);
 out_free:
-	destroy_workqueue(card->complete_wq);
+	destroy_workqueue_with_sync_wait(card->complete_wq);
 	return ret;
 }
 
@@ -3273,7 +3273,7 @@ static void mmc_blk_remove(struct mmc_card *card)
 		pm_runtime_disable(&card->dev);
 	pm_runtime_put_noidle(&card->dev);
 	mmc_blk_remove_req(md);
-	destroy_workqueue(card->complete_wq);
+	destroy_workqueue_with_sync_wait(card->complete_wq);
 }
 
 static int _mmc_blk_suspend(struct mmc_card *card)

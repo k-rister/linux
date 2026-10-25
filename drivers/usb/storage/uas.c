@@ -1281,7 +1281,7 @@ static int __init uas_init(void)
 
 	rv = usb_register(&uas_driver);
 	if (rv) {
-		destroy_workqueue(workqueue);
+		destroy_workqueue_with_sync_wait(workqueue);
 		return -ENOMEM;
 	}
 
@@ -1291,7 +1291,7 @@ static int __init uas_init(void)
 static void __exit uas_exit(void)
 {
 	usb_deregister(&uas_driver);
-	destroy_workqueue(workqueue);
+	destroy_workqueue_with_sync_wait(workqueue);
 }
 
 module_init(uas_init);

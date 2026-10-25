@@ -87,7 +87,7 @@ void cw1200_unregister_bh(struct cw1200_common *priv)
 	wake_up(&priv->bh_wq);
 
 	flush_work_with_sync_wait(&priv->bh_work);
-	destroy_workqueue(priv->bh_workqueue);
+	destroy_workqueue_with_sync_wait(priv->bh_workqueue);
 	priv->bh_workqueue = NULL;
 
 	pr_debug("[BH] unregistered.\n");

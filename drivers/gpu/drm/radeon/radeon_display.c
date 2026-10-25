@@ -251,7 +251,7 @@ static void radeon_crtc_destroy(struct drm_crtc *crtc)
 	struct radeon_crtc *radeon_crtc = to_radeon_crtc(crtc);
 
 	drm_crtc_cleanup(crtc);
-	destroy_workqueue(radeon_crtc->flip_queue);
+	destroy_workqueue_with_sync_wait(radeon_crtc->flip_queue);
 	kfree(radeon_crtc);
 }
 

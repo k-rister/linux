@@ -669,7 +669,7 @@ err_clean_devs:
 	debugfs_remove(wwan_hwsim_debugfs_topdir);
 	class_unregister(&wwan_hwsim_class);
 err_wq_destroy:
-	destroy_workqueue(wwan_wq);
+	destroy_workqueue_with_sync_wait(wwan_wq);
 
 	return err;
 }
@@ -681,7 +681,7 @@ static void __exit wwan_hwsim_exit(void)
 	flush_workqueue_with_sync_wait(wwan_wq);	/* Wait deletion works completion */
 	debugfs_remove(wwan_hwsim_debugfs_topdir);
 	class_unregister(&wwan_hwsim_class);
-	destroy_workqueue(wwan_wq);
+	destroy_workqueue_with_sync_wait(wwan_wq);
 }
 
 module_init(wwan_hwsim_init);

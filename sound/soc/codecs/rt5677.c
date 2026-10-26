@@ -4679,12 +4679,12 @@ static int rt5677_set_bias_level(struct snd_soc_component *component,
 		break;
 
 	case SND_SOC_BIAS_OFF:
-		flush_delayed_work(&rt5677->dsp_work);
+		flush_delayed_work_with_sync_wait(&rt5677->dsp_work);
 		if (rt5677->is_dsp_mode) {
 			/* Turn off the DSP before suspend */
 			rt5677->dsp_vad_en = false;
 			schedule_delayed_work(&rt5677->dsp_work, 0);
-			flush_delayed_work(&rt5677->dsp_work);
+			flush_delayed_work_with_sync_wait(&rt5677->dsp_work);
 		}
 
 		regmap_update_bits(rt5677->regmap, RT5677_DIG_MISC, 0x1, 0x0);
@@ -4925,7 +4925,7 @@ static void rt5677_remove(struct snd_soc_component *component)
 {
 	struct rt5677_priv *rt5677 = snd_soc_component_get_drvdata(component);
 
-	cancel_delayed_work_sync(&rt5677->dsp_work);
+	cancel_delayed_work_sync_with_sync_wait(&rt5677->dsp_work);
 
 	regmap_write(rt5677->regmap, RT5677_RESET, 0x10ec);
 	gpiod_set_value_cansleep(rt5677->pow_ldo2, 0);
@@ -4938,7 +4938,7 @@ static int rt5677_suspend(struct snd_soc_component *component)
 	struct rt5677_priv *rt5677 = snd_soc_component_get_drvdata(component);
 
 	if (rt5677->irq) {
-		cancel_delayed_work_sync(&rt5677->resume_irq_check);
+		cancel_delayed_work_sync_with_sync_wait(&rt5677->resume_irq_check);
 		disable_irq(rt5677->irq);
 	}
 

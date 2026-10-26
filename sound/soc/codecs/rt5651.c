@@ -1791,7 +1791,7 @@ static void rt5651_jack_detect_work(struct work_struct *work)
 		/* Jack removed, or spurious IRQ? */
 		if (rt5651->hp_jack->status & SND_JACK_HEADPHONE) {
 			if (rt5651->hp_jack->status & SND_JACK_MICROPHONE) {
-				cancel_delayed_work_sync(&rt5651->bp_work);
+				cancel_delayed_work_sync_with_sync_wait(&rt5651->bp_work);
 				rt5651_disable_micbias1_ovcd_irq(component);
 				rt5651_disable_micbias1_for_ovcd(component);
 			}
@@ -1851,8 +1851,8 @@ static void rt5651_cancel_work(void *data)
 {
 	struct rt5651_priv *rt5651 = data;
 
-	cancel_work_sync(&rt5651->jack_detect_work);
-	cancel_delayed_work_sync(&rt5651->bp_work);
+	cancel_work_sync_with_sync_wait(&rt5651->jack_detect_work);
+	cancel_delayed_work_sync_with_sync_wait(&rt5651->bp_work);
 }
 
 static void rt5651_enable_jack_detect(struct snd_soc_component *component,

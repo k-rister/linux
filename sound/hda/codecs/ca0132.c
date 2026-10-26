@@ -9594,7 +9594,7 @@ static void ca0132_free(struct hda_codec *codec)
 {
 	struct ca0132_spec *spec = codec->spec;
 
-	cancel_delayed_work_sync(&spec->unsol_hp_work);
+	cancel_delayed_work_sync_with_sync_wait(&spec->unsol_hp_work);
 	snd_hda_power_up(codec);
 	switch (ca0132_quirk(spec)) {
 	case QUIRK_SBZ:
@@ -10141,7 +10141,7 @@ static int ca0132_codec_suspend(struct hda_codec *codec)
 	if (ca0132_quirk(spec) == QUIRK_GENERIC)
 		return 0;
 
-	cancel_delayed_work_sync(&spec->unsol_hp_work);
+	cancel_delayed_work_sync_with_sync_wait(&spec->unsol_hp_work);
 	return 0;
 }
 

@@ -912,7 +912,7 @@ static void rt5682s_jack_detect_handler(struct work_struct *work)
 		SND_JACK_BTN_2 | SND_JACK_BTN_3))
 		schedule_delayed_work(&rt5682s->jd_check_work, 0);
 	else
-		cancel_delayed_work_sync(&rt5682s->jd_check_work);
+		cancel_delayed_work_sync_with_sync_wait(&rt5682s->jd_check_work);
 }
 
 static void rt5682s_jd_check_handler(struct work_struct *work)
@@ -951,7 +951,7 @@ static int rt5682s_set_jack_detect(struct snd_soc_component *component,
 			RT5682S_JD1_EN_MASK, RT5682S_JD1_DIS);
 		regmap_update_bits(rt5682s->regmap, RT5682S_RC_CLK_CTRL,
 			RT5682S_POW_JDH, 0);
-		cancel_delayed_work_sync(&rt5682s->jack_detect_work);
+		cancel_delayed_work_sync_with_sync_wait(&rt5682s->jack_detect_work);
 
 		return 0;
 	}
@@ -2892,8 +2892,8 @@ static int rt5682s_suspend(struct snd_soc_component *component)
 	if (rt5682s->irq)
 		disable_irq(rt5682s->irq);
 
-	cancel_delayed_work_sync(&rt5682s->jack_detect_work);
-	cancel_delayed_work_sync(&rt5682s->jd_check_work);
+	cancel_delayed_work_sync_with_sync_wait(&rt5682s->jack_detect_work);
+	cancel_delayed_work_sync_with_sync_wait(&rt5682s->jd_check_work);
 
 	if (rt5682s->hs_jack)
 		rt5682s->jack_type = rt5682s_headset_detect(component, 0);
@@ -3294,8 +3294,8 @@ static void rt5682s_i2c_shutdown(struct i2c_client *client)
 	struct rt5682s_priv *rt5682s = i2c_get_clientdata(client);
 
 	disable_irq(client->irq);
-	cancel_delayed_work_sync(&rt5682s->jack_detect_work);
-	cancel_delayed_work_sync(&rt5682s->jd_check_work);
+	cancel_delayed_work_sync_with_sync_wait(&rt5682s->jack_detect_work);
+	cancel_delayed_work_sync_with_sync_wait(&rt5682s->jd_check_work);
 
 	rt5682s_reset(rt5682s);
 }

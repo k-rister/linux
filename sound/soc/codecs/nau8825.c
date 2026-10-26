@@ -777,7 +777,7 @@ static void nau8825_xtalk_cancel(struct nau8825 *nau8825)
 	 */
 	if (nau8825->xtalk_enable && nau8825->xtalk_state !=
 		NAU8825_XTALK_DONE) {
-		cancel_work_sync(&nau8825->xtalk_work);
+		cancel_work_sync_with_sync_wait(&nau8825->xtalk_work);
 		nau8825_xtalk_clean(nau8825, true);
 	}
 	/* Reset parameters for cross talk suppression function */

@@ -235,7 +235,7 @@ static int rt5514_spi_hw_free(struct snd_soc_component *component,
 	scoped_guard(mutex, &rt5514_dsp->dma_lock)
 		rt5514_dsp->substream = NULL;
 
-	cancel_delayed_work_sync(&rt5514_dsp->copy_work);
+	cancel_delayed_work_sync_with_sync_wait(&rt5514_dsp->copy_work);
 
 	return 0;
 }

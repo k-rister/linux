@@ -8462,7 +8462,7 @@ out_free_bsmbx:
 out_free_mem:
 	lpfc_mem_free(phba);
 out_destroy_workqueue:
-	destroy_workqueue(phba->wq);
+	destroy_workqueue_with_sync_wait(phba->wq);
 	phba->wq = NULL;
 	return rc;
 }
@@ -8606,7 +8606,7 @@ static void
 lpfc_unset_driver_resource_phase2(struct lpfc_hba *phba)
 {
 	if (phba->wq) {
-		destroy_workqueue(phba->wq);
+		destroy_workqueue_with_sync_wait(phba->wq);
 		phba->wq = NULL;
 	}
 

@@ -2168,19 +2168,19 @@ out_destroy_netfs:
 out_destroy_inodecache:
 	cifs_destroy_inodecache();
 out_destroy_cfid_put_wq:
-	destroy_workqueue(cfid_put_wq);
+	destroy_workqueue_with_sync_wait(cfid_put_wq);
 out_destroy_serverclose_wq:
-	destroy_workqueue(serverclose_wq);
+	destroy_workqueue_with_sync_wait(serverclose_wq);
 out_destroy_deferredclose_wq:
-	destroy_workqueue(deferredclose_wq);
+	destroy_workqueue_with_sync_wait(deferredclose_wq);
 out_destroy_cifsoplockd_wq:
-	destroy_workqueue(cifsoplockd_wq);
+	destroy_workqueue_with_sync_wait(cifsoplockd_wq);
 out_destroy_fileinfo_put_wq:
 	destroy_workqueue(fileinfo_put_wq);
 out_destroy_decrypt_wq:
 	destroy_workqueue(decrypt_wq);
 out_destroy_cifsiod_wq:
-	destroy_workqueue(cifsiod_wq);
+	destroy_workqueue_with_sync_wait(cifsiod_wq);
 out_clean_proc:
 	cifs_proc_clean();
 	return rc;
@@ -2207,13 +2207,13 @@ exit_cifs(void)
 	destroy_mids();
 	cifs_destroy_netfs();
 	cifs_destroy_inodecache();
-	destroy_workqueue(deferredclose_wq);
-	destroy_workqueue(cifsoplockd_wq);
+	destroy_workqueue_with_sync_wait(deferredclose_wq);
+	destroy_workqueue_with_sync_wait(cifsoplockd_wq);
 	destroy_workqueue(decrypt_wq);
 	destroy_workqueue(fileinfo_put_wq);
-	destroy_workqueue(serverclose_wq);
-	destroy_workqueue(cfid_put_wq);
-	destroy_workqueue(cifsiod_wq);
+	destroy_workqueue_with_sync_wait(serverclose_wq);
+	destroy_workqueue_with_sync_wait(cfid_put_wq);
+	destroy_workqueue_with_sync_wait(cifsiod_wq);
 	cifs_proc_clean();
 }
 

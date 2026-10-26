@@ -1309,7 +1309,7 @@ static int __init alua_init(void)
 	if (r != 0) {
 		printk(KERN_ERR "%s: Failed to register scsi device handler",
 			ALUA_DH_NAME);
-		destroy_workqueue(kaluad_wq);
+		destroy_workqueue_with_sync_wait(kaluad_wq);
 	}
 	return r;
 }
@@ -1317,7 +1317,7 @@ static int __init alua_init(void)
 static void __exit alua_exit(void)
 {
 	scsi_unregister_device_handler(&alua_dh);
-	destroy_workqueue(kaluad_wq);
+	destroy_workqueue_with_sync_wait(kaluad_wq);
 }
 
 module_init(alua_init);

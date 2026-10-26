@@ -2331,7 +2331,7 @@ static int es1968_suspend(struct device *dev)
 		return 0;
 
 	chip->in_suspend = 1;
-	cancel_work_sync(&chip->hwvol_work);
+	cancel_work_sync_with_sync_wait(&chip->hwvol_work);
 	snd_power_change_state(card, SNDRV_CTL_POWER_D3hot);
 	snd_ac97_suspend(chip->ac97);
 	snd_es1968_bob_stop(chip);
@@ -2545,7 +2545,7 @@ static void snd_es1968_free(struct snd_card *card)
 {
 	struct es1968 *chip = card->private_data;
 
-	cancel_work_sync(&chip->hwvol_work);
+	cancel_work_sync_with_sync_wait(&chip->hwvol_work);
 
 	if (chip->io_port) {
 		outw(1, chip->io_port + 0x04); /* clear WP interrupts */

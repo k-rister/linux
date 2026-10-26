@@ -307,7 +307,7 @@ static int sof_pcm_hw_free(struct snd_soc_component *component,
 	/* unprepare and free the list of DAPM widgets */
 	sof_widget_list_unprepare(sdev, spcm, substream->stream);
 
-	cancel_work_sync(&spcm->stream[substream->stream].period_elapsed_work);
+	cancel_work_sync_with_sync_wait(&spcm->stream[substream->stream].period_elapsed_work);
 
 	return ret;
 }

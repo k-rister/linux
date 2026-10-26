@@ -2074,7 +2074,7 @@ static void rt1011_remove(struct snd_soc_component *component)
 {
 	struct rt1011_priv *rt1011 = snd_soc_component_get_drvdata(component);
 
-	cancel_work_sync(&rt1011->cali_work);
+	cancel_work_sync_with_sync_wait(&rt1011->cali_work);
 	rt1011_reset(rt1011->regmap);
 }
 

@@ -675,7 +675,7 @@ static void wm_adsp_control_remove(struct cs_dsp_coeff_ctl *cs_ctl)
 	if (!ctl)
 		return;
 
-	cancel_work_sync(&ctl->work);
+	cancel_work_sync_with_sync_wait(&ctl->work);
 
 	kfree(ctl->name);
 	kfree(ctl);

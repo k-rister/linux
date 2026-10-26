@@ -365,7 +365,7 @@ static int loopback_snd_timer_close_cable(struct loopback_pcm *dpcm)
 	snd_timer_close(cable->snd_timer.instance);
 
 	/* wait till drain work has finished if requested */
-	cancel_work_sync(&cable->snd_timer.event_work);
+	cancel_work_sync_with_sync_wait(&cable->snd_timer.event_work);
 
 	snd_timer_instance_free(cable->snd_timer.instance);
 	memset(&cable->snd_timer, 0, sizeof(cable->snd_timer));

@@ -1062,7 +1062,7 @@ static void verity_dtr(struct dm_target *ti)
 	struct dm_verity *v = ti->private;
 
 	if (v->verify_wq)
-		destroy_workqueue(v->verify_wq);
+		destroy_workqueue_with_sync_wait(v->verify_wq);
 
 	mempool_exit(&v->recheck_pool);
 	if (v->io)

@@ -680,15 +680,15 @@ xfs_init_mount_workqueues(
 	return 0;
 
 out_destroy_inodegc:
-	destroy_workqueue(mp->m_inodegc_wq);
+	destroy_workqueue_with_sync_wait(mp->m_inodegc_wq);
 out_destroy_blockgc:
 	destroy_workqueue(mp->m_blockgc_wq);
 out_destroy_reclaim:
-	destroy_workqueue(mp->m_reclaim_workqueue);
+	destroy_workqueue_with_sync_wait(mp->m_reclaim_workqueue);
 out_destroy_unwritten:
-	destroy_workqueue(mp->m_unwritten_workqueue);
+	destroy_workqueue_with_sync_wait(mp->m_unwritten_workqueue);
 out_destroy_buf:
-	destroy_workqueue(mp->m_buf_workqueue);
+	destroy_workqueue_with_sync_wait(mp->m_buf_workqueue);
 out:
 	return -ENOMEM;
 }
@@ -697,12 +697,12 @@ STATIC void
 xfs_destroy_mount_workqueues(
 	struct xfs_mount	*mp)
 {
-	destroy_workqueue(mp->m_sync_workqueue);
+	destroy_workqueue_with_sync_wait(mp->m_sync_workqueue);
 	destroy_workqueue(mp->m_blockgc_wq);
-	destroy_workqueue(mp->m_inodegc_wq);
-	destroy_workqueue(mp->m_reclaim_workqueue);
-	destroy_workqueue(mp->m_unwritten_workqueue);
-	destroy_workqueue(mp->m_buf_workqueue);
+	destroy_workqueue_with_sync_wait(mp->m_inodegc_wq);
+	destroy_workqueue_with_sync_wait(mp->m_reclaim_workqueue);
+	destroy_workqueue_with_sync_wait(mp->m_unwritten_workqueue);
+	destroy_workqueue_with_sync_wait(mp->m_buf_workqueue);
 }
 
 static void
@@ -2628,7 +2628,7 @@ xfs_init_workqueues(void)
 
 	return 0;
 out_free_alloc_wq:
-	destroy_workqueue(xfs_alloc_wq);
+	destroy_workqueue_with_sync_wait(xfs_alloc_wq);
 	return -ENOMEM;
 }
 
@@ -2636,7 +2636,7 @@ STATIC void
 xfs_destroy_workqueues(void)
 {
 	destroy_workqueue(xfs_discard_wq);
-	destroy_workqueue(xfs_alloc_wq);
+	destroy_workqueue_with_sync_wait(xfs_alloc_wq);
 }
 
 STATIC int __init

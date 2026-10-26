@@ -152,13 +152,13 @@ EXPORT_SYMBOL(snd_seq_autoload_exit);
 void snd_seq_device_load_drivers(void)
 {
 	queue_autoload_drivers();
-	flush_work(&autoload_work);
+	flush_work_with_sync_wait(&autoload_work);
 }
 EXPORT_SYMBOL(snd_seq_device_load_drivers);
 
 static inline void cancel_autoload_drivers(void)
 {
-	cancel_work_sync(&autoload_work);
+	cancel_work_sync_with_sync_wait(&autoload_work);
 }
 #else
 static inline void queue_autoload_drivers(void)
@@ -325,7 +325,7 @@ static int __init alsa_seq_device_init(void)
 static void __exit alsa_seq_device_exit(void)
 {
 #ifdef CONFIG_MODULES
-	cancel_work_sync(&autoload_work);
+	cancel_work_sync_with_sync_wait(&autoload_work);
 #endif
 #ifdef CONFIG_SND_PROC_FS
 	snd_info_free_entry(info_entry);

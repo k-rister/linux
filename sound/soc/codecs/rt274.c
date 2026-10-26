@@ -993,7 +993,7 @@ static void rt274_remove(struct snd_soc_component *component)
 {
 	struct rt274_priv *rt274 = snd_soc_component_get_drvdata(component);
 
-	cancel_delayed_work_sync(&rt274->jack_detect_work);
+	cancel_delayed_work_sync_with_sync_wait(&rt274->jack_detect_work);
 	rt274->component = NULL;
 }
 

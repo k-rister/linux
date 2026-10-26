@@ -3833,7 +3833,7 @@ stag_in_prog:
 	if (mode != QEDF_MODE_RECOVERY) {
 		if (qedf->dpc_wq) {
 			/* Stop general DPC handling */
-			destroy_workqueue(qedf->dpc_wq);
+			destroy_workqueue_with_sync_wait(qedf->dpc_wq);
 			qedf->dpc_wq = NULL;
 		}
 	}
@@ -4199,7 +4199,7 @@ static int __init qedf_init(void)
 	return 0;
 
 err5:
-	destroy_workqueue(qedf_io_wq);
+	destroy_workqueue_with_sync_wait(qedf_io_wq);
 err4:
 	fc_release_transport(qedf_fc_vport_transport_template);
 err3:

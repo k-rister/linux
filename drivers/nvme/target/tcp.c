@@ -2281,7 +2281,7 @@ static int __init nvmet_tcp_init(void)
 
 	return 0;
 err:
-	destroy_workqueue(nvmet_tcp_wq);
+	destroy_workqueue_with_sync_wait(nvmet_tcp_wq);
 	return ret;
 }
 
@@ -2298,7 +2298,7 @@ static void __exit nvmet_tcp_exit(void)
 	mutex_unlock(&nvmet_tcp_queue_mutex);
 	flush_workqueue(nvmet_wq);
 
-	destroy_workqueue(nvmet_tcp_wq);
+	destroy_workqueue_with_sync_wait(nvmet_tcp_wq);
 	ida_destroy(&nvmet_tcp_queue_ida);
 }
 

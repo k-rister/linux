@@ -1997,7 +1997,7 @@ static void disk_free_zone_resources(struct gendisk *disk)
 void disk_release_zone_resources(struct gendisk *disk)
 {
 	if (disk->zone_wplugs_wq) {
-		destroy_workqueue(disk->zone_wplugs_wq);
+		destroy_workqueue_with_sync_wait(disk->zone_wplugs_wq);
 		disk->zone_wplugs_wq = NULL;
 	}
 

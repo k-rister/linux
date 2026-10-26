@@ -5473,17 +5473,17 @@ static void dm_integrity_dtr(struct dm_target *ti)
 	if (ic->mode == 'B' && ic->bitmap_flush_work.work.func)
 		cancel_delayed_work_sync_with_sync_wait(&ic->bitmap_flush_work);
 	if (ic->metadata_wq)
-		destroy_workqueue(ic->metadata_wq);
+		destroy_workqueue_with_sync_wait(ic->metadata_wq);
 	if (ic->wait_wq)
 		destroy_workqueue(ic->wait_wq);
 	if (ic->offload_wq)
-		destroy_workqueue(ic->offload_wq);
+		destroy_workqueue_with_sync_wait(ic->offload_wq);
 	if (ic->commit_wq)
-		destroy_workqueue(ic->commit_wq);
+		destroy_workqueue_with_sync_wait(ic->commit_wq);
 	if (ic->writer_wq)
-		destroy_workqueue(ic->writer_wq);
+		destroy_workqueue_with_sync_wait(ic->writer_wq);
 	if (ic->recalc_wq)
-		destroy_workqueue(ic->recalc_wq);
+		destroy_workqueue_with_sync_wait(ic->recalc_wq);
 	kvfree(ic->bbs);
 	if (ic->bufio)
 		dm_bufio_client_destroy(ic->bufio);

@@ -2354,7 +2354,7 @@ static void rt5640_jack_work(struct work_struct *work)
 		/* Jack removed, or spurious IRQ? */
 		if (rt5640->jack->status & SND_JACK_HEADPHONE) {
 			if (rt5640->jack->status & SND_JACK_MICROPHONE) {
-				cancel_delayed_work_sync(&rt5640->bp_work);
+				cancel_delayed_work_sync_with_sync_wait(&rt5640->bp_work);
 				rt5640_disable_micbias1_ovcd_irq(component);
 				rt5640_disable_micbias1_for_ovcd(component);
 			}
@@ -2441,7 +2441,7 @@ static void rt5640_disable_irq_and_cancel_work(void *data)
 	}
 
 	cancel_delayed_work_sync(&rt5640->jack_work);
-	cancel_delayed_work_sync(&rt5640->bp_work);
+	cancel_delayed_work_sync_with_sync_wait(&rt5640->bp_work);
 }
 
 void rt5640_set_ovcd_params(struct snd_soc_component *component)
@@ -2810,7 +2810,7 @@ static int rt5640_suspend(struct snd_soc_component *component)
 		/* disable jack interrupts during system suspend */
 		disable_irq(rt5640->irq);
 		cancel_delayed_work_sync(&rt5640->jack_work);
-		cancel_delayed_work_sync(&rt5640->bp_work);
+		cancel_delayed_work_sync_with_sync_wait(&rt5640->bp_work);
 	}
 
 	snd_soc_dapm_force_bias_level(dapm, SND_SOC_BIAS_OFF);

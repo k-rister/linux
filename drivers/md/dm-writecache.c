@@ -2190,7 +2190,7 @@ static void writecache_dtr(struct dm_target *ti)
 	mempool_exit(&wc->copy_pool);
 
 	if (wc->writeback_wq)
-		destroy_workqueue(wc->writeback_wq);
+		destroy_workqueue_with_sync_wait(wc->writeback_wq);
 
 	if (wc->dev)
 		dm_put_device(ti, wc->dev);

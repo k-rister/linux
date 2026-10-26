@@ -2356,20 +2356,20 @@ static int __init dm_multipath_init(void)
 	return 0;
 
 bad_register_target:
-	destroy_workqueue(dm_mpath_wq);
+	destroy_workqueue_with_sync_wait(dm_mpath_wq);
 bad_alloc_dm_mpath_wq:
 	destroy_workqueue(kmpath_handlerd);
 bad_alloc_kmpath_handlerd:
-	destroy_workqueue(kmultipathd);
+	destroy_workqueue_with_sync_wait(kmultipathd);
 bad_alloc_kmultipathd:
 	return r;
 }
 
 static void __exit dm_multipath_exit(void)
 {
-	destroy_workqueue(dm_mpath_wq);
+	destroy_workqueue_with_sync_wait(dm_mpath_wq);
 	destroy_workqueue(kmpath_handlerd);
-	destroy_workqueue(kmultipathd);
+	destroy_workqueue_with_sync_wait(kmultipathd);
 
 	dm_unregister_target(&multipath_target);
 }

@@ -737,7 +737,7 @@ int snd_sof_device_remove(struct device *dev)
 	bool aborted = false;
 
 	if (IS_ENABLED(CONFIG_SND_SOC_SOF_PROBE_WORK_QUEUE))
-		aborted = cancel_work_sync(&sdev->probe_work);
+		aborted = cancel_work_sync_with_sync_wait(&sdev->probe_work);
 
 	/*
 	 * Unregister any registered client device first before IPC and debugfs
@@ -792,7 +792,7 @@ int snd_sof_device_shutdown(struct device *dev)
 	struct snd_sof_dev *sdev = dev_get_drvdata(dev);
 
 	if (IS_ENABLED(CONFIG_SND_SOC_SOF_PROBE_WORK_QUEUE))
-		cancel_work_sync(&sdev->probe_work);
+		cancel_work_sync_with_sync_wait(&sdev->probe_work);
 
 	if (sdev->fw_state == SOF_FW_BOOT_COMPLETE) {
 		sof_fw_trace_free(sdev);

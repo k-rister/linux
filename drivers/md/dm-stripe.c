@@ -502,7 +502,7 @@ int __init dm_stripe_init(void)
 		return -ENOMEM;
 	r = dm_register_target(&stripe_target);
 	if (r < 0) {
-		destroy_workqueue(dm_stripe_wq);
+		destroy_workqueue_with_sync_wait(dm_stripe_wq);
 		DMWARN("target registration failed");
 	}
 
@@ -512,5 +512,5 @@ int __init dm_stripe_init(void)
 void dm_stripe_exit(void)
 {
 	dm_unregister_target(&stripe_target);
-	destroy_workqueue(dm_stripe_wq);
+	destroy_workqueue_with_sync_wait(dm_stripe_wq);
 }

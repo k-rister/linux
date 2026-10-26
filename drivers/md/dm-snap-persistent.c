@@ -593,7 +593,7 @@ static void persistent_dtr(struct dm_exception_store *store)
 {
 	struct pstore *ps = get_info(store);
 
-	destroy_workqueue(ps->metadata_wq);
+	destroy_workqueue_with_sync_wait(ps->metadata_wq);
 
 	/* Created in read_header */
 	if (ps->io_client)
@@ -895,7 +895,7 @@ static int persistent_ctr(struct dm_exception_store *store, char *options)
 	return 0;
 
 err_options:
-	destroy_workqueue(ps->metadata_wq);
+	destroy_workqueue_with_sync_wait(ps->metadata_wq);
 err_workqueue:
 	kfree(ps);
 

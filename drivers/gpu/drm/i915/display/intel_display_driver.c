@@ -305,9 +305,9 @@ int intel_display_driver_probe_noirq(struct intel_display *display)
 	return 0;
 
 cleanup_wq_unordered:
-	destroy_workqueue(display->wq.unordered);
+	destroy_workqueue_with_sync_wait(display->wq.unordered);
 cleanup_wq_cleanup:
-	destroy_workqueue(display->wq.cleanup);
+	destroy_workqueue_with_sync_wait(display->wq.cleanup);
 cleanup_wq_flip:
 	destroy_workqueue(display->wq.flip);
 cleanup_wq_modeset:
@@ -650,8 +650,8 @@ void intel_display_driver_remove_noirq(struct intel_display *display)
 	destroy_workqueue(display->hotplug.dp_wq);
 	destroy_workqueue(display->wq.flip);
 	destroy_workqueue(display->wq.modeset);
-	destroy_workqueue(display->wq.cleanup);
-	destroy_workqueue(display->wq.unordered);
+	destroy_workqueue_with_sync_wait(display->wq.cleanup);
+	destroy_workqueue_with_sync_wait(display->wq.unordered);
 
 	intel_fbc_cleanup(display);
 }

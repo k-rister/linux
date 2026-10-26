@@ -550,7 +550,7 @@ static void avs_pci_shutdown(struct pci_dev *pci)
 	struct hdac_bus *bus = pci_get_drvdata(pci);
 	struct avs_dev *adev = hdac_to_avs(bus);
 
-	cancel_work_sync(&adev->probe_work);
+	cancel_work_sync_with_sync_wait(&adev->probe_work);
 	avs_ipc_block(adev->ipc);
 
 	snd_hdac_stop_streams(bus);
@@ -572,7 +572,7 @@ static void avs_pci_remove(struct pci_dev *pci)
 	struct hdac_bus *bus = pci_get_drvdata(pci);
 	struct avs_dev *adev = hdac_to_avs(bus);
 
-	cancel_work_sync(&adev->probe_work);
+	cancel_work_sync_with_sync_wait(&adev->probe_work);
 	avs_ipc_block(adev->ipc);
 
 	avs_unregister_all_boards(adev);
@@ -644,7 +644,7 @@ static int avs_suspend_common(struct avs_dev *adev, bool low_power)
 	struct hdac_bus *bus = &adev->base.core;
 	int ret;
 
-	flush_work(&adev->probe_work);
+	flush_work_with_sync_wait(&adev->probe_work);
 	if (low_power && adev->num_lp_paths)
 		return avs_suspend_standby(adev);
 

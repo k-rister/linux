@@ -942,7 +942,7 @@ static int hi3110_can_probe(struct spi_device *spi)
 	return 0;
 
  error_probe:
-	destroy_workqueue(priv->wq);
+	destroy_workqueue_with_sync_wait(priv->wq);
 	priv->wq = NULL;
 	hi3110_power_enable(priv->power, 0);
 
@@ -965,7 +965,7 @@ static void hi3110_can_remove(struct spi_device *spi)
 
 	hi3110_power_enable(priv->power, 0);
 
-	destroy_workqueue(priv->wq);
+	destroy_workqueue_with_sync_wait(priv->wq);
 	priv->wq = NULL;
 
 	clk_disable_unprepare(priv->clk);

@@ -1074,7 +1074,7 @@ out_unregister_shrinker:
 		virtio_balloon_unregister_shrinker(vb);
 out_del_balloon_wq:
 	if (virtio_has_feature(vdev, VIRTIO_BALLOON_F_FREE_PAGE_HINT))
-		destroy_workqueue(vb->balloon_wq);
+		destroy_workqueue_with_sync_wait(vb->balloon_wq);
 out_del_vqs:
 	vdev->config->del_vqs(vdev);
 out_free_vb:
@@ -1133,7 +1133,7 @@ static void virtballoon_remove(struct virtio_device *vdev)
 	virtballoon_quiesce(vb);
 
 	if (virtio_has_feature(vdev, VIRTIO_BALLOON_F_FREE_PAGE_HINT))
-		destroy_workqueue(vb->balloon_wq);
+		destroy_workqueue_with_sync_wait(vb->balloon_wq);
 
 	remove_common(vb);
 	mutex_destroy(&vb->balloon_lock);

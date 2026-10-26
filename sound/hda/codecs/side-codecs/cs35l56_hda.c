@@ -52,7 +52,7 @@ static const struct reg_sequence cs35l56_hda_dai_config[] = {
 static void cs35l56_hda_wait_dsp_ready(struct cs35l56_hda *cs35l56)
 {
 	/* Wait for patching to complete */
-	flush_work(&cs35l56->dsp_work);
+	flush_work_with_sync_wait(&cs35l56->dsp_work);
 }
 
 static void cs35l56_hda_play(struct cs35l56_hda *cs35l56)
@@ -804,7 +804,7 @@ static void cs35l56_hda_unbind(struct device *dev, struct device *master, void *
 	struct hda_component_parent *parent = master_data;
 	struct hda_component *comp;
 
-	cancel_work_sync(&cs35l56->dsp_work);
+	cancel_work_sync_with_sync_wait(&cs35l56->dsp_work);
 
 	cs35l56_remove_cal_debugfs(&cs35l56->base);
 	cs35l56_hda_remove_controls(cs35l56);

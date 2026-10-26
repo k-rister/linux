@@ -2139,7 +2139,7 @@ static void max98090_pll_det_disable_work(struct work_struct *work)
 		container_of(work, struct max98090_priv, pll_det_disable_work);
 	struct snd_soc_component *component = max98090->component;
 
-	cancel_delayed_work_sync(&max98090->pll_det_enable_work);
+	cancel_delayed_work_sync_with_sync_wait(&max98090->pll_det_enable_work);
 
 	/* Disable PLL unlock interrupt */
 	snd_soc_component_update_bits(component, M98090_REG_INTERRUPT_S,
@@ -2529,9 +2529,9 @@ static void max98090_remove(struct snd_soc_component *component)
 {
 	struct max98090_priv *max98090 = snd_soc_component_get_drvdata(component);
 
-	cancel_delayed_work_sync(&max98090->jack_work);
-	cancel_delayed_work_sync(&max98090->pll_det_enable_work);
-	cancel_work_sync(&max98090->pll_det_disable_work);
+	cancel_delayed_work_sync_with_sync_wait(&max98090->jack_work);
+	cancel_delayed_work_sync_with_sync_wait(&max98090->pll_det_enable_work);
+	cancel_work_sync_with_sync_wait(&max98090->pll_det_disable_work);
 	max98090->component = NULL;
 }
 

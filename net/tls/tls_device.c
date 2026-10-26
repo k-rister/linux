@@ -1430,7 +1430,7 @@ int __init tls_device_init(void)
 	return 0;
 
 err_destroy_wq:
-	destroy_workqueue(destruct_wq);
+	destroy_workqueue_with_sync_wait(destruct_wq);
 err_free_dummy:
 	put_page(dummy_page);
 	return err;

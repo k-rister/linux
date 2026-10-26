@@ -259,7 +259,7 @@ static struct se_portal_group *ft_add_tpg(struct se_wwn *wwn, const char *name)
 
 	ret = core_tpg_register(wwn, &tpg->se_tpg, SCSI_PROTOCOL_FCP);
 	if (ret < 0) {
-		destroy_workqueue(wq);
+		destroy_workqueue_with_sync_wait(wq);
 		kfree(tpg);
 		return NULL;
 	}

@@ -3157,7 +3157,7 @@ static void __exit nvme_tcp_cleanup_module(void)
 	mutex_unlock(&nvme_tcp_ctrl_mutex);
 	flush_workqueue(nvme_delete_wq);
 
-	destroy_workqueue(nvme_tcp_wq);
+	destroy_workqueue_with_sync_wait(nvme_tcp_wq);
 }
 
 module_init(nvme_tcp_init_module);

@@ -2289,7 +2289,7 @@ static void acpi_ec_destroy_workqueues(void)
 		ec_wq = NULL;
 	}
 	if (ec_query_wq) {
-		destroy_workqueue(ec_query_wq);
+		destroy_workqueue_with_sync_wait(ec_query_wq);
 		ec_query_wq = NULL;
 	}
 }

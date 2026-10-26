@@ -47,7 +47,7 @@ static int __init fm10k_init_module(void)
 	ret = fm10k_register_pci_driver();
 	if (ret) {
 		fm10k_dbg_exit();
-		destroy_workqueue(fm10k_workqueue);
+		destroy_workqueue_with_sync_wait(fm10k_workqueue);
 	}
 
 	return ret;
@@ -67,7 +67,7 @@ static void __exit fm10k_exit_module(void)
 	fm10k_dbg_exit();
 
 	/* destroy driver workqueue */
-	destroy_workqueue(fm10k_workqueue);
+	destroy_workqueue_with_sync_wait(fm10k_workqueue);
 }
 module_exit(fm10k_exit_module);
 

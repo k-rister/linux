@@ -219,7 +219,7 @@ static void snd_rawmidi_input_trigger(struct snd_rawmidi_substream *substream, i
 		return;
 	substream->ops->trigger(substream, up);
 	if (!up)
-		cancel_work_sync(&substream->runtime->event_work);
+		cancel_work_sync_with_sync_wait(&substream->runtime->event_work);
 }
 
 static void __reset_runtime_ptrs(struct snd_rawmidi_runtime *runtime,

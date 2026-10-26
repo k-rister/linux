@@ -1021,7 +1021,7 @@ static void rt298_remove(struct snd_soc_component *component)
 {
 	struct rt298_priv *rt298 = snd_soc_component_get_drvdata(component);
 
-	cancel_delayed_work_sync(&rt298->jack_detect_work);
+	cancel_delayed_work_sync_with_sync_wait(&rt298->jack_detect_work);
 	rt298->component = NULL;
 }
 

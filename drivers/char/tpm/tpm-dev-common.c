@@ -284,7 +284,7 @@ int __init tpm_dev_common_init(void)
 void __exit tpm_dev_common_exit(void)
 {
 	if (tpm_dev_wq) {
-		destroy_workqueue(tpm_dev_wq);
+		destroy_workqueue_with_sync_wait(tpm_dev_wq);
 		tpm_dev_wq = NULL;
 	}
 }

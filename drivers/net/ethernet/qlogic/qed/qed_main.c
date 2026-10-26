@@ -1165,7 +1165,7 @@ static void qed_slowpath_wq_stop(struct qed_dev *cdev)
 		hwfn->slowpath_wq_active = false;
 
 		cancel_delayed_work_sync_with_sync_wait(&hwfn->slowpath_task);
-		destroy_workqueue(hwfn->slowpath_wq);
+		destroy_workqueue_with_sync_wait(hwfn->slowpath_wq);
 	}
 }
 

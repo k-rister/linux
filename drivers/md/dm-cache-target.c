@@ -1958,7 +1958,7 @@ static void __destroy(struct cache *cache)
 		dm_bio_prison_destroy_v2(cache->prison);
 
 	if (cache->wq)
-		destroy_workqueue(cache->wq);
+		destroy_workqueue_with_sync_wait(cache->wq);
 
 	if (cache->dirty_bitset)
 		free_bitset(cache->dirty_bitset);

@@ -466,10 +466,10 @@ static void xe_device_destroy(struct drm_device *dev, void *dummy)
 		destroy_workqueue(xe->ordered_wq);
 
 	if (xe->unordered_wq)
-		destroy_workqueue(xe->unordered_wq);
+		destroy_workqueue_with_sync_wait(xe->unordered_wq);
 
 	if (xe->destroy_wq)
-		destroy_workqueue(xe->destroy_wq);
+		destroy_workqueue_with_sync_wait(xe->destroy_wq);
 
 	ttm_device_fini(&xe->ttm);
 }

@@ -1024,7 +1024,7 @@ static void rtw_usb_deinit_rx(struct rtw_dev *rtwdev)
 	drain_workqueue_with_sync_wait(rtwusb->rxwq);
 	skb_queue_purge(&rtwusb->rx_queue);
 
-	destroy_workqueue(rtwusb->rxwq);
+	destroy_workqueue_with_sync_wait(rtwusb->rxwq);
 
 	skb_queue_purge(&rtwusb->rx_free_queue);
 }

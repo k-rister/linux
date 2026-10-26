@@ -1003,7 +1003,7 @@ err_free_cb_mask:
 err_free_p_mask:
 	free_cpumask_var(pinst->cpumask.pcpu);
 err_free_serial_wq:
-	destroy_workqueue(pinst->serial_wq);
+	destroy_workqueue_with_sync_wait(pinst->serial_wq);
 err_put_cpus:
 	cpus_read_unlock();
 	destroy_workqueue(pinst->parallel_wq);

@@ -291,7 +291,7 @@ static int __init ovpn_init(void)
 unreg_rtnl:
 	rtnl_link_unregister(&ovpn_link_ops);
 destroy_wq:
-	destroy_workqueue(ovpn_wq);
+	destroy_workqueue_with_sync_wait(ovpn_wq);
 	ovpn_wq = NULL;
 	return err;
 }
@@ -304,7 +304,7 @@ static __exit void ovpn_cleanup(void)
 	flush_workqueue_with_sync_wait(ovpn_wq);
 	rcu_barrier();
 
-	destroy_workqueue(ovpn_wq);
+	destroy_workqueue_with_sync_wait(ovpn_wq);
 	ovpn_wq = NULL;
 }
 

@@ -138,7 +138,7 @@ int init_se_kmem_caches(void)
 	return 0;
 
 out_free_completion_wq:
-	destroy_workqueue(target_completion_wq);
+	destroy_workqueue_with_sync_wait(target_completion_wq);
 out_free_lba_map_mem_cache:
 	kmem_cache_destroy(t10_alua_lba_map_mem_cache);
 out_free_lba_map_cache:

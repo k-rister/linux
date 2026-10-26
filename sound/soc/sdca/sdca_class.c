@@ -191,7 +191,7 @@ static void class_sdw_remove(struct sdw_slave *sdw)
 	struct device *dev = &sdw->dev;
 	struct sdca_class_drv *drv = dev_get_drvdata(dev);
 
-	cancel_work_sync(&drv->boot_work);
+	cancel_work_sync_with_sync_wait(&drv->boot_work);
 }
 
 static int class_suspend(struct device *dev)

@@ -2345,7 +2345,7 @@ static void snd_m3_free(struct snd_card *card)
 	struct m3_dma *s;
 	int i;
 
-	cancel_work_sync(&chip->hwvol_work);
+	cancel_work_sync_with_sync_wait(&chip->hwvol_work);
 
 	if (chip->substreams) {
 		guard(spinlock_irq)(&chip->reg_lock);
@@ -2379,7 +2379,7 @@ static int m3_suspend(struct device *dev)
 		return 0;
 
 	chip->in_suspend = 1;
-	cancel_work_sync(&chip->hwvol_work);
+	cancel_work_sync_with_sync_wait(&chip->hwvol_work);
 	snd_power_change_state(card, SNDRV_CTL_POWER_D3hot);
 	snd_ac97_suspend(chip->ac97);
 

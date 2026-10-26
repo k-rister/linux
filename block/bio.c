@@ -2040,7 +2040,7 @@ void bioset_exit(struct bio_set *bs)
 {
 	bio_alloc_cache_destroy(bs);
 	if (bs->rescue_workqueue)
-		destroy_workqueue(bs->rescue_workqueue);
+		destroy_workqueue_with_sync_wait(bs->rescue_workqueue);
 	bs->rescue_workqueue = NULL;
 
 	mempool_exit(&bs->bio_pool);

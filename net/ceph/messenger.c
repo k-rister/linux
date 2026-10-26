@@ -228,7 +228,7 @@ static void ceph_msgr_slab_exit(void)
 static void _ceph_msgr_exit(void)
 {
 	if (ceph_msgr_wq) {
-		destroy_workqueue(ceph_msgr_wq);
+		destroy_workqueue_with_sync_wait(ceph_msgr_wq);
 		ceph_msgr_wq = NULL;
 	}
 

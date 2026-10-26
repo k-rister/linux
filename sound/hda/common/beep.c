@@ -127,7 +127,7 @@ static void turn_on_beep(struct hda_beep *beep)
 
 static void turn_off_beep(struct hda_beep *beep)
 {
-	cancel_work_sync(&beep->beep_work);
+	cancel_work_sync_with_sync_wait(&beep->beep_work);
 	if (beep->playing) {
 		/* turn off beep */
 		generate_tone(beep, 0);

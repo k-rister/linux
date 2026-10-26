@@ -318,7 +318,7 @@ static void ggtt_fini_early(struct drm_device *drm, void *arg)
 {
 	struct xe_ggtt *ggtt = arg;
 
-	destroy_workqueue(ggtt->wq);
+	destroy_workqueue_with_sync_wait(ggtt->wq);
 	drm_mm_takedown(&ggtt->mm);
 }
 

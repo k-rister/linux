@@ -2447,7 +2447,7 @@ int sb_init_dio_done_wq(struct super_block *sb)
 	 */
 	if (!try_cmpxchg(&sb->s_dio_done_wq, &old, wq)) {
 		/* Someone created workqueue before us? Free ours... */
-		destroy_workqueue(wq);
+		destroy_workqueue_with_sync_wait(wq);
 	}
 	return 0;
 }

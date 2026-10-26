@@ -1057,7 +1057,7 @@ static void rt1318_remove(struct snd_soc_component *component)
 {
 	struct rt1318_priv *rt1318 = snd_soc_component_get_drvdata(component);
 
-	cancel_work_sync(&rt1318->cali_work);
+	cancel_work_sync_with_sync_wait(&rt1318->cali_work);
 }
 
 #ifdef CONFIG_PM

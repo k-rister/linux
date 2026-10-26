@@ -10783,7 +10783,7 @@ static int __init md_init(void)
 err_mdp:
 	unregister_blkdev(MD_MAJOR, "md");
 err_md:
-	destroy_workqueue(md_misc_wq);
+	destroy_workqueue_with_sync_wait(md_misc_wq);
 err_misc_wq:
 	md_llbitmap_exit();
 err_bitmap:

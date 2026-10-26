@@ -121,7 +121,7 @@ static int rt5677_spi_pcm_close(
 	struct rt5677_dsp *rt5677_dsp =
 			snd_soc_component_get_drvdata(component);
 
-	cancel_delayed_work_sync(&rt5677_dsp->copy_work);
+	cancel_delayed_work_sync_with_sync_wait(&rt5677_dsp->copy_work);
 	rt5677->set_dsp_vad(codec_component, false);
 	return 0;
 }

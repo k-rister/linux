@@ -284,7 +284,7 @@ static void jack_free_gpios(struct snd_soc_jack *jack, int count,
 		gpiod_unexport(gpios[i].desc);
 		unregister_pm_notifier(&gpios[i].pm_notifier);
 		free_irq(gpiod_to_irq(gpios[i].desc), &gpios[i]);
-		cancel_delayed_work_sync(&gpios[i].work);
+		cancel_delayed_work_sync_with_sync_wait(&gpios[i].work);
 		gpiod_put(gpios[i].desc);
 		gpios[i].jack = NULL;
 	}

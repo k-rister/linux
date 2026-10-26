@@ -532,6 +532,6 @@ int rvt_driver_cq_init(void)
  */
 void rvt_cq_exit(void)
 {
-	destroy_workqueue(comp_vector_wq);
+	destroy_workqueue_with_sync_wait(comp_vector_wq);
 	comp_vector_wq = NULL;
 }

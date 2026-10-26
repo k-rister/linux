@@ -1047,7 +1047,7 @@ static int __init iser_init(void)
 	return 0;
 
 err_reg:
-	destroy_workqueue(release_wq);
+	destroy_workqueue_with_sync_wait(release_wq);
 err_alloc_wq:
 	kmem_cache_destroy(ig.desc_cache);
 

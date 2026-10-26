@@ -1127,7 +1127,7 @@ static void privcmd_irqfd_exit(void)
 	spin_unlock_irqrestore(&irqfds_lock, flags);
 
 	flush_workqueue_with_sync_wait(irqfd_cleanup_wq);
-	destroy_workqueue(irqfd_cleanup_wq);
+	destroy_workqueue_with_sync_wait(irqfd_cleanup_wq);
 }
 
 /* Ioeventfd Support */

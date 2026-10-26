@@ -952,7 +952,7 @@ static void cs8409_remove(struct hda_codec *codec)
 	struct cs8409_spec *spec = codec->spec;
 
 	/* Cancel i2c clock disable timer, and disable clock if left enabled */
-	cancel_delayed_work_sync(&spec->i2c_clk_work);
+	cancel_delayed_work_sync_with_sync_wait(&spec->i2c_clk_work);
 	cs8409_disable_i2c_clock(codec);
 
 	snd_hda_gen_remove(codec);
@@ -1024,7 +1024,7 @@ static int cs8409_cs42l42_suspend(struct hda_codec *codec)
 		cs42l42_suspend(spec->scodecs[i]);
 
 	/* Cancel i2c clock disable timer, and disable clock if left enabled */
-	cancel_delayed_work_sync(&spec->i2c_clk_work);
+	cancel_delayed_work_sync_with_sync_wait(&spec->i2c_clk_work);
 	cs8409_disable_i2c_clock(codec);
 
 	snd_hda_shutup_pins(codec);

@@ -165,7 +165,7 @@ static int __init vsock_loopback_init(void)
 	return 0;
 
 out_wq:
-	destroy_workqueue(vsock->workqueue);
+	destroy_workqueue_with_sync_wait(vsock->workqueue);
 	return ret;
 }
 
@@ -179,7 +179,7 @@ static void __exit vsock_loopback_exit(void)
 
 	virtio_vsock_skb_queue_purge(&vsock->pkt_queue);
 
-	destroy_workqueue(vsock->workqueue);
+	destroy_workqueue_with_sync_wait(vsock->workqueue);
 }
 
 module_init(vsock_loopback_init);

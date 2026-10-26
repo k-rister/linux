@@ -919,7 +919,7 @@ err_emad_tlv_enable:
 	mlxsw_core_trap_unregister(mlxsw_core, &mlxsw_emad_rx_listener,
 				   mlxsw_core);
 err_trap_register:
-	destroy_workqueue(mlxsw_core->emad_wq);
+	destroy_workqueue_with_sync_wait(mlxsw_core->emad_wq);
 	return err;
 }
 
@@ -933,7 +933,7 @@ static void mlxsw_emad_fini(struct mlxsw_core *mlxsw_core)
 	mlxsw_emad_tlv_disable(mlxsw_core);
 	mlxsw_core_trap_unregister(mlxsw_core, &mlxsw_emad_rx_listener,
 				   mlxsw_core);
-	destroy_workqueue(mlxsw_core->emad_wq);
+	destroy_workqueue_with_sync_wait(mlxsw_core->emad_wq);
 }
 
 static struct sk_buff *mlxsw_emad_alloc(const struct mlxsw_core *mlxsw_core,
@@ -3395,7 +3395,7 @@ static int __init mlxsw_core_module_init(void)
 	return 0;
 
 err_alloc_ordered_workqueue:
-	destroy_workqueue(mlxsw_wq);
+	destroy_workqueue_with_sync_wait(mlxsw_wq);
 err_alloc_workqueue:
 	mlxsw_linecard_driver_unregister();
 	return err;
@@ -3404,7 +3404,7 @@ err_alloc_workqueue:
 static void __exit mlxsw_core_module_exit(void)
 {
 	destroy_workqueue(mlxsw_owq);
-	destroy_workqueue(mlxsw_wq);
+	destroy_workqueue_with_sync_wait(mlxsw_wq);
 	mlxsw_linecard_driver_unregister();
 }
 

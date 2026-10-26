@@ -574,7 +574,7 @@ int avs_ipc_init(struct avs_ipc *ipc, struct device *dev)
 void avs_ipc_block(struct avs_ipc *ipc)
 {
 	ipc->ready = false;
-	cancel_work_sync(&ipc->recovery_work);
+	cancel_work_sync_with_sync_wait(&ipc->recovery_work);
 	cancel_delayed_work_sync_with_sync_wait(&ipc->d0ix_work);
 	ipc->in_d0ix = false;
 }

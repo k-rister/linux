@@ -72,7 +72,7 @@ void snd_hdac_bus_exit(struct hdac_bus *bus)
 {
 	WARN_ON(!list_empty(&bus->stream_list));
 	WARN_ON(!list_empty(&bus->codec_list));
-	cancel_work_sync(&bus->unsol_work);
+	cancel_work_sync_with_sync_wait(&bus->unsol_work);
 }
 EXPORT_SYMBOL_GPL(snd_hdac_bus_exit);
 
@@ -230,7 +230,7 @@ void snd_hdac_bus_remove_device(struct hdac_bus *bus,
 	bus->caddr_tbl[codec->addr] = NULL;
 	clear_bit(codec->addr, &bus->codec_powered);
 	bus->num_codecs--;
-	flush_work(&bus->unsol_work);
+	flush_work_with_sync_wait(&bus->unsol_work);
 }
 
 #ifdef CONFIG_SND_HDA_ALIGNED_MMIO

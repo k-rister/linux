@@ -353,7 +353,7 @@ static int create_ump_endpoint_port(struct seq_ump_client *client)
 /* release the client resources */
 static void seq_ump_client_free(struct seq_ump_client *client)
 {
-	cancel_work_sync(&client->group_notify_work);
+	cancel_work_sync_with_sync_wait(&client->group_notify_work);
 
 	if (client->seq_client >= 0)
 		snd_seq_delete_kernel_client(client->seq_client);

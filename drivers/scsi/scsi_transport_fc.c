@@ -2954,7 +2954,7 @@ fc_remove_host(struct Scsi_Host *shost)
 	if (fc_host->work_q) {
 		work_q = fc_host->work_q;
 		fc_host->work_q = NULL;
-		destroy_workqueue(work_q);
+		destroy_workqueue_with_sync_wait(work_q);
 	}
 }
 EXPORT_SYMBOL(fc_remove_host);
@@ -3061,7 +3061,7 @@ fc_rport_final_delete(struct work_struct *work)
 	if (rport->devloss_work_q) {
 		work_q = rport->devloss_work_q;
 		rport->devloss_work_q = NULL;
-		destroy_workqueue(work_q);
+		destroy_workqueue_with_sync_wait(work_q);
 	}
 
 	transport_remove_device(dev);

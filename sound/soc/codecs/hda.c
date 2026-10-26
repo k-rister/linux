@@ -378,7 +378,7 @@ static int hda_hdev_detach(struct hdac_device *hdev)
 	struct hda_codec *codec = dev_to_hda_codec(&hdev->dev);
 
 	if (codec->core.registered)
-		cancel_delayed_work_sync(&codec->jackpoll_work);
+		cancel_delayed_work_sync_with_sync_wait(&codec->jackpoll_work);
 
 	snd_soc_unregister_component(&hdev->dev);
 

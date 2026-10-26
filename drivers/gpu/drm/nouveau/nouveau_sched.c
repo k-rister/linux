@@ -455,7 +455,7 @@ fail_sched:
 	drm_sched_fini(drm_sched);
 fail_wq:
 	if (sched->wq)
-		destroy_workqueue(sched->wq);
+		destroy_workqueue_with_sync_wait(sched->wq);
 	return ret;
 }
 

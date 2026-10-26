@@ -912,7 +912,7 @@ static void snd_emu10k1_free(struct snd_card *card)
 		/* Disable 48Volt power to Audio Dock */
 		snd_emu1010_fpga_write_lock(emu, EMU_HANA_DOCK_PWR, 0);
 	}
-	cancel_work_sync(&emu->emu1010.work);
+	cancel_work_sync_with_sync_wait(&emu->emu1010.work);
 	mutex_destroy(&emu->emu1010.lock);
 	release_firmware(emu->firmware);
 	release_firmware(emu->dock_fw);

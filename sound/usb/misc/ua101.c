@@ -530,7 +530,7 @@ static void stop_usb_playback(struct ua101 *ua)
 
 	kill_stream_urbs(&ua->playback);
 
-	cancel_work_sync(&ua->playback_work);
+	cancel_work_sync_with_sync_wait(&ua->playback_work);
 
 	disable_iso_interface(ua, INTF_PLAYBACK);
 }
@@ -548,7 +548,7 @@ static int start_usb_playback(struct ua101 *ua)
 		return 0;
 
 	kill_stream_urbs(&ua->playback);
-	cancel_work_sync(&ua->playback_work);
+	cancel_work_sync_with_sync_wait(&ua->playback_work);
 
 	err = enable_iso_interface(ua, INTF_PLAYBACK);
 	if (err < 0)

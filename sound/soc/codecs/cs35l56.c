@@ -2194,7 +2194,7 @@ EXPORT_SYMBOL_NS_GPL(cs35l56_init, "SND_SOC_CS35L56_CORE");
 
 void cs35l56_remove(struct cs35l56_private *cs35l56)
 {
-	cancel_work_sync(&cs35l56->component_register_work);
+	cancel_work_sync_with_sync_wait(&cs35l56->component_register_work);
 	if (cs35l56->component_registered)
 		snd_soc_unregister_component(cs35l56->base.dev);
 

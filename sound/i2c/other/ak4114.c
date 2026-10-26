@@ -41,7 +41,7 @@ static inline unsigned char reg_read(struct ak4114 *ak4114, unsigned char reg)
 static void snd_ak4114_free(struct ak4114 *chip)
 {
 	atomic_inc(&chip->wq_processing);	/* don't schedule new work */
-	cancel_delayed_work_sync(&chip->work);
+	cancel_delayed_work_sync_with_sync_wait(&chip->work);
 	kfree(chip);
 }
 
@@ -131,7 +131,7 @@ static void ak4114_init_regs(struct ak4114 *chip)
 void snd_ak4114_reinit(struct ak4114 *chip)
 {
 	if (atomic_inc_return(&chip->wq_processing) == 1)
-		cancel_delayed_work_sync(&chip->work);
+		cancel_delayed_work_sync_with_sync_wait(&chip->work);
 	scoped_guard(mutex, &chip->reinit_mutex) {
 		ak4114_init_regs(chip);
 	}
@@ -600,7 +600,7 @@ static void ak4114_stats(struct work_struct *work)
 void snd_ak4114_suspend(struct ak4114 *chip)
 {
 	atomic_inc(&chip->wq_processing); /* don't schedule new work */
-	cancel_delayed_work_sync(&chip->work);
+	cancel_delayed_work_sync_with_sync_wait(&chip->work);
 }
 EXPORT_SYMBOL(snd_ak4114_suspend);
 

@@ -16651,7 +16651,7 @@ static int __init i40e_init_module(void)
 	i40e_dbg_init();
 	err = pci_register_driver(&i40e_driver);
 	if (err) {
-		destroy_workqueue(i40e_wq);
+		destroy_workqueue_with_sync_wait(i40e_wq);
 		i40e_dbg_exit();
 		return err;
 	}
@@ -16669,7 +16669,7 @@ module_init(i40e_init_module);
 static void __exit i40e_exit_module(void)
 {
 	pci_unregister_driver(&i40e_driver);
-	destroy_workqueue(i40e_wq);
+	destroy_workqueue_with_sync_wait(i40e_wq);
 	ida_destroy(&i40e_client_ida);
 	i40e_dbg_exit();
 }

@@ -333,7 +333,7 @@ int __init adf_init_pf_wq(void)
 void adf_exit_pf_wq(void)
 {
 	if (pf2vf_resp_wq) {
-		destroy_workqueue(pf2vf_resp_wq);
+		destroy_workqueue_with_sync_wait(pf2vf_resp_wq);
 		pf2vf_resp_wq = NULL;
 	}
 }

@@ -2054,7 +2054,7 @@ void snd_hda_hdmi_generic_remove(struct hda_codec *codec)
 
 	for (pin_idx = 0; pin_idx < spec->num_pins; pin_idx++) {
 		struct hdmi_spec_per_pin *per_pin = get_pin(spec, pin_idx);
-		cancel_delayed_work_sync(&per_pin->work);
+		cancel_delayed_work_sync_with_sync_wait(&per_pin->work);
 		eld_proc_free(per_pin);
 	}
 
@@ -2075,7 +2075,7 @@ int snd_hda_hdmi_generic_suspend(struct hda_codec *codec)
 
 	for (pin_idx = 0; pin_idx < spec->num_pins; pin_idx++) {
 		struct hdmi_spec_per_pin *per_pin = get_pin(spec, pin_idx);
-		cancel_delayed_work_sync(&per_pin->work);
+		cancel_delayed_work_sync_with_sync_wait(&per_pin->work);
 	}
 	return 0;
 }

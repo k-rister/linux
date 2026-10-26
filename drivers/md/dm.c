@@ -2245,7 +2245,7 @@ static inline void dm_queue_destroy_crypto_profile(struct request_queue *q)
 static void cleanup_mapped_device(struct mapped_device *md)
 {
 	if (md->wq)
-		destroy_workqueue(md->wq);
+		destroy_workqueue_with_sync_wait(md->wq);
 	dm_free_md_mempools(md->mempools);
 
 	if (md->dax_dev) {

@@ -810,7 +810,7 @@ err_hw:
 	flush_workqueue_with_sync_wait(priv->xfer_wq);
 	flush_work_with_sync_wait(&priv->setrx_work);
 	flush_work_with_sync_wait(&priv->restart_work);
-	destroy_workqueue(priv->xfer_wq);
+	destroy_workqueue_with_sync_wait(priv->xfer_wq);
 	goto err_register;
 err_wq:
 	unregister_netdev(ndev);
@@ -832,7 +832,7 @@ void w5100_remove(struct device *dev)
 	flush_work_with_sync_wait(&priv->setrx_work);
 	flush_work_with_sync_wait(&priv->restart_work);
 	w5100_hw_reset(priv);
-	destroy_workqueue(priv->xfer_wq);
+	destroy_workqueue_with_sync_wait(priv->xfer_wq);
 
 	free_netdev(ndev);
 }

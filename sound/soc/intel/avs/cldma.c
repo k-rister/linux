@@ -160,7 +160,7 @@ int hda_cldma_stop(struct hda_cldma *cl)
 	/* await DMA engine stop */
 	ret = snd_hdac_stream_readb_poll(cl, SD_CTL, reg, !(reg & SD_CTL_DMA_START),
 					 AVS_CL_OP_INTERVAL_US, AVS_CL_OP_TIMEOUT_US);
-	cancel_delayed_work_sync(&cl->memcpy_work);
+	cancel_delayed_work_sync_with_sync_wait(&cl->memcpy_work);
 
 	return ret;
 }

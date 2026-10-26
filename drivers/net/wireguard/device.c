@@ -392,11 +392,11 @@ err_free_decrypt_queue:
 err_free_encrypt_queue:
 	wg_packet_queue_free(&wg->encrypt_queue, false);
 err_destroy_packet_crypt:
-	destroy_workqueue(wg->packet_crypt_wq);
+	destroy_workqueue_with_sync_wait(wg->packet_crypt_wq);
 err_destroy_handshake_send:
 	destroy_workqueue(wg->handshake_send_wq);
 err_destroy_handshake_receive:
-	destroy_workqueue(wg->handshake_receive_wq);
+	destroy_workqueue_with_sync_wait(wg->handshake_receive_wq);
 err_free_index_hashtable:
 	kvfree(wg->index_hashtable);
 err_free_peer_hashtable:

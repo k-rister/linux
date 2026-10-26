@@ -613,7 +613,7 @@ static void cs35l41_remove_dsp(struct cs35l41_hda *cs35l41)
 {
 	struct cs_dsp *dsp = &cs35l41->cs_dsp;
 
-	cancel_work_sync(&cs35l41->fw_load_work);
+	cancel_work_sync_with_sync_wait(&cs35l41->fw_load_work);
 
 	guard(mutex)(&cs35l41->fw_mutex);
 	cs35l41_shutdown_dsp(cs35l41);
@@ -1552,7 +1552,7 @@ static void cs35l41_hda_unbind(struct device *dev, struct device *master, void *
 		memset(comp, 0, sizeof(*comp));
 
 		cs35l41_remove_controls(cs35l41);
-		cancel_work_sync(&cs35l41->fw_load_work);
+		cancel_work_sync_with_sync_wait(&cs35l41->fw_load_work);
 		cs35l41->codec = NULL;
 	}
 }
@@ -2088,7 +2088,7 @@ void cs35l41_hda_remove(struct device *dev)
 	struct cs35l41_hda *cs35l41 = dev_get_drvdata(dev);
 
 	component_del(cs35l41->dev, &cs35l41_hda_comp_ops);
-	cancel_work_sync(&cs35l41->fw_load_work);
+	cancel_work_sync_with_sync_wait(&cs35l41->fw_load_work);
 
 	pm_runtime_get_sync(cs35l41->dev);
 	pm_runtime_dont_use_autosuspend(cs35l41->dev);

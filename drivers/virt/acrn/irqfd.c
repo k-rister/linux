@@ -240,5 +240,5 @@ void acrn_irqfd_deinit(struct acrn_vm *vm)
 
 	/* Drain all cleanup work before tearing the workqueue down. */
 	flush_workqueue_with_sync_wait(vm->irqfd_wq);
-	destroy_workqueue(vm->irqfd_wq);
+	destroy_workqueue_with_sync_wait(vm->irqfd_wq);
 }

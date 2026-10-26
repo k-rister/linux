@@ -765,7 +765,7 @@ void snd_hda_codec_cleanup_for_unbind(struct hda_codec *codec)
 	}
 
 	snd_hda_codec_disconnect_pcms(codec);
-	cancel_delayed_work_sync(&codec->jackpoll_work);
+	cancel_delayed_work_sync_with_sync_wait(&codec->jackpoll_work);
 	if (!codec->in_freeing)
 		snd_hda_ctls_clear(codec);
 	codec_release_pcms(codec);
@@ -2961,7 +2961,7 @@ static int hda_codec_pm_prepare(struct device *dev)
 {
 	struct hda_codec *codec = dev_to_hda_codec(dev);
 
-	cancel_delayed_work_sync(&codec->jackpoll_work);
+	cancel_delayed_work_sync_with_sync_wait(&codec->jackpoll_work);
 	dev->power.power_state = PMSG_SUSPEND;
 	return pm_runtime_suspended(dev);
 }
@@ -2998,7 +2998,7 @@ static int hda_codec_pm_freeze(struct device *dev)
 {
 	struct hda_codec *codec = dev_to_hda_codec(dev);
 
-	cancel_delayed_work_sync(&codec->jackpoll_work);
+	cancel_delayed_work_sync_with_sync_wait(&codec->jackpoll_work);
 	dev->power.power_state = PMSG_FREEZE;
 	return pm_runtime_force_suspend(dev);
 }
@@ -3039,7 +3039,7 @@ void snd_hda_codec_shutdown(struct hda_codec *codec)
 		return;
 
 	codec->jackpoll_interval = 0; /* don't poll any longer */
-	cancel_delayed_work_sync(&codec->jackpoll_work);
+	cancel_delayed_work_sync_with_sync_wait(&codec->jackpoll_work);
 	list_for_each_entry(cpcm, &codec->pcm_list_head, list)
 		snd_pcm_suspend_all(cpcm->pcm);
 
@@ -4050,7 +4050,7 @@ void snd_hda_bus_reset_codecs(struct hda_bus *bus)
 	list_for_each_codec(codec, bus) {
 		/* FIXME: maybe a better way needed for forced reset */
 		if (current_work() != &codec->jackpoll_work.work)
-			cancel_delayed_work_sync(&codec->jackpoll_work);
+			cancel_delayed_work_sync_with_sync_wait(&codec->jackpoll_work);
 		if (hda_codec_is_power_on(codec)) {
 			hda_call_codec_suspend(codec);
 			hda_call_codec_resume(codec);

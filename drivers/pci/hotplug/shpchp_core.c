@@ -116,7 +116,7 @@ static int init_slots(struct controller *ctrl)
 
 	return 0;
 error_slotwq:
-	destroy_workqueue(slot->wq);
+	destroy_workqueue_with_sync_wait(slot->wq);
 error_slot:
 	kfree(slot);
 error:

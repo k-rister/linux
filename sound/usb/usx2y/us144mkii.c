@@ -311,11 +311,11 @@ static int tascam_suspend(struct usb_interface *intf, pm_message_t message)
 
 	snd_pcm_suspend_all(tascam->pcm);
 
-	cancel_work_sync(&tascam->stop_work);
-	cancel_work_sync(&tascam->capture_work);
-	cancel_work_sync(&tascam->midi_in_work);
-	cancel_work_sync(&tascam->midi_out_work);
-	cancel_work_sync(&tascam->stop_pcm_work);
+	cancel_work_sync_with_sync_wait(&tascam->stop_work);
+	cancel_work_sync_with_sync_wait(&tascam->capture_work);
+	cancel_work_sync_with_sync_wait(&tascam->midi_in_work);
+	cancel_work_sync_with_sync_wait(&tascam->midi_out_work);
+	cancel_work_sync_with_sync_wait(&tascam->stop_pcm_work);
 	usb_kill_anchored_urbs(&tascam->playback_anchor);
 	usb_kill_anchored_urbs(&tascam->capture_anchor);
 	usb_kill_anchored_urbs(&tascam->feedback_anchor);
@@ -598,11 +598,11 @@ static void tascam_disconnect(struct usb_interface *intf)
 		usb_kill_anchored_urbs(&tascam->midi_in_anchor);
 		usb_kill_anchored_urbs(&tascam->midi_out_anchor);
 
-		cancel_work_sync(&tascam->stop_work);
-		cancel_work_sync(&tascam->capture_work);
-		cancel_work_sync(&tascam->midi_in_work);
-		cancel_work_sync(&tascam->midi_out_work);
-		cancel_work_sync(&tascam->stop_pcm_work);
+		cancel_work_sync_with_sync_wait(&tascam->stop_work);
+		cancel_work_sync_with_sync_wait(&tascam->capture_work);
+		cancel_work_sync_with_sync_wait(&tascam->midi_in_work);
+		cancel_work_sync_with_sync_wait(&tascam->midi_out_work);
+		cancel_work_sync_with_sync_wait(&tascam->stop_pcm_work);
 		timer_delete_sync(&tascam->error_timer);
 		tascam_free_urbs(tascam);
 		snd_card_free(tascam->card);

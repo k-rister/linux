@@ -145,7 +145,7 @@ static void tascam_midi_in_trigger(struct snd_rawmidi_substream *substream,
 	} else {
 		if (atomic_xchg(&tascam->midi_in_active, 0) == 1) {
 			usb_kill_anchored_urbs(&tascam->midi_in_anchor);
-			cancel_work_sync(&tascam->midi_in_work);
+			cancel_work_sync_with_sync_wait(&tascam->midi_in_work);
 		}
 	}
 }
@@ -336,7 +336,7 @@ static void tascam_midi_out_drain(struct snd_rawmidi_substream *substream)
 			schedule_timeout_uninterruptible(1);
 	}
 
-	cancel_work_sync(&tascam->midi_out_work);
+	cancel_work_sync_with_sync_wait(&tascam->midi_out_work);
 	usb_kill_anchored_urbs(&tascam->midi_out_anchor);
 }
 

@@ -1102,7 +1102,7 @@ void t7xx_dpmaif_bat_wq_rel(struct dpmaif_ctrl *dpmaif_ctrl)
 	flush_work_with_sync_wait(&dpmaif_ctrl->bat_release_work);
 
 	if (dpmaif_ctrl->bat_release_wq) {
-		destroy_workqueue(dpmaif_ctrl->bat_release_wq);
+		destroy_workqueue_with_sync_wait(dpmaif_ctrl->bat_release_wq);
 		dpmaif_ctrl->bat_release_wq = NULL;
 	}
 }

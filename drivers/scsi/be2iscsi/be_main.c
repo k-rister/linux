@@ -5699,7 +5699,7 @@ disable_iopoll:
 		pbe_eq = &phwi_context->be_eq[i];
 		irq_poll_disable(&pbe_eq->iopoll);
 	}
-	destroy_workqueue(phba->wq);
+	destroy_workqueue_with_sync_wait(phba->wq);
 free_twq:
 	hwi_cleanup_port(phba);
 	beiscsi_cleanup_port(phba);
@@ -5744,7 +5744,7 @@ static void beiscsi_remove(struct pci_dev *pcidev)
 	iscsi_boot_destroy_kset(phba->boot_struct.boot_kset);
 
 	/* free all resources */
-	destroy_workqueue(phba->wq);
+	destroy_workqueue_with_sync_wait(phba->wq);
 	beiscsi_free_mem(phba);
 
 	/* ctrl uninit */

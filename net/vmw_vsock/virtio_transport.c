@@ -970,7 +970,7 @@ static int __init virtio_vsock_init(void)
 out_vci:
 	vsock_core_unregister(&virtio_transport.transport);
 out_wq:
-	destroy_workqueue(virtio_vsock_workqueue);
+	destroy_workqueue_with_sync_wait(virtio_vsock_workqueue);
 	return ret;
 }
 
@@ -978,7 +978,7 @@ static void __exit virtio_vsock_exit(void)
 {
 	unregister_virtio_driver(&virtio_vsock_driver);
 	vsock_core_unregister(&virtio_transport.transport);
-	destroy_workqueue(virtio_vsock_workqueue);
+	destroy_workqueue_with_sync_wait(virtio_vsock_workqueue);
 }
 
 module_init(virtio_vsock_init);

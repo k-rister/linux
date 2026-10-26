@@ -498,14 +498,14 @@ static void cm9825_remove(struct hda_codec *codec)
 	int i;
 
 	if (spec->jd_cap_hp)
-		cancel_delayed_work_sync(&spec->unsol_hp_work);
+		cancel_delayed_work_sync_with_sync_wait(&spec->unsol_hp_work);
 
 	if (spec->jd_cap_lineout)
-		cancel_delayed_work_sync(&spec->unsol_lineout_work);
+		cancel_delayed_work_sync_with_sync_wait(&spec->unsol_lineout_work);
 
 	for (i = 0; i < spec->gen.autocfg.num_inputs; i++) {
 		if (spec->jd_cap_inputs[i]) {
-			cancel_delayed_work_sync(&spec->unsol_inputs_work);
+			cancel_delayed_work_sync_with_sync_wait(&spec->unsol_inputs_work);
 			break;
 		}
 	}
@@ -519,14 +519,14 @@ static int cm9825_suspend(struct hda_codec *codec)
 	int i;
 
 	if (spec->jd_cap_hp)
-		cancel_delayed_work_sync(&spec->unsol_hp_work);
+		cancel_delayed_work_sync_with_sync_wait(&spec->unsol_hp_work);
 
 	if (spec->jd_cap_lineout)
-		cancel_delayed_work_sync(&spec->unsol_lineout_work);
+		cancel_delayed_work_sync_with_sync_wait(&spec->unsol_lineout_work);
 
 	for (i = 0; i < spec->gen.autocfg.num_inputs; i++) {
 		if (spec->jd_cap_inputs[i]) {
-			cancel_delayed_work_sync(&spec->unsol_inputs_work);
+			cancel_delayed_work_sync_with_sync_wait(&spec->unsol_inputs_work);
 			break;
 		}
 	}

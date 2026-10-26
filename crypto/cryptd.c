@@ -1010,7 +1010,7 @@ static int __init cryptd_init(void)
 err_fini_queue:
 	cryptd_fini_queue(&queue);
 err_destroy_wq:
-	destroy_workqueue(cryptd_wq);
+	destroy_workqueue_with_sync_wait(cryptd_wq);
 	return err;
 }
 

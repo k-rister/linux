@@ -170,7 +170,7 @@ void snd_fasync_free(struct snd_fasync *fasync)
 		list_del_init(&fasync->list);
 	}
 
-	flush_work(&snd_fasync_work);
+	flush_work_with_sync_wait(&snd_fasync_work);
 	kfree(fasync);
 }
 EXPORT_SYMBOL_GPL(snd_fasync_free);

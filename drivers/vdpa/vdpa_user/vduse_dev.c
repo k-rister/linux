@@ -2758,7 +2758,7 @@ static int vduse_init(void)
 err_mgmtdev:
 	vduse_domain_exit();
 err_domain:
-	destroy_workqueue(vduse_irq_bound_wq);
+	destroy_workqueue_with_sync_wait(vduse_irq_bound_wq);
 err_bound_wq:
 	destroy_workqueue(vduse_irq_wq);
 err_wq:
@@ -2779,7 +2779,7 @@ static void vduse_exit(void)
 {
 	vduse_mgmtdev_exit();
 	vduse_domain_exit();
-	destroy_workqueue(vduse_irq_bound_wq);
+	destroy_workqueue_with_sync_wait(vduse_irq_bound_wq);
 	destroy_workqueue(vduse_irq_wq);
 	cdev_del(&vduse_cdev);
 	device_destroy(&vduse_class, vduse_major);

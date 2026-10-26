@@ -1460,7 +1460,7 @@ xlog_alloc_log(
 	return log;
 
 out_destroy_workqueue:
-	destroy_workqueue(log->l_ioend_workqueue);
+	destroy_workqueue_with_sync_wait(log->l_ioend_workqueue);
 out_free_iclog:
 	for (iclog = log->l_iclog; iclog; iclog = prev_iclog) {
 		prev_iclog = iclog->ic_next;
@@ -1819,7 +1819,7 @@ xlog_dealloc_log(
 	}
 
 	log->l_mp->m_log = NULL;
-	destroy_workqueue(log->l_ioend_workqueue);
+	destroy_workqueue_with_sync_wait(log->l_ioend_workqueue);
 	kfree(log);
 }
 

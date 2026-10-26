@@ -50,7 +50,7 @@ static int hda_acpi_dev_free(struct snd_device *device)
 	struct azx *azx = device->device_data;
 	struct hda_acpi *hda = container_of(azx, struct hda_acpi, azx);
 
-	cancel_work_sync(&hda->probe_work);
+	cancel_work_sync_with_sync_wait(&hda->probe_work);
 	if (azx_bus(azx)->chip_init) {
 		azx_stop_all_streams(azx);
 		azx_stop_chip(azx);

@@ -1212,7 +1212,7 @@ static int snd_usbmidi_output_close(struct snd_rawmidi_substream *substream)
 {
 	struct usbmidi_out_port *port = substream->runtime->private_data;
 
-	flush_work(&port->ep->work);
+	flush_work_with_sync_wait(&port->ep->work);
 	return substream_open(substream, 0, 0);
 }
 
@@ -1556,7 +1556,7 @@ void snd_usbmidi_disconnect(struct list_head *p)
 	for (i = 0; i < MIDI_MAX_ENDPOINTS; ++i) {
 		struct snd_usb_midi_endpoint *ep = &umidi->endpoints[i];
 		if (ep->out)
-			cancel_work_sync(&ep->out->work);
+			cancel_work_sync_with_sync_wait(&ep->out->work);
 		if (ep->out) {
 			for (j = 0; j < OUTPUT_URBS; ++j)
 				usb_kill_urb(ep->out->urbs[j].urb);

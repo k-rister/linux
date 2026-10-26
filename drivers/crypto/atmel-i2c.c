@@ -407,7 +407,7 @@ static int __init atmel_i2c_init(void)
 
 static void __exit atmel_i2c_exit(void)
 {
-	destroy_workqueue(atmel_wq);
+	destroy_workqueue_with_sync_wait(atmel_wq);
 }
 
 module_init(atmel_i2c_init);

@@ -270,7 +270,7 @@ EXPORT_SYMBOL_GPL(wcd_mbhc_event_notify);
 
 static int wcd_cancel_btn_work(struct wcd_mbhc *mbhc)
 {
-	return cancel_delayed_work_sync(&mbhc->mbhc_btn_dwork);
+	return cancel_delayed_work_sync_with_sync_wait(&mbhc->mbhc_btn_dwork);
 }
 
 static void wcd_micbias_disable(struct wcd_mbhc *mbhc)
@@ -420,7 +420,7 @@ static void wcd_cancel_hs_detect_plug(struct wcd_mbhc *mbhc,
 {
 	mbhc->hs_detect_work_stop = true;
 	mutex_unlock(&mbhc->lock);
-	cancel_work_sync(work);
+	cancel_work_sync_with_sync_wait(work);
 	mutex_lock(&mbhc->lock);
 }
 
@@ -1624,7 +1624,7 @@ void wcd_mbhc_deinit(struct wcd_mbhc *mbhc)
 
 	mutex_lock(&mbhc->lock);
 	wcd_cancel_hs_detect_plug(mbhc,	&mbhc->correct_plug_swch);
-	cancel_work_sync(&mbhc->mbhc_plug_detect_work);
+	cancel_work_sync_with_sync_wait(&mbhc->mbhc_plug_detect_work);
 	mutex_unlock(&mbhc->lock);
 
 	kfree(mbhc);

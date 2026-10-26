@@ -622,7 +622,7 @@ nouveau_drm_device_fini(struct nouveau_drm *drm)
 	mutex_unlock(&drm->clients_lock);
 
 	nouveau_cli_fini(&drm->client);
-	destroy_workqueue(drm->sched_wq);
+	destroy_workqueue_with_sync_wait(drm->sched_wq);
 	mutex_destroy(&drm->clients_lock);
 }
 
@@ -707,7 +707,7 @@ fail_ttm:
 	nouveau_vga_fini(drm);
 	nouveau_cli_fini(&drm->client);
 fail_wq:
-	destroy_workqueue(drm->sched_wq);
+	destroy_workqueue_with_sync_wait(drm->sched_wq);
 	return ret;
 }
 

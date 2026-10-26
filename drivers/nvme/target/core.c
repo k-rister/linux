@@ -2008,9 +2008,9 @@ out_free_nvmet_aen_work_queue:
 out_free_nvmet_work_queue:
 	destroy_workqueue(nvmet_wq);
 out_free_buffered_work_queue:
-	destroy_workqueue(buffered_io_wq);
+	destroy_workqueue_with_sync_wait(buffered_io_wq);
 out_free_zbd_work_queue:
-	destroy_workqueue(zbd_wq);
+	destroy_workqueue_with_sync_wait(zbd_wq);
 out_destroy_bvec_cache:
 	kmem_cache_destroy(nvmet_bvec_cache);
 	return error;
@@ -2024,8 +2024,8 @@ static void __exit nvmet_exit(void)
 	ida_destroy(&cntlid_ida);
 	destroy_workqueue(nvmet_aen_wq);
 	destroy_workqueue(nvmet_wq);
-	destroy_workqueue(buffered_io_wq);
-	destroy_workqueue(zbd_wq);
+	destroy_workqueue_with_sync_wait(buffered_io_wq);
+	destroy_workqueue_with_sync_wait(zbd_wq);
 	kmem_cache_destroy(nvmet_bvec_cache);
 
 	BUILD_BUG_ON(sizeof(struct nvmf_disc_rsp_page_entry) != 1024);

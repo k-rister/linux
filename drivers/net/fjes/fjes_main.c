@@ -1376,9 +1376,9 @@ static int fjes_probe(struct platform_device *plat_dev)
 err_hw_exit:
 	fjes_hw_exit(&adapter->hw);
 err_free_control_wq:
-	destroy_workqueue(adapter->control_wq);
+	destroy_workqueue_with_sync_wait(adapter->control_wq);
 err_free_txrx_wq:
-	destroy_workqueue(adapter->txrx_wq);
+	destroy_workqueue_with_sync_wait(adapter->txrx_wq);
 err_free_netdev:
 	free_netdev(netdev);
 err_out:
@@ -1398,9 +1398,9 @@ static void fjes_remove(struct platform_device *plat_dev)
 	unregister_netdev(netdev);
 
 	if (adapter->control_wq)
-		destroy_workqueue(adapter->control_wq);
+		destroy_workqueue_with_sync_wait(adapter->control_wq);
 	if (adapter->txrx_wq)
-		destroy_workqueue(adapter->txrx_wq);
+		destroy_workqueue_with_sync_wait(adapter->txrx_wq);
 
 	cancel_work_sync_with_sync_wait(&adapter->force_close_task);
 

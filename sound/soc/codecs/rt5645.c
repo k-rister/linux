@@ -4297,8 +4297,8 @@ static void rt5645_i2c_remove(struct i2c_client *i2c)
 	 */
 	timer_delete_sync(&rt5645->btn_check_timer);
 
-	cancel_delayed_work_sync(&rt5645->jack_detect_work);
-	cancel_delayed_work_sync(&rt5645->rcclock_work);
+	cancel_delayed_work_sync_with_sync_wait(&rt5645->jack_detect_work);
+	cancel_delayed_work_sync_with_sync_wait(&rt5645->rcclock_work);
 
 	if (rt5645->gpiod_cbj_sleeve)
 		gpiod_set_value(rt5645->gpiod_cbj_sleeve, 0);
@@ -4328,8 +4328,8 @@ static int rt5645_sys_suspend(struct device *dev)
 	struct rt5645_priv *rt5645 = dev_get_drvdata(dev);
 
 	timer_delete_sync(&rt5645->btn_check_timer);
-	cancel_delayed_work_sync(&rt5645->jack_detect_work);
-	cancel_delayed_work_sync(&rt5645->rcclock_work);
+	cancel_delayed_work_sync_with_sync_wait(&rt5645->jack_detect_work);
+	cancel_delayed_work_sync_with_sync_wait(&rt5645->rcclock_work);
 
 	regcache_cache_only(rt5645->regmap, true);
 	regcache_mark_dirty(rt5645->regmap);

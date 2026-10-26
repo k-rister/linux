@@ -308,7 +308,7 @@ int __init adf_init_vf_wq(void)
 void adf_exit_vf_wq(void)
 {
 	if (adf_vf_stop_wq)
-		destroy_workqueue(adf_vf_stop_wq);
+		destroy_workqueue_with_sync_wait(adf_vf_stop_wq);
 
 	adf_vf_stop_wq = NULL;
 }

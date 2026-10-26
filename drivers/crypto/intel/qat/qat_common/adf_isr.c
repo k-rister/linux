@@ -432,7 +432,7 @@ int __init adf_init_misc_wq(void)
 void adf_exit_misc_wq(void)
 {
 	if (adf_misc_wq)
-		destroy_workqueue(adf_misc_wq);
+		destroy_workqueue_with_sync_wait(adf_misc_wq);
 
 	adf_misc_wq = NULL;
 }

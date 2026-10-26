@@ -303,7 +303,7 @@ xfs_mru_cache_init(void)
 void
 xfs_mru_cache_uninit(void)
 {
-	destroy_workqueue(xfs_mru_reap_wq);
+	destroy_workqueue_with_sync_wait(xfs_mru_reap_wq);
 }
 
 /*

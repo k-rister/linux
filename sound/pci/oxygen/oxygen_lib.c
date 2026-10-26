@@ -566,8 +566,8 @@ static void oxygen_card_free(struct snd_card *card)
 	struct oxygen *chip = card->private_data;
 
 	oxygen_shutdown(chip);
-	flush_work(&chip->spdif_input_bits_work);
-	flush_work(&chip->gpio_work);
+	flush_work_with_sync_wait(&chip->spdif_input_bits_work);
+	flush_work_with_sync_wait(&chip->gpio_work);
 	chip->model.cleanup(chip);
 	mutex_destroy(&chip->mutex);
 }
@@ -727,8 +727,8 @@ static int oxygen_pci_suspend(struct device *dev)
 		oxygen_write16(chip, OXYGEN_INTERRUPT_MASK, 0);
 	}
 
-	flush_work(&chip->spdif_input_bits_work);
-	flush_work(&chip->gpio_work);
+	flush_work_with_sync_wait(&chip->spdif_input_bits_work);
+	flush_work_with_sync_wait(&chip->gpio_work);
 	chip->interrupt_mask = saved_interrupt_mask;
 	return 0;
 }

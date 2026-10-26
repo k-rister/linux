@@ -360,7 +360,7 @@ static void virtsnd_remove(struct virtio_device *vdev)
 	for (i = 0; snd->substreams && i < snd->nsubstreams; ++i) {
 		struct virtio_pcm_substream *vss = &snd->substreams[i];
 
-		cancel_work_sync(&vss->elapsed_period);
+		cancel_work_sync_with_sync_wait(&vss->elapsed_period);
 		virtsnd_pcm_msg_free(vss);
 	}
 
@@ -387,7 +387,7 @@ static int virtsnd_freeze(struct virtio_device *vdev)
 	vdev->config->del_vqs(vdev);
 
 	for (i = 0; i < snd->nsubstreams; ++i)
-		cancel_work_sync(&snd->substreams[i].elapsed_period);
+		cancel_work_sync_with_sync_wait(&snd->substreams[i].elapsed_period);
 
 	kfree(snd->event_msgs);
 	snd->event_msgs = NULL;

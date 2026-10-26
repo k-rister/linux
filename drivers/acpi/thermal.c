@@ -1031,7 +1031,7 @@ static int __init acpi_thermal_init(void)
 
 	result = platform_driver_register(&acpi_thermal_driver);
 	if (result < 0) {
-		destroy_workqueue(acpi_thermal_pm_queue);
+		destroy_workqueue_with_sync_wait(acpi_thermal_pm_queue);
 		return -ENODEV;
 	}
 
@@ -1041,7 +1041,7 @@ static int __init acpi_thermal_init(void)
 static void __exit acpi_thermal_exit(void)
 {
 	platform_driver_unregister(&acpi_thermal_driver);
-	destroy_workqueue(acpi_thermal_pm_queue);
+	destroy_workqueue_with_sync_wait(acpi_thermal_pm_queue);
 }
 
 module_init(acpi_thermal_init);

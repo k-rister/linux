@@ -903,7 +903,7 @@ static void destroy_fs_client(struct ceph_fs_client *fsc)
 
 	ceph_mdsc_destroy(fsc);
 	destroy_workqueue(fsc->inode_wq);
-	destroy_workqueue(fsc->cap_wq);
+	destroy_workqueue_with_sync_wait(fsc->cap_wq);
 
 	destroy_mount_options(fsc->mount_options);
 

@@ -1461,7 +1461,7 @@ out_unregister_candev:
 	flush_workqueue_with_sync_wait(priv->wq);
 
 error_probe:
-	destroy_workqueue(priv->wq);
+	destroy_workqueue_with_sync_wait(priv->wq);
 	priv->wq = NULL;
 	mcp251x_power_enable(priv->power, 0);
 
@@ -1484,7 +1484,7 @@ static void mcp251x_can_remove(struct spi_device *spi)
 
 	mcp251x_power_enable(priv->power, 0);
 
-	destroy_workqueue(priv->wq);
+	destroy_workqueue_with_sync_wait(priv->wq);
 	priv->wq = NULL;
 
 	clk_disable_unprepare(priv->clk);

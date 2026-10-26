@@ -1180,7 +1180,7 @@ static int mirror_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	return 0;
 
 err_destroy_wq:
-	destroy_workqueue(ms->kmirrord_wq);
+	destroy_workqueue_with_sync_wait(ms->kmirrord_wq);
 err_free_context:
 	free_context(ms, ti, ms->nr_mirrors);
 	return r;
@@ -1194,7 +1194,7 @@ static void mirror_dtr(struct dm_target *ti)
 	flush_workqueue_with_sync_wait(ms->kmirrord_wq);
 	flush_work_with_sync_wait(&ms->trigger_event);
 	dm_kcopyd_client_destroy(ms->kcopyd_client);
-	destroy_workqueue(ms->kmirrord_wq);
+	destroy_workqueue_with_sync_wait(ms->kmirrord_wq);
 	free_context(ms, ti, ms->nr_mirrors);
 }
 
@@ -1517,7 +1517,7 @@ static int __init dm_mirror_init(void)
 
 	r = dm_register_target(&mirror_target);
 	if (r < 0) {
-		destroy_workqueue(dm_raid1_wq);
+		destroy_workqueue_with_sync_wait(dm_raid1_wq);
 		return r;
 	}
 
@@ -1526,7 +1526,7 @@ static int __init dm_mirror_init(void)
 
 static void __exit dm_mirror_exit(void)
 {
-	destroy_workqueue(dm_raid1_wq);
+	destroy_workqueue_with_sync_wait(dm_raid1_wq);
 	dm_unregister_target(&mirror_target);
 }
 

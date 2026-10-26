@@ -770,7 +770,7 @@ static void hda_intel_stream_clear_irq_pending(struct azx_dev *azx_dev)
 	struct hda_intel_stream *istream = azx_dev_to_istream(azx_dev);
 
 	istream->irq_pending = false;
-	cancel_work_sync(&istream->irq_pending_work);
+	cancel_work_sync_with_sync_wait(&istream->irq_pending_work);
 }
 
 /* called at PCM close */
@@ -2470,7 +2470,7 @@ static void azx_remove(struct pci_dev *pci)
 		/* cancel the pending probing work */
 		chip = card->private_data;
 		hda = container_of(chip, struct hda_intel, chip);
-		cancel_delayed_work_sync(&hda->probe_work);
+		cancel_delayed_work_sync_with_sync_wait(&hda->probe_work);
 
 		clear_bit(chip->dev_index, probed_devs);
 		pci_set_drvdata(pci, NULL);

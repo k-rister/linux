@@ -766,7 +766,7 @@ wq_error:
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		ppd = dd->pport + pidx;
 		if (ppd->hfi1_wq) {
-			destroy_workqueue(ppd->hfi1_wq);
+			destroy_workqueue_with_sync_wait(ppd->hfi1_wq);
 			ppd->hfi1_wq = NULL;
 		}
 		if (ppd->link_wq) {

@@ -64,7 +64,7 @@ static int avs_dsp_wake_d0i0(struct avs_dev *adev, struct avs_ipc_msg *tx)
 	struct avs_ipc *ipc = adev->ipc;
 
 	if (!atomic_read(&ipc->d0ix_disable_depth)) {
-		cancel_delayed_work_sync(&ipc->d0ix_work);
+		cancel_delayed_work_sync_with_sync_wait(&ipc->d0ix_work);
 		return avs_dsp_set_d0ix(adev, false);
 	}
 
@@ -77,7 +77,7 @@ int avs_dsp_disable_d0ix(struct avs_dev *adev)
 
 	/* Prevent PG only on the first disable. */
 	if (atomic_inc_return(&ipc->d0ix_disable_depth) == 1) {
-		cancel_delayed_work_sync(&ipc->d0ix_work);
+		cancel_delayed_work_sync_with_sync_wait(&ipc->d0ix_work);
 		return avs_dsp_set_d0ix(adev, false);
 	}
 
@@ -575,6 +575,6 @@ void avs_ipc_block(struct avs_ipc *ipc)
 {
 	ipc->ready = false;
 	cancel_work_sync(&ipc->recovery_work);
-	cancel_delayed_work_sync(&ipc->d0ix_work);
+	cancel_delayed_work_sync_with_sync_wait(&ipc->d0ix_work);
 	ipc->in_d0ix = false;
 }

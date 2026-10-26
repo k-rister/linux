@@ -2935,7 +2935,7 @@ static int scarlett2_usb_set_config(
 	 */
 
 	/* Cancel any pending NVRAM save */
-	cancel_delayed_work_sync(&private->work);
+	cancel_delayed_work_sync_with_sync_wait(&private->work);
 
 	/* Convert config_item->size in bits to size in bytes and
 	 * calculate offset
@@ -8652,7 +8652,7 @@ static void scarlett2_private_free(struct usb_mixer_interface *mixer)
 {
 	struct scarlett2_data *private = mixer->private_data;
 
-	cancel_delayed_work_sync(&private->work);
+	cancel_delayed_work_sync_with_sync_wait(&private->work);
 	scarlett2_cleanup_urb(mixer);
 	kfree(private);
 	mixer->private_data = NULL;
@@ -8662,7 +8662,7 @@ static void scarlett2_private_suspend(struct usb_mixer_interface *mixer)
 {
 	struct scarlett2_data *private = mixer->private_data;
 
-	if (cancel_delayed_work_sync(&private->work))
+	if (cancel_delayed_work_sync_with_sync_wait(&private->work))
 		scarlett2_config_save_nopm(private->mixer);
 
 	scarlett2_cleanup_urb(mixer);

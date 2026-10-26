@@ -3609,7 +3609,7 @@ static void rt1320_sdw_remove(struct sdw_slave *slave)
 {
 	struct  rt1320_sdw_priv *rt1320 = dev_get_drvdata(&slave->dev);
 
-	cancel_work_sync(&rt1320->load_dspfw_work);
+	cancel_work_sync_with_sync_wait(&rt1320->load_dspfw_work);
 	pm_runtime_disable(&slave->dev);
 }
 

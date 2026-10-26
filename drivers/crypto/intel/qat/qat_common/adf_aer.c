@@ -324,7 +324,7 @@ int adf_init_aer(void)
 
 	device_sriov_wq = alloc_workqueue("qat_device_sriov_wq", WQ_PERCPU, 0);
 	if (!device_sriov_wq) {
-		destroy_workqueue(device_reset_wq);
+		destroy_workqueue_with_sync_wait(device_reset_wq);
 		device_reset_wq = NULL;
 		return -EFAULT;
 	}
@@ -335,10 +335,10 @@ int adf_init_aer(void)
 void adf_exit_aer(void)
 {
 	if (device_reset_wq)
-		destroy_workqueue(device_reset_wq);
+		destroy_workqueue_with_sync_wait(device_reset_wq);
 	device_reset_wq = NULL;
 
 	if (device_sriov_wq)
-		destroy_workqueue(device_sriov_wq);
+		destroy_workqueue_with_sync_wait(device_sriov_wq);
 	device_sriov_wq = NULL;
 }

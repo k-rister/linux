@@ -321,7 +321,7 @@ static int uvc_status_start(struct uvc_device *dev, gfp_t flags)
 	 * the work may still be running. Wait for it to finish before we submit
 	 * the urb.
 	 */
-	flush_work(&dev->async_ctrl.work);
+	flush_work_with_sync_wait(&dev->async_ctrl.work);
 
 	/* Clear the flush status if we were previously stopped. */
 	smp_store_release(&dev->flush_status, false);

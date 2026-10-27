@@ -1185,7 +1185,7 @@ static void uninit_pcpu_irq(struct optee *optee)
 {
 	cpuhp_remove_state(optee->smc.notif_cpuhp_state);
 
-	destroy_workqueue(optee->smc.notif_pcpu_wq);
+	destroy_workqueue_with_sync_wait(optee->smc.notif_pcpu_wq);
 
 	free_percpu_irq(optee->smc.notif_irq, optee->smc.optee_pcpu);
 	free_percpu(optee->smc.optee_pcpu);

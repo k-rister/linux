@@ -10005,7 +10005,7 @@ void kvm_arch_pre_destroy_vm(struct kvm *kvm)
 #ifdef CONFIG_KVM_IOAPIC
 	kvm_free_pit(kvm);
 	if (kvm->arch.vioapic)
-		cancel_delayed_work_sync(&kvm->arch.vioapic->eoi_inject);
+		cancel_delayed_work_sync_with_sync_wait(&kvm->arch.vioapic->eoi_inject);
 #endif
 
 	kvm_mmu_pre_destroy_vm(kvm);

@@ -5314,7 +5314,7 @@ static void snd_hdsp_card_free(struct snd_card *card)
 
 	if (hdsp->port) {
 		/* stop the audio, and cancel all interrupts */
-		cancel_work_sync(&hdsp->midi_work);
+		cancel_work_sync_with_sync_wait(&hdsp->midi_work);
 		hdsp->control_register &= ~(HDSP_Start|HDSP_AudioInterruptEnable|HDSP_Midi0InterruptEnable|HDSP_Midi1InterruptEnable);
 		hdsp_write (hdsp, HDSP_controlRegister, hdsp->control_register);
 	}

@@ -458,7 +458,7 @@ close_hw:
 stop_hw:
 	hid_hw_stop(hdev);
 	if (kbd->backlight_dev) {
-		cancel_delayed_work_sync_with_sync_wait(&kbd->inactivity_work);
+		cancel_delayed_work_sync(&kbd->inactivity_work);
 		cancel_work_sync_with_sync_wait(&kbd->restore_brightness_work);
 		put_device(&kbd->backlight_dev->dev);
 	}
@@ -476,7 +476,7 @@ static void appletb_kbd_remove(struct hid_device *hdev)
 	hid_hw_stop(hdev);
 
 	if (kbd->backlight_dev) {
-		cancel_delayed_work_sync_with_sync_wait(&kbd->inactivity_work);
+		cancel_delayed_work_sync(&kbd->inactivity_work);
 		cancel_work_sync_with_sync_wait(&kbd->restore_brightness_work);
 		put_device(&kbd->backlight_dev->dev);
 	}

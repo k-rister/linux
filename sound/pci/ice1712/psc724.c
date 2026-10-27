@@ -224,7 +224,7 @@ static void psc724_set_jack_detection(struct snd_ice1712 *ice, bool on)
 		schedule_delayed_work(&spec->hp_work,
 					msecs_to_jiffies(JACK_INTERVAL));
 	} else
-		cancel_delayed_work_sync(&spec->hp_work);
+		cancel_delayed_work_sync_with_sync_wait(&spec->hp_work);
 }
 
 static bool psc724_get_jack_detection(struct snd_ice1712 *ice)
@@ -413,7 +413,7 @@ static void psc724_exit(struct snd_ice1712 *ice)
 {
 	struct psc724_spec *spec = ice->spec;
 
-	cancel_delayed_work_sync(&spec->hp_work);
+	cancel_delayed_work_sync_with_sync_wait(&spec->hp_work);
 }
 
 /* PSC724 has buggy EEPROM (no 96&192kHz, all FFh GPIOs), so override it here */

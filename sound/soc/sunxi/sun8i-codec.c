@@ -19,6 +19,7 @@
 #include <linux/of.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
+#include <linux/workqueue.h>
 #include <linux/log2.h>
 
 #include <sound/jack.h>
@@ -1550,7 +1551,7 @@ static void sun8i_codec_disable_jack_detect(struct snd_soc_component *component)
 
 	devm_free_irq(component->dev, scodec->jack_irq, scodec);
 
-	cancel_delayed_work_sync(&scodec->jack_work);
+	cancel_delayed_work_sync_with_sync_wait(&scodec->jack_work);
 
 	regmap_clear_bits(scodec->regmap, SUN8I_HMIC_CTRL1,
 			  BIT(SUN8I_HMIC_CTRL1_JACK_OUT_IRQ_EN) |

@@ -347,9 +347,9 @@ err_mbox_destroy:
 		cmdq_mbox_destroy(mdp->cmdq_clt[i]);
 	scp_put(mdp->scp);
 err_destroy_clock_wq:
-	destroy_workqueue(mdp->clock_wq);
+	destroy_workqueue_with_sync_wait(mdp->clock_wq);
 err_destroy_job_wq:
-	destroy_workqueue(mdp->job_wq);
+	destroy_workqueue_with_sync_wait(mdp->job_wq);
 err_deinit_comp:
 	mdp_comp_destroy(mdp);
 err_free_mutex:

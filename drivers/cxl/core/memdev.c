@@ -1267,7 +1267,7 @@ static void sanitize_teardown_notifier(void *data)
 	mds->security.sanitize_node = NULL;
 	mutex_unlock(&cxl_mbox->mbox_mutex);
 
-	cancel_delayed_work_sync(&mds->security.poll_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&mds->security.poll_dwork);
 	sysfs_put(state);
 }
 

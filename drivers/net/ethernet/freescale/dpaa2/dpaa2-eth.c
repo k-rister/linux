@@ -5069,7 +5069,7 @@ err_dpio_setup:
 err_dpni_setup:
 	fsl_mc_portal_free(priv->mc_io);
 err_portal_alloc:
-	destroy_workqueue(priv->dpaa2_ptp_wq);
+	destroy_workqueue_with_sync_wait(priv->dpaa2_ptp_wq);
 err_wq_alloc:
 	dev_set_drvdata(dev, NULL);
 	free_netdev(net_dev);

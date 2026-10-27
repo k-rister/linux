@@ -1940,7 +1940,7 @@ static void clone_dtr(struct dm_target *ti)
 	mempool_exit(&clone->hydration_pool);
 	dm_kcopyd_client_destroy(clone->kcopyd_client);
 	cancel_delayed_work_sync_with_sync_wait(&clone->waker);
-	destroy_workqueue(clone->wq);
+	destroy_workqueue_with_sync_wait(clone->wq);
 	hash_table_exit(clone);
 	dm_clone_metadata_close(clone->cmd);
 	dm_put_device(ti, clone->source_dev);

@@ -2194,7 +2194,7 @@ static void riocm_remove_mport(struct device *dev)
 		return;
 
 	flush_workqueue_with_sync_wait(cm->rx_wq);
-	destroy_workqueue(cm->rx_wq);
+	destroy_workqueue_with_sync_wait(cm->rx_wq);
 
 	/* Release channels bound to this mport */
 	spin_lock_bh(&idr_lock);

@@ -321,7 +321,7 @@ static void cifs_kill_sb(struct super_block *sb)
 		wait_var_event(&cifs_sb->outstanding_rreq,
 			       !atomic_read(&cifs_sb->outstanding_rreq));
 		flush_workqueue_with_sync_wait(serverclose_wq);
-		flush_workqueue_with_sync_wait(fileinfo_put_wq);
+		flush_workqueue(fileinfo_put_wq);
 
 		/* finally release root dentry */
 		dput(cifs_sb->root);

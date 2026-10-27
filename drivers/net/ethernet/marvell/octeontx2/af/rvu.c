@@ -3689,6 +3689,9 @@ err_dl:
 	rvu_unregister_dl(rvu);
 err_irq:
 	rvu_unregister_interrupts(rvu);
+	if (rvu->afpf_wq_info.mbox_wq)
+		drain_workqueue_with_sync_wait(rvu->afpf_wq_info.mbox_wq);
+	rvu_rep_exit(rvu);
 err_flr:
 	rvu_flr_wq_destroy(rvu);
 err_mbox:
@@ -3722,6 +3725,8 @@ static void rvu_remove(struct pci_dev *pdev)
 	rvu_dbg_exit(rvu);
 	rvu_unregister_dl(rvu);
 	rvu_unregister_interrupts(rvu);
+	drain_workqueue_with_sync_wait(rvu->afpf_wq_info.mbox_wq);
+	rvu_rep_exit(rvu);
 	rvu_flr_wq_destroy(rvu);
 	rvu_cgx_exit(rvu);
 	rvu_fwdata_exit(rvu);

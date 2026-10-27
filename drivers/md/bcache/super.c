@@ -1702,7 +1702,7 @@ static CLOSURE_CALLBACK(cache_set_free)
 
 
 	if (c->moving_gc_wq)
-		destroy_workqueue(c->moving_gc_wq);
+		destroy_workqueue_with_sync_wait(c->moving_gc_wq);
 	bioset_exit(&c->bio_split);
 	mempool_exit(&c->fill_iter);
 	mempool_exit(&c->bio_meta);

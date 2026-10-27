@@ -3009,7 +3009,7 @@ static int __dm_suspend(struct mapped_device *md, struct dm_table *map,
 	 * we take the write lock. To prevent any process from reentering
 	 * dm_split_and_process_bio from dm_submit_bio and quiesce the thread
 	 * (dm_wq_work), we set DMF_BLOCK_IO_FOR_SUSPEND and call
-	 * flush_workqueue(md->wq).
+	 * flush_workqueue_with_sync_wait(md->wq).
 	 */
 	set_bit(DMF_BLOCK_IO_FOR_SUSPEND, &md->flags);
 	if (map)

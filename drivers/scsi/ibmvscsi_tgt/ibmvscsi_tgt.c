@@ -3596,11 +3596,11 @@ static void ibmvscsis_remove(struct vio_dev *vdev)
 
 	vio_disable_interrupts(vdev);
 	free_irq(vdev->irq, vscsi);
-	destroy_workqueue(vscsi->work_q);
+	tasklet_kill(&vscsi->work_task);
+	destroy_workqueue_with_sync_wait(vscsi->work_q);
 	dma_unmap_single(&vdev->dev, vscsi->map_ioba, PAGE_SIZE,
 			 DMA_BIDIRECTIONAL);
 	kfree(vscsi->map_buf);
-	tasklet_kill(&vscsi->work_task);
 	ibmvscsis_destroy_command_q(vscsi);
 	ibmvscsis_freetimer(vscsi);
 	ibmvscsis_free_cmds(vscsi);

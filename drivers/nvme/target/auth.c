@@ -240,7 +240,7 @@ void nvmet_auth_sq_free(struct nvmet_sq *sq)
 
 void nvmet_auth_sq_destroy(struct nvmet_sq *sq)
 {
-	cancel_delayed_work_sync(&sq->auth_expired_work);
+	cancel_delayed_work_sync_with_sync_wait(&sq->auth_expired_work);
 	nvmet_auth_sq_free(sq);
 }
 

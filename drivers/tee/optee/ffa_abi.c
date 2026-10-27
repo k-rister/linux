@@ -973,7 +973,7 @@ static void optee_ffa_remove(struct ffa_device *ffa_dev)
 	if (bottom_half_id != U32_MAX) {
 		ffa_dev->ops->notifier_ops->notify_relinquish(ffa_dev,
 							      bottom_half_id);
-		destroy_workqueue(optee->ffa.notif_wq);
+		destroy_workqueue_with_sync_wait(optee->ffa.notif_wq);
 	}
 	optee_remove_common(optee);
 
@@ -1028,7 +1028,7 @@ static int optee_ffa_async_notif_init(struct ffa_device *ffa_dev,
 err_rel:
 	ffa_dev->ops->notifier_ops->notify_relinquish(ffa_dev, notif_id);
 err_wq:
-	destroy_workqueue(optee->ffa.notif_wq);
+	destroy_workqueue_with_sync_wait(optee->ffa.notif_wq);
 err:
 	optee->ffa.bottom_half_value = U32_MAX;
 

@@ -228,7 +228,7 @@ void libeth_xdpsq_init_timer(struct libeth_xdpsq_timer *timer, void *xdpsq,
  */
 static inline void libeth_xdpsq_deinit_timer(struct libeth_xdpsq_timer *timer)
 {
-	cancel_delayed_work_sync(&timer->dwork);
+	cancel_delayed_work_sync_with_sync_wait(&timer->dwork);
 }
 
 /**

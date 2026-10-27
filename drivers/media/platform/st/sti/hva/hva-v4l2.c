@@ -1406,7 +1406,7 @@ static int hva_probe(struct platform_device *pdev)
 	return 0;
 
 err_work_queue:
-	destroy_workqueue(hva->work_queue);
+	destroy_workqueue_with_sync_wait(hva->work_queue);
 err_v4l2:
 #ifdef CONFIG_VIDEO_STI_HVA_DEBUGFS
 	hva_debugfs_remove(hva);
@@ -1425,7 +1425,7 @@ static void hva_remove(struct platform_device *pdev)
 
 	hva_unregister_device(hva);
 
-	destroy_workqueue(hva->work_queue);
+	destroy_workqueue_with_sync_wait(hva->work_queue);
 
 	hva_hw_remove(hva);
 

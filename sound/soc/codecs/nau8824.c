@@ -986,7 +986,7 @@ static irqreturn_t nau8824_interrupt(int irq, void *data)
 			nau8824_sema_release(nau8824);
 			nau8824->resume_lock = false;
 		}
-		cancel_work_sync(&nau8824->jdet_work);
+		cancel_work_sync_with_sync_wait(&nau8824->jdet_work);
 	} else if (active_irq & NAU8824_KEY_SHORT_PRESS_IRQ) {
 		int key_status, button_pressed;
 
@@ -1013,7 +1013,7 @@ static irqreturn_t nau8824_interrupt(int irq, void *data)
 			NAU8824_REG_INTERRUPT_SETTING_1,
 			NAU8824_IRQ_INSERT_EN, 0);
 		/* detect microphone and jack type */
-		cancel_work_sync(&nau8824->jdet_work);
+		cancel_work_sync_with_sync_wait(&nau8824->jdet_work);
 		schedule_work(&nau8824->jdet_work);
 
 		/* Enable interruption for jack type detection at audo

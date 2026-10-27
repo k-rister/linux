@@ -1000,7 +1000,7 @@ static int smc_lgr_create(struct smc_sock *smc, struct smc_init_info *ini)
 	return 0;
 
 free_wq:
-	destroy_workqueue(lgr->tx_wq);
+	destroy_workqueue_with_sync_wait(lgr->tx_wq);
 free_lgr:
 	kfree(lgr);
 ism_put_vlan:

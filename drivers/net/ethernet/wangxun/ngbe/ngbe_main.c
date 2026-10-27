@@ -415,7 +415,7 @@ static void ngbe_disable_device(struct wx *wx)
 
 	clear_bit(WX_FLAG_NEED_DO_RESET, wx->flags);
 	timer_delete_sync(&wx->service_timer);
-	cancel_work_sync(&wx->service_task);
+	cancel_work_sync_with_sync_wait(&wx->service_task);
 
 	if (wx->gpio_ctrl)
 		ngbe_sfp_modules_txrx_powerctl(wx, false);
@@ -891,7 +891,7 @@ err_clear_interrupt_scheme:
 	wx_clear_interrupt_scheme(wx);
 err_cancel_service:
 	timer_delete_sync(&wx->service_timer);
-	cancel_work_sync(&wx->service_task);
+	cancel_work_sync_with_sync_wait(&wx->service_task);
 	cancel_work_sync(&wx->reset_task);
 	destroy_workqueue(wx->reset_wq);
 err_free_mac_table:
@@ -924,7 +924,7 @@ static void ngbe_remove(struct pci_dev *pdev)
 	unregister_netdev(netdev);
 
 	timer_shutdown_sync(&wx->service_timer);
-	cancel_work_sync(&wx->service_task);
+	cancel_work_sync_with_sync_wait(&wx->service_task);
 	cancel_work_sync(&wx->reset_task);
 	destroy_workqueue(wx->reset_wq);
 

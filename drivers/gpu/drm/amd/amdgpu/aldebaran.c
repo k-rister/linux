@@ -196,7 +196,7 @@ aldebaran_mode2_perform_reset(struct amdgpu_reset_control *reset_ctl,
 	if (!r) {
 		list_for_each_entry(tmp_adev, reset_device_list, reset_list) {
 			if (tmp_adev->gmc.xgmi.num_physical_nodes > 1) {
-				flush_work(&tmp_adev->reset_cntl->reset_work);
+				flush_work_with_sync_wait(&tmp_adev->reset_cntl->reset_work);
 				r = tmp_adev->asic_reset_res;
 				if (r)
 					break;

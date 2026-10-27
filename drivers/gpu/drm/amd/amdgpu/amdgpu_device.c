@@ -5304,7 +5304,7 @@ int amdgpu_do_asic_reset(struct list_head *device_list_handle,
 			list_for_each_entry(tmp_adev, device_list_handle,
 					    reset_list) {
 				if (tmp_adev->gmc.xgmi.num_physical_nodes > 1) {
-					flush_work(&tmp_adev->xgmi_reset_work);
+					flush_work_with_sync_wait(&tmp_adev->xgmi_reset_work);
 					r = tmp_adev->asic_reset_res;
 					if (r)
 						break;

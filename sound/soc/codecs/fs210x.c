@@ -796,8 +796,8 @@ static int fs210x_dai_mute(struct snd_soc_dai *dai, int mute, int stream)
 	}
 
 	if (mute) {
-		cancel_delayed_work_sync(&fs210x->fault_check_work);
-		cancel_delayed_work_sync(&fs210x->start_work);
+		cancel_delayed_work_sync_with_sync_wait(&fs210x->fault_check_work);
+		cancel_delayed_work_sync_with_sync_wait(&fs210x->start_work);
 	} else {
 		delay = msecs_to_jiffies(fs210x->check_interval_ms);
 		schedule_delayed_work(&fs210x->fault_check_work, delay);
@@ -1211,8 +1211,8 @@ static void fs210x_remove(struct snd_soc_component *cmpnt)
 	if (!fs210x || !fs210x->dev)
 		return;
 
-	cancel_delayed_work_sync(&fs210x->start_work);
-	cancel_delayed_work_sync(&fs210x->fault_check_work);
+	cancel_delayed_work_sync_with_sync_wait(&fs210x->start_work);
+	cancel_delayed_work_sync_with_sync_wait(&fs210x->fault_check_work);
 }
 
 #ifdef CONFIG_PM
@@ -1237,8 +1237,8 @@ static int fs210x_suspend(struct snd_soc_component *cmpnt)
 		fsleep(30000); /* >= 30ms */
 	}
 
-	cancel_delayed_work_sync(&fs210x->start_work);
-	cancel_delayed_work_sync(&fs210x->fault_check_work);
+	cancel_delayed_work_sync_with_sync_wait(&fs210x->start_work);
+	cancel_delayed_work_sync_with_sync_wait(&fs210x->fault_check_work);
 
 	ret = regulator_bulk_disable(FS210X_NUM_SUPPLIES, fs210x->supplies);
 	if (ret) {

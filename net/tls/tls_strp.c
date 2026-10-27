@@ -660,5 +660,5 @@ int __init tls_strp_dev_init(void)
 
 void tls_strp_dev_exit(void)
 {
-	destroy_workqueue(tls_strp_wq);
+	destroy_workqueue_with_sync_wait(tls_strp_wq);
 }

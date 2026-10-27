@@ -50,7 +50,7 @@ static int livepatch_callbacks_mod_init(void)
 
 static void livepatch_callbacks_mod_exit(void)
 {
-	cancel_delayed_work_sync(&work);
+	cancel_delayed_work_sync_with_sync_wait(&work);
 	pr_info("%s\n", __func__);
 }
 

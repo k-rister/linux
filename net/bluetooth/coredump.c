@@ -113,7 +113,7 @@ void hci_devcd_shutdown(struct hci_dev *hdev)
 	spin_unlock_irqrestore(&hdev->dump.dump_q.lock, flags);
 
 	disable_work_sync(&hdev->dump.dump_rx);
-	disable_delayed_work_sync(&hdev->dump.dump_timeout);
+	disable_delayed_work_sync_with_sync_wait(&hdev->dump.dump_timeout);
 
 	hci_dev_lock(hdev);
 	hci_devcd_free(hdev);

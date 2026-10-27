@@ -16,7 +16,6 @@
 #include <linux/slab.h>
 #include <linux/cpu.h>
 #include <linux/fs.h>
-#include <linux/smp.h>
 #include <linux/sysfs.h>
 #include <linux/ctype.h>
 #include <linux/workqueue.h>
@@ -1286,20 +1285,6 @@ static int __exit fcoe_if_exit(void)
 	return 0;
 }
 
-static void fcoe_flush_percpu_work(unsigned int cpu, struct work_struct *work)
-{
-	bool sync_wait = work_busy(work);
-
-	/* A busy target-CPU worker may be queued behind an active owner. */
-	if (sync_wait) {
-		arch_smp_sync_wait_begin(cpu);
-		arch_smp_sync_wait_stop(cpu);
-	}
-	flush_work(work);
-	if (sync_wait)
-		arch_smp_sync_wait_end(cpu);
-}
-
 static void fcoe_thread_cleanup_local(unsigned int cpu)
 {
 	struct page *crc_eof;
@@ -1314,7 +1299,7 @@ static void fcoe_thread_cleanup_local(unsigned int cpu)
 
 	if (crc_eof)
 		put_page(crc_eof);
-	fcoe_flush_percpu_work(cpu, &p->work);
+	flush_work_with_sync_wait(&p->work);
 }
 
 /**
@@ -2324,7 +2309,7 @@ static void fcoe_percpu_clean(struct fc_lport *lport)
 	for_each_possible_cpu(cpu) {
 		pp = &per_cpu(fcoe_percpu, cpu);
 
-		fcoe_flush_percpu_work(cpu, &pp->work);
+		flush_work_with_sync_wait(&pp->work);
 	}
 }
 

@@ -195,7 +195,7 @@ void pcsp_sync_stop(struct snd_pcsp *chip)
 	pcsp_stop_playing(chip);
 	local_irq_enable();
 	hrtimer_cancel(&chip->timer);
-	cancel_work_sync(&pcsp_pcm_work);
+	cancel_work_sync_with_sync_wait(&pcsp_pcm_work);
 }
 
 static int snd_pcsp_playback_close(struct snd_pcm_substream *substream)

@@ -1493,7 +1493,7 @@ static int read_from_bdev_sync(struct zram *zram, struct page *page,
 
 	INIT_WORK_ONSTACK(&req.work, zram_sync_read);
 	queue_work(system_dfl_wq, &req.work);
-	flush_work_with_sync_wait(&req.work);
+	flush_work(&req.work);
 	destroy_work_on_stack(&req.work);
 
 	if (req.error || zram->compressed_wb == false)

@@ -1486,7 +1486,7 @@ static void smc_lgr_free(struct smc_link_group *lgr)
 		smc_llc_lgr_clear(lgr);
 	}
 
-	destroy_workqueue(lgr->tx_wq);
+	destroy_workqueue_with_sync_wait(lgr->tx_wq);
 	if (lgr->is_smcd) {
 		smc_ism_put_vlan(lgr->smcd, lgr->vlan_id);
 		put_device(&lgr->smcd->dibs->dev);

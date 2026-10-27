@@ -118,7 +118,7 @@ static void smc_close_cancel_work(struct smc_sock *smc)
 	release_sock(sk);
 	if (cancel_work_sync(&smc->conn.close_work))
 		sock_put(sk);
-	cancel_delayed_work_sync(&smc->conn.tx_work);
+	cancel_delayed_work_sync_with_sync_wait(&smc->conn.tx_work);
 	lock_sock(sk);
 }
 
@@ -230,7 +230,7 @@ again:
 	case SMC_ACTIVE:
 		smc_close_stream_wait(smc, timeout);
 		release_sock(sk);
-		cancel_delayed_work_sync(&conn->tx_work);
+		cancel_delayed_work_sync_with_sync_wait(&conn->tx_work);
 		lock_sock(sk);
 		if (sk->sk_state == SMC_ACTIVE) {
 			/* send close request */
@@ -264,7 +264,7 @@ again:
 		if (!smc_cdc_rxed_any_close(conn))
 			smc_close_stream_wait(smc, timeout);
 		release_sock(sk);
-		cancel_delayed_work_sync(&conn->tx_work);
+		cancel_delayed_work_sync_with_sync_wait(&conn->tx_work);
 		lock_sock(sk);
 		if (sk->sk_state != SMC_APPCLOSEWAIT1 &&
 		    sk->sk_state != SMC_APPCLOSEWAIT2)
@@ -372,7 +372,7 @@ static void smc_close_passive_work(struct work_struct *work)
 		/* peer has not received all data */
 		smc_close_passive_abort_received(smc);
 		release_sock(sk);
-		cancel_delayed_work_sync(&conn->tx_work);
+		cancel_delayed_work_sync_with_sync_wait(&conn->tx_work);
 		lock_sock(sk);
 		goto wakeup;
 	}
@@ -462,7 +462,7 @@ again:
 	case SMC_ACTIVE:
 		smc_close_stream_wait(smc, timeout);
 		release_sock(sk);
-		cancel_delayed_work_sync(&conn->tx_work);
+		cancel_delayed_work_sync_with_sync_wait(&conn->tx_work);
 		lock_sock(sk);
 		if (sk->sk_state != SMC_ACTIVE)
 			goto again;
@@ -475,7 +475,7 @@ again:
 		if (!smc_cdc_rxed_any_close(conn))
 			smc_close_stream_wait(smc, timeout);
 		release_sock(sk);
-		cancel_delayed_work_sync(&conn->tx_work);
+		cancel_delayed_work_sync_with_sync_wait(&conn->tx_work);
 		lock_sock(sk);
 		if (sk->sk_state != SMC_APPCLOSEWAIT1)
 			goto again;

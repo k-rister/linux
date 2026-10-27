@@ -1828,7 +1828,7 @@ static void __exit rnbd_client_exit(void)
 	rnbd_destroy_sessions();
 	unregister_blkdev(rnbd_client_major, "rnbd");
 	ida_destroy(&index_ida);
-	destroy_workqueue(rnbd_clt_wq);
+	destroy_workqueue_with_sync_wait(rnbd_clt_wq);
 }
 
 module_init(rnbd_client_init);

@@ -653,6 +653,6 @@ void amdgpu_coredump_init(struct amdgpu_device *adev)
 void amdgpu_coredump_fini(struct amdgpu_device *adev)
 {
 	/* Finish deferred coredump formatting before HW/IP teardown. */
-	flush_work_with_sync_wait(&adev->coredump_work);
+	flush_work(&adev->coredump_work);
 }
 #endif

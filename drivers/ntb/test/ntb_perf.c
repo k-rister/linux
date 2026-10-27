@@ -756,7 +756,7 @@ static void perf_disable_service(struct perf_ctx *perf)
 		perf_cmd_exec(&perf->peers[pidx], PERF_CMD_CLEAR);
 
 	for (pidx = 0; pidx < perf->pcnt; pidx++)
-		flush_work(&perf->peers[pidx].service);
+		flush_work_with_sync_wait(&perf->peers[pidx].service);
 
 	for (pidx = 0; pidx < perf->pcnt; pidx++) {
 		struct perf_peer *peer = &perf->peers[pidx];

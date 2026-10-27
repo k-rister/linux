@@ -109,7 +109,7 @@ static void hyp_trace_clock_enable(struct hyp_trace_clock *hyp_clock, bool enabl
 	struct system_time_snapshot snap;
 
 	if (!enable) {
-		cancel_delayed_work_sync(&hyp_clock->work);
+		cancel_delayed_work_sync_with_sync_wait(&hyp_clock->work);
 		return;
 	}
 

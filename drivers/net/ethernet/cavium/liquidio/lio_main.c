@@ -689,7 +689,7 @@ static inline void cleanup_sync_octeon_time_wq(struct net_device *netdev)
 
 	if (time_wq->wq) {
 		cancel_delayed_work_sync_with_sync_wait(&time_wq->wk.work);
-		destroy_workqueue(time_wq->wq);
+		destroy_workqueue_with_sync_wait(time_wq->wq);
 	}
 }
 
@@ -1753,7 +1753,7 @@ static inline void cleanup_tx_poll_fn(struct net_device *netdev)
 
 	if (lio->txq_status_wq.wq) {
 		cancel_delayed_work_sync_with_sync_wait(&lio->txq_status_wq.wk.work);
-		destroy_workqueue(lio->txq_status_wq.wq);
+		destroy_workqueue_with_sync_wait(lio->txq_status_wq.wq);
 	}
 }
 

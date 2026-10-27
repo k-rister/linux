@@ -693,7 +693,7 @@ static int __init vtpm_module_init(void)
 	rc = misc_register(&vtpmx_miscdev);
 	if (rc) {
 		pr_err("couldn't create vtpmx device\n");
-		destroy_workqueue(workqueue);
+		destroy_workqueue_with_sync_wait(workqueue);
 	}
 
 	return rc;
@@ -701,7 +701,7 @@ static int __init vtpm_module_init(void)
 
 static void __exit vtpm_module_exit(void)
 {
-	destroy_workqueue(workqueue);
+	destroy_workqueue_with_sync_wait(workqueue);
 	misc_deregister(&vtpmx_miscdev);
 }
 

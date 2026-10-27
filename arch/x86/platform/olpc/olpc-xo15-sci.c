@@ -178,7 +178,7 @@ static int xo15_sci_probe(struct platform_device *pdev)
 
 err_sysfs:
 	acpi_remove_gpe_handler(NULL, xo15_sci_gpe, xo15_sci_gpe_handler);
-	cancel_work_sync(&sci_work);
+	cancel_work_sync_with_sync_wait(&sci_work);
 	return r;
 }
 
@@ -189,7 +189,7 @@ static void xo15_sci_remove(struct platform_device *pdev)
 	device_init_wakeup(&pdev->dev, false);
 	acpi_disable_gpe(NULL, xo15_sci_gpe);
 	acpi_remove_gpe_handler(NULL, xo15_sci_gpe, xo15_sci_gpe_handler);
-	cancel_work_sync(&sci_work);
+	cancel_work_sync_with_sync_wait(&sci_work);
 	sysfs_remove_file(&device->dev.kobj, &lid_wake_on_close_attr.attr);
 }
 

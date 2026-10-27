@@ -304,7 +304,7 @@ static int rt721_sdca_interrupt_callback(struct sdw_slave *slave,
 	int count = 0, retry = 3;
 	unsigned int sdca_cascade, scp_sdca_stat1, scp_sdca_stat2 = 0;
 
-	if (cancel_delayed_work_sync(&rt721->jack_detect_work)) {
+	if (cancel_delayed_work_sync_with_sync_wait(&rt721->jack_detect_work)) {
 		dev_warn(&slave->dev, "%s the pending delayed_work was cancelled", __func__);
 		/* avoid the HID owner doesn't change to device */
 		if (rt721->scp_sdca_stat2)
@@ -423,8 +423,8 @@ static void rt721_sdca_sdw_remove(struct sdw_slave *slave)
 	struct rt721_sdca_priv *rt721 = dev_get_drvdata(&slave->dev);
 
 	if (rt721->hw_init) {
-		cancel_delayed_work_sync(&rt721->jack_detect_work);
-		cancel_delayed_work_sync(&rt721->jack_btn_check_work);
+		cancel_delayed_work_sync_with_sync_wait(&rt721->jack_detect_work);
+		cancel_delayed_work_sync_with_sync_wait(&rt721->jack_btn_check_work);
 	}
 
 	if (rt721->first_hw_init)
@@ -447,8 +447,8 @@ static int rt721_sdca_dev_suspend(struct device *dev)
 	if (!rt721->hw_init)
 		return 0;
 
-	cancel_delayed_work_sync(&rt721->jack_detect_work);
-	cancel_delayed_work_sync(&rt721->jack_btn_check_work);
+	cancel_delayed_work_sync_with_sync_wait(&rt721->jack_detect_work);
+	cancel_delayed_work_sync_with_sync_wait(&rt721->jack_btn_check_work);
 
 	regcache_cache_only(rt721->regmap, true);
 	regcache_cache_only(rt721->mbq_regmap, true);

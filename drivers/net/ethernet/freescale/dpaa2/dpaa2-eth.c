@@ -5122,7 +5122,7 @@ static void dpaa2_eth_remove(struct fsl_mc_device *ls_dev)
 
 	fsl_mc_portal_free(priv->mc_io);
 
-	destroy_workqueue(priv->dpaa2_ptp_wq);
+	destroy_workqueue_with_sync_wait(priv->dpaa2_ptp_wq);
 
 	dev_dbg(net_dev->dev.parent, "Removed interface %s\n", net_dev->name);
 

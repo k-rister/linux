@@ -1489,19 +1489,26 @@ static int mmc_omap_probe(struct platform_device *pdev)
 			while (--i >= 0)
 				mmc_omap_remove_slot(host->slots[i]);
 
-			goto err_destroy_wq;
+			goto err_plat_cleanup;
 		}
 	}
 
 	return 0;
 
-err_destroy_wq:
-	destroy_workqueue(host->mmc_omap_wq);
 err_plat_cleanup:
 	if (pdata->cleanup)
 		pdata->cleanup(&pdev->dev);
 err_free_irq:
+	if (host->mmc_omap_wq) {
+		disable_irq(host->irq);
+		timer_delete_sync(&host->cmd_abort_timer);
+		flush_workqueue_with_sync_wait(host->mmc_omap_wq);
+	}
 	free_irq(host->irq, host);
+	if (host->mmc_omap_wq) {
+		destroy_workqueue_with_sync_wait(host->mmc_omap_wq);
+		host->mmc_omap_wq = NULL;
+	}
 err_free_dma:
 	if (host->dma_tx)
 		dma_release_channel(host->dma_tx);
@@ -1530,8 +1537,14 @@ static void mmc_omap_remove(struct platform_device *pdev)
 	if (host->pdata->cleanup)
 		host->pdata->cleanup(&pdev->dev);
 
-	mmc_omap_fclk_enable(host, 0);
+	disable_irq(host->irq);
+	timer_delete_sync(&host->cmd_abort_timer);
+	flush_workqueue_with_sync_wait(host->mmc_omap_wq);
 	free_irq(host->irq, host);
+	destroy_workqueue_with_sync_wait(host->mmc_omap_wq);
+	host->mmc_omap_wq = NULL;
+
+	mmc_omap_fclk_enable(host, 0);
 	clk_unprepare(host->fclk);
 	clk_put(host->fclk);
 	clk_disable_unprepare(host->iclk);
@@ -1541,8 +1554,6 @@ static void mmc_omap_remove(struct platform_device *pdev)
 		dma_release_channel(host->dma_tx);
 	if (host->dma_rx)
 		dma_release_channel(host->dma_rx);
-
-	destroy_workqueue(host->mmc_omap_wq);
 }
 
 #if IS_BUILTIN(CONFIG_OF)

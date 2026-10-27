@@ -103,12 +103,12 @@ static __exit void smbdirect_module_exit(void)
 
 	smbdirect_devices_exit();
 
-	destroy_workqueue(smbdirect_globals.workqueues.accept);
-	destroy_workqueue(smbdirect_globals.workqueues.connect);
-	destroy_workqueue(smbdirect_globals.workqueues.idle);
-	destroy_workqueue(smbdirect_globals.workqueues.refill);
-	destroy_workqueue(smbdirect_globals.workqueues.immediate);
-	destroy_workqueue(smbdirect_globals.workqueues.cleanup);
+	destroy_workqueue_with_sync_wait(smbdirect_globals.workqueues.accept);
+	destroy_workqueue_with_sync_wait(smbdirect_globals.workqueues.connect);
+	destroy_workqueue_with_sync_wait(smbdirect_globals.workqueues.idle);
+	destroy_workqueue_with_sync_wait(smbdirect_globals.workqueues.refill);
+	destroy_workqueue_with_sync_wait(smbdirect_globals.workqueues.immediate);
+	destroy_workqueue_with_sync_wait(smbdirect_globals.workqueues.cleanup);
 
 	mutex_unlock(&smbdirect_globals.mutex);
 	pr_notice("subsystem unloaded\n");

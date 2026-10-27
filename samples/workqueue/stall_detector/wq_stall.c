@@ -85,8 +85,8 @@ static void __exit wq_stall_exit(void)
 	pr_info("wq_stall: unloading\n");
 	atomic_set(&wake_condition, 1);
 	wake_up(&stall_wq_head);
-	flush_work(&stall_work1);
-	flush_work(&stall_work2);
+	flush_work_with_sync_wait(&stall_work1);
+	flush_work_with_sync_wait(&stall_work2);
 	pr_info("wq_stall: all work flushed, module unloaded\n");
 }
 

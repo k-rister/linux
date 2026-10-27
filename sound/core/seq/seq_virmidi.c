@@ -264,7 +264,7 @@ static int snd_virmidi_output_close(struct snd_rawmidi_substream *substream)
 	struct snd_virmidi *vmidi = substream->runtime->private_data;
 
 	WRITE_ONCE(vmidi->trigger, false); /* to be sure */
-	cancel_work_sync(&vmidi->output_work);
+	cancel_work_sync_with_sync_wait(&vmidi->output_work);
 	snd_midi_event_free(vmidi->parser);
 	substream->runtime->private_data = NULL;
 	kfree(vmidi);

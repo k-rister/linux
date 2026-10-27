@@ -147,7 +147,7 @@ static int snd_compr_free(struct inode *inode, struct file *f)
 	struct snd_compr_file *data = f->private_data;
 	struct snd_compr_runtime *runtime = data->stream.runtime;
 
-	cancel_delayed_work_sync(&data->stream.error_work);
+	cancel_delayed_work_sync_with_sync_wait(&data->stream.error_work);
 
 	switch (runtime->state) {
 	case SNDRV_PCM_STATE_RUNNING:

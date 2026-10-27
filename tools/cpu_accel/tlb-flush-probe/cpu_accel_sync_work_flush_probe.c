@@ -130,8 +130,8 @@ err_destroy_wq:
 static void __exit cpu_accel_sync_work_flush_probe_exit(void)
 {
 	debugfs_remove_recursive(debugfs_dir);
-	cancel_work_sync(&sync_work);
-	destroy_workqueue(sync_wq);
+	cancel_work_sync_with_sync_wait(&sync_work);
+	destroy_workqueue_with_sync_wait(sync_wq);
 }
 
 module_init(cpu_accel_sync_work_flush_probe_init);

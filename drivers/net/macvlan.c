@@ -1299,7 +1299,7 @@ static void macvlan_port_destroy(struct net_device *dev)
 	/* After this point, no packet can schedule bc_work anymore,
 	 * but we need to cancel it and purge left skbs if any.
 	 */
-	cancel_work_sync(&port->bc_work);
+	cancel_work_sync_with_sync_wait(&port->bc_work);
 
 	while ((skb = __skb_dequeue(&port->bc_queue))) {
 		const struct macvlan_dev *src = MACVLAN_SKB_CB(skb)->src;

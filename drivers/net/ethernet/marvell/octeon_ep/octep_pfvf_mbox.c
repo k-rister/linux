@@ -289,7 +289,7 @@ free_mbox:
 	while (i) {
 		i--;
 		ring  = rings_per_vf * i;
-		cancel_work_sync(&oct->mbox[ring]->wk.work);
+		cancel_work_sync_with_sync_wait(&oct->mbox[ring]->wk.work);
 		mutex_destroy(&oct->mbox[ring]->lock);
 		vfree(oct->mbox[ring]);
 		oct->mbox[ring] = NULL;
@@ -309,7 +309,7 @@ void octep_delete_pfvf_mbox(struct octep_device *oct)
 			continue;
 
 		if (work_pending(&oct->mbox[ring]->wk.work))
-			cancel_work_sync(&oct->mbox[ring]->wk.work);
+			cancel_work_sync_with_sync_wait(&oct->mbox[ring]->wk.work);
 
 		mutex_destroy(&oct->mbox[ring]->lock);
 		vfree(oct->mbox[ring]);

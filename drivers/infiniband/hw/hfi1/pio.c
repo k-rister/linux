@@ -849,7 +849,7 @@ void sc_free(struct send_context *sc)
 	sw_index = sc->sw_index;
 	hw_context = sc->hw_context;
 	sc_disable(sc);	/* make sure the HW is disabled */
-	flush_work(&sc->halt_work);
+	flush_work_with_sync_wait(&sc->halt_work);
 
 	spin_lock_irqsave(&dd->sc_lock, flags);
 	dd->send_contexts[sw_index].sc = NULL;

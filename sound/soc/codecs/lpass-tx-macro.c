@@ -9,6 +9,7 @@
 #include <linux/pm_clock.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
+#include <linux/workqueue.h>
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
 #include <sound/tlv.h>
@@ -1015,7 +1016,7 @@ static int tx_macro_enable_dec(struct snd_soc_dapm_widget *w,
 			tx->tx_hpf_work[decimator].hpf_cut_off_freq;
 		snd_soc_component_write_field(component, tx_vol_ctl_reg,
 					      CDC_TXn_PGA_MUTE_MASK, 0x1);
-		if (cancel_delayed_work_sync(
+		if (cancel_delayed_work_sync_with_sync_wait(
 		    &tx->tx_hpf_work[decimator].dwork)) {
 			if (hpf_cut_off_freq != CF_MIN_3DB_150HZ) {
 				snd_soc_component_write_field(
@@ -1046,7 +1047,8 @@ static int tx_macro_enable_dec(struct snd_soc_dapm_widget *w,
 					      0x1);
 			}
 		}
-		cancel_delayed_work_sync(&tx->tx_mute_dwork[decimator].dwork);
+		cancel_delayed_work_sync_with_sync_wait(
+			&tx->tx_mute_dwork[decimator].dwork);
 		break;
 	case SND_SOC_DAPM_POST_PMD:
 		snd_soc_component_write_field(component, tx_vol_ctl_reg,

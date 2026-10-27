@@ -20,6 +20,7 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/of_reserved_mem.h>
+#include <linux/workqueue.h>
 #include <linux/platform_data/cros_ec_commands.h>
 #include <linux/platform_data/cros_ec_proto.h>
 #include <linux/platform_device.h>
@@ -922,7 +923,7 @@ static int wov_pcm_hw_free(struct snd_soc_component *component,
 		priv->wov_substream = NULL;
 	}
 
-	cancel_delayed_work_sync(&priv->wov_copy_work);
+	cancel_delayed_work_sync_with_sync_wait(&priv->wov_copy_work);
 
 	return 0;
 }

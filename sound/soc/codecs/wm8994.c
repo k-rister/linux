@@ -18,6 +18,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
+#include <linux/workqueue.h>
 #include <linux/slab.h>
 #include <sound/core.h>
 #include <sound/jack.h>
@@ -3811,7 +3812,7 @@ static irqreturn_t wm1811_jackdet_irq(int irq, void *data)
 
 	pm_runtime_get_sync(component->dev);
 
-	cancel_delayed_work_sync(&wm8994->mic_complete_work);
+	cancel_delayed_work_sync_with_sync_wait(&wm8994->mic_complete_work);
 
 	mutex_lock(&wm8994->accdet_lock);
 
@@ -3847,10 +3848,10 @@ static irqreturn_t wm1811_jackdet_irq(int irq, void *data)
 		dev_dbg(component->dev, "Jack not detected\n");
 
 		/* Release wm8994->accdet_lock to avoid deadlock:
-		 * cancel_delayed_work_sync() takes wm8994->mic_work internal
-		 * lock and wm1811_mic_work takes wm8994->accdet_lock */
+		 * cancel_delayed_work_sync_with_sync_wait() waits for
+		 * wm1811_mic_work, which takes wm8994->accdet_lock. */
 		mutex_unlock(&wm8994->accdet_lock);
-		cancel_delayed_work_sync(&wm8994->mic_work);
+		cancel_delayed_work_sync_with_sync_wait(&wm8994->mic_work);
 		mutex_lock(&wm8994->accdet_lock);
 
 		snd_soc_component_update_bits(component, WM8958_MICBIAS2,
@@ -4037,8 +4038,8 @@ static irqreturn_t wm8958_mic_irq(int irq, void *data)
 	if (!(snd_soc_component_read(component, WM8958_MIC_DETECT_1) & WM8958_MICD_ENA))
 		return IRQ_HANDLED;
 
-	cancel_delayed_work_sync(&wm8994->mic_complete_work);
-	cancel_delayed_work_sync(&wm8994->open_circuit_work);
+	cancel_delayed_work_sync_with_sync_wait(&wm8994->mic_complete_work);
+	cancel_delayed_work_sync_with_sync_wait(&wm8994->open_circuit_work);
 
 	pm_runtime_get_sync(component->dev);
 

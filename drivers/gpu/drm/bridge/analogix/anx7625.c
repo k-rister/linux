@@ -2964,7 +2964,7 @@ free_wq:
 
 free_hdcp_wq:
 	if (platform->hdcp_workqueue)
-		destroy_workqueue(platform->hdcp_workqueue);
+		destroy_workqueue_with_sync_wait(platform->hdcp_workqueue);
 
 	return ret;
 }
@@ -2987,7 +2987,7 @@ static void anx7625_i2c_remove(struct i2c_client *client)
 
 	if (platform->hdcp_workqueue) {
 		cancel_delayed_work(&platform->hdcp_work);
-		destroy_workqueue(platform->hdcp_workqueue);
+		destroy_workqueue_with_sync_wait(platform->hdcp_workqueue);
 	}
 
 	if (!platform->pdata.low_power_mode)

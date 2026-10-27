@@ -6300,7 +6300,7 @@ void regulator_unregister(struct regulator_dev *rdev)
 		regulator_put(rdev->supply);
 	}
 
-	flush_work(&rdev->disable_work.work);
+	flush_work_with_sync_wait(&rdev->disable_work.work);
 
 	mutex_lock(&regulator_list_mutex);
 

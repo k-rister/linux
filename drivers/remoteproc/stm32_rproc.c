@@ -856,7 +856,7 @@ static int stm32_rproc_probe(struct platform_device *pdev)
 free_mb:
 	stm32_rproc_free_mbox(rproc);
 free_wkq:
-	destroy_workqueue(ddata->workqueue);
+	destroy_workqueue_with_sync_wait(ddata->workqueue);
 free_resources:
 	rproc_resource_cleanup(rproc);
 free_rproc:
@@ -878,7 +878,7 @@ static void stm32_rproc_remove(struct platform_device *pdev)
 
 	rproc_del(rproc);
 	stm32_rproc_free_mbox(rproc);
-	destroy_workqueue(ddata->workqueue);
+	destroy_workqueue_with_sync_wait(ddata->workqueue);
 
 	if (device_may_wakeup(dev)) {
 		dev_pm_clear_wake_irq(dev);

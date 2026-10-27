@@ -90,8 +90,16 @@ int mcs_add_intr_wq_entry(struct mcs *mcs, struct mcs_intr_event *event)
 {
 	struct mcs_intrq_entry *qentry;
 	u16 pcifunc = event->pcifunc;
-	struct rvu *rvu = mcs->rvu;
+	struct rvu *rvu;
 	struct mcs_pfvf *pfvf;
+	int ret = 0;
+
+	rcu_read_lock();
+	rvu = rcu_dereference(mcs->rvu);
+	if (!rvu) {
+		ret = -ENODEV;
+		goto out_rcu;
+	}
 
 	/* Check if it is PF or VF */
 	if (pcifunc & RVU_PFVF_FUNC_MASK)
@@ -103,11 +111,13 @@ int mcs_add_intr_wq_entry(struct mcs *mcs, struct mcs_intr_event *event)
 
 	/* Check PF/VF interrupt notification is enabled */
 	if (!(pfvf->intr_mask && event->intr_mask))
-		return 0;
+		goto out_rcu;
 
 	qentry = kmalloc_obj(*qentry, GFP_ATOMIC);
-	if (!qentry)
-		return -ENOMEM;
+	if (!qentry) {
+		ret = -ENOMEM;
+		goto out_rcu;
+	}
 
 	qentry->intr_event = *event;
 	spin_lock(&rvu->mcs_intrq_lock);
@@ -115,7 +125,9 @@ int mcs_add_intr_wq_entry(struct mcs *mcs, struct mcs_intr_event *event)
 	spin_unlock(&rvu->mcs_intrq_lock);
 	queue_work(rvu->mcs_intr_wq, &rvu->mcs_intr_work);
 
-	return 0;
+out_rcu:
+	rcu_read_unlock();
+	return ret;
 }
 
 static int mcs_notify_pfvf(struct mcs_intr_event *event, struct rvu *rvu)
@@ -896,8 +908,6 @@ int rvu_mcs_init(struct rvu *rvu)
 		for (lmac = 0; lmac < mcs->hw->lmac_cnt; lmac++)
 			mcs_set_lmac_mode(mcs, lmac, 0);
 
-		mcs->rvu = rvu;
-
 		/* Allocated memory for PFVF data */
 		mcs->pf = devm_kcalloc(mcs->dev, hw->total_pfs,
 				       sizeof(struct mcs_pfvf), GFP_KERNEL);
@@ -911,6 +921,7 @@ int rvu_mcs_init(struct rvu *rvu)
 	}
 
 	/* Initialize the wq for handling mcs interrupts */
+	spin_lock_init(&rvu->mcs_intrq_lock);
 	INIT_LIST_HEAD(&rvu->mcs_intrq_head);
 	INIT_WORK(&rvu->mcs_intr_work, mcs_intr_handler_task);
 	rvu->mcs_intr_wq = alloc_workqueue("mcs_intr_wq", WQ_PERCPU, 0);
@@ -919,15 +930,31 @@ int rvu_mcs_init(struct rvu *rvu)
 		return -ENOMEM;
 	}
 
+	/* Publish the RVU only after its interrupt workqueue is ready. */
+	for (mcs_id = 0; mcs_id < rvu->mcs_blk_cnt; mcs_id++) {
+		mcs = mcs_get_pdata(mcs_id);
+		rcu_assign_pointer(mcs->rvu, rvu);
+	}
+
 	return err;
 }
 
 void rvu_mcs_exit(struct rvu *rvu)
 {
+	int mcs_id;
+	struct mcs *mcs;
+
 	if (!rvu->mcs_intr_wq)
 		return;
 
+	/* Stop IRQ producers before draining the queue. */
+	for (mcs_id = 0; mcs_id < rvu->mcs_blk_cnt; mcs_id++) {
+		mcs = mcs_get_pdata(mcs_id);
+		rcu_assign_pointer(mcs->rvu, NULL);
+	}
+	synchronize_rcu();
+
 	drain_workqueue_with_sync_wait(rvu->mcs_intr_wq);
-	destroy_workqueue(rvu->mcs_intr_wq);
+	destroy_workqueue_with_sync_wait(rvu->mcs_intr_wq);
 	rvu->mcs_intr_wq = NULL;
 }

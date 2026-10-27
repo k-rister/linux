@@ -293,7 +293,7 @@ struct iwl_trans *iwl_trans_alloc(unsigned int priv_size,
 
 void iwl_trans_free(struct iwl_trans *trans)
 {
-	cancel_delayed_work_sync_with_sync_wait(&trans->restart.wk);
+	cancel_delayed_work_sync(&trans->restart.wk);
 }
 
 int iwl_trans_send_cmd(struct iwl_trans *trans, struct iwl_host_cmd *cmd)
@@ -418,7 +418,7 @@ void iwl_trans_op_mode_leave(struct iwl_trans *trans)
 	else
 		iwl_trans_pcie_op_mode_leave(trans);
 
-	cancel_delayed_work_sync_with_sync_wait(&trans->restart.wk);
+	cancel_delayed_work_sync(&trans->restart.wk);
 
 	trans->op_mode = NULL;
 	memset(&trans->conf, 0, sizeof(trans->conf));

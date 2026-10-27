@@ -1694,7 +1694,7 @@ static int tas675x_runtime_suspend(struct device *dev)
 {
 	struct tas675x_priv *tas = dev_get_drvdata(dev);
 
-	disable_delayed_work_sync(&tas->fault_check_work);
+	disable_delayed_work_sync_with_sync_wait(&tas->fault_check_work);
 	tas675x_set_state_all(tas, TAS675X_STATE_SLEEP_BOTH);
 
 	return 0;
@@ -2150,7 +2150,7 @@ static void tas675x_i2c_remove(struct i2c_client *client)
 {
 	struct tas675x_priv *tas = dev_get_drvdata(&client->dev);
 
-	disable_delayed_work_sync(&tas->fault_check_work);
+	disable_delayed_work_sync_with_sync_wait(&tas->fault_check_work);
 	if (client->irq)
 		disable_irq(client->irq);
 

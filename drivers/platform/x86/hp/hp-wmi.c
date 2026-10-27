@@ -2570,7 +2570,7 @@ static void __exit hp_wmi_bios_remove(struct platform_device *device)
 
 	priv = platform_get_drvdata(device);
 	if (priv)
-		cancel_delayed_work_sync(&priv->keep_alive_dwork);
+		cancel_delayed_work_sync_with_sync_wait(&priv->keep_alive_dwork);
 }
 
 static int hp_wmi_resume_handler(struct device *device)

@@ -10747,7 +10747,7 @@ int qla2xxx_delete_qpair(struct scsi_qla_host *vha, struct qla_qpair *qpair)
 		rsp->msix->handle = NULL;
 	}
 	if (rsp && ha->wq)
-		cancel_work_sync(&qpair->q_work);
+		cancel_work_sync_with_sync_wait(&qpair->q_work);
 
 	ret = qla25xx_delete_req_que(vha, qpair->req);
 	if (ret != QLA_SUCCESS)

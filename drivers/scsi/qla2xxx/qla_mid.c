@@ -608,7 +608,7 @@ qla25xx_free_rsp_que(struct scsi_qla_host *vha, struct rsp_que *rsp)
 
 	/* Flush any queued response work before freeing the queue/qpair. */
 	if (rsp->qpair && ha->wq)
-		cancel_work_sync(&rsp->qpair->q_work);
+		cancel_work_sync_with_sync_wait(&rsp->qpair->q_work);
 
 	if (rsp->ring)
 		dma_free_coherent(&ha->pdev->dev,

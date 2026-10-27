@@ -1921,7 +1921,7 @@ out_fabric:
 
 static void tcm_qla2xxx_deregister_configfs(void)
 {
-	destroy_workqueue(tcm_qla2xxx_free_wq);
+	destroy_workqueue_with_sync_wait(tcm_qla2xxx_free_wq);
 
 	target_unregister_template(&tcm_qla2xxx_ops);
 	target_unregister_template(&tcm_qla2xxx_npiv_ops);

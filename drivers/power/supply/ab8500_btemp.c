@@ -685,8 +685,10 @@ static void ab8500_btemp_unbind(struct device *dev, struct device *master,
 {
 	struct ab8500_btemp *di = dev_get_drvdata(dev);
 
+	ab8500_btemp_periodic(di, false);
+
 	/* Delete the work queue */
-	destroy_workqueue(di->btemp_wq);
+	destroy_workqueue_with_sync_wait(di->btemp_wq);
 }
 
 static const struct component_ops ab8500_btemp_component_ops = {

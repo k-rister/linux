@@ -149,7 +149,7 @@ receive_announce(struct snd_seq_event *ev, int direct, void *private, int atomic
 int
 snd_seq_oss_delete_client(void)
 {
-	cancel_work_sync(&async_lookup_work);
+	cancel_work_sync_with_sync_wait(&async_lookup_work);
 	if (system_client >= 0)
 		snd_seq_delete_kernel_client(system_client);
 

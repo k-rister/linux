@@ -105,5 +105,5 @@ void intel_pxp_irq_disable(struct intel_pxp *pxp)
 
 	pxp_irq_reset(gt);
 
-	flush_work(&pxp->session_work);
+	flush_work_with_sync_wait(&pxp->session_work);
 }

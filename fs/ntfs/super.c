@@ -2592,7 +2592,7 @@ static int ntfs_workqueue_init(void)
 
 static void ntfs_workqueue_destroy(void)
 {
-	destroy_workqueue(ntfs_wq);
+	destroy_workqueue_with_sync_wait(ntfs_wq);
 	ntfs_wq = NULL;
 }
 

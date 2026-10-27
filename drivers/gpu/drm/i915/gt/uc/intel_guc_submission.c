@@ -1717,7 +1717,7 @@ static void guc_flush_submissions(struct intel_guc *guc)
 
 void intel_guc_submission_flush_work(struct intel_guc *guc)
 {
-	flush_work_with_sync_wait(&guc->submission_state.destroyed_worker);
+	flush_work(&guc->submission_state.destroyed_worker);
 }
 
 static void guc_flush_destroyed_contexts(struct intel_guc *guc);

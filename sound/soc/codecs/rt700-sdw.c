@@ -458,8 +458,8 @@ static void rt700_sdw_remove(struct sdw_slave *slave)
 {
 	struct rt700_priv *rt700 = dev_get_drvdata(&slave->dev);
 
-	cancel_delayed_work_sync(&rt700->jack_detect_work);
-	cancel_delayed_work_sync(&rt700->jack_btn_check_work);
+	cancel_delayed_work_sync_with_sync_wait(&rt700->jack_detect_work);
+	cancel_delayed_work_sync_with_sync_wait(&rt700->jack_btn_check_work);
 
 	pm_runtime_disable(&slave->dev);
 }
@@ -477,8 +477,8 @@ static int rt700_dev_suspend(struct device *dev)
 	if (!rt700->hw_init)
 		return 0;
 
-	cancel_delayed_work_sync(&rt700->jack_detect_work);
-	cancel_delayed_work_sync(&rt700->jack_btn_check_work);
+	cancel_delayed_work_sync_with_sync_wait(&rt700->jack_detect_work);
+	cancel_delayed_work_sync_with_sync_wait(&rt700->jack_btn_check_work);
 
 	regcache_cache_only(rt700->regmap, true);
 

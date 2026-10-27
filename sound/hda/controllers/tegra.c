@@ -23,6 +23,7 @@
 #include <linux/time.h>
 #include <linux/string.h>
 #include <linux/pm_runtime.h>
+#include <linux/workqueue.h>
 
 #include <sound/core.h>
 #include <sound/initval.h>
@@ -230,7 +231,7 @@ static int hda_tegra_dev_free(struct snd_device *device)
 	struct azx *chip = device->device_data;
 	struct hda_tegra *hda = container_of(chip, struct hda_tegra, chip);
 
-	cancel_work_sync(&hda->probe_work);
+	cancel_work_sync_with_sync_wait(&hda->probe_work);
 	if (azx_bus(chip)->chip_init) {
 		azx_stop_all_streams(chip);
 		azx_stop_chip(chip);

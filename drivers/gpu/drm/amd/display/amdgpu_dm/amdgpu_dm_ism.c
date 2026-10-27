@@ -649,7 +649,7 @@ EXPORT_IF_KUNIT(amdgpu_dm_ism_init);
 
 void amdgpu_dm_ism_fini(struct amdgpu_dm_ism *ism)
 {
-	cancel_delayed_work_sync_with_sync_wait(&ism->sso_delayed_work);
-	cancel_delayed_work_sync_with_sync_wait(&ism->delayed_work);
+	cancel_delayed_work_sync(&ism->sso_delayed_work);
+	cancel_delayed_work_sync(&ism->delayed_work);
 }
 EXPORT_IF_KUNIT(amdgpu_dm_ism_fini);

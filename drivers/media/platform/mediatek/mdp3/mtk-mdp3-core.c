@@ -132,8 +132,8 @@ void mdp_video_device_release(struct video_device *vdev)
 
 	scp_put(mdp->scp);
 
-	destroy_workqueue(mdp->job_wq);
-	destroy_workqueue(mdp->clock_wq);
+	destroy_workqueue_with_sync_wait(mdp->job_wq);
+	destroy_workqueue_with_sync_wait(mdp->clock_wq);
 
 	pm_runtime_disable(&mdp->pdev->dev);
 

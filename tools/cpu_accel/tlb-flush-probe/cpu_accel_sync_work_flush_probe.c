@@ -123,7 +123,8 @@ static int __init cpu_accel_sync_work_flush_probe_init(void)
 err_remove_debugfs:
 	debugfs_remove_recursive(debugfs_dir);
 err_destroy_wq:
-	destroy_workqueue(sync_wq);
+	cancel_work_sync_with_sync_wait(&sync_work);
+	destroy_workqueue_with_sync_wait(sync_wq);
 	return ret;
 }
 

@@ -1261,7 +1261,7 @@ out_unregister_blkdev:
 	vdc_major = 0;
 
 out_free_wq:
-	destroy_workqueue(sunvdc_wq);
+	destroy_workqueue_with_sync_wait(sunvdc_wq);
 	return err;
 }
 

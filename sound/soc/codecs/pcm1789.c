@@ -269,7 +269,7 @@ void pcm1789_common_exit(struct device *dev)
 {
 	struct pcm1789_private *priv = dev_get_drvdata(dev);
 
-	flush_work(&priv->work);
+	flush_work_with_sync_wait(&priv->work);
 }
 EXPORT_SYMBOL_GPL(pcm1789_common_exit);
 

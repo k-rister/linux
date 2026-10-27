@@ -1624,7 +1624,7 @@ static void hdmi_lpe_audio_free(struct snd_card *card)
 	for_each_port(card_ctx, port) {
 		struct snd_intelhad *ctx = &card_ctx->pcm_ctx[port];
 
-		cancel_work_sync(&ctx->hdmi_audio_wq);
+		cancel_work_sync_with_sync_wait(&ctx->hdmi_audio_wq);
 	}
 }
 

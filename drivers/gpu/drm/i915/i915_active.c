@@ -606,7 +606,7 @@ int __i915_active_wait(struct i915_active *ref, int state)
 	 * After the wait is complete, the caller may free the active.
 	 * We have to flush any concurrent retirement before returning.
 	 */
-	flush_work_with_sync_wait(&ref->work);
+	flush_work(&ref->work);
 	return 0;
 }
 

@@ -76,7 +76,7 @@ static void pnv_php_free_slot(struct kref *kref)
 
 	WARN_ON(!list_empty(&php_slot->children));
 	pnv_php_disable_irq(php_slot, false, false);
-	destroy_workqueue(php_slot->wq);
+	destroy_workqueue_with_sync_wait(php_slot->wq);
 	kfree(php_slot->name);
 	kfree(php_slot);
 }

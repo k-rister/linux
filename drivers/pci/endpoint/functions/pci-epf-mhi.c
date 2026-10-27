@@ -703,7 +703,7 @@ err_release_tx:
 
 static void pci_epf_mhi_dma_deinit(struct pci_epf_mhi *epf_mhi)
 {
-	destroy_workqueue(epf_mhi->dma_wq);
+	destroy_workqueue_with_sync_wait(epf_mhi->dma_wq);
 	dma_release_channel(epf_mhi->dma_chan_tx);
 	dma_release_channel(epf_mhi->dma_chan_rx);
 	epf_mhi->dma_chan_tx = NULL;

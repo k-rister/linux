@@ -12,6 +12,7 @@
 #include <linux/notifier.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/workqueue.h>
 #include <sound/jack.h>
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
@@ -366,7 +367,7 @@ static void framer_component_remove(struct snd_soc_component *component)
 	struct framer_codec *framer = snd_soc_component_get_drvdata(component);
 
 	framer_notifier_unregister(framer->framer, &framer->nb);
-	cancel_work_sync(&framer->carrier_work);
+	cancel_work_sync_with_sync_wait(&framer->carrier_work);
 	framer_power_off(framer->framer);
 	framer_exit(framer->framer);
 }

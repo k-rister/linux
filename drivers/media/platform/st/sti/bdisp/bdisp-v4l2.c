@@ -1274,7 +1274,7 @@ static void bdisp_remove(struct platform_device *pdev)
 	if (!IS_ERR(bdisp->clock))
 		clk_unprepare(bdisp->clock);
 
-	destroy_workqueue(bdisp->work_queue);
+	destroy_workqueue_with_sync_wait(bdisp->work_queue);
 
 	dev_dbg(&pdev->dev, "%s driver unloaded\n", pdev->name);
 }
@@ -1396,7 +1396,7 @@ err_remove:
 err_clk:
 	clk_unprepare(bdisp->clock);
 err_wq:
-	destroy_workqueue(bdisp->work_queue);
+	destroy_workqueue_with_sync_wait(bdisp->work_queue);
 	return ret;
 }
 

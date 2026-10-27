@@ -672,5 +672,5 @@ int mlx4_ib_cm_init(void)
 
 void mlx4_ib_cm_destroy(void)
 {
-	destroy_workqueue(cm_wq);
+	destroy_workqueue_with_sync_wait(cm_wq);
 }

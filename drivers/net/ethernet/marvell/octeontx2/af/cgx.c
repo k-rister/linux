@@ -1829,7 +1829,7 @@ static int cgx_lmac_exit(struct cgx *cgx)
 
 	if (cgx->cgx_cmd_workq) {
 		drain_workqueue_with_sync_wait(cgx->cgx_cmd_workq);
-		destroy_workqueue(cgx->cgx_cmd_workq);
+		destroy_workqueue_with_sync_wait(cgx->cgx_cmd_workq);
 		cgx->cgx_cmd_workq = NULL;
 	}
 

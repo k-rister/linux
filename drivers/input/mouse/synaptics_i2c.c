@@ -486,7 +486,7 @@ static void synaptics_i2c_close(struct input_dev *input)
 	if (!polling_req)
 		synaptics_i2c_reg_set(touch->client, INTERRUPT_EN_REG, 0);
 
-	cancel_delayed_work_sync_with_sync_wait(&touch->dwork);
+	cancel_delayed_work_sync(&touch->dwork);
 
 	/* Save some power */
 	synaptics_i2c_reg_set(touch->client, DEV_CONTROL_REG, DEEP_SLEEP);
@@ -576,7 +576,7 @@ static int synaptics_i2c_suspend(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct synaptics_i2c *touch = i2c_get_clientdata(client);
 
-	cancel_delayed_work_sync_with_sync_wait(&touch->dwork);
+	cancel_delayed_work_sync(&touch->dwork);
 
 	/* Save some power */
 	synaptics_i2c_reg_set(touch->client, DEV_CONTROL_REG, DEEP_SLEEP);

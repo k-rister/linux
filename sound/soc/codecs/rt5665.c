@@ -19,6 +19,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/regulator/consumer.h>
 #include <linux/mutex.h>
+#include <linux/workqueue.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
@@ -1274,7 +1275,7 @@ static void rt5665_jack_detect_handler(struct work_struct *work)
 		SND_JACK_BTN_2 | SND_JACK_BTN_3))
 		schedule_delayed_work(&rt5665->jd_check_work, 0);
 	else
-		cancel_delayed_work_sync(&rt5665->jd_check_work);
+		cancel_delayed_work_sync_with_sync_wait(&rt5665->jd_check_work);
 }
 
 static const char * const rt5665_clk_sync[] = {

@@ -489,7 +489,7 @@ static void __init start_event_scan(void)
 /* Cancel the rtas event scan work */
 void rtas_cancel_event_scan(void)
 {
-	cancel_delayed_work_sync(&event_scan_work);
+	cancel_delayed_work_sync_with_sync_wait(&event_scan_work);
 }
 EXPORT_SYMBOL_GPL(rtas_cancel_event_scan);
 

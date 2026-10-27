@@ -854,7 +854,7 @@ static void i3c_masterdev_release(struct device *dev)
 	struct i3c_bus *bus = dev_to_i3cbus(dev);
 
 	if (master->wq)
-		destroy_workqueue(master->wq);
+		destroy_workqueue_with_sync_wait(master->wq);
 
 	WARN_ON(!list_empty(&bus->devs.i2c) || !list_empty(&bus->devs.i3c));
 	i3c_bus_cleanup(bus);

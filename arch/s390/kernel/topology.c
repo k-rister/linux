@@ -356,7 +356,7 @@ void topology_schedule_update(void)
 
 static void topology_flush_work(void)
 {
-	flush_work(&topology_work);
+	flush_work_with_sync_wait(&topology_work);
 }
 
 static void topology_timer_fn(struct timer_list *unused)

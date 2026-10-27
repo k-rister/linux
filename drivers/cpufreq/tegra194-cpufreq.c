@@ -607,7 +607,7 @@ static const struct tegra_cpufreq_soc tegra194_cpufreq_soc = {
 
 static void tegra194_cpufreq_free_resources(void)
 {
-	destroy_workqueue(read_counters_wq);
+	destroy_workqueue_with_sync_wait(read_counters_wq);
 }
 
 static struct cpufreq_frequency_table *

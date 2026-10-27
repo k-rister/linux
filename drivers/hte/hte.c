@@ -207,7 +207,7 @@ int hte_ts_put(struct hte_ts_desc *desc)
 
 	if (test_bit(HTE_TS_QUEUE_WK, &ei->flags)) {
 		spin_unlock_irqrestore(&ei->slock, flag);
-		flush_work_with_sync_wait(&ei->cb_work);
+		flush_work(&ei->cb_work);
 		spin_lock_irqsave(&ei->slock, flag);
 	}
 

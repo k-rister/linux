@@ -433,7 +433,7 @@ static int __init ionic_mod_init(void)
 	return 0;
 
 err_aux:
-	destroy_workqueue(ionic_evt_workq);
+	destroy_workqueue_with_sync_wait(ionic_evt_workq);
 
 	return rc;
 }
@@ -441,7 +441,7 @@ err_aux:
 static void __exit ionic_mod_exit(void)
 {
 	auxiliary_driver_unregister(&ionic_aux_r_driver);
-	destroy_workqueue(ionic_evt_workq);
+	destroy_workqueue_with_sync_wait(ionic_evt_workq);
 }
 
 module_init(ionic_mod_init);

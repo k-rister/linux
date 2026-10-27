@@ -9,6 +9,7 @@
 #include <linux/firmware.h>
 #include <linux/i2c.h>
 #include <linux/regmap.h>
+#include <linux/workqueue.h>
 #include <sound/pcm_params.h>
 #include <sound/tlv.h>
 #include "sma1307.h"
@@ -570,7 +571,7 @@ static void sma1307_shutdown(struct snd_soc_component *component)
 	struct sma1307_priv *sma1307 = snd_soc_component_get_drvdata(component);
 
 	/* for SMA1307A */
-	cancel_delayed_work_sync(&sma1307->check_fault_work);
+	cancel_delayed_work_sync_with_sync_wait(&sma1307->check_fault_work);
 
 	regmap_update_bits(sma1307->regmap, SMA1307_0E_MUTE_VOL_CTRL,
 				   SMA1307_SPK_MUTE_MASK, SMA1307_SPK_MUTE);
@@ -2007,7 +2008,7 @@ static void sma1307_i2c_remove(struct i2c_client *client)
 	struct sma1307_priv *sma1307 =
 	    (struct sma1307_priv *)i2c_get_clientdata(client);
 
-	cancel_delayed_work_sync(&sma1307->check_fault_work);
+	cancel_delayed_work_sync_with_sync_wait(&sma1307->check_fault_work);
 }
 
 static const struct i2c_device_id sma1307_i2c_id[] = {

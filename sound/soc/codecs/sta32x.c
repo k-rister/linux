@@ -419,7 +419,7 @@ static void sta32x_watchdog_stop(struct sta32x_priv *sta32x)
 {
 	if (sta32x->pdata->needs_esd_watchdog) {
 		sta32x->shutdown = 1;
-		cancel_delayed_work_sync(&sta32x->watchdog_work);
+		cancel_delayed_work_sync_with_sync_wait(&sta32x->watchdog_work);
 	}
 }
 

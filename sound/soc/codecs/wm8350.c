@@ -17,6 +17,7 @@
 #include <linux/mfd/wm8350/audio.h>
 #include <linux/mfd/wm8350/core.h>
 #include <linux/regulator/consumer.h>
+#include <linux/workqueue.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
@@ -1590,12 +1591,12 @@ static void wm8350_component_remove(struct snd_soc_component *component)
 	priv->hpr.jack = NULL;
 	priv->mic.jack = NULL;
 
-	cancel_delayed_work_sync(&priv->hpl.work);
-	cancel_delayed_work_sync(&priv->hpr.work);
+	cancel_delayed_work_sync_with_sync_wait(&priv->hpl.work);
+	cancel_delayed_work_sync_with_sync_wait(&priv->hpr.work);
 
 	/* if there was any work waiting then we run it now and
 	 * wait for its completion */
-	flush_delayed_work(&priv->pga_work);
+	flush_delayed_work_with_sync_wait(&priv->pga_work);
 
 	wm8350_clear_bits(wm8350, WM8350_POWER_MGMT_5, WM8350_CODEC_ENA);
 }

@@ -6300,7 +6300,7 @@ EXPORT_SYMBOL_GPL(alloc_workqueue_noprof);
 
 static void devm_workqueue_release(void *res)
 {
-	destroy_workqueue(res);
+	destroy_workqueue_with_sync_wait(res);
 }
 
 __printf(2, 5) struct workqueue_struct *

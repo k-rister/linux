@@ -2020,7 +2020,7 @@ int rio_init_mports(void)
 	flush_workqueue_with_sync_wait(rio_wq);
 	mutex_unlock(&rio_mport_list_lock);
 	pr_debug("RIO: destroy discovery workqueue\n");
-	destroy_workqueue(rio_wq);
+	destroy_workqueue_with_sync_wait(rio_wq);
 	kfree(work);
 
 no_disc:

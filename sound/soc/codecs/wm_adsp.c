@@ -994,7 +994,7 @@ int wm_adsp2_preloader_put(struct snd_kcontrol *kcontrol,
 
 	snd_soc_dapm_sync(dapm);
 
-	flush_work_with_sync_wait(&dsp->boot_work);
+	flush_work(&dsp->boot_work);
 
 	dsp->preloaded = ucontrol->value.integer.value[0];
 
@@ -1104,7 +1104,7 @@ static void wm_adsp_event_post_stop(struct cs_dsp *cs_dsp)
 
 int wm_adsp_run(struct wm_adsp *dsp)
 {
-	flush_work_with_sync_wait(&dsp->boot_work);
+	flush_work(&dsp->boot_work);
 
 	return cs_dsp_run(&dsp->cs_dsp);
 }

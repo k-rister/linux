@@ -82,8 +82,8 @@ static int simple_thread(void *arg)
 	while (!kthread_should_stop())
 		simple_thread_func(count++);
 
-	timer_delete(&mytimer);
-	cancel_work_sync(&trace_work);
+	timer_delete_sync(&mytimer);
+	cancel_work_sync_with_sync_wait(&trace_work);
 
 	/*
 	 * trace_array_put() decrements the reference counter associated with

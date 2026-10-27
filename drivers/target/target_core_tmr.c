@@ -14,6 +14,7 @@
 #include <linux/spinlock.h>
 #include <linux/list.h>
 #include <linux/export.h>
+#include <linux/smp.h>
 
 #include <target/target_core_base.h>
 #include <target/target_core_backend.h>
@@ -102,6 +103,26 @@ static bool __target_check_io_state(struct se_cmd *se_cmd,
 	return kref_get_unless_zero(&se_cmd->cmd_kref);
 }
 
+static void target_core_flush_submit_works(struct se_device *dev)
+{
+	unsigned int cpu;
+	int i;
+
+	/*
+	 * target_submission_wq is WQ_PERCPU | WQ_MEM_RECLAIM. Its rescuer can
+	 * execute work on any CPU, so coordinate every possible CPU while
+	 * flushing this device's submission work.
+	 */
+	for_each_possible_cpu(cpu)
+		arch_smp_sync_wait_begin(cpu);
+	for_each_possible_cpu(cpu)
+		arch_smp_sync_wait_stop(cpu);
+	for (i = 0; i < dev->queue_cnt; i++)
+		flush_work(&dev->queues[i].sq.work);
+	for_each_possible_cpu(cpu)
+		arch_smp_sync_wait_end(cpu);
+}
+
 void core_tmr_abort_task(
 	struct se_device *dev,
 	struct se_tmr_req *tmr,
@@ -114,9 +135,8 @@ void core_tmr_abort_task(
 	u64 ref_tag;
 	int i;
 
+	target_core_flush_submit_works(dev);
 	for (i = 0; i < dev->queue_cnt; i++) {
-		flush_work(&dev->queues[i].sq.work);
-
 		spin_lock_irqsave(&dev->queues[i].lock, flags);
 		list_for_each_entry_safe(se_cmd, next, &dev->queues[i].state_list,
 					 state_list) {
@@ -297,9 +317,8 @@ static void core_tmr_drain_state_list(
 	 * Note that this seems to be independent of TAS (Task Aborted Status)
 	 * in the Control Mode Page.
 	 */
+	target_core_flush_submit_works(dev);
 	for (i = 0; i < dev->queue_cnt; i++) {
-		flush_work(&dev->queues[i].sq.work);
-
 		spin_lock_irqsave(&dev->queues[i].lock, flags);
 		list_for_each_entry_safe(cmd, next, &dev->queues[i].state_list,
 					 state_list) {

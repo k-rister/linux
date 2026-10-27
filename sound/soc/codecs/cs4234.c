@@ -687,7 +687,7 @@ static const char * const cs4234_core_supplies[] = {
 
 static void cs4234_shutdown(struct cs4234 *cs4234)
 {
-	cancel_delayed_work_sync(&cs4234->vq_ramp_delay);
+	cancel_delayed_work_sync_with_sync_wait(&cs4234->vq_ramp_delay);
 	reinit_completion(&cs4234->vq_ramp_complete);
 
 	regmap_update_bits(cs4234->regmap, CS4234_DAC_CTRL4, CS4234_VQ_RAMP_MASK,

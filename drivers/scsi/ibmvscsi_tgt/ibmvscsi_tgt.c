@@ -3556,7 +3556,7 @@ static int ibmvscsis_probe(struct vio_dev *vdev,
 	return 0;
 
 destroy_WQ:
-	destroy_workqueue(vscsi->work_q);
+	destroy_workqueue_with_sync_wait(vscsi->work_q);
 unmap_buf:
 	dma_unmap_single(&vdev->dev, vscsi->map_ioba, PAGE_SIZE,
 			 DMA_BIDIRECTIONAL);

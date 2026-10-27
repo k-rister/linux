@@ -1909,7 +1909,7 @@ out_with_mempool:
 out_with_kcopyd:
 	dm_kcopyd_client_destroy(clone->kcopyd_client);
 out_with_wq:
-	destroy_workqueue(clone->wq);
+	destroy_workqueue_with_sync_wait(clone->wq);
 out_with_ht:
 	hash_table_exit(clone);
 out_with_metadata:

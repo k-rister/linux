@@ -5,6 +5,7 @@
 #include <linux/export.h>
 #include <linux/moduleparam.h>
 #include <linux/blkdev.h>
+#include <linux/workqueue.h>
 #include "blk.h"
 
 struct disk_events {
@@ -90,7 +91,7 @@ void disk_block_events(struct gendisk *disk)
 	spin_unlock_irqrestore(&ev->lock, flags);
 
 	if (cancel)
-		cancel_delayed_work_sync(&disk->ev->dwork);
+		cancel_delayed_work_sync_with_sync_wait(&disk->ev->dwork);
 
 	mutex_unlock(&ev->block_mutex);
 }

@@ -159,7 +159,7 @@ int octeon_delete_instr_queue(struct octeon_device *oct, u32 iq_no)
 	struct octeon_instr_queue *iq = oct->instr_queue[iq_no];
 
 	cancel_delayed_work_sync_with_sync_wait(&oct->check_db_wq[iq_no].wk.work);
-	destroy_workqueue(oct->check_db_wq[iq_no].wq);
+	destroy_workqueue_with_sync_wait(oct->check_db_wq[iq_no].wq);
 
 	if (OCTEON_CN6XXX(oct))
 		desc_size =

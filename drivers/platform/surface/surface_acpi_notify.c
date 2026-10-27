@@ -879,7 +879,7 @@ module_init(san_init);
 static void __exit san_exit(void)
 {
 	platform_driver_unregister(&surface_acpi_notify);
-	destroy_workqueue(san_wq);
+	destroy_workqueue_with_sync_wait(san_wq);
 }
 module_exit(san_exit);
 

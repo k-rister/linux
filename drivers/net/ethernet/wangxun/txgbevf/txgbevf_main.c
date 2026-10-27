@@ -285,7 +285,7 @@ err_register:
 	wx_clear_interrupt_scheme(wx);
 err_free_sw_init:
 	timer_delete_sync(&wx->service_timer);
-	cancel_work_sync(&wx->service_task);
+	cancel_work_sync_with_sync_wait(&wx->service_task);
 	kfree(wx->vfinfo);
 	kfree(wx->rss_key);
 	kfree(wx->mac_table);

@@ -790,7 +790,7 @@ err_shutdown_tc:
 err_unreg_netdev:
 	unregister_netdev(netdev);
 err_wq_destroy:
-	cancel_work_sync(&vf->reset_task);
+	cancel_work_sync_with_sync_wait(&vf->reset_task);
 	cancel_work_sync(&vf->rx_mode_work);
 	destroy_workqueue(vf->otx2_wq);
 err_ipsec_clean:
@@ -843,7 +843,7 @@ static void otx2vf_remove(struct pci_dev *pdev)
 	otx2_unregister_dl(vf);
 	unregister_netdev(netdev);
 	if (vf->otx2_wq) {
-		cancel_work_sync(&vf->reset_task);
+		cancel_work_sync_with_sync_wait(&vf->reset_task);
 		cancel_work_sync(&vf->rx_mode_work);
 		destroy_workqueue(vf->otx2_wq);
 	}

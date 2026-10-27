@@ -1516,7 +1516,7 @@ static int __init prestera_module_init(void)
 
 static void __exit prestera_module_exit(void)
 {
-	destroy_workqueue(prestera_wq);
+	destroy_workqueue_with_sync_wait(prestera_wq);
 	destroy_workqueue(prestera_owq);
 }
 

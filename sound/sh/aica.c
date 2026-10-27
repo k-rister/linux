@@ -355,7 +355,7 @@ static int snd_aicapcm_pcm_sync_stop(struct snd_pcm_substream *substream)
 	struct snd_card_aica *dreamcastcard = substream->pcm->private_data;
 
 	timer_delete_sync(&dreamcastcard->timer);
-	cancel_work_sync(&dreamcastcard->spu_dma_work);
+	cancel_work_sync_with_sync_wait(&dreamcastcard->spu_dma_work);
 	return 0;
 }
 

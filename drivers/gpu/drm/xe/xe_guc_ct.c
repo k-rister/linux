@@ -87,7 +87,7 @@ static void ct_dead_capture(struct xe_guc_ct *ct, struct guc_ctb *ctb, u32 reaso
 
 static void ct_dead_fini(struct xe_guc_ct *ct)
 {
-	cancel_work_sync(&ct->dead.worker);
+	cancel_work_sync_with_sync_wait(&ct->dead.worker);
 }
 
 static void ct_dead_init(struct xe_guc_ct *ct)

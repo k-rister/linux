@@ -188,11 +188,11 @@ fail_fs2:
 fail_fs1:
 	mempool_destroy(gfs2_page_pool);
 fail_mempool:
-	destroy_workqueue(gfs2_freeze_wq);
+	destroy_workqueue_with_sync_wait(gfs2_freeze_wq);
 fail_wq3:
 	destroy_workqueue(gfs2_control_wq);
 fail_wq2:
-	destroy_workqueue(gfs2_recovery_wq);
+	destroy_workqueue_with_sync_wait(gfs2_recovery_wq);
 fail_wq1:
 	gfs2_qd_shrinker_exit();
 fail_shrinker:

@@ -26,7 +26,7 @@ void smc_clcsock_release(struct smc_sock *smc)
 	struct socket *tcp;
 
 	if (smc->listen_smc && current_work() != &smc->smc_listen_work)
-		cancel_work_sync(&smc->smc_listen_work);
+		cancel_work_sync_with_sync_wait(&smc->smc_listen_work);
 	mutex_lock(&smc->clcsock_release_lock);
 	if (smc->clcsock) {
 		tcp = smc->clcsock;
@@ -116,7 +116,7 @@ static void smc_close_cancel_work(struct smc_sock *smc)
 	struct sock *sk = &smc->sk;
 
 	release_sock(sk);
-	if (cancel_work_sync(&smc->conn.close_work))
+	if (cancel_work_sync_with_sync_wait(&smc->conn.close_work))
 		sock_put(sk);
 	cancel_delayed_work_sync_with_sync_wait(&smc->conn.tx_work);
 	lock_sock(sk);
@@ -224,7 +224,7 @@ again:
 		}
 		smc_close_cleanup_listen(sk);
 		release_sock(sk);
-		flush_work(&smc->tcp_listen_work);
+		flush_work_with_sync_wait(&smc->tcp_listen_work);
 		lock_sock(sk);
 		break;
 	case SMC_ACTIVE:

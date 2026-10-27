@@ -607,7 +607,7 @@ bail:
 		if (cleanup_inode)
 			kmem_cache_destroy(dlmfs_inode_cache);
 		if (cleanup_worker)
-			destroy_workqueue(user_dlm_worker);
+			destroy_workqueue_with_sync_wait(user_dlm_worker);
 	} else
 		printk("OCFS2 User DLM kernel interface loaded\n");
 	return status;

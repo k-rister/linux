@@ -18,6 +18,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
+#include <linux/workqueue.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
@@ -1411,7 +1412,7 @@ static void dac33_soc_remove(struct snd_soc_component *component)
 
 	if (dac33->irq >= 0) {
 		free_irq(dac33->irq, dac33->component);
-		flush_work(&dac33->work);
+		flush_work_with_sync_wait(&dac33->work);
 	}
 }
 

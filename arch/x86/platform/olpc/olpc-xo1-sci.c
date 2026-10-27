@@ -601,7 +601,7 @@ err_ebook:
 static void xo1_sci_remove(struct platform_device *pdev)
 {
 	free_irq(sci_irq, pdev);
-	cancel_work_sync(&sci_work);
+	cancel_work_sync_with_sync_wait(&sci_work);
 	free_ec_sci();
 	free_lid_events();
 	free_lid_switch();

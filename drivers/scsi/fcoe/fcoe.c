@@ -2530,7 +2530,7 @@ static void __exit fcoe_exit(void)
 	 * destroy_work's may be chained but destroy_workqueue()
 	 * can take care of them. Just kill the fcoe_wq.
 	 */
-	destroy_workqueue(fcoe_wq);
+	destroy_workqueue_with_sync_wait(fcoe_wq);
 
 	/*
 	 * Detaching from the scsi transport must happen after all

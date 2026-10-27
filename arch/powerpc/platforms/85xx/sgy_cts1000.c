@@ -117,7 +117,7 @@ static int gpio_halt_probe(struct platform_device *pdev)
 static void gpio_halt_remove(struct platform_device *pdev)
 {
 	free_irq(halt_irq, pdev);
-	cancel_work_sync(&gpio_halt_wq);
+	cancel_work_sync_with_sync_wait(&gpio_halt_wq);
 
 	ppc_md.halt = NULL;
 	pm_power_off = NULL;

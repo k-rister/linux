@@ -3354,7 +3354,7 @@ fail:
 static void rvu_flr_wq_destroy(struct rvu *rvu)
 {
 	if (rvu->flr_wq) {
-		destroy_workqueue(rvu->flr_wq);
+		destroy_workqueue_with_sync_wait(rvu->flr_wq);
 		rvu->flr_wq = NULL;
 	}
 }
@@ -3381,7 +3381,7 @@ static int rvu_flr_init(struct rvu *rvu)
 	rvu->flr_wrk = devm_kcalloc(rvu->dev, num_devs,
 				    sizeof(struct rvu_work), GFP_KERNEL);
 	if (!rvu->flr_wrk) {
-		destroy_workqueue(rvu->flr_wq);
+		destroy_workqueue_with_sync_wait(rvu->flr_wq);
 		return -ENOMEM;
 	}
 

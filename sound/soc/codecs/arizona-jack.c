@@ -16,6 +16,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/property.h>
 #include <linux/regulator/consumer.h>
+#include <linux/workqueue.h>
 
 #include <sound/jack.h>
 #include <sound/soc.h>
@@ -918,7 +919,7 @@ static void arizona_micd_detect(struct work_struct *work)
 						micd_detect_work.work);
 	struct arizona *arizona = info->arizona;
 
-	cancel_delayed_work_sync(&info->micd_timeout_work);
+	cancel_delayed_work_sync_with_sync_wait(&info->micd_timeout_work);
 
 	guard(mutex)(&info->lock);
 
@@ -942,8 +943,8 @@ static irqreturn_t arizona_micdet(int irq, void *data)
 	struct arizona *arizona = info->arizona;
 	int debounce = arizona->pdata.micd_detect_debounce;
 
-	cancel_delayed_work_sync(&info->micd_detect_work);
-	cancel_delayed_work_sync(&info->micd_timeout_work);
+	cancel_delayed_work_sync_with_sync_wait(&info->micd_detect_work);
+	cancel_delayed_work_sync_with_sync_wait(&info->micd_timeout_work);
 
 	scoped_guard(mutex, &info->lock) {
 		if (!info->detecting)
@@ -1011,8 +1012,9 @@ static irqreturn_t arizona_jackdet(int irq, void *data)
 	bool cancelled_hp, cancelled_mic;
 	int ret, i;
 
-	cancelled_hp = cancel_delayed_work_sync(&info->hpdet_work);
-	cancelled_mic = cancel_delayed_work_sync(&info->micd_timeout_work);
+	cancelled_hp = cancel_delayed_work_sync_with_sync_wait(&info->hpdet_work);
+	cancelled_mic =
+		cancel_delayed_work_sync_with_sync_wait(&info->micd_timeout_work);
 
 	guard(pm_runtime_active_auto)(arizona->dev);
 
@@ -1582,9 +1584,9 @@ static int arizona_jack_disable_jack_detect(struct arizona_priv *info)
 	arizona_free_irq(arizona, ARIZONA_IRQ_MICDET, info);
 	arizona_free_irq(arizona, jack_irq_rise, info);
 	arizona_free_irq(arizona, jack_irq_fall, info);
-	cancel_delayed_work_sync(&info->hpdet_work);
-	cancel_delayed_work_sync(&info->micd_detect_work);
-	cancel_delayed_work_sync(&info->micd_timeout_work);
+	cancel_delayed_work_sync_with_sync_wait(&info->hpdet_work);
+	cancel_delayed_work_sync_with_sync_wait(&info->micd_detect_work);
+	cancel_delayed_work_sync_with_sync_wait(&info->micd_timeout_work);
 
 	ret = regmap_update_bits_check(arizona->regmap, ARIZONA_MIC_DETECT_1,
 				       ARIZONA_MICD_ENA, 0,

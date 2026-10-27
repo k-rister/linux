@@ -3553,11 +3553,11 @@ out_proto:
 out_core:
 	smc_core_exit();
 out_alloc_wqs:
-	destroy_workqueue(smc_close_wq);
+	destroy_workqueue_with_sync_wait(smc_close_wq);
 out_alloc_hs_wq:
-	destroy_workqueue(smc_hs_wq);
+	destroy_workqueue_with_sync_wait(smc_hs_wq);
 out_alloc_tcp_ls_wq:
-	destroy_workqueue(smc_tcp_ls_wq);
+	destroy_workqueue_with_sync_wait(smc_tcp_ls_wq);
 out_pnet:
 	smc_pnet_exit();
 out_nl:

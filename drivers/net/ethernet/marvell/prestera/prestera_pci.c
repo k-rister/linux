@@ -934,7 +934,7 @@ err_request_irq:
 	drain_workqueue_with_sync_wait(fw->wq);
 	pci_free_irq_vectors(pdev);
 err_irq_alloc:
-	destroy_workqueue(fw->wq);
+	destroy_workqueue_with_sync_wait(fw->wq);
 err_wq_alloc:
 	prestera_fw_uninit(fw);
 err_prestera_fw_init:
@@ -955,7 +955,7 @@ static void prestera_pci_remove(struct pci_dev *pdev)
 	free_irq(pci_irq_vector(pdev, 0), fw);
 	drain_workqueue_with_sync_wait(fw->wq);
 	pci_free_irq_vectors(pdev);
-	destroy_workqueue(fw->wq);
+	destroy_workqueue_with_sync_wait(fw->wq);
 	prestera_fw_uninit(fw);
 }
 

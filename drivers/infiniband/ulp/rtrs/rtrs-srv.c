@@ -2405,7 +2405,7 @@ out_err:
 
 static void __exit rtrs_server_exit(void)
 {
-	destroy_workqueue(rtrs_wq);
+	destroy_workqueue_with_sync_wait(rtrs_wq);
 	class_unregister(&rtrs_dev_class);
 	rtrs_rdma_dev_pd_deinit(&dev_pd);
 }

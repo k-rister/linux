@@ -16,6 +16,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
+#include <linux/workqueue.h>
 
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
@@ -88,7 +89,7 @@ static int tas6424_dac_event(struct snd_soc_dapm_widget *w,
 				      msecs_to_jiffies(TAS6424_FAULT_CHECK_INTERVAL));
 	} else if (event & SND_SOC_DAPM_PRE_PMD) {
 		/* Disable TAS6424 periodic fault checking/handling */
-		cancel_delayed_work_sync(&tas6424->fault_check_work);
+		cancel_delayed_work_sync_with_sync_wait(&tas6424->fault_check_work);
 	}
 
 	return 0;
@@ -781,7 +782,7 @@ static void tas6424_i2c_remove(struct i2c_client *client)
 	struct tas6424_data *tas6424 = dev_get_drvdata(dev);
 	int ret;
 
-	cancel_delayed_work_sync(&tas6424->fault_check_work);
+	cancel_delayed_work_sync_with_sync_wait(&tas6424->fault_check_work);
 
 	/* put the codec in stand-by */
 	if (tas6424->standby_gpio)

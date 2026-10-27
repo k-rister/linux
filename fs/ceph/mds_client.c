@@ -6934,7 +6934,7 @@ void ceph_mdsc_destroy(struct ceph_fs_client *fsc)
 	spin_unlock(&mdsc->reset_state.lock);
 	wake_up_all(&mdsc->reset_state.blocked_wq);
 
-	cancel_work_sync(&mdsc->reset_work);
+	cancel_work_sync_with_sync_wait(&mdsc->reset_work);
 	ceph_mdsc_stop(mdsc);
 
 	ceph_metric_destroy(&mdsc->metric);

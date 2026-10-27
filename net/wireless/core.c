@@ -1391,7 +1391,7 @@ void cfg80211_dev_free(struct cfg80211_registered_device *rdev)
 	spin_lock_irqsave(&rdev->wiphy_work_lock, flags);
 	WARN_ON(!list_empty(&rdev->wiphy_work_list));
 	spin_unlock_irqrestore(&rdev->wiphy_work_lock, flags);
-	cancel_work_sync_with_sync_wait(&rdev->wiphy_work);
+	cancel_work_sync(&rdev->wiphy_work);
 
 	rfkill_destroy(rdev->wiphy.rfkill);
 	list_for_each_entry_safe(reg, treg, &rdev->beacon_registrations, list) {

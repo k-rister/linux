@@ -356,7 +356,7 @@ static int deferred_probe_initcall(void)
 	 * that is optional
 	 */
 	driver_deferred_probe_trigger();
-	flush_work_with_sync_wait(&deferred_probe_work);
+	flush_work(&deferred_probe_work);
 
 	if (driver_deferred_probe_timeout > 0) {
 		schedule_delayed_work(&deferred_probe_timeout_work,
@@ -816,7 +816,7 @@ bool __init driver_probe_done(void)
 void wait_for_device_probe(void)
 {
 	/* wait for the deferred probe workqueue to finish */
-	flush_work_with_sync_wait(&deferred_probe_work);
+	flush_work(&deferred_probe_work);
 
 	/* wait for the known devices to complete their probing */
 	wait_event(probe_waitqueue, atomic_read(&probe_count) == 0);

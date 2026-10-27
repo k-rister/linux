@@ -344,7 +344,7 @@ static int cgx_lmac_event_handler_init(struct rvu *rvu)
 static void rvu_cgx_wq_destroy(struct rvu *rvu)
 {
 	if (rvu->cgx_evh_wq) {
-		destroy_workqueue(rvu->cgx_evh_wq);
+		destroy_workqueue_with_sync_wait(rvu->cgx_evh_wq);
 		rvu->cgx_evh_wq = NULL;
 	}
 }

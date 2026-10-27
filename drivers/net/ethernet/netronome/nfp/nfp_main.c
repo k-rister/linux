@@ -883,7 +883,7 @@ err_hwinfo_free:
 err_cpp_free:
 	nfp_cpp_free(pf->cpp);
 err_disable_msix:
-	destroy_workqueue(pf->wq);
+	destroy_workqueue_with_sync_wait(pf->wq);
 err_pci_priv_unset:
 	pci_set_drvdata(pdev, NULL);
 	devlink_free(devlink);
@@ -915,7 +915,7 @@ static void __nfp_pci_shutdown(struct pci_dev *pdev, bool unload_fw)
 	if (unload_fw && pf->unload_fw_on_remove)
 		nfp_fw_unload(pf);
 
-	destroy_workqueue(pf->wq);
+	destroy_workqueue_with_sync_wait(pf->wq);
 	pci_set_drvdata(pdev, NULL);
 	kfree(pf->hwinfo);
 	nfp_cpp_free(pf->cpp);

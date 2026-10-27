@@ -1290,7 +1290,7 @@ static int hidg_bind(struct usb_configuration *c, struct usb_function *f)
 
 	return 0;
 fail_free_all:
-	destroy_workqueue(hidg->workqueue);
+	destroy_workqueue_with_sync_wait(hidg->workqueue);
 fail_free_descs:
 	usb_free_all_descriptors(f);
 fail:

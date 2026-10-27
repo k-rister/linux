@@ -11,6 +11,7 @@
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/workqueue.h>
 
 #include <sound/control.h>
 #include <sound/core.h>
@@ -530,8 +531,8 @@ static void siu_pcm_free(struct snd_soc_component *component,
 	struct platform_device *pdev = to_platform_device(pcm->card->dev);
 	struct siu_port *port_info = siu_ports[pdev->id];
 
-	cancel_work_sync(&port_info->capture.work);
-	cancel_work_sync(&port_info->playback.work);
+	cancel_work_sync_with_sync_wait(&port_info->capture.work);
+	cancel_work_sync_with_sync_wait(&port_info->playback.work);
 
 	siu_free_port(port_info);
 

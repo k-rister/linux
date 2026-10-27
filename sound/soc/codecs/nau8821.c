@@ -1206,7 +1206,7 @@ static irqreturn_t nau8821_interrupt(int irq, void *data)
 
 	if ((active_irq & NAU8821_JACK_EJECT_IRQ_MASK) ==
 		NAU8821_JACK_EJECT_DETECTED) {
-		cancel_delayed_work_sync(&nau8821->jdet_work);
+		cancel_delayed_work_sync_with_sync_wait(&nau8821->jdet_work);
 		regmap_update_bits(regmap, NAU8821_R71_ANALOG_ADC_1,
 			NAU8821_MICDET_MASK, NAU8821_MICDET_DIS);
 		nau8821_eject_jack(nau8821);
@@ -1220,7 +1220,7 @@ static irqreturn_t nau8821_interrupt(int irq, void *data)
 		nau8821_irq_status_clear(regmap, NAU8821_KEY_RELEASE_IRQ);
 	} else if ((active_irq & NAU8821_JACK_INSERT_IRQ_MASK) ==
 		NAU8821_JACK_INSERT_DETECTED) {
-		cancel_delayed_work_sync(&nau8821->jdet_work);
+		cancel_delayed_work_sync_with_sync_wait(&nau8821->jdet_work);
 		regmap_update_bits(regmap, NAU8821_R71_ANALOG_ADC_1,
 			NAU8821_MICDET_MASK, NAU8821_MICDET_EN);
 		if (nau8821_is_jack_inserted(regmap)) {
@@ -1275,7 +1275,7 @@ static void nau8821_component_remove(struct snd_soc_component *component)
 	struct nau8821 *nau8821 = snd_soc_component_get_drvdata(component);
 
 	if (nau8821->jdet_active)
-		cancel_delayed_work_sync(&nau8821->jdet_work);
+		cancel_delayed_work_sync_with_sync_wait(&nau8821->jdet_work);
 };
 
 /**
@@ -1613,7 +1613,7 @@ static int __maybe_unused nau8821_suspend(struct snd_soc_component *component)
 		disable_irq(nau8821->irq);
 
 	if (nau8821->jdet_active)
-		cancel_delayed_work_sync(&nau8821->jdet_work);
+		cancel_delayed_work_sync_with_sync_wait(&nau8821->jdet_work);
 
 	snd_soc_dapm_force_bias_level(nau8821->dapm, SND_SOC_BIAS_OFF);
 	/* Power down codec power; don't support button wakeup */

@@ -589,7 +589,7 @@ static void sata_pmp_detach(struct ata_device *dev)
 
 	ata_for_each_link(tlink, ap, EDGE) {
 		WARN_ON(tlink->deferred_qc);
-		cancel_work_sync(&tlink->deferred_qc_work);
+		cancel_work_sync_with_sync_wait(&tlink->deferred_qc_work);
 		ata_eh_detach_dev(tlink->device);
 	}
 

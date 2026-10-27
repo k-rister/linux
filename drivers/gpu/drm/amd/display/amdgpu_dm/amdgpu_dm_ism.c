@@ -556,7 +556,7 @@ void amdgpu_dm_ism_disable(struct amdgpu_display_manager *dm)
 	/*
 	 * Caller must NOT hold dc_lock: the ISM delayed work handlers
 	 * acquire dc_lock themselves, so waiting for them via
-	 * disable_delayed_work_sync_with_sync_wait() while holding dc_lock would
+	 * disable_delayed_work_sync() while holding dc_lock would
 	 * self-deadlock against an in-flight worker.
 	 */
 	lockdep_assert_not_held(&dm->dc_lock);
@@ -565,8 +565,8 @@ void amdgpu_dm_ism_disable(struct amdgpu_display_manager *dm)
 		acrtc = to_amdgpu_crtc(crtc);
 		ism = &acrtc->ism;
 
-		disable_delayed_work_sync_with_sync_wait(&ism->delayed_work);
-		disable_delayed_work_sync_with_sync_wait(&ism->sso_delayed_work);
+		disable_delayed_work_sync(&ism->delayed_work);
+		disable_delayed_work_sync(&ism->sso_delayed_work);
 	}
 }
 EXPORT_IF_KUNIT(amdgpu_dm_ism_disable);

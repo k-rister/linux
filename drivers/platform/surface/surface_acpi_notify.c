@@ -871,7 +871,7 @@ static int __init san_init(void)
 		return -ENOMEM;
 	ret = platform_driver_register(&surface_acpi_notify);
 	if (ret)
-		destroy_workqueue(san_wq);
+		destroy_workqueue_with_sync_wait(san_wq);
 	return ret;
 }
 module_init(san_init);

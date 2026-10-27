@@ -354,7 +354,7 @@ static int soc_compr_set_params(struct snd_compr_stream *cstream,
 	rtd->pop_wait = 0;
 	snd_soc_dpcm_mutex_unlock(rtd);
 
-	cancel_delayed_work_sync(&rtd->delayed_work);
+	cancel_delayed_work_sync_with_sync_wait(&rtd->delayed_work);
 
 	return 0;
 

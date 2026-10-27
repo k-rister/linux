@@ -580,7 +580,7 @@ static int ucma_destroy_private_ctx(struct ucma_context *ctx)
 	 * xarray, or it will be positive because we still have the ref from the
 	 * xarray. This can also be 0 in cases where cm_id was never set
 	 */
-	cancel_work_sync_with_sync_wait(&ctx->close_work);
+	cancel_work_sync(&ctx->close_work);
 	if (refcount_read(&ctx->ref))
 		ucma_close_id(&ctx->close_work);
 

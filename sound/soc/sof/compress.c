@@ -4,9 +4,10 @@
 //
 // Author: Daniel Baluta <daniel.baluta@nxp.com>
 
+#include <linux/workqueue.h>
+#include <sound/compress_driver.h>
 #include <sound/soc.h>
 #include <sound/sof.h>
-#include <sound/compress_driver.h>
 #include "sof-audio.h"
 #include "sof-priv.h"
 #include "sof-utils.h"
@@ -152,7 +153,7 @@ static int sof_compr_free(struct snd_soc_component *component,
 			spcm->prepared[cstream->direction] = false;
 	}
 
-	cancel_work_sync(&spcm->stream[cstream->direction].period_elapsed_work);
+	cancel_work_sync_with_sync_wait(&spcm->stream[cstream->direction].period_elapsed_work);
 	spcm->stream[cstream->direction].cstream = NULL;
 	kfree(sstream);
 

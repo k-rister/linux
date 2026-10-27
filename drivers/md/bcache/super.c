@@ -2854,11 +2854,11 @@ static void bcache_exit(void)
 	if (bcache_kobj)
 		kobject_put(bcache_kobj);
 	if (bcache_wq)
-		destroy_workqueue(bcache_wq);
+		destroy_workqueue_with_sync_wait(bcache_wq);
 	if (bch_journal_wq)
-		destroy_workqueue(bch_journal_wq);
+		destroy_workqueue_with_sync_wait(bch_journal_wq);
 	if (bch_flush_wq)
-		destroy_workqueue(bch_flush_wq);
+		destroy_workqueue_with_sync_wait(bch_flush_wq);
 	bch_btree_exit();
 
 	if (bcache_major)

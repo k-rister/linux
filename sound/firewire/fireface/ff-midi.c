@@ -5,6 +5,7 @@
  * Copyright (c) 2015-2017 Takashi Sakamoto
  */
 
+#include <linux/workqueue.h>
 #include "ff.h"
 
 static int midi_capture_open(struct snd_rawmidi_substream *substream)
@@ -36,7 +37,7 @@ static int midi_playback_close(struct snd_rawmidi_substream *substream)
 {
 	struct snd_ff *ff = substream->rmidi->private_data;
 
-	cancel_work_sync(&ff->rx_midi_work[substream->number]);
+	cancel_work_sync_with_sync_wait(&ff->rx_midi_work[substream->number]);
 	WRITE_ONCE(ff->rx_midi_substreams[substream->number], NULL);
 
 	return 0;

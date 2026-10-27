@@ -2311,7 +2311,7 @@ static int __init vivid_init(void)
 	return ret;
 
 destroy_hdmi_wq:
-	destroy_workqueue(update_hdmi_ctrls_workqueue);
+	destroy_workqueue_with_sync_wait(update_hdmi_ctrls_workqueue);
 unreg_driver:
 	platform_driver_unregister(&vivid_pdrv);
 unreg_device:
@@ -2330,8 +2330,8 @@ static void __exit vivid_exit(void)
 		kfree(vivid_ctrl_hdmi_to_output_strings[i]);
 		kfree(vivid_ctrl_svid_to_output_strings[i]);
 	}
-	destroy_workqueue(update_svid_ctrls_workqueue);
-	destroy_workqueue(update_hdmi_ctrls_workqueue);
+	destroy_workqueue_with_sync_wait(update_svid_ctrls_workqueue);
+	destroy_workqueue_with_sync_wait(update_hdmi_ctrls_workqueue);
 	platform_driver_unregister(&vivid_pdrv);
 	platform_device_unregister(&vivid_pdev);
 }

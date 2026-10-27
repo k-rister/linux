@@ -1114,7 +1114,7 @@ static void cs42l56_free_beep(struct snd_soc_component *component)
 	struct cs42l56_private *cs42l56 = snd_soc_component_get_drvdata(component);
 
 	device_remove_file(component->dev, &dev_attr_beep);
-	cancel_work_sync(&cs42l56->beep_work);
+	cancel_work_sync_with_sync_wait(&cs42l56->beep_work);
 	cs42l56->beep = NULL;
 
 	snd_soc_component_update_bits(component, CS42L56_BEEP_TONE_CFG,

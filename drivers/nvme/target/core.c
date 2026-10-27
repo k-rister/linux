@@ -439,7 +439,7 @@ void nvmet_stop_keep_alive_timer(struct nvmet_ctrl *ctrl)
 
 	pr_debug("ctrl %d stop keep-alive\n", ctrl->cntlid);
 
-	cancel_delayed_work_sync(&ctrl->ka_work);
+	cancel_delayed_work_sync_with_sync_wait(&ctrl->ka_work);
 }
 
 u16 nvmet_req_find_ns(struct nvmet_req *req)

@@ -16,6 +16,7 @@
 #include <linux/slab.h>
 #include <linux/compat.h>
 #include <linux/sched/signal.h>
+#include <linux/workqueue.h>
 
 #include <sound/core.h>
 #include <sound/initval.h>
@@ -192,7 +193,7 @@ static inline void
 snd_fw_async_midi_port_finish(struct snd_fw_async_midi_port *port)
 {
 	port->substream = NULL;
-	cancel_work_sync(&port->work);
+	cancel_work_sync_with_sync_wait(&port->work);
 	port->error = false;
 }
 

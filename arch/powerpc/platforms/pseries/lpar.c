@@ -429,7 +429,7 @@ static int dtl_worker_offline(unsigned int cpu)
 {
 	struct dtl_worker *d = &per_cpu(dtl_workers, cpu);
 
-	cancel_delayed_work_sync(&d->work);
+	cancel_delayed_work_sync_with_sync_wait(&d->work);
 
 #ifndef CONFIG_VIRT_CPU_ACCOUNTING_NATIVE
 	unregister_dtl(get_hard_smp_processor_id(cpu));

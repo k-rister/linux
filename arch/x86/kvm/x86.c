@@ -61,6 +61,7 @@
 #include <linux/mem_encrypt.h>
 #include <linux/suspend.h>
 #include <linux/smp.h>
+#include <linux/workqueue.h>
 
 #include <trace/events/ipi.h>
 #include <trace/events/kvm.h>
@@ -7173,7 +7174,7 @@ void kvm_x86_vendor_exit(void)
 #ifdef CONFIG_X86_64
 	pvclock_gtod_unregister_notifier(&pvclock_gtod_notifier);
 	irq_work_sync(&pvclock_irq_work);
-	cancel_work_sync(&pvclock_gtod_work);
+	cancel_work_sync_with_sync_wait(&pvclock_gtod_work);
 #endif
 	kvm_x86_call(hardware_unsetup)();
 	kvm_destroy_user_return_msrs();

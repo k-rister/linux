@@ -17,6 +17,7 @@
 #include <linux/i2c.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
+#include <linux/workqueue.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
@@ -571,7 +572,7 @@ static int wm8971_set_bias_level(struct snd_soc_component *component,
 		break;
 	case SND_SOC_BIAS_PREPARE:
 		/* Wait until fully charged */
-		flush_delayed_work(&wm8971->charge_work);
+		flush_delayed_work_with_sync_wait(&wm8971->charge_work);
 		break;
 	case SND_SOC_BIAS_STANDBY:
 		if (snd_soc_dapm_get_bias_level(dapm) == SND_SOC_BIAS_OFF) {
@@ -587,7 +588,7 @@ static int wm8971_set_bias_level(struct snd_soc_component *component,
 
 		break;
 	case SND_SOC_BIAS_OFF:
-		cancel_delayed_work_sync(&wm8971->charge_work);
+		cancel_delayed_work_sync_with_sync_wait(&wm8971->charge_work);
 		snd_soc_component_write(component, WM8971_PWR1, 0x0001);
 		break;
 	}

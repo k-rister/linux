@@ -15,6 +15,7 @@
 #include <linux/pm.h>
 #include <linux/i2c.h>
 #include <linux/regmap.h>
+#include <linux/workqueue.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
@@ -490,7 +491,7 @@ static int sma1303_shutdown(struct snd_soc_component *component)
 	struct sma1303_priv *sma1303 = snd_soc_component_get_drvdata(component);
 	bool change = false, temp = false;
 
-	cancel_delayed_work_sync(&sma1303->check_fault_work);
+	cancel_delayed_work_sync_with_sync_wait(&sma1303->check_fault_work);
 
 	sma1303_regmap_update_bits(sma1303, SMA1303_10_SYSTEM_CTRL1,
 			SMA1303_SPK_MODE_MASK, SMA1303_SPK_OFF, &temp);
@@ -1567,7 +1568,7 @@ static void sma1303_remove(struct snd_soc_component *component)
 {
 	struct sma1303_priv *sma1303 = snd_soc_component_get_drvdata(component);
 
-	cancel_delayed_work_sync(&sma1303->check_fault_work);
+	cancel_delayed_work_sync_with_sync_wait(&sma1303->check_fault_work);
 }
 
 static const struct snd_soc_component_driver sma1303_component = {
@@ -1779,7 +1780,7 @@ static void sma1303_i2c_remove(struct i2c_client *client)
 
 	if (sma1303->attr_grp)
 		sysfs_remove_group(sma1303->kobj, sma1303->attr_grp);
-	cancel_delayed_work_sync(&sma1303->check_fault_work);
+	cancel_delayed_work_sync_with_sync_wait(&sma1303->check_fault_work);
 }
 
 static const struct i2c_device_id sma1303_i2c_id[] = {

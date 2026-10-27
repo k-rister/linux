@@ -1890,7 +1890,7 @@ static int delta_probe(struct platform_device *pdev)
 	return 0;
 
 err_work_queue:
-	destroy_workqueue(delta->work_queue);
+	destroy_workqueue_with_sync_wait(delta->work_queue);
 err_v4l2:
 	v4l2_device_unregister(&delta->v4l2_dev);
 err_pm_disable:
@@ -1907,7 +1907,7 @@ static void delta_remove(struct platform_device *pdev)
 
 	delta_unregister_device(delta);
 
-	destroy_workqueue(delta->work_queue);
+	destroy_workqueue_with_sync_wait(delta->work_queue);
 
 	pm_runtime_put_autosuspend(delta->dev);
 	pm_runtime_disable(delta->dev);

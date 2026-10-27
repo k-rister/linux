@@ -174,7 +174,7 @@ static void hd_update_capacities(void)
 
 void hd_disable_hiperdispatch(void)
 {
-	cancel_delayed_work_sync(&hd_capacity_work);
+	cancel_delayed_work_sync_with_sync_wait(&hd_capacity_work);
 	hd_high_capacity_cores = hd_online_cores;
 	hd_previous_steal = 0;
 }

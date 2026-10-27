@@ -58,7 +58,7 @@ EXPORT_SYMBOL_GPL(octeon_setup_response_list);
 void octeon_delete_response_list(struct octeon_device *oct)
 {
 	cancel_delayed_work_sync_with_sync_wait(&oct->dma_comp_wq.wk.work);
-	destroy_workqueue(oct->dma_comp_wq.wq);
+	destroy_workqueue_with_sync_wait(oct->dma_comp_wq.wq);
 }
 EXPORT_SYMBOL_GPL(octeon_delete_response_list);
 

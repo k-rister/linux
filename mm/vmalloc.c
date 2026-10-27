@@ -2431,9 +2431,13 @@ static bool __purge_vmap_area_lazy(unsigned long start, unsigned long end,
 			vn = &vmap_nodes[i];
 
 			if (vn->purge_work.func) {
-				flush_work(&vn->purge_work);
-				if (cpumask_test_and_clear_cpu(i, &purge_waiters))
+				if (cpumask_test_and_clear_cpu(i, &purge_waiters)) {
+					flush_work(&vn->purge_work);
 					arch_smp_sync_wait_end(i);
+				} else {
+					/* Offline nodes queue on the local system pool. */
+					flush_work_with_sync_wait(&vn->purge_work);
+				}
 				nr_purged_areas += vn->nr_purged;
 			}
 		}

@@ -730,7 +730,7 @@ void drm_mode_config_cleanup(struct drm_device *dev)
 	}
 	drm_connector_list_iter_end(&conn_iter);
 	/* connector_iter drops references in a work item. */
-	flush_work(&dev->mode_config.connector_free_work);
+	flush_work_with_sync_wait(&dev->mode_config.connector_free_work);
 	if (WARN_ON(!list_empty(&dev->mode_config.connector_list))) {
 		drm_connector_list_iter_begin(dev, &conn_iter);
 		drm_for_each_connector_iter(connector, &conn_iter)

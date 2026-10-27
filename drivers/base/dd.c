@@ -306,7 +306,7 @@ static void deferred_probe_timeout_work_func(struct work_struct *work)
 
 	driver_deferred_probe_timeout = 0;
 	driver_deferred_probe_trigger();
-	flush_work_with_sync_wait(&deferred_probe_work);
+	flush_work(&deferred_probe_work);
 
 	mutex_lock(&deferred_probe_mutex);
 	list_for_each_entry(p, &deferred_probe_pending_list, deferred_probe)
@@ -345,7 +345,7 @@ static int deferred_probe_initcall(void)
 	driver_deferred_probe_enable = true;
 	driver_deferred_probe_trigger();
 	/* Sort as many dependencies as possible before exiting initcalls */
-	flush_work_with_sync_wait(&deferred_probe_work);
+	flush_work(&deferred_probe_work);
 	initcalls_done = true;
 
 	if (!IS_ENABLED(CONFIG_MODULES))

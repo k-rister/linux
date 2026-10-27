@@ -204,7 +204,7 @@ static ssize_t xe_devcoredump_read(char *buffer, loff_t offset,
 	ss = &coredump->snapshot;
 
 	/* Ensure delayed work is captured before continuing */
-	flush_work(&ss->work);
+	flush_work_with_sync_wait(&ss->work);
 
 	pm_needed = ss->read.size > XE_DEVCOREDUMP_CHUNK_MAX;
 	if (pm_needed)
@@ -256,7 +256,7 @@ static void xe_devcoredump_free(void *data)
 		return;
 
 	if (coredump->captured)
-		cancel_work_sync(&coredump->snapshot.work);
+		cancel_work_sync_with_sync_wait(&coredump->snapshot.work);
 
 	mutex_lock(&coredump->lock);
 

@@ -357,7 +357,7 @@ static int tas5805m_dac_event(struct snd_soc_dapm_widget *w,
 		unsigned int chan, global1, global2;
 
 		dev_dbg(component->dev, "DSP shutdown\n");
-		cancel_work_sync(&tas5805m->work);
+		cancel_work_sync_with_sync_wait(&tas5805m->work);
 
 		guard(mutex)(&tas5805m->lock);
 		if (tas5805m->is_powered) {
@@ -562,7 +562,7 @@ static void tas5805m_i2c_remove(struct i2c_client *i2c)
 	struct device *dev = &i2c->dev;
 	struct tas5805m_priv *tas5805m = dev_get_drvdata(dev);
 
-	cancel_work_sync(&tas5805m->work);
+	cancel_work_sync_with_sync_wait(&tas5805m->work);
 	snd_soc_unregister_component(dev);
 	gpiod_set_value(tas5805m->gpio_pdn_n, 0);
 	usleep_range(10000, 15000);

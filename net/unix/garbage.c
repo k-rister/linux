@@ -659,5 +659,5 @@ void unix_schedule_gc(struct user_struct *user)
 		queue_work(system_dfl_wq, &unix_gc_work);
 
 	if (user && READ_ONCE(unix_graph_cyclic_sccs))
-		flush_work(&unix_gc_work);
+		flush_work_with_sync_wait(&unix_gc_work);
 }

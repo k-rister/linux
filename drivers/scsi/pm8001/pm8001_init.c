@@ -1559,7 +1559,7 @@ static void __exit pm8001_exit(void)
 {
 	pci_unregister_driver(&pm8001_pci_driver);
 	sas_release_transport(pm8001_stt);
-	destroy_workqueue(pm8001_wq);
+	destroy_workqueue_with_sync_wait(pm8001_wq);
 }
 
 module_init(pm8001_init);

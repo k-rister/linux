@@ -10,6 +10,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/reset.h>
+#include <linux/workqueue.h>
 #include <sound/dmaengine_pcm.h>
 #include <sound/pcm_iec958.h>
 #include <sound/pcm_params.h>
@@ -1760,7 +1761,7 @@ static void fsl_xcvr_remove(struct platform_device *pdev)
 {
 	struct fsl_xcvr *xcvr = dev_get_drvdata(&pdev->dev);
 
-	cancel_work_sync(&xcvr->work_rst);
+	cancel_work_sync_with_sync_wait(&xcvr->work_rst);
 	pm_runtime_disable(&pdev->dev);
 }
 

@@ -249,7 +249,7 @@ static void txgbe_disable_device(struct wx *wx)
 
 	clear_bit(WX_FLAG_NEED_DO_RESET, wx->flags);
 	timer_delete_sync(&wx->service_timer);
-	cancel_work_sync(&wx->service_task);
+	cancel_work_sync_with_sync_wait(&wx->service_task);
 
 	if (wx->bus.func < 2)
 		wr32m(wx, TXGBE_MIS_PRB_CTL, TXGBE_MIS_PRB_CTL_LAN_UP(wx->bus.func), 0);
@@ -965,7 +965,7 @@ err_release_hw:
 	wx_control_hw(wx, false);
 err_cancel_service:
 	timer_delete_sync(&wx->service_timer);
-	cancel_work_sync(&wx->service_task);
+	cancel_work_sync_with_sync_wait(&wx->service_task);
 	cancel_work_sync(&wx->reset_task);
 	destroy_workqueue(wx->reset_wq);
 err_free_mac_table:
@@ -1000,7 +1000,7 @@ static void txgbe_remove(struct pci_dev *pdev)
 	txgbe_fdir_filter_exit(wx);
 
 	timer_shutdown_sync(&wx->service_timer);
-	cancel_work_sync(&wx->service_task);
+	cancel_work_sync_with_sync_wait(&wx->service_task);
 	cancel_work_sync(&wx->reset_task);
 	destroy_workqueue(wx->reset_wq);
 

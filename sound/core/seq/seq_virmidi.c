@@ -278,7 +278,7 @@ static void snd_virmidi_output_drain(struct snd_rawmidi_substream *substream)
 {
 	struct snd_virmidi *vmidi = substream->runtime->private_data;
 
-	flush_work(&vmidi->output_work);
+	flush_work_with_sync_wait(&vmidi->output_work);
 }
 
 /*

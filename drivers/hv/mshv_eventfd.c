@@ -619,7 +619,7 @@ int mshv_irqfd_wq_init(void)
 void mshv_irqfd_wq_cleanup(void)
 {
 	flush_workqueue_with_sync_wait(irqfd_cleanup_wq);
-	destroy_workqueue(irqfd_cleanup_wq);
+	destroy_workqueue_with_sync_wait(irqfd_cleanup_wq);
 }
 
 /*

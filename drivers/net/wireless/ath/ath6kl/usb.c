@@ -619,7 +619,7 @@ static void ath6kl_usb_destroy(struct ath6kl_usb *ar_usb)
 
 	kfree(ar_usb->diag_cmd_buffer);
 	kfree(ar_usb->diag_resp_buffer);
-	destroy_workqueue(ar_usb->wq);
+	destroy_workqueue_with_sync_wait(ar_usb->wq);
 
 	kfree(ar_usb);
 }

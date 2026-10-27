@@ -952,7 +952,7 @@ static int  r852_probe(struct pci_dev *pci_dev, const struct pci_device_id *id)
 	return 0;
 
 error10:
-	destroy_workqueue_with_sync_wait(dev->card_workqueue);
+	destroy_workqueue(dev->card_workqueue);
 error9:
 	kfree(dev->tmp_buffer);
 error8:
@@ -979,8 +979,8 @@ static void r852_remove(struct pci_dev *pci_dev)
 
 	/* Stop detect workqueue -
 		we are going to unregister the device anyway*/
-	cancel_delayed_work_sync_with_sync_wait(&dev->card_detect_work);
-	destroy_workqueue_with_sync_wait(dev->card_workqueue);
+	cancel_delayed_work_sync(&dev->card_detect_work);
+	destroy_workqueue(dev->card_workqueue);
 
 	/* Unregister the device, this might make more IO */
 	r852_unregister_nand_device(dev);
@@ -1007,7 +1007,7 @@ static void r852_shutdown(struct pci_dev *pci_dev)
 {
 	struct r852_device *dev = pci_get_drvdata(pci_dev);
 
-	cancel_delayed_work_sync_with_sync_wait(&dev->card_detect_work);
+	cancel_delayed_work_sync(&dev->card_detect_work);
 	r852_disable_irqs(dev);
 	synchronize_irq(dev->irq);
 	pci_disable_device(pci_dev);
@@ -1022,7 +1022,7 @@ static int r852_suspend(struct device *device)
 		return -EBUSY;
 
 	/* First make sure the detect work is gone */
-	cancel_delayed_work_sync_with_sync_wait(&dev->card_detect_work);
+	cancel_delayed_work_sync(&dev->card_detect_work);
 
 	/* Turn off the interrupts and stop the device */
 	r852_disable_irqs(dev);

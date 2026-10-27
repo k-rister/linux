@@ -1572,7 +1572,7 @@ err_free_irq:
 err_ida_free:
 	ida_free(&mhi_ep_cntrl_ida, mhi_cntrl->index);
 err_destroy_wq:
-	destroy_workqueue(mhi_cntrl->wq);
+	destroy_workqueue_with_sync_wait(mhi_cntrl->wq);
 err_destroy_ring_item_cache:
 	kmem_cache_destroy(mhi_cntrl->ring_item_cache);
 err_destroy_ev_ring_el_cache:

@@ -388,7 +388,7 @@ static void idxd_cleanup_internals(struct idxd_device *idxd)
 	idxd_clean_groups(idxd);
 	idxd_clean_engines(idxd);
 	idxd_clean_wqs(idxd);
-	destroy_workqueue(idxd->wq);
+	destroy_workqueue_with_sync_wait(idxd->wq);
 }
 
 static int idxd_init_evl(struct idxd_device *idxd)
@@ -459,7 +459,7 @@ static int idxd_setup_internals(struct idxd_device *idxd)
 	return 0;
 
  err_evl:
-	destroy_workqueue(idxd->wq);
+	destroy_workqueue_with_sync_wait(idxd->wq);
  err_wkq_create:
 	idxd_clean_groups(idxd);
  err_group:

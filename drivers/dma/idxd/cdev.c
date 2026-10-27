@@ -653,7 +653,7 @@ static int idxd_user_drv_probe(struct idxd_dev *idxd_dev)
 err_cdev:
 	idxd_drv_disable_wq(wq);
 err:
-	destroy_workqueue(wq->wq);
+	destroy_workqueue_with_sync_wait(wq->wq);
 	wq->type = IDXD_WQT_NONE;
 wq_err:
 	mutex_unlock(&wq->wq_lock);
@@ -668,7 +668,7 @@ static void idxd_user_drv_remove(struct idxd_dev *idxd_dev)
 	idxd_wq_del_cdev(wq);
 	idxd_drv_disable_wq(wq);
 	wq->type = IDXD_WQT_NONE;
-	destroy_workqueue(wq->wq);
+	destroy_workqueue_with_sync_wait(wq->wq);
 	wq->wq = NULL;
 	mutex_unlock(&wq->wq_lock);
 }

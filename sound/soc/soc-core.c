@@ -464,7 +464,7 @@ static void soc_free_pcm_runtime(struct snd_soc_pcm_runtime *rtd)
 
 	list_del(&rtd->list);
 
-	flush_delayed_work(&rtd->delayed_work);
+	flush_delayed_work_with_sync_wait(&rtd->delayed_work);
 	snd_soc_pcm_component_free(rtd);
 
 	/*
@@ -614,7 +614,7 @@ static void snd_soc_flush_all_delayed_work(struct snd_soc_card *card)
 	struct snd_soc_pcm_runtime *rtd;
 
 	for_each_card_rtds(card, rtd)
-		flush_delayed_work(&rtd->delayed_work);
+		flush_delayed_work_with_sync_wait(&rtd->delayed_work);
 }
 
 #ifdef CONFIG_PM_SLEEP

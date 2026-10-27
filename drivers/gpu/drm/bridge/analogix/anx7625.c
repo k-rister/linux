@@ -2960,7 +2960,7 @@ pm_suspend:
 
 free_wq:
 	if (platform->workqueue)
-		destroy_workqueue(platform->workqueue);
+		destroy_workqueue_with_sync_wait(platform->workqueue);
 
 free_hdcp_wq:
 	if (platform->hdcp_workqueue)

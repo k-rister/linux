@@ -990,7 +990,7 @@ void hda_dsp_remove(struct snd_sof_dev *sdev)
 
 	/* Cancel the microphone privacy work if mic privacy is active */
 	if (hda->mic_privacy.active)
-		cancel_work_sync(&hda->mic_privacy.work);
+		cancel_work_sync_with_sync_wait(&hda->mic_privacy.work);
 
 	/* no need to check for error as the DSP will be disabled anyway */
 	if (chip && chip->power_down_dsp)

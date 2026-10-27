@@ -995,7 +995,7 @@ int hda_dsp_runtime_suspend(struct snd_sof_dev *sdev)
 
 		/* Cancel the microphone privacy work if mic privacy is active */
 		if (hda->mic_privacy.active)
-			cancel_work_sync(&hda->mic_privacy.work);
+			cancel_work_sync_with_sync_wait(&hda->mic_privacy.work);
 	}
 
 	/* stop hda controller and power dsp off */
@@ -1025,7 +1025,7 @@ int hda_dsp_suspend(struct snd_sof_dev *sdev, u32 target_state)
 
 		/* Cancel the microphone privacy work if mic privacy is active */
 		if (hda->mic_privacy.active)
-			cancel_work_sync(&hda->mic_privacy.work);
+			cancel_work_sync_with_sync_wait(&hda->mic_privacy.work);
 	}
 
 	if (target_state == SOF_DSP_PM_D0) {

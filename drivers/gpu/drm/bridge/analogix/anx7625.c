@@ -2973,12 +2973,17 @@ static void anx7625_i2c_remove(struct i2c_client *client)
 {
 	struct anx7625_data *platform = i2c_get_clientdata(client);
 
+	if (platform->pdata.intp_irq) {
+		disable_irq(platform->pdata.intp_irq);
+		cancel_work_sync_with_sync_wait(&platform->work);
+	}
+
 	anx7625_typec_unregister(platform);
 
 	drm_bridge_remove(&platform->bridge);
 
 	if (platform->pdata.intp_irq)
-		destroy_workqueue(platform->workqueue);
+		destroy_workqueue_with_sync_wait(platform->workqueue);
 
 	if (platform->hdcp_workqueue) {
 		cancel_delayed_work(&platform->hdcp_work);

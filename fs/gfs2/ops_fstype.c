@@ -1307,10 +1307,10 @@ fail_debug:
 	gfs2_delete_debugfs_file(sdp);
 	gfs2_sys_fs_del(sdp);
 fail_delete_wq:
-	destroy_workqueue(sdp->sd_delete_wq);
+	destroy_workqueue_with_sync_wait(sdp->sd_delete_wq);
 fail_glock_wq:
 	if (sdp->sd_glock_wq)
-		destroy_workqueue(sdp->sd_glock_wq);
+		destroy_workqueue_with_sync_wait(sdp->sd_glock_wq);
 fail_iput:
 	iput(sdp->sd_inode);
 fail_free:
@@ -1789,11 +1789,11 @@ static void gfs2_kill_sb(struct super_block *sb)
 
 	/*
 	 * Flush and then drain the delete workqueue here (via
-	 * destroy_workqueue()) to ensure that any delete work that
-	 * may be running will also see the SDF_KILL flag.
+	 * destroy_workqueue_with_sync_wait()) to ensure that any delete work
+	 * that may be running will also see the SDF_KILL flag.
 	 */
 	gfs2_flush_delete_work(sdp);
-	destroy_workqueue(sdp->sd_delete_wq);
+	destroy_workqueue_with_sync_wait(sdp->sd_delete_wq);
 
 	kill_block_super(sb);
 }

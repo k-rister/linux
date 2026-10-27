@@ -1999,7 +1999,7 @@ void gfs2_wait_glocks(struct gfs2_sbd *sdp)
 	gfs2_lm_unmount(sdp);
 	gfs2_free_dead_glocks(sdp);
 	glock_hash_walk(dump_glock_func, sdp);
-	destroy_workqueue(sdp->sd_glock_wq);
+	destroy_workqueue_with_sync_wait(sdp->sd_glock_wq);
 	sdp->sd_glock_wq = NULL;
 }
 

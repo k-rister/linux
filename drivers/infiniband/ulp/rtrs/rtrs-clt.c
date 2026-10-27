@@ -3226,7 +3226,7 @@ static int __init rtrs_client_init(void)
 
 static void __exit rtrs_client_exit(void)
 {
-	destroy_workqueue(rtrs_wq);
+	destroy_workqueue_with_sync_wait(rtrs_wq);
 	class_unregister(&rtrs_clt_dev_class);
 	rtrs_rdma_dev_pd_deinit(&dev_pd);
 }

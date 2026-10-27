@@ -3287,7 +3287,7 @@ int __init igmp6_late_init(void)
 void igmp6_cleanup(void)
 {
 	unregister_pernet_subsys(&igmp6_net_ops);
-	destroy_workqueue(mld_wq);
+	destroy_workqueue_with_sync_wait(mld_wq);
 }
 
 void igmp6_late_cleanup(void)

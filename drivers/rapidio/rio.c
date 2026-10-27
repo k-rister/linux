@@ -2002,7 +2002,7 @@ int rio_init_mports(void)
 
 	work = kzalloc_objs(*work, n);
 	if (!work) {
-		destroy_workqueue(rio_wq);
+		destroy_workqueue_with_sync_wait(rio_wq);
 		goto no_disc;
 	}
 

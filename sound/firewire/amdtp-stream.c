@@ -12,6 +12,7 @@
 #include <linux/firewire-constants.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/workqueue.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
 #include "amdtp-stream.h"
@@ -338,7 +339,7 @@ EXPORT_SYMBOL(amdtp_stream_get_max_payload);
  */
 void amdtp_stream_pcm_prepare(struct amdtp_stream *s)
 {
-	cancel_work_sync(&s->period_work);
+	cancel_work_sync_with_sync_wait(&s->period_work);
 	s->pcm_buffer_pointer = 0;
 	s->pcm_period_pointer = 0;
 }
@@ -1919,7 +1920,7 @@ static void amdtp_stream_stop(struct amdtp_stream *s)
 	if (!amdtp_stream_running(s))
 		return;
 
-	cancel_work_sync(&s->period_work);
+	cancel_work_sync_with_sync_wait(&s->period_work);
 	fw_iso_context_stop(s->context);
 	fw_iso_context_destroy(s->context);
 	s->context = ERR_PTR(-1);

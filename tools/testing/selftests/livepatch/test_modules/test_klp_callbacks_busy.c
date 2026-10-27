@@ -50,7 +50,7 @@ static int test_klp_callbacks_busy_init(void)
 		 * Serialize output: print all messages from the work
 		 * function before returning from init().
 		 */
-		flush_work(&work);
+		flush_work_with_sync_wait(&work);
 	}
 
 	return 0;
@@ -59,7 +59,7 @@ static int test_klp_callbacks_busy_init(void)
 static void test_klp_callbacks_busy_exit(void)
 {
 	WRITE_ONCE(block_transition, false);
-	flush_work(&work);
+	flush_work_with_sync_wait(&work);
 	pr_info("%s\n", __func__);
 }
 

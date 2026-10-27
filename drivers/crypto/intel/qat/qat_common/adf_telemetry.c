@@ -167,7 +167,7 @@ static void tl_work_handler(struct work_struct *work)
 	layout_sz = tl_data->layout_sz;
 
 	if (!atomic_read(&telemetry->state)) {
-		cancel_delayed_work_sync(&telemetry->work_ctx);
+		cancel_delayed_work_sync_with_sync_wait(&telemetry->work_ctx);
 		return;
 	}
 
@@ -201,7 +201,7 @@ int adf_tl_halt(struct adf_accel_dev *accel_dev)
 	struct device *dev = &GET_DEV(accel_dev);
 	int ret;
 
-	cancel_delayed_work_sync(&telemetry->work_ctx);
+	cancel_delayed_work_sync_with_sync_wait(&telemetry->work_ctx);
 	atomic_set(&telemetry->state, 0);
 
 	ret = adf_send_admin_tl_stop(accel_dev);

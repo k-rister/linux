@@ -63,7 +63,7 @@ void adf_timer_stop(struct adf_accel_dev *accel_dev)
 	if (!timer_ctx)
 		return;
 
-	cancel_delayed_work_sync(&timer_ctx->work_ctx);
+	cancel_delayed_work_sync_with_sync_wait(&timer_ctx->work_ctx);
 
 	kfree(timer_ctx);
 	accel_dev->timer = NULL;

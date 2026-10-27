@@ -136,7 +136,7 @@ static void gpio_keys_quiesce_key(void *data)
 	else if (bdata->debounce_use_hrtimer)
 		hrtimer_cancel(&bdata->debounce_timer);
 	else
-		cancel_delayed_work_sync(&bdata->work);
+		cancel_delayed_work_sync_with_sync_wait(&bdata->work);
 }
 
 /**

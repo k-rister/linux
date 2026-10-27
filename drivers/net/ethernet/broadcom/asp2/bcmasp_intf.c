@@ -1404,7 +1404,7 @@ int bcmasp_interface_suspend(struct bcmasp_intf *intf)
 		mutex_lock(&dev->phydev->lock);
 		dev->phydev->state = PHY_READY;
 		mutex_unlock(&dev->phydev->lock);
-		cancel_delayed_work_sync(&dev->phydev->state_queue);
+		cancel_delayed_work_sync_with_sync_wait(&dev->phydev->state_queue);
 
 		bcmasp_suspend_to_wol(intf);
 	} else {

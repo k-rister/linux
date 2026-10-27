@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 #include <linux/regulator/consumer.h>
 #include <linux/delay.h>
+#include <linux/workqueue.h>
 
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
@@ -392,7 +393,7 @@ static void tas5720_codec_remove(struct snd_soc_component *component)
 	struct tas5720_data *tas5720 = snd_soc_component_get_drvdata(component);
 	int ret;
 
-	cancel_delayed_work_sync(&tas5720->fault_check_work);
+	cancel_delayed_work_sync_with_sync_wait(&tas5720->fault_check_work);
 
 	ret = regulator_bulk_disable(ARRAY_SIZE(tas5720->supplies),
 				     tas5720->supplies);
@@ -432,7 +433,7 @@ static int tas5720_dac_event(struct snd_soc_dapm_widget *w,
 				msecs_to_jiffies(TAS5720_FAULT_CHECK_INTERVAL));
 	} else if (event & SND_SOC_DAPM_PRE_PMD) {
 		/* Disable TAS5720 periodic fault checking/handling */
-		cancel_delayed_work_sync(&tas5720->fault_check_work);
+		cancel_delayed_work_sync_with_sync_wait(&tas5720->fault_check_work);
 
 		/* Place TAS5720 in shutdown mode to minimize current draw */
 		ret = snd_soc_component_update_bits(component, TAS5720_POWER_CTRL_REG,

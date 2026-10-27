@@ -198,8 +198,8 @@ static void livepatch_shadow_mod_exit(void)
 	struct dummy *d, *tmp;
 
 	/* Wait for any dummies at work */
-	cancel_delayed_work_sync(&alloc_dwork);
-	cancel_delayed_work_sync(&cleanup_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&alloc_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&cleanup_dwork);
 
 	/* Cleanup residual dummies */
 	list_for_each_entry_safe(d, tmp, &dummy_list, list) {

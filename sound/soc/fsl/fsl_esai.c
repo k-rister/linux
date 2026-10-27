@@ -10,6 +10,7 @@
 #include <linux/of_irq.h>
 #include <linux/of_platform.h>
 #include <linux/pm_runtime.h>
+#include <linux/workqueue.h>
 #include <sound/dmaengine_pcm.h>
 #include <sound/pcm_params.h>
 
@@ -1103,7 +1104,7 @@ static void fsl_esai_remove(struct platform_device *pdev)
 	if (!pm_runtime_status_suspended(&pdev->dev))
 		fsl_esai_runtime_suspend(&pdev->dev);
 
-	cancel_work_sync(&esai_priv->work);
+	cancel_work_sync_with_sync_wait(&esai_priv->work);
 }
 
 static const struct of_device_id fsl_esai_dt_ids[] = {

@@ -1691,7 +1691,7 @@ static void work_stop(void)
 	}
 
 	if (process_workqueue) {
-		destroy_workqueue(process_workqueue);
+		destroy_workqueue_with_sync_wait(process_workqueue);
 		process_workqueue = NULL;
 	}
 }

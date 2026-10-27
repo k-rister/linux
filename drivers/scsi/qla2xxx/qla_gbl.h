@@ -97,6 +97,7 @@ extern int qla2x00_init_rings(scsi_qla_host_t *);
 extern struct qla_qpair *qla2xxx_create_qpair(struct scsi_qla_host *,
 	int, int, bool);
 extern int qla2xxx_delete_qpair(struct scsi_qla_host *, struct qla_qpair *);
+void qla2xxx_cancel_q_work_sync(struct work_struct *work);
 void qla2x00_handle_rscn(scsi_qla_host_t *vha, struct event_arg *ea);
 void qla24xx_handle_plogi_done_event(struct scsi_qla_host *vha,
 				     struct event_arg *ea);

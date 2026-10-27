@@ -11,6 +11,7 @@
 #include <linux/vmalloc.h>
 #include <linux/slab.h>
 #include <linux/list.h>
+#include <linux/smp.h>
 
 #include <scsi/scsi_tcq.h>
 #include <scsi/scsicam.h>
@@ -606,9 +607,9 @@ qla25xx_free_rsp_que(struct scsi_qla_host *vha, struct rsp_que *rsp)
 		rsp->msix->handle = NULL;
 	}
 
-	/* Flush any queued response work before freeing the queue/qpair. */
+	/* Cancel response work before freeing the queue/qpair. */
 	if (rsp->qpair && ha->wq)
-		cancel_work_sync_with_sync_wait(&rsp->qpair->q_work);
+		qla2xxx_cancel_q_work_sync(&rsp->qpair->q_work);
 
 	if (rsp->ring)
 		dma_free_coherent(&ha->pdev->dev,
@@ -849,6 +850,29 @@ static void qla_do_work(struct work_struct *work)
 	qla24xx_process_response_queue(vha, qpair->rsp);
 	spin_unlock_irqrestore(&qpair->qp_lock, flags);
 
+}
+
+/*
+ * q_work runs on ha->wq, a WQ_PERCPU | WQ_MEM_RECLAIM queue. Its rescuer can
+ * execute work away from the pool CPU, so coordinate every possible CPU while
+ * canceling it. Callers must quiesce the response-queue IRQ first.
+ */
+void qla2xxx_cancel_q_work_sync(struct work_struct *work)
+{
+	unsigned int cpu;
+
+	if (!work_busy(work))
+		return;
+
+	for_each_possible_cpu(cpu)
+		arch_smp_sync_wait_begin(cpu);
+	for_each_possible_cpu(cpu)
+		arch_smp_sync_wait_stop(cpu);
+
+	cancel_work_sync(work);
+
+	for_each_possible_cpu(cpu)
+		arch_smp_sync_wait_end(cpu);
 }
 
 /* create response queue */

@@ -10735,9 +10735,9 @@ int qla2xxx_delete_qpair(struct scsi_qla_host *vha, struct qla_qpair *qpair)
 
 	/*
 	 * The response-queue interrupt schedules qla_do_work(), which
-	 * dereferences qpair->rsp->req.  Release the interrupt and flush
-	 * any pending work before the request queue is freed below so a
-	 * late completion cannot touch the freed request queue.  The
+	 * dereferences qpair->rsp->req.  Release the interrupt and cancel
+	 * or wait for its work before the request queue is freed below so
+	 * a late completion cannot touch the freed request queue.  The
 	 * firmware queue-delete order (request then response) is kept.
 	 */
 	if (rsp && rsp->msix && rsp->msix->have_irq) {
@@ -10747,7 +10747,7 @@ int qla2xxx_delete_qpair(struct scsi_qla_host *vha, struct qla_qpair *qpair)
 		rsp->msix->handle = NULL;
 	}
 	if (rsp && ha->wq)
-		cancel_work_sync_with_sync_wait(&qpair->q_work);
+		qla2xxx_cancel_q_work_sync(&qpair->q_work);
 
 	ret = qla25xx_delete_req_que(vha, qpair->req);
 	if (ret != QLA_SUCCESS)

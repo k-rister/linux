@@ -930,7 +930,7 @@ static void nsim_dev_traps_exit(struct devlink *devlink)
 	struct nsim_dev *nsim_dev = devlink_priv(devlink);
 
 	/* caution, trap work takes devlink lock */
-	cancel_delayed_work_sync(&nsim_dev->trap_data->trap_report_dw);
+	cancel_delayed_work_sync_with_sync_wait(&nsim_dev->trap_data->trap_report_dw);
 	devl_traps_unregister(devlink, nsim_traps_arr,
 			      ARRAY_SIZE(nsim_traps_arr));
 	devl_trap_groups_unregister(devlink, nsim_trap_groups_arr,

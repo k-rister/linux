@@ -1596,7 +1596,7 @@ void mhi_ep_unregister_controller(struct mhi_ep_cntrl *mhi_cntrl)
 {
 	struct mhi_ep_device *mhi_dev = mhi_cntrl->mhi_dev;
 
-	destroy_workqueue(mhi_cntrl->wq);
+	destroy_workqueue_with_sync_wait(mhi_cntrl->wq);
 
 	free_irq(mhi_cntrl->irq, mhi_cntrl);
 

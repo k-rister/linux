@@ -3392,7 +3392,7 @@ static void wm8962_free_beep(struct snd_soc_component *component)
 	struct wm8962_priv *wm8962 = snd_soc_component_get_drvdata(component);
 
 	device_remove_file(component->dev, &dev_attr_beep);
-	cancel_work_sync(&wm8962->beep_work);
+	cancel_work_sync_with_sync_wait(&wm8962->beep_work);
 	wm8962->beep = NULL;
 
 	snd_soc_component_update_bits(component, WM8962_BEEP_GENERATOR_1, WM8962_BEEP_ENA,0);

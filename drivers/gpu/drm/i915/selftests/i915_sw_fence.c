@@ -571,7 +571,7 @@ static int test_ipc(void *arg)
 err_in:
 	free_fence(ipc.in);
 err_work:
-	destroy_workqueue(wq);
+	destroy_workqueue_with_sync_wait(wq);
 
 	return ret;
 }

@@ -3581,9 +3581,9 @@ static void __exit smc_exit(void)
 	smc_core_exit();
 	smc_ib_unregister_client();
 	smc_ism_exit();
-	destroy_workqueue(smc_close_wq);
-	destroy_workqueue(smc_tcp_ls_wq);
-	destroy_workqueue(smc_hs_wq);
+	destroy_workqueue_with_sync_wait(smc_close_wq);
+	destroy_workqueue_with_sync_wait(smc_tcp_ls_wq);
+	destroy_workqueue_with_sync_wait(smc_hs_wq);
 	proto_unregister(&smc_proto6);
 	proto_unregister(&smc_proto);
 	smc_pnet_exit();

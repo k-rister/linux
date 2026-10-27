@@ -6778,7 +6778,7 @@ static void snd_hdspm_card_free(struct snd_card *card)
 	struct hdspm *hdspm = card->private_data;
 
 	if (hdspm->port) {
-		cancel_work_sync(&hdspm->midi_work);
+		cancel_work_sync_with_sync_wait(&hdspm->midi_work);
 
 		/* stop th audio, and cancel all interrupts */
 		hdspm->control_register &=

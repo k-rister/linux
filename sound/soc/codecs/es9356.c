@@ -843,8 +843,8 @@ static int es9356_sdw_update_status(struct sdw_slave *slave,
 
 	if (status == SDW_SLAVE_UNATTACHED) {
 		es9356->hw_init = false;
-		cancel_delayed_work_sync(&es9356->interrupt_handle_work);
-		cancel_delayed_work_sync(&es9356->button_detect_work);
+		cancel_delayed_work_sync_with_sync_wait(&es9356->interrupt_handle_work);
+		cancel_delayed_work_sync_with_sync_wait(&es9356->button_detect_work);
 		regcache_cache_only(es9356->regmap, true);
 	}
 
@@ -1059,8 +1059,8 @@ static void es9356_sdw_remove(struct sdw_slave *slave)
 	struct es9356_sdw_priv *es9356 = dev_get_drvdata(&slave->dev);
 
 	if (es9356->hw_init) {
-		cancel_delayed_work_sync(&es9356->interrupt_handle_work);
-		cancel_delayed_work_sync(&es9356->button_detect_work);
+		cancel_delayed_work_sync_with_sync_wait(&es9356->interrupt_handle_work);
+		cancel_delayed_work_sync_with_sync_wait(&es9356->button_detect_work);
 	}
 
 	if (es9356->first_hw_init)
@@ -1081,8 +1081,8 @@ static int es9356_sdca_dev_suspend(struct device *dev)
 {
 	struct es9356_sdw_priv *es9356 = dev_get_drvdata(dev);
 
-	cancel_delayed_work_sync(&es9356->interrupt_handle_work);
-	cancel_delayed_work_sync(&es9356->button_detect_work);
+	cancel_delayed_work_sync_with_sync_wait(&es9356->interrupt_handle_work);
+	cancel_delayed_work_sync_with_sync_wait(&es9356->button_detect_work);
 
 	regcache_cache_only(es9356->regmap, true);
 

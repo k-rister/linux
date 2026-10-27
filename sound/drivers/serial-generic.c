@@ -20,6 +20,7 @@
 #include <linux/serdev.h>
 #include <linux/serial_reg.h>
 #include <linux/slab.h>
+#include <linux/workqueue.h>
 #include <linux/dev_printk.h>
 
 #include <sound/core.h>
@@ -245,7 +246,7 @@ static void snd_serial_generic_output_drain(struct snd_rawmidi_substream *substr
 
 	/* Flush any pending characters */
 	serdev_device_write_flush(drvdata->serdev);
-	cancel_work_sync(&drvdata->tx_work);
+	cancel_work_sync_with_sync_wait(&drvdata->tx_work);
 }
 
 static const struct snd_rawmidi_ops snd_serial_generic_output = {

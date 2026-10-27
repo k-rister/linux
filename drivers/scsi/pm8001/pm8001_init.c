@@ -1550,7 +1550,7 @@ static int __init pm8001_init(void)
 err_tp:
 	sas_release_transport(pm8001_stt);
 err_wq:
-	destroy_workqueue(pm8001_wq);
+	destroy_workqueue_with_sync_wait(pm8001_wq);
 err:
 	return rc;
 }

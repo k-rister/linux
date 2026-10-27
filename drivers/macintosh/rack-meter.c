@@ -25,6 +25,7 @@
 #include <linux/kernel_stat.h>
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
+#include <linux/workqueue.h>
 
 #include <asm/io.h>
 #include <asm/machdep.h>
@@ -284,8 +285,8 @@ static void rackmeter_init_cpu_sniffer(struct rackmeter *rm)
 
 static void rackmeter_stop_cpu_sniffer(struct rackmeter *rm)
 {
-	cancel_delayed_work_sync(&rm->cpu[0].sniffer);
-	cancel_delayed_work_sync(&rm->cpu[1].sniffer);
+	cancel_delayed_work_sync_with_sync_wait(&rm->cpu[0].sniffer);
+	cancel_delayed_work_sync_with_sync_wait(&rm->cpu[1].sniffer);
 }
 
 static int rackmeter_setup(struct rackmeter *rm)

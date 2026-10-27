@@ -1926,7 +1926,7 @@ static void clear_dapm_works(struct hdac_device *hdev)
 
 	list_for_each_entry(pin, &hdmi->pin_list, head)
 		for (i = 0; i < pin->num_ports; i++)
-			cancel_work_sync(&pin->ports[i].dapm_work);
+			cancel_work_sync_with_sync_wait(&pin->ports[i].dapm_work);
 }
 
 static int hdac_hdmi_dev_remove(struct hdac_device *hdev)

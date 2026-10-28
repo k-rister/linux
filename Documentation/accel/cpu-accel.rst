@@ -627,6 +627,12 @@ run-specific results must be recorded with the kernel build and test logs.
        processing, marks remaining entries for that WQ consumed, and drains
        the private queue before destroying it. The IDXD cdev object builds on
        this x86 host; no IDXD hardware is available for runtime validation.
+       OcteonTX2 MCS IRQs come from a separate PCI function, but their
+       enqueue path holds an RCU read section while using ``mcs->rvu``.
+       RVU teardown unpublishes those pointers and waits for a grace period
+       before draining and destroying the per-CPU queue. Later MCS IRQs see
+       no RVU pointer and cannot enqueue. This is source-only; no MCS hardware
+       is available for runtime validation.
      - The scripts cover selected producers and APIs, not every queue,
        callback, or synchronous wait site under load.
    * - ``mmap``/unmap and page-table changes on other CPUs

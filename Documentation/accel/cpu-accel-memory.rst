@@ -1987,8 +1987,9 @@ The implementation checkpoints are:
     now disables the IRQ before aborting transfers and flushing that queue;
     the reset path synchronizes the IRQ already disabled by its handler without
     adding another IRQ-disable depth. Controller unregister marks the instance
-    as shutting down, synchronizes the IRQ, cancels reset work, and then powers
-    down before destroying the queue. The IRQ handler acknowledges and exits
+    as shutting down, synchronizes the IRQ, cancels reset work with the
+    owner-aware helper, then powers down before destroying the queue. The IRQ
+    handler acknowledges and exits
     during unregister, and power-up rejects a late reset-worker restart. This
     closes the in-tree IRQ and reset-work producer paths before the drain. The
     MHI endpoint object builds, but this VM has no MHI endpoint hardware for a

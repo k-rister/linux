@@ -1618,7 +1618,7 @@ void mhi_ep_unregister_controller(struct mhi_ep_cntrl *mhi_cntrl)
 	/* Stop IRQ and reset-work producers before draining the endpoint workqueue. */
 	WRITE_ONCE(mhi_cntrl->unregistering, true);
 	synchronize_irq(mhi_cntrl->irq);
-	cancel_work_sync(&mhi_cntrl->reset_work);
+	cancel_work_sync_with_sync_wait(&mhi_cntrl->reset_work);
 	mhi_ep_power_down(mhi_cntrl);
 	destroy_workqueue_with_sync_wait(mhi_cntrl->wq);
 

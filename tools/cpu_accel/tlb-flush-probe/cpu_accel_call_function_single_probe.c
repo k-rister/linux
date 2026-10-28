@@ -228,6 +228,11 @@ static int probe_fire_irq_work(const char *value,
 	queue_count = atomic_read(&irq_work_queue_count);
 	callback_count_while_owner = atomic_read(&irq_work_callback_count);
 	if (!overflow_count || !queue_count || callback_count_while_owner) {
+		pr_info("cpu_accel_call_function_single_probe: mode=irq-work "
+			"pre_exit nmi_overflows=%d irq_work_queued=%d "
+			"irq_work_callback_count_while_owner=%d\n",
+			overflow_count, queue_count,
+			callback_count_while_owner);
 		cpu_accel_irq_work_probe_stop();
 		return -EIO;
 	}
@@ -244,8 +249,14 @@ static int probe_fire_irq_work(const char *value,
 	cpu_accel_irq_work_probe_stop();
 	callback_count_after_exit = atomic_read(&irq_work_callback_count);
 	if (atomic_read(&callback_count) != 1 ||
-	    callback_count_after_exit < queue_count)
+	    callback_count_after_exit < queue_count) {
+		pr_info("cpu_accel_call_function_single_probe: mode=irq-work "
+			"post_exit irq_work_queued=%d "
+			"irq_work_callback_count_after_exit=%d callback_count=%d\n",
+			queue_count, callback_count_after_exit,
+			atomic_read(&callback_count));
 		return -EIO;
+	}
 
 	pr_info("cpu_accel_call_function_single_probe: cpu=%d mode=irq-work "
 		"nmi_overflows=%d irq_work_queued=%d "

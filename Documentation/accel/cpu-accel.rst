@@ -534,9 +534,17 @@ run-specific results must be recorded with the kernel build and test logs.
        ``sysvec_irq_work()``, and accelerator exit ordering identifies the
        local-vector policy. The aggregate ``arch_irq_count`` includes
        ``IRQ_COUNT_IRQ_WORK`` deliveries.
-     - No run-specific result yet, and no callback-storm evidence.
-       ``arch_irq_count`` does not identify the callback or whether work
-       remained pending at exit.
+     - On 2026-10-28, one initial run returned ``-EIO`` without failure
+       counters. After adding failure-only probe diagnostics, 16 consecutive
+       bounded runs on
+       ``7.3.0-rc3-accel-tlbfix-02114-gb36ad836e944`` passed. Each queued one
+       item; callback count stayed zero during ownership and reached one after
+       exit. Runs observed 4-37 PMU overflows and 104-115 ms probe completion,
+       with no soft lockup, hung task, RCU stall, BUG, Oops, or panic. The
+       initial failure remains unexplained.
+     - No callback-storm, sustained-queue, or cross-class contention evidence;
+       these runs do not establish a latency bound. ``arch_irq_count`` does
+       not identify the callback or whether work remained pending at exit.
    * - Synchronous CPU calls and workqueue waits
      - **Owner-stop, then synchronous completion.** A synchronous waiter
        reserves the target, requests owner exit, and retains the reservation

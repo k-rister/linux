@@ -4676,15 +4676,18 @@ EXPORT_SYMBOL_GPL(flush_delayed_work_with_sync_wait);
  * Return:
  * %true if flush_rcu_work() waited for the work to finish execution,
  * %false if it was already idle.
+ *
+ * If @rwork was queued on a fixed-CPU workqueue, the flush coordinates with
+ * that CPU through the architecture synchronous CPU-wait hooks.
  */
 bool flush_rcu_work(struct rcu_work *rwork)
 {
 	if (test_bit(WORK_STRUCT_PENDING_BIT, work_data_bits(&rwork->work))) {
 		rcu_barrier();
-		flush_work(&rwork->work);
+		flush_work_with_sync_wait(&rwork->work);
 		return true;
 	} else {
-		return flush_work(&rwork->work);
+		return flush_work_with_sync_wait(&rwork->work);
 	}
 }
 EXPORT_SYMBOL(flush_rcu_work);

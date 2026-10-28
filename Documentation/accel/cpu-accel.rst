@@ -515,6 +515,12 @@ run-specific results must be recorded with the kernel build and test logs.
        direct queue-wide flush, drain, and destroy calls. Reviewed textual
        overlaps were separate queue objects or already used owner-aware waits;
        no additional direct same-queue raw wait was identified.
+       A cross-file per-item scan also matched the spelling ``&dma->work``
+       between ddbridge and NetUP. Source review confirmed distinct item types
+       and queues: ddbridge's ``struct ddb_dma`` uses the per-CPU ``ddb_wq``
+       and owner-aware cancellation, while NetUP's ``struct netup_dma`` uses
+       its own single-thread queue. This was a textual false positive, not a
+       raw wait on ddbridge's per-CPU queue.
      - The scripts cover selected producers and APIs, not every queue,
        callback, or synchronous wait site under load.
    * - ``mmap``/unmap and page-table changes on other CPUs

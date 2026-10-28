@@ -687,7 +687,21 @@ run-specific results must be recorded with the kernel build and test logs.
        3 s run:
        owner active time was 34.544 ms, recovery succeeded, and CPU 1 came
        online after owner exit.
-     - Repeated and loaded hotplug races remain unrepresented.
+       On 2026-10-28, four traced 3 s runs passed on kernel build ``#02114``
+       (``b36ad836e944``), with a busy loop pinned to CPU 4. Each trace showed
+       ``begin < owner_stop_request < owner_exit_complete < begin_done < try
+       < stop``, a successful inactive-CPU reservation and stop-machine
+       return, and CPU 1 online after cleanup. All four runs recorded the NMI
+       escape with Linux mode restored and no recovery attempt. Owner active
+       time ranged from 29.071 to 37.605 ms; the observed stop-request-to-owner
+       exit interval ranged from 11 to 16 us, and maintenance begin-to-return
+       ranged from 25 to 29 us. No soft-lockup, hung-task, or RCU-stall alert
+       appeared. These four samples are observations, not a worst-case bound.
+       A prior attempt with a stale controller reached its timed escape before
+       the test observed an active marker; it never launched CPU-up and is not
+       included in this count.
+     - Broader concurrent load, higher-volume repeated CPU-up and CPU-down
+       races, and a run-specific latency-tail report remain open.
    * - ``stop_machine()`` requests
      - **Owner-stop on sleepable paths; reject unscoped inactive rendezvous.**
        The public ``stop_machine()`` wrapper drains owners before taking
@@ -711,8 +725,10 @@ run-specific results must be recorded with the kernel build and test logs.
        inactive-CPU reservation returning true and stop-machine returning
        success. Candidate build ``#68`` passed one more traced CPU-up run with
        the same ordering, reservation true, and inactive stop-machine return
-       value zero.
-     - Repeated hotplug, caller lock ordering, a general
+       value zero. Kernel build ``#02114`` passed four additional loaded runs
+       with that trace order and successful inactive-CPU rendezvous; the
+       maximum observed owner-stop-request-to-exit interval was 16 us.
+     - Higher-volume hotplug, caller lock-order fault injection, a general
        ``stop_machine()`` fault injector, and disposition of out-of-tree direct
        ``stop_machine_cpuslocked()`` callers remain open.
    * - Memory pressure and reclaim

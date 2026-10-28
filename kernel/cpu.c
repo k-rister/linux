@@ -1633,7 +1633,20 @@ static int _cpu_up(unsigned int cpu, int tasks_frozen, enum cpuhp_state target)
 	struct cpuhp_cpu_state *st = per_cpu_ptr(&cpuhp_state, cpu);
 	struct task_struct *idle;
 	int ret = 0;
+#ifdef CONFIG_X86
+	bool accel_maintenance = system_state >= SYSTEM_RUNNING;
+#endif
 
+	/*
+	 * CPU startup can call stop_machine_from_inactive_cpu() from the AP
+	 * hotplug thread, where waiting for an owner is not possible. Close
+	 * admission and drain owners before the hotplug write lock, then keep
+	 * that reservation through the inactive-CPU rendezvous.
+	 */
+#ifdef CONFIG_X86
+	if (accel_maintenance)
+		x86_cpu_accel_cpu_up_maintenance_begin(cpu);
+#endif
 	cpus_write_lock();
 
 	if (!cpu_present(cpu)) {
@@ -1690,6 +1703,10 @@ static int _cpu_up(unsigned int cpu, int tasks_frozen, enum cpuhp_state target)
 out:
 	cpus_write_unlock();
 	arch_smt_update();
+#ifdef CONFIG_X86
+	if (accel_maintenance)
+		x86_cpu_accel_cpu_up_maintenance_end(cpu);
+#endif
 	return ret;
 }
 

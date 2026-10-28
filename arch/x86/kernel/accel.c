@@ -108,6 +108,8 @@ static struct task_struct *x86_cpu_accel_maintenance_owner;
 static unsigned int x86_cpu_accel_maintenance_depth;
 static bool x86_cpu_accel_maintenance;
 static bool x86_cpu_accel_maintenance_try;
+static int x86_cpu_accel_cpu_up_cpu = -1;
+static unsigned int x86_cpu_accel_cpu_up_depth;
 static unsigned int x86_cpu_accel_kgdb_breakpoints;
 
 static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets,
@@ -598,6 +600,41 @@ void x86_cpu_accel_maintenance_end(void)
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_maintenance_end);
 
+void x86_cpu_accel_cpu_up_maintenance_begin(unsigned int cpu)
+{
+	unsigned long flags;
+
+	x86_cpu_accel_maintenance_begin();
+	raw_spin_lock_irqsave(&x86_cpu_accel_ownership_lock, flags);
+	if (WARN_ON_ONCE(x86_cpu_accel_cpu_up_depth &&
+			 x86_cpu_accel_cpu_up_cpu != cpu)) {
+		raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
+		x86_cpu_accel_maintenance_end();
+		return;
+	}
+	x86_cpu_accel_cpu_up_cpu = cpu;
+	x86_cpu_accel_cpu_up_depth++;
+	raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
+}
+EXPORT_SYMBOL_GPL(x86_cpu_accel_cpu_up_maintenance_begin);
+
+void x86_cpu_accel_cpu_up_maintenance_end(unsigned int cpu)
+{
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&x86_cpu_accel_ownership_lock, flags);
+	if (WARN_ON_ONCE(!x86_cpu_accel_cpu_up_depth ||
+			 x86_cpu_accel_cpu_up_cpu != cpu)) {
+		raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
+		return;
+	}
+	if (!--x86_cpu_accel_cpu_up_depth)
+		x86_cpu_accel_cpu_up_cpu = -1;
+	raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
+	x86_cpu_accel_maintenance_end();
+}
+EXPORT_SYMBOL_GPL(x86_cpu_accel_cpu_up_maintenance_end);
+
 bool x86_cpu_accel_maintenance_try_begin(void)
 {
 	unsigned long flags;
@@ -614,6 +651,25 @@ bool x86_cpu_accel_maintenance_try_begin(void)
 	return acquired;
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_maintenance_try_begin);
+
+bool x86_cpu_accel_maintenance_try_begin_inactive(unsigned int cpu)
+{
+	unsigned long flags;
+	bool acquired = false;
+
+	raw_spin_lock_irqsave(&x86_cpu_accel_ownership_lock, flags);
+	if (!x86_cpu_accel_maintenance_try &&
+	    !atomic_read(&x86_cpu_accel_active_count) &&
+	    (!x86_cpu_accel_maintenance ||
+	     (x86_cpu_accel_cpu_up_depth && x86_cpu_accel_cpu_up_cpu == cpu))) {
+		x86_cpu_accel_maintenance_try = true;
+		acquired = true;
+	}
+	raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
+
+	return acquired;
+}
+EXPORT_SYMBOL_GPL(x86_cpu_accel_maintenance_try_begin_inactive);
 
 void x86_cpu_accel_maintenance_try_end(void)
 {

@@ -567,33 +567,51 @@ run-specific results must be recorded with the kernel build and test logs.
        and there is no resctrl-specific counter or policy for the remaining
        task-group and monitoring paths.
    * - CPU hotplug attempts
-     - **Owner-stop before offlining.** The offlining request waits until the
-       active owner exits, then removes the CPU.
+     - **Owner-stop before online or offline transitions.** The current source
+       closes owner admission and drains active owners before taking the
+       CPU-hotplug write lock. CPU-up carries a target-CPU reservation through
+       its inactive-CPU cache rendezvous.
      - ``test-cpu-accel.sh`` starts an active owner, requests offlining from
        CPU 0, and checks that the owner exits before the CPU goes offline.
-     - Repeated and loaded hotplug races are not represented by this case.
+       ``test-stop-machine-inactive-owner.sh`` now checks the CPU-up gate,
+       owner-exit ordering, and successful inactive-CPU rendezvous.
+     - On candidate build ``#65`` (``d08dba1``), the CPU-up test reproduced a
+       safety failure: the inactive stop-machine try gate returned ``-EBUSY``,
+       but the sysfs write returned success and CPU 1 became online while CPU
+       2 still owned the accelerator. On candidate build ``#66``
+       (``e406bf98cb01``), one run of the updated test passed: the trace showed
+       the ring-3 owner stop request and exit before the CPU-up maintenance
+       gate completed, followed by a successful inactive-CPU rendezvous and
+       CPU 1 online. The owner returned through the expected NMI escape path
+       with recovery successful and 31 ms of active time; the timed escape
+       fallback was not reached. Candidate build ``#67`` passed a repeat with
+       a 3 s configured run: the owner exited after 35.658 ms, recovery
+       succeeded, and CPU 1 came online. Repeated and loaded hotplug races
+       remain unrepresented.
    * - ``stop_machine()`` requests
-     - **Owner-stop on sleepable paths; conditional reject on inactive-CPU
-       rendezvous.** The public ``stop_machine()`` wrapper drains owners before
-       taking CPU-hotplug locks. Each in-tree x86 caller of
+     - **Owner-stop on sleepable paths; reject unscoped inactive rendezvous.**
+       The public ``stop_machine()`` wrapper drains owners before taking
+       CPU-hotplug locks. Each in-tree x86 caller of
        ``stop_machine_cpuslocked()`` has a caller-side maintenance gate before
-       its locks and rendezvous. When called,
-       ``stop_machine_from_inactive_cpu()`` uses a nonblocking reservation and
-       returns ``-EBUSY`` if an owner prevents it. The x86 cache-CPU-online
-       caller can skip that rendezvous when cache-control setup is disabled or
-       delayed AP initialization remains active. No in-tree x86 caller of
-       ``stop_core_cpuslocked()`` was found.
+       its locks and rendezvous. The cache-CPU-online rendezvous can proceed
+       inside the matching CPU-up reservation after owners have exited; an
+       unscoped inactive-CPU call still uses the nonblocking try gate. The
+       cache-CPU-online caller skips that rendezvous when cache-control setup
+       is disabled or delayed AP initialization remains active. No in-tree
+       x86 caller of ``stop_core_cpuslocked()`` was found.
      - The callsite review covers CPU hotplug, MTRR updates, late microcode,
        TDX module installation, and cache initialization. Existing CPU
-       hotplug and ftrace tests cover selected owner-stop paths. A bounded VM
-       probe confirmed the ring-3 owner was active before bringing CPU 3
-       online, but CPU 3 still came online. The test did not establish whether
-       the conditional cache rendezvous ran, so this is not a busy-reject
-       result.
-     - No general ``stop_machine()`` fault injector or counter proves which
-       conditional path ran. The active-owner CPU-up probe is inconclusive;
-       caller lock-order testing and disposition of out-of-tree direct
-       ``stop_machine_cpuslocked()`` callers also remain open.
+       hotplug and ftrace tests cover selected owner-stop paths. On candidate
+       build ``#65``, return probes confirmed that the CPU-up cache rendezvous
+       returned ``-EBUSY`` while its caller nevertheless brought the CPU
+       online. On candidate build ``#66`` the updated trace-order test passed:
+       ``begin < owner_stop_request < owner_exit_complete < begin_done < try
+       < stop``, with the reservation returning true and stop-machine returning
+       success. Candidate build ``#67`` repeated that trace order, with the
+       inactive-CPU reservation returning true and stop-machine returning
+       success. Repeated hotplug, caller lock ordering, a general
+       ``stop_machine()`` fault injector, and disposition of out-of-tree direct
+       ``stop_machine_cpuslocked()`` callers remain open.
    * - Memory pressure and reclaim
      - **Safe only on audited completion paths; otherwise synchronous.** A
        clean file-page reclaim probe waits for owner reconciliation. Dirty or

@@ -701,7 +701,8 @@ int stop_machine_from_inactive_cpu(cpu_stop_fn_t fn, void *data,
 	BUG_ON(cpu_active(raw_smp_processor_id()));
 	/* This context cannot sleep; abort if owners cannot be drained now. */
 #ifdef CONFIG_X86
-	if (!x86_cpu_accel_maintenance_try_begin())
+	if (!x86_cpu_accel_maintenance_try_begin_inactive(
+			raw_smp_processor_id()))
 		return -EBUSY;
 #endif
 	msdata.num_threads = num_active_cpus() + 1;	/* +1 for local */

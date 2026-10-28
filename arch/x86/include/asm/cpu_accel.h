@@ -59,8 +59,13 @@ bool x86_cpu_accel_any_active(void);
 /* Drain owners, block admission, and allow same-task nesting. */
 void x86_cpu_accel_maintenance_begin(void);
 void x86_cpu_accel_maintenance_end(void);
+/* Keep admission closed across a CPU-up transition and its inactive rendezvous. */
+void x86_cpu_accel_cpu_up_maintenance_begin(unsigned int cpu);
+void x86_cpu_accel_cpu_up_maintenance_end(unsigned int cpu);
 /* Succeed only with no owners; block admission until try_end(). */
 bool x86_cpu_accel_maintenance_try_begin(void);
+/* Also permit the matching CPU-up rendezvous inside its maintenance window. */
+bool x86_cpu_accel_maintenance_try_begin_inactive(unsigned int cpu);
 void x86_cpu_accel_maintenance_try_end(void);
 /* Keep owners out while KGDB software or hardware breakpoints are armed. */
 void x86_cpu_accel_kgdb_breakpoint_get(void);
@@ -165,7 +170,23 @@ static inline void x86_cpu_accel_maintenance_end(void)
 {
 }
 
+static inline void
+x86_cpu_accel_cpu_up_maintenance_begin(unsigned int cpu)
+{
+}
+
+static inline void
+x86_cpu_accel_cpu_up_maintenance_end(unsigned int cpu)
+{
+}
+
 static inline bool x86_cpu_accel_maintenance_try_begin(void)
+{
+	return true;
+}
+
+static inline bool
+x86_cpu_accel_maintenance_try_begin_inactive(unsigned int cpu)
 {
 	return true;
 }

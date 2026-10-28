@@ -799,14 +799,28 @@ run-specific results must be recorded with the kernel build and test logs.
        caller; no microcode update was run during Phase 8 validation.
      - Runtime update behavior, failure injection, event counters, and
        run-specific latency evidence remain open.
-   * - Suspend, hibernate, kexec, reboot, and panic paths
-     - **Unclassified as a group.** Normal owner-stop and module teardown
-       evidence does not establish the full-system suspend, image, restart, or
-       panic lifecycle contract.
-     - No Phase 8 lifecycle or failure-injection run for these operations is
+   * - Suspend and hibernate
+     - **Owner-drain gate spans CPU freeze through thaw.** The gate nests
+       with each CPU-hotplug transition and prevents admission on the retained
+       primary CPU.
+     - Source review covers the suspend, hibernate, and recovery call paths.
+       No Phase 8 suspend or hibernate lifecycle run is recorded.
+     - Failure injection and external continuity evidence remain open.
+   * - Kexec and kexec-jump
+     - **Normal kexec holds the owner-drain gate through its one-way
+       transfer.** Kexec-jump uses the suspend CPU freeze path and therefore
+       holds the gate until secondary CPUs are thawed.
+     - Source review covers both paths. No Phase 8 kexec lifecycle run is
        recorded.
-     - The admission or termination disposition and external continuity
-       evidence for each path remain open.
+     - Failure injection and external continuity evidence remain open.
+   * - Reboot and panic
+     - **Terminal CPU-stop paths; no sleepable owner-drain gate.** Normal
+       reboot sends the reboot vector and falls back to NMI; forced reboot can
+       skip stopping other CPUs. Panic uses the crash CPU-stop path.
+     - Source review covers the x86 stop paths. No Phase 8 reboot or panic
+       lifecycle run is recorded.
+     - Deterministic owner termination and external continuity evidence
+       remain open.
    * - Memory pressure and reclaim
      - **Safe only on audited completion paths; otherwise synchronous.** A
        clean file-page reclaim probe waits for owner reconciliation. Dirty or

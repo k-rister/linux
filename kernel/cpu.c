@@ -1914,12 +1914,25 @@ void __init bringup_nonboot_cpus(unsigned int max_cpus)
 
 #ifdef CONFIG_PM_SLEEP_SMP
 static cpumask_var_t frozen_cpus;
+#ifdef CONFIG_X86
+/* Protected by cpu_add_remove_lock across the freeze/thaw pair. */
+static bool x86_cpu_accel_freeze_maintenance;
+#endif
 
 int freeze_secondary_cpus(int primary)
 {
 	int cpu, error = 0;
 
 	cpu_maps_update_begin();
+	/*
+	 * Keep accelerator owners out for the entire suspend/hibernate window.
+	 * _cpu_down() nests this gate while CPUs are removed, but its per-CPU
+	 * release would otherwise allow an owner onto the retained primary CPU.
+	 */
+#ifdef CONFIG_X86
+	x86_cpu_accel_maintenance_begin();
+	x86_cpu_accel_freeze_maintenance = true;
+#endif
 	if (primary == -1) {
 		primary = cpumask_first(cpu_online_mask);
 		if (!housekeeping_cpu(primary, HK_TYPE_TIMER))
@@ -2011,6 +2024,14 @@ void thaw_secondary_cpus(void)
 	cpumask_clear(frozen_cpus);
 out:
 	cpu_maps_update_done();
+#ifdef CONFIG_X86
+	/* Release only a gate acquired by freeze_secondary_cpus(). */
+	if (x86_cpu_accel_freeze_maintenance) {
+		x86_cpu_accel_freeze_maintenance = false;
+		/* All frozen CPUs are back before accelerator admission reopens. */
+		x86_cpu_accel_maintenance_end();
+	}
+#endif
 }
 
 static int __init alloc_frozen_cpus(void)

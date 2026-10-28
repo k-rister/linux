@@ -424,8 +424,16 @@ run-specific results must be recorded with the kernel build and test logs.
      - **Deferred only while maskable interrupts are disabled.** There is no
        general timer ownership or housekeeping-routing policy for an active
        CPU. Timer migration maintenance requests owner stop.
-     - ``test-sync-work-owner-stop.sh`` has a ``timer_migration`` case.
-       Timer and hrtimer softirq deltas are reported.
+     - On 2026-10-28, the ``test-sync-work-owner-stop.sh``
+       ``timer_migration`` case passed on
+       ``7.3.0-rc3-accel-tlbfix-phase8-irq-d08dba1-02098-gd08dba1bad4f``.
+       The CPU1 owner-stop request came from a cpuset partition transition;
+       its triggered stack contained ``housekeeping_update()`` and
+       ``cpuset_partition_write()``, followed by the matching owner-exit event.
+       The trigger completed in 17 ms. The result reported
+       ``state=7``, ``recovery_state=2``, ``user_active_ns=15253680``,
+       ``timer_softirq_count=0``, and ``hrtimer_softirq_count=0``. The run's
+       dmesg and kernel-error deltas were empty.
      - No local-timer storm test; softirq counts do not count individual
        timer callbacks or bound their latency.
    * - RCU callbacks

@@ -234,7 +234,9 @@ for function in cpuset_partition_write wait_attach_done_lock update_prstate \
 	cpuset_update_sd_hk_unlock hk_sd_workfn housekeeping_update \
 	pci_probe_flush_workqueue mem_cgroup_flush_workqueue \
 	vmstat_flush_workqueue workqueue_unbound_housekeeping_update \
-	tmigr_isolated_exclude_cpumask tmigr_cpu_isolate tmigr_cpu_unisolate; do
+	tmigr_isolated_exclude_cpumask tmigr_cpu_isolate tmigr_cpu_unisolate \
+	arch_smp_sync_wait_begin arch_smp_sync_wait_stop arch_smp_sync_wait_end \
+	x86_cpu_accel_request_stop_owner_gen; do
 	grep -qw "$function" "$trace_root/available_filter_functions" || \
 		fail "timer migration trace function is unavailable: $function"
 done
@@ -291,6 +293,8 @@ printf '%s\n' x86_cpu_accel_user_enter cpuset_partition_write \
 	housekeeping_update pci_probe_flush_workqueue mem_cgroup_flush_workqueue \
 	vmstat_flush_workqueue workqueue_unbound_housekeeping_update \
 	tmigr_isolated_exclude_cpumask tmigr_cpu_isolate tmigr_cpu_unisolate \
+	arch_smp_sync_wait_begin arch_smp_sync_wait_stop arch_smp_sync_wait_end \
+	x86_cpu_accel_request_stop_owner_gen \
 	>"$instance/set_ftrace_filter"
 if should_run_case vmalloc_purge_wait; then
 	printf '%s\n' __purge_vmap_area_lazy purge_vmap_node flush_work \
@@ -347,12 +351,20 @@ run_case()
 	case_cpu=${6:-$target_cpu}
 	owner_cgroup=${7:-}
 	case_escape_ms=$escape_ms
+	active_marker="$outdir/$name-active"
 	if [ "$name" = vmalloc_purge_wait ]; then
 		case_escape_ms=100
 	fi
 	entry_count=$(grep -Fc 'x86_cpu_accel_user_enter();' "$outdir/trace.log" || true)
 
-	if [ -n "$owner_cgroup" ]; then
+	if [ "$name" = timer_migration ]; then
+		rm -f "$active_marker"
+		CPU_ACCEL_ACTIVE_MARKER="$active_marker" "$tool" run \
+			--cpu "$case_cpu" --duration-ms 5000 --period-us 1000 \
+			--workload user-hang --escape-after-ms "$case_escape_ms" \
+			--escape-retries 1 --worker-cgroup "$owner_cgroup" \
+			>"$outdir/$name-ctl.log" 2>&1 &
+	elif [ -n "$owner_cgroup" ]; then
 		taskset -c "$work_cpu" "$tool" run --cpu "$case_cpu" \
 			--duration-ms 5000 --period-us 1000 --workload user-hang \
 			--escape-after-ms "$case_escape_ms" --escape-retries 1 \
@@ -367,8 +379,17 @@ run_case()
 	run_pid=$!
 	ready=0
 	for n in $(seq 1 300); do
-		count=$(grep -Fc 'x86_cpu_accel_user_enter();' "$outdir/trace.log" || true)
-		if [ "$count" -gt "$entry_count" ]; then
+		if [ "$name" = timer_migration ]; then
+			ready=0
+			if [ -s "$active_marker" ] &&
+			   [ "$(cat "$active_marker")" = active ]; then
+				ready=1
+			fi
+		else
+			count=$(grep -Fc 'x86_cpu_accel_user_enter();' "$outdir/trace.log" || true)
+			[ "$count" -gt "$entry_count" ] && ready=1 || ready=0
+		fi
+		if [ "$ready" -eq 1 ]; then
 			ready=1
 			break
 		fi
@@ -477,35 +498,75 @@ run_case()
 	[ "$helper_elapsed_ms" -lt "$max_helper_elapsed_ms" ] || \
 		fail "$name trigger waited ${helper_elapsed_ms} ms (limit ${max_helper_elapsed_ms} ms) for timed owner escape"
 
-	if ! awk -v target="$case_cpu" -v caller="$expected_caller" '
-function number(line, name, rest, pos)
+	stack_caller=
+	if [ "$name" = timer_migration ]; then
+		stack_caller=housekeeping_update
+	fi
+	# Function-graph tracing can expose its return trampoline as the event
+	# caller. For timer migration, accept that only when the trigger stack
+	# proves the request came through housekeeping_update().
+	if ! awk -v target="$case_cpu" -v caller="$expected_caller" \
+		-v stack_caller="$stack_caller" '
+function field(line, name, value, pos)
 {
 	pos = index(line, name "=")
 	if (!pos)
 		return ""
-	rest = substr(line, pos + length(name) + 1)
-	sub(/[^0-9].*$/, "", rest)
-	return rest
+	value = substr(line, pos + length(name) + 1)
+	sub(/[^[:alnum:]_].*$/, "", value)
+	return value
 }
-function caller_matches(line, expected, parts, count, i)
+function caller_matches(line, expected, actual, parts, count, i)
 {
+	actual = field(line, "caller")
 	count = split(expected, parts, "|")
 	for (i = 1; i <= count; i++) {
-		if (index(line, "caller=" parts[i]))
+		if (actual == parts[i])
 			return 1
 	}
 	return 0
 }
 /owner_stop_request:/ {
-	if (number($0, "cpu") == target && caller_matches($0, caller) &&
-	    index($0, "stop_cb=1") && index($0, "sent=1")) {
-		owner = number($0, "owner")
-		stop_line = NR
+	pending = 0
+	stack_active = 0
+	if (field($0, "cpu") == target) {
+		owner = ""
+		stop_line = 0
+		if (field($0, "stop_cb") == "1" && field($0, "sent") == "1") {
+			this_owner = field($0, "owner")
+			if (caller_matches($0, caller)) {
+				owner = this_owner
+				stop_line = NR
+			} else if (stack_caller != "" &&
+				   field($0, "caller") == "return_to_handler") {
+				pending = 1
+				pending_owner = this_owner
+				pending_line = NR
+			}
+	}
+}
+}
+/<stack trace>/ {
+	if (pending)
+		stack_active = 1
+	next
+}
+{
+	if (pending && stack_active) {
+		if (index($0, "=> " stack_caller)) {
+			owner = pending_owner
+			stop_line = pending_line
+			pending = 0
+			stack_active = 0
+		} else if ($0 !~ /=>/) {
+			pending = 0
+			stack_active = 0
+		}
 	}
 }
 /owner_exit_complete:/ {
-	if (number($0, "cpu") == target && number($0, "owner") == owner &&
-	    index($0, "stop_requested=1"))
+	if (field($0, "cpu") == target && field($0, "owner") == owner &&
+	    field($0, "stop_requested") == "1")
 		exit_line = NR
 }
 END {
@@ -695,14 +756,10 @@ if should_run_case timer_migration; then
 	timer_mems=$(cat "$cpuset_root/cpuset.mems.effective")
 	echo "$timer_mems" >"$timer_cgroup/cpuset.mems"
 	timer_stop_trigger="$instance/events/cpu_accel/owner_stop_request/trigger"
-	if [ "${CPU_ACCEL_TIMER_TRACE_STACK:-0}" -eq 1 ]; then
-		echo stacktrace:1 >"$timer_stop_trigger"
-	fi
+	echo stacktrace:1 >"$timer_stop_trigger"
 	run_case timer_migration "$timer_partition" \
 		housekeeping_update isolated sysfs "$timer_cpu" "$timer_cgroup"
-	if [ "${CPU_ACCEL_TIMER_TRACE_STACK:-0}" -eq 1 ]; then
-		echo '!stacktrace:1' >"$timer_stop_trigger"
-	fi
+	echo '!stacktrace:1' >"$timer_stop_trigger"
 	echo member >"$timer_partition"
 	rmdir "$timer_cgroup"
 	timer_cgroup_created=0

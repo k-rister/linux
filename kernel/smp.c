@@ -71,6 +71,11 @@ void __weak arch_smp_sync_wait_end(int cpu)
 	(void)cpu;
 }
 
+/* Modular subsystem callers use these hooks around synchronous CPU waits. */
+EXPORT_SYMBOL_GPL(arch_smp_sync_wait_begin);
+EXPORT_SYMBOL_GPL(arch_smp_sync_wait_stop);
+EXPORT_SYMBOL_GPL(arch_smp_sync_wait_end);
+
 int smpcfd_prepare_cpu(unsigned int cpu)
 {
 	struct call_function_data *cfd = &per_cpu(cfd_data, cpu);

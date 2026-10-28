@@ -390,6 +390,13 @@ run-specific results must be recorded with the kernel build and test logs.
      - ``test-cpu-accel.sh`` has an optional ``--quarantine-irqs`` path;
        shared results report moved IRQs and blockers.
      - No IRQ-storm fault injector or post-admission affinity-change test.
+       Source review also found reservation-check bypasses: generic default
+       affinity setup, managed IRQ startup, and pending IRQ moves call
+       ``irq_do_set_affinity()`` directly.  Unlike
+       ``irq_set_affinity_locked()``, that helper does not reject masks that
+       include a CPU reserved by an active accelerator.  An internal update
+       applying such a mask can therefore route an IRQ back to the CPU after
+       admission; enforcement and runtime coverage remain open.
    * - Local timers and timer activity
      - **Deferred only while maskable interrupts are disabled.** There is no
        general timer ownership or housekeeping-routing policy for an active

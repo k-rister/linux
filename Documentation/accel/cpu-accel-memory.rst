@@ -1948,3 +1948,18 @@ The implementation checkpoints are:
     ``xe_hw_engine_group.o`` compiled successfully; runtime testing is
     unavailable because the VM has no Xe GPU. The broader Phase 8 wait-site
     and isolation audit remains open.
+
+    A follow-up scan of raw synchronous-work matches in files declaring
+    ``WQ_PERCPU`` traced the remaining candidate waits to their queues and
+    producers. The qla2xxx response-queue helper holds explicit owner
+    reservations around its per-CPU work cancellation; its DPC queues are
+    ordered. NVMe target/TCP control work and VDUSE device-level IRQ injection
+    use unbound queues, while VDUSE per-vq injection already uses the
+    owner-aware cancel helper. RBD's lock and watch work uses an ordered queue;
+    SCSI host work is unbound and Fibre Channel's per-CPU flush paths use the
+    owner-aware helpers. The target-core TMR wait is enclosed by explicit
+    synchronous-call reservations. Other matches were comments, callback
+    names, or the disabled Quantenna path. No unguarded raw wait on an enabled
+    ``WQ_PERCPU`` queue was found among these candidates. This bounded scan
+    does not cover every cross-file work producer or non-workqueue wait site;
+    Phase 8 remains open.

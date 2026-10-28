@@ -18,6 +18,9 @@ test-perf-owner-stop: cpu-accelctl test-perf-event-open
 	CPU_ACCELCTL=./cpu-accelctl CPU_ACCEL_PERF_EVENT_HELPER=./test-perf-event-open \
 		sh ./test-perf-owner-stop.sh
 
+test-irq-storm: cpu-accelctl
+	CPU_ACCELCTL=./cpu-accelctl sh ./test-irq-storm.sh
+
 cpu-accelctl: cpu-accelctl.o libcpu_accel.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
@@ -51,4 +54,5 @@ clean:
 		test-perf-event-open test-perf-event-open.o \
 		cpu-accelctl.o libcpu_accel.o
 
-.PHONY: all clean test test-sync-work-owner-stop test-perf-owner-stop
+.PHONY: all clean test test-sync-work-owner-stop test-perf-owner-stop \
+	test-irq-storm

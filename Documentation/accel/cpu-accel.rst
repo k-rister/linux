@@ -397,9 +397,17 @@ run-specific results must be recorded with the kernel build and test logs.
        it checks moved IRQs, zero blockers, and zero measured ``irq_count`` for
        kernel, shared-memory, and ring-3 workloads. IRQ KUnit coverage checks
        default startup/internal updates and managed shutdown/restart around an
-       active reservation.
-     - No IRQ-storm fault injector; the new KUnit cases compile but have not
-       run, and no post-admission IRQ-stress run has been recorded.
+       active reservation. ``test-irq-storm.sh`` applies bounded ping-flood
+       traffic to a selected NIC while a persistent timestamp workload owns
+       the target CPU; it checks effective IRQ affinities and per-vector
+       delivery deltas as well as the accelerator IRQ counters. Run it via
+       ``make -C tools/cpu_accel test-irq-storm`` with
+       ``CPU_ACCEL_CPU``, ``CPU_ACCEL_IRQ_INTERFACE``, and
+       ``CPU_ACCEL_IRQ_STORM_HOST`` set.
+     - No run-specific IRQ-stress result is recorded against the current
+       reservation-enforcing kernel. The new KUnit cases compile but have not
+       run. Software IRQ injection is not used because the x86 injection path
+       can prematurely complete an affinity change.
    * - Local timers and timer activity
      - **Deferred only while maskable interrupts are disabled.** There is no
        general timer ownership or housekeeping-routing policy for an active

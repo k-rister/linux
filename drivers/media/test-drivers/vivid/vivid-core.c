@@ -854,6 +854,7 @@ static void vivid_dev_release(struct v4l2_device *v4l2_dev)
 	struct vivid_dev *dev = container_of(v4l2_dev, struct vivid_dev, v4l2_dev);
 
 	cancel_work_sync_with_sync_wait(&dev->update_hdmi_ctrl_work);
+	cancel_work_sync_with_sync_wait(&dev->update_svid_ctrl_work);
 	vivid_free_controls(dev);
 	v4l2_device_unregister(&dev->v4l2_dev);
 #ifdef CONFIG_MEDIA_CONTROLLER
@@ -1758,6 +1759,7 @@ static int vivid_create_devnodes(struct platform_device *pdev,
 
 static void update_hdmi_ctrls_work_handler(struct work_struct *work)
 {
+	struct vivid_dev *dev;
 	u64 skip_mask;
 	u64 update_mask;
 
@@ -1766,11 +1768,14 @@ static void update_hdmi_ctrls_work_handler(struct work_struct *work)
 	update_mask = hdmi_input_update_outputs_mask;
 	hdmi_input_update_outputs_mask = 0;
 	spin_unlock(&hdmi_output_skip_mask_lock);
-	for (int i = 0; i < n_devs && vivid_devs[i]; i++) {
+	for (int i = 0; i < n_devs; i++) {
+		dev = READ_ONCE(vivid_devs[i]);
+		if (!dev)
+			break;
 		if (update_mask & (1 << i))
-			vivid_update_connected_outputs(vivid_devs[i]);
-		for (int j = 0; j < vivid_devs[i]->num_hdmi_inputs; j++) {
-			struct v4l2_ctrl *c = vivid_devs[i]->ctrl_hdmi_to_output[j];
+			vivid_update_connected_outputs(dev);
+		for (int j = 0; j < dev->num_hdmi_inputs; j++) {
+			struct v4l2_ctrl *c = dev->ctrl_hdmi_to_output[j];
 
 			v4l2_ctrl_modify_range(c, c->minimum, c->maximum,
 					       skip_mask & ~(1ULL << c->cur.val),
@@ -1781,14 +1786,18 @@ static void update_hdmi_ctrls_work_handler(struct work_struct *work)
 
 static void update_svid_ctrls_work_handler(struct work_struct *work)
 {
+	struct vivid_dev *dev;
 	u64 skip_mask;
 
 	spin_lock(&svid_output_skip_mask_lock);
 	skip_mask = svid_to_output_menu_skip_mask;
 	spin_unlock(&svid_output_skip_mask_lock);
-	for (int i = 0; i < n_devs && vivid_devs[i]; i++) {
-		for (int j = 0; j < vivid_devs[i]->num_svid_inputs; j++) {
-			struct v4l2_ctrl *c = vivid_devs[i]->ctrl_svid_to_output[j];
+	for (int i = 0; i < n_devs; i++) {
+		dev = READ_ONCE(vivid_devs[i]);
+		if (!dev)
+			break;
+		for (int j = 0; j < dev->num_svid_inputs; j++) {
+			struct v4l2_ctrl *c = dev->ctrl_svid_to_output[j];
 
 			v4l2_ctrl_modify_range(c, c->minimum, c->maximum,
 					       skip_mask & ~(1ULL << c->cur.val),
@@ -2150,13 +2159,16 @@ static int vivid_probe(struct platform_device *pdev)
 
 static void vivid_remove(struct platform_device *pdev)
 {
+	struct vivid_dev *devs[VIVID_MAX_DEVS] = {};
 	struct vivid_dev *dev;
 	unsigned int i, j;
 
 	for (i = 0; i < n_devs; i++) {
-		dev = vivid_devs[i];
+		dev = READ_ONCE(vivid_devs[i]);
+		devs[i] = dev;
 		if (!dev)
 			continue;
+		WRITE_ONCE(vivid_devs[i], NULL);
 
 		if (dev->disconnect_error)
 			vivid_reconnect(dev);
@@ -2221,9 +2233,15 @@ static void vivid_remove(struct platform_device *pdev)
 			cec_unregister_adapter(dev->cec_tx_adap[j]);
 		if (dev->kthread_cec)
 			kthread_stop(dev->kthread_cec);
-		v4l2_device_put(&dev->v4l2_dev);
-		vivid_devs[i] = NULL;
 	}
+
+	/* Global control workers may have already picked up one of these devices. */
+	drain_workqueue_with_sync_wait(update_svid_ctrls_workqueue);
+	drain_workqueue_with_sync_wait(update_hdmi_ctrls_workqueue);
+
+	for (i = 0; i < n_devs; i++)
+		if (devs[i])
+			v4l2_device_put(&devs[i]->v4l2_dev);
 }
 
 static void vivid_pdev_release(struct device *dev)
@@ -2288,34 +2306,34 @@ static int __init vivid_init(void)
 			}
 		}
 	}
-	ret = platform_device_register(&vivid_pdev);
-	if (ret) {
-		platform_device_put(&vivid_pdev);
-		goto free_output_strings;
-	}
-	ret = platform_driver_register(&vivid_pdrv);
-	if (ret)
-		goto unreg_device;
-
-	/* Initialize workqueue before module is loaded */
+	/* Initialize workqueues before the driver can expose control callbacks. */
 	update_hdmi_ctrls_workqueue = create_workqueue("update_hdmi_ctrls_wq");
 	if (!update_hdmi_ctrls_workqueue) {
 		ret = -ENOMEM;
-		goto unreg_driver;
+		goto free_output_strings;
 	}
 	update_svid_ctrls_workqueue = create_workqueue("update_svid_ctrls_wq");
 	if (!update_svid_ctrls_workqueue) {
 		ret = -ENOMEM;
 		goto destroy_hdmi_wq;
 	}
+
+	ret = platform_device_register(&vivid_pdev);
+	if (ret) {
+		platform_device_put(&vivid_pdev);
+		goto destroy_svid_wq;
+	}
+	ret = platform_driver_register(&vivid_pdrv);
+	if (ret)
+		goto unreg_device;
 	return ret;
 
-destroy_hdmi_wq:
-	destroy_workqueue_with_sync_wait(update_hdmi_ctrls_workqueue);
-unreg_driver:
-	platform_driver_unregister(&vivid_pdrv);
 unreg_device:
 	platform_device_unregister(&vivid_pdev);
+destroy_svid_wq:
+	destroy_workqueue_with_sync_wait(update_svid_ctrls_workqueue);
+destroy_hdmi_wq:
+	destroy_workqueue_with_sync_wait(update_hdmi_ctrls_workqueue);
 free_output_strings:
 	for (int i = FIXED_MENU_ITEMS; i < MAX_MENU_ITEMS; i++) {
 		kfree(vivid_ctrl_hdmi_to_output_strings[i]);
@@ -2326,14 +2344,14 @@ free_output_strings:
 
 static void __exit vivid_exit(void)
 {
+	platform_driver_unregister(&vivid_pdrv);
+	platform_device_unregister(&vivid_pdev);
+	destroy_workqueue_with_sync_wait(update_svid_ctrls_workqueue);
+	destroy_workqueue_with_sync_wait(update_hdmi_ctrls_workqueue);
 	for (int i = FIXED_MENU_ITEMS; i < MAX_MENU_ITEMS; i++) {
 		kfree(vivid_ctrl_hdmi_to_output_strings[i]);
 		kfree(vivid_ctrl_svid_to_output_strings[i]);
 	}
-	destroy_workqueue_with_sync_wait(update_svid_ctrls_workqueue);
-	destroy_workqueue_with_sync_wait(update_hdmi_ctrls_workqueue);
-	platform_driver_unregister(&vivid_pdrv);
-	platform_device_unregister(&vivid_pdev);
 }
 
 module_init(vivid_init);

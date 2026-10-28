@@ -48,8 +48,8 @@ esac
 case "$packets" in
 	''|*[!0-9]*) fail "CPU_ACCEL_IRQ_STORM_PACKETS must be an integer" ;;
 esac
-[ "$duration" -ge 1 ] && [ "$duration" -le 5 ] || \
-	fail "CPU_ACCEL_IRQ_STORM_SECONDS must be between 1 and 5"
+[ "$duration" -ge 1 ] && [ "$duration" -le 4 ] || \
+	fail "CPU_ACCEL_IRQ_STORM_SECONDS must be between 1 and 4"
 [ "$packets" -ge 1 ] && [ "$packets" -le 5000 ] || \
 	fail "CPU_ACCEL_IRQ_STORM_PACKETS must be between 1 and 5000"
 traffic_cpu=0
@@ -154,7 +154,7 @@ done
 [ "$initial_target_irq" -eq 1 ] || \
 	fail "NIC IRQs were already off CPU $target_cpu; cannot verify quarantine routing"
 
-"$tool" run --cpu "$target_cpu" --duration-ms 10000 --period-us 1000 \
+"$tool" run --cpu "$target_cpu" --duration-ms 5000 --period-us 1000 \
 	--workload timestamp --persistent --quarantine-irqs \
 	>"$run_output" 2>&1 &
 run_pid=$!

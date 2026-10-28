@@ -451,19 +451,32 @@ run-specific results must be recorded with the kernel build and test logs.
      - No local-timer storm test; softirq counts do not count individual
        timer callbacks or bound their latency.
    * - RCU callbacks
-     - **Owner-stop for selected synchronous waits; otherwise unclassified.**
-       The IRQ quarantine is not an RCU callback-routing mechanism.
-     - The sync-work test covers selected RCU sheaf and SRCU cleanup paths;
-       ``rcu_softirq_count`` reports the softirq vector. A 2026-10-28 source
-       audit found that generic ``handle_softirqs()`` dispatches a pending
-       ``RCU_SOFTIRQ`` without an accelerator-owner gate. The RCU nocb
-       transition helper rejects offload changes for online CPUs, so routing
-       must be established before owner admission rather than enabled as the
-       owner starts.
-     - No fault-injected asynchronous callback during ownership, per-callback
-       count, callback storm, or general routing proof. ``rcu_softirq_count``
-       counts vector dispatches, not callbacks, and admission does not require
-       the target CPU to have boot-time RCU callback offload enabled.
+     - **Enforced policy.** x86 admission requires
+       the target CPU to be both RCU-offloaded and outside
+       ``HK_TYPE_RCU`` housekeeping CPUs. The per-CPU nocb callback kthread and
+       its grace-period kthread are bound to the RCU housekeeping mask with
+       ``kthread_bind_mask()``, preventing userspace affinity and cpuset
+       changes from moving them onto an isolated owner CPU. The isolation
+       policy comes from the boot-time ``nohz_full=`` mask; admission returns
+       ``-EOPNOTSUPP`` if the target remains an RCU housekeeping CPU.
+     - On candidate ``7.3.0-rc3-accel-tlbfix-02104-ge406bf98cb01-dirty``
+       build ``#67``, ``test-rcu-nocb-admission.sh`` passed: CPU 1 was rejected
+       because it lacks callback offload, while CPU 2 completed a 100 ms
+       ring-3 run with 100 samples and no escape. Every ``rcuop/*`` and
+       ``rcuog/*`` thread had ``Cpus_allowed_list=0-1,3-7``; a ``taskset``
+       attempt to move a callback worker to CPU 2 was rejected because the
+       kthread has ``PF_NO_SETAFFINITY`` set.
+     - On the same build, ``test-rcu-callback-routing.sh`` passed with 64 of
+       64 callbacks completed on CPU 6 while the CPU 2 owner was active;
+       ``target_callbacks=0``. The first callback completed 990 ms after the
+       owner interval began, and the owner completed its 4.762 s interval with
+       2,048 samples, no user escape, and ``recovery_state=0``. The harness
+       waits for module-init reclamation to drain before holding its RCU reader:
+       that cleanup uses ``execmem_free()`` and a global kernel TLB flush, which
+       correctly stops an active owner if the test delays its grace period.
+       This bounded batch does not cover a sustained callback storm or
+       establish a latency bound. ``rcu_softirq_count`` counts softirq-vector
+       dispatches, not individual callbacks.
    * - Scheduler and ordinary task placement
      - **Deferred selectively.** Reschedule IPIs are counted and replayed
        after owner exit. The prototype reserves the target for selected

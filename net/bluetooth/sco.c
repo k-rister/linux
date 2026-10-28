@@ -90,7 +90,7 @@ static void sco_conn_free(struct kref *ref)
 	}
 
 	/* Ensure no more work items will run since hci_conn has been dropped */
-	disable_delayed_work_sync(&conn->timeout_work);
+	disable_delayed_work_sync_with_sync_wait(&conn->timeout_work);
 
 	kfree(conn);
 }
@@ -583,7 +583,7 @@ static void sco_sock_close(struct sock *sk)
 	release_sock(sk);
 
 	if (conn)
-		disable_delayed_work_sync(&conn->timeout_work);
+		disable_delayed_work_sync_with_sync_wait(&conn->timeout_work);
 
 	lock_sock(sk);
 	__sco_sock_close(sk);

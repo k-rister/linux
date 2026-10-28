@@ -947,11 +947,12 @@ void rvu_mcs_exit(struct rvu *rvu)
 	if (!rvu->mcs_intr_wq)
 		return;
 
-	/* Stop IRQ producers before draining the queue. */
+	/* Unpublish rvu so IRQ handlers cannot submit new work. */
 	for (mcs_id = 0; mcs_id < rvu->mcs_blk_cnt; mcs_id++) {
 		mcs = mcs_get_pdata(mcs_id);
 		rcu_assign_pointer(mcs->rvu, NULL);
 	}
+	/* Wait for IRQ handlers that already entered mcs_add_intr_wq_entry(). */
 	synchronize_rcu();
 
 	drain_workqueue_with_sync_wait(rvu->mcs_intr_wq);

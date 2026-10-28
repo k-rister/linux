@@ -677,7 +677,7 @@ static bool work_fixup_init(void *addr, enum debug_obj_state state)
 
 	switch (state) {
 	case ODEBUG_STATE_ACTIVE:
-		cancel_work_sync(work);
+		cancel_work_sync_with_sync_wait(work);
 		debug_object_init(work, &work_debug_descr);
 		return true;
 	default:
@@ -695,7 +695,7 @@ static bool work_fixup_free(void *addr, enum debug_obj_state state)
 
 	switch (state) {
 	case ODEBUG_STATE_ACTIVE:
-		cancel_work_sync(work);
+		cancel_work_sync_with_sync_wait(work);
 		debug_object_free(work, &work_debug_descr);
 		return true;
 	default:

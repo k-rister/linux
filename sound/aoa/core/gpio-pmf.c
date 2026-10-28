@@ -105,9 +105,9 @@ static void pmf_gpio_exit(struct gpio_runtime *rt)
 
 	/* make sure no work is pending before freeing
 	 * all things */
-	cancel_delayed_work_sync(&rt->headphone_notify.work);
-	cancel_delayed_work_sync(&rt->line_in_notify.work);
-	cancel_delayed_work_sync(&rt->line_out_notify.work);
+	cancel_delayed_work_sync_with_sync_wait(&rt->headphone_notify.work);
+	cancel_delayed_work_sync_with_sync_wait(&rt->line_in_notify.work);
+	cancel_delayed_work_sync_with_sync_wait(&rt->line_out_notify.work);
 
 	mutex_destroy(&rt->headphone_notify.mutex);
 	mutex_destroy(&rt->line_in_notify.mutex);

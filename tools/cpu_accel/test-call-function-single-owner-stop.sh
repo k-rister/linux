@@ -19,6 +19,7 @@ dmesg_pid=
 run_pid=
 probe_rc=0
 run_rc=0
+irq_work_test=0
 mode=${1:-sync}
 
 fail()
@@ -48,8 +49,14 @@ work-on-cpu)
 	expected_count=1
 	require_deferred=0
 	;;
+irq-work)
+	fire_parameter=fire_irq_work
+	expected_count=1
+	require_deferred=0
+	irq_work_test=1
+	;;
 *)
-	fail "usage: $0 [sync|async-reuse|smp-call-on-cpu|work-on-cpu]"
+	fail "usage: $0 [sync|async-reuse|smp-call-on-cpu|work-on-cpu|irq-work]"
 	;;
 esac
 
@@ -107,7 +114,8 @@ esac
 if grep -q "^${module_name} " /proc/modules; then
 	fail "probe module is already loaded: $module_name"
 fi
-insmod "$probe" "target_cpu=$target_cpu" || fail "could not load probe module"
+insmod "$probe" "target_cpu=$target_cpu" "irq_work_test=$irq_work_test" || \
+	fail "could not load probe module"
 module_loaded=1
 fire_path="/sys/module/$module_name/parameters/$fire_parameter"
 [ -w "$fire_path" ] || fail "probe fire parameter is unavailable"
@@ -186,6 +194,13 @@ grep -q "callback_count=$expected_count" "$outdir/probe.log" || \
 if [ "$require_deferred" -eq 1 ]; then
 	grep -Eq 'arch_call_function_deferred=[1-9][0-9]*' "$outdir/ctl.log" || \
 		fail "first asynchronous callback was not deferred by the active owner"
+fi
+if [ "$mode" = irq-work ]; then
+	grep -q 'irq_work_callback_count_while_owner=0' "$outdir/dmesg-new.log" || \
+		fail "IRQ-work callback ran before the owner exited"
+	grep -Eq 'irq_work_callback_count_after_exit=[1-9][0-9]*' \
+		"$outdir/dmesg-new.log" || \
+		fail "deferred IRQ-work callback did not complete after owner exit"
 fi
 if ! awk -v target="$target_cpu" '
 function number(line, name, rest, pos)

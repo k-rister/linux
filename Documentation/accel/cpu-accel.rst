@@ -309,6 +309,13 @@ target and work CPUs are 2 and 3)::
   sudo tools/cpu_accel/test-call-function-single-owner-stop.sh async-reuse
   sudo tools/cpu_accel/test-call-function-single-owner-stop.sh smp-call-on-cpu
   sudo tools/cpu_accel/test-call-function-single-owner-stop.sh work-on-cpu
+  sudo tools/cpu_accel/test-call-function-single-owner-stop.sh irq-work
+
+The ``irq-work`` mode requires a CPU-cycles PMU event on the target CPU. The
+probe enables the event before owner entry and arms its NMI handler during
+ring-3 ownership; the NMI queues local IRQ work, the probe checks that its
+callback count stays zero, then a synchronous call stops the owner and the
+probe checks callback completion.
 
 The opt-in ``flush_work_with_sync_wait()`` API can be checked with a probe
 that queues work on the active owner CPU, then flushes it from another CPU.
@@ -518,12 +525,18 @@ run-specific results must be recorded with the kernel build and test logs.
        Remote ``irq_work_queue_on()`` requests use the call-function queue and
        follow its deferral policy. Ring-3 exit retires the mm owner and
        reconciles TLB state before enabling interrupts.
-     - Source review of ``irq_work_queue()``, ``arch_irq_work_raise()``,
-       ``sysvec_irq_work()``, and the accelerator exit ordering. The aggregate
-       ``arch_irq_count`` includes ``IRQ_COUNT_IRQ_WORK`` deliveries.
-     - No focused injection that queues local IRQ work during ownership, or
-       callback completion/storm evidence. ``arch_irq_count`` does not
-       identify the callback or whether work remained pending at exit.
+     - ``test-call-function-single-owner-stop.sh irq-work`` enables a
+       CPU-cycles PMU event before owner entry, then arms its NMI handler during
+       ring-3 ownership. The target NMI queues local IRQ work; the probe checks
+       that its callback count stays zero, then a synchronous call stops the
+       owner and the probe checks callback completion. Source review of
+       ``irq_work_queue()``, ``arch_irq_work_raise()``,
+       ``sysvec_irq_work()``, and accelerator exit ordering identifies the
+       local-vector policy. The aggregate ``arch_irq_count`` includes
+       ``IRQ_COUNT_IRQ_WORK`` deliveries.
+     - No run-specific result yet, and no callback-storm evidence.
+       ``arch_irq_count`` does not identify the callback or whether work
+       remained pending at exit.
    * - Synchronous CPU calls and workqueue waits
      - **Owner-stop, then synchronous completion.** A synchronous waiter
        reserves the target, requests owner exit, and retains the reservation

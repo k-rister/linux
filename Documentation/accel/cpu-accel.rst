@@ -498,10 +498,18 @@ run-specific results must be recorded with the kernel build and test logs.
        optional BPF JIT churn. ``test-perf-owner-stop.sh`` opens a per-CPU
        ``cycles:u`` event while a ring-3 owner is active and checks the paired
        owner-stop and exit tracepoints.
-     - The perf probe has not run against the accelerator kernel in the
-       current VM, and covers one hardware event install/close path only.
-       Repeated PMU churn, task-scoped events, PMI delivery during ownership,
-       and a comprehensive tracing-operation matrix remain open.
+     - On 2026-10-28, ``test-perf-owner-stop.sh`` passed on
+       ``7.3.0-rc3-accel-tlbfix-phase8-irq-d08dba1-02098-gd08dba1bad4f``
+       with target CPU 2 and a 3-second escape delay. The per-CPU
+       ``cycles:u`` helper completed in 253 ms and read 380 cycles. The trace
+       paired owner 7's stop request from
+       ``__smp_call_function_single`` with its exit 75 us later. The run
+       reported ``state=7``, ``recovery_state=2``, ``user_escape_count=1``,
+       ``arch_call_function_deferred=1``, and ``migration_detected=0``; the
+       captured kernel-error and new-dmesg logs were empty. This covers one
+       hardware-event install/close path only. Repeated PMU churn,
+       task-scoped events, PMI delivery during ownership, and a comprehensive
+       tracing-operation matrix remain open.
    * - Resctrl changes
      - **Owner-stop for synchronous remote CPU callbacks.** The x86 domain
        programming paths use ``smp_call_function_any(..., 1)`` and

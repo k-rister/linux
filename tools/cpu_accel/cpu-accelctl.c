@@ -898,7 +898,8 @@ static bool user_reclaim_owner_stop_completed(
 }
 
 static int wait_for_user_worker(pid_t child, int *status,
-				const volatile struct cpu_accel_shared *shared)
+				const volatile struct cpu_accel_shared *shared,
+				uint64_t timeout_ms)
 {
 	/* Test harnesses may wait for the ring-3 owner before injecting activity. */
 	const char *active_marker = getenv("CPU_ACCEL_ACTIVE_MARKER");
@@ -907,14 +908,15 @@ static int wait_for_user_worker(pid_t child, int *status,
 		.tv_nsec = 1000000,
 	};
 	bool marker_written = false;
+	uint64_t waited_ms = 0;
 
-	if (!active_marker || !*active_marker)
+	if ((!active_marker || !*active_marker) && !timeout_ms)
 		return waitpid(child, status, 0) < 0 ? -1 : 0;
 
 	for (;;) {
 		pid_t waited;
 
-		if (!marker_written &&
+		if (!marker_written && active_marker && *active_marker &&
 		    __atomic_load_n(&shared->state, __ATOMIC_ACQUIRE) ==
 			    CPU_ACCEL_STATE_RUNNING &&
 		    __atomic_load_n(&shared->mode, __ATOMIC_ACQUIRE) ==
@@ -947,7 +949,11 @@ static int wait_for_user_worker(pid_t child, int *status,
 			return 0;
 		if (waited < 0)
 			return -1;
+		if (timeout_ms && waited_ms >= timeout_ms)
+			return 1;
 		nanosleep(&poll_delay, NULL);
+		if (timeout_ms)
+			waited_ms++;
 	}
 }
 
@@ -1042,38 +1048,29 @@ static int run_user_workload(const struct cpu_accel_config *requested,
 		_exit(127);
 	}
 
-	if (escape_after_ms) {
-		struct timespec delay = {
-			.tv_sec = escape_after_ms / 1000,
-			.tv_nsec = (escape_after_ms % 1000) * 1000000ULL,
-		};
-
-		if (nanosleep(&delay, NULL) < 0 && errno != EINTR) {
-			perror("delay before user escape");
-			escape_ret = -1;
-		} else {
-			for (uint64_t attempt = 0; attempt < escape_attempts;
-			     attempt++) {
-				escape_ret = cpu_accel_user_escape(&handle);
-				if (!escape_ret)
-					break;
-				if (errno == EINVAL &&
-				    user_escape_completed(handle.shared)) {
-					escape_ret = 0;
-					break;
-				}
-				if (errno == EALREADY && user_reclaim &&
-				    user_reclaim_owner_stop_completed(handle.shared)) {
-					/* Reclaim's subscribed stop beat the timed NMI. */
-					escape_ret = 0;
-					break;
-				}
+	ret = wait_for_user_worker(child, &status, handle.shared,
+				   escape_after_ms);
+	if (ret == 1) {
+		for (uint64_t attempt = 0; attempt < escape_attempts; attempt++) {
+			escape_ret = cpu_accel_user_escape(&handle);
+			if (!escape_ret)
+				break;
+			if (errno == EINVAL && user_escape_completed(handle.shared)) {
+				escape_ret = 0;
+				break;
 			}
-			if (escape_ret)
-				perror("user escape");
+			if (errno == EALREADY && user_reclaim &&
+			    user_reclaim_owner_stop_completed(handle.shared)) {
+				/* Reclaim's subscribed stop beat the timed NMI. */
+				escape_ret = 0;
+				break;
+			}
 		}
+		if (escape_ret)
+			perror("user escape");
+		ret = wait_for_user_worker(child, &status, handle.shared, 0);
 	}
-	if (wait_for_user_worker(child, &status, handle.shared) < 0) {
+	if (ret < 0) {
 		perror("wait for user accelerator");
 		ret = -1;
 	} else if (WIFEXITED(status) && WEXITSTATUS(status)) {

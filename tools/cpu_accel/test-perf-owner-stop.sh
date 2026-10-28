@@ -153,9 +153,14 @@ function number(line, name, rest, pos)
 	sub(/[^0-9].*$/, "", rest)
 	return rest
 }
+function expected_perf_caller(line)
+{
+	return index(line, "caller=__smp_call_function_single") ||
+	       index(line, "caller=smp_call_function_many_cond")
+}
 /owner_stop_request:/ {
 	if (number($0, "cpu") == target && index($0, "stop_cb=1") &&
-	    index($0, "sent=1") && index($0, "caller=smp_call_function_many_cond")) {
+	    index($0, "sent=1") && expected_perf_caller($0)) {
 		stop_owner = number($0, "owner")
 		stop_line = NR
 	}

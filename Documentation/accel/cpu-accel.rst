@@ -454,8 +454,16 @@ run-specific results must be recorded with the kernel build and test logs.
      - **Owner-stop for selected synchronous waits; otherwise unclassified.**
        The IRQ quarantine is not an RCU callback-routing mechanism.
      - The sync-work test covers selected RCU sheaf and SRCU cleanup paths;
-       ``rcu_softirq_count`` reports the softirq vector.
-     - No RCU callback count, callback storm, or general RCU-routing proof.
+       ``rcu_softirq_count`` reports the softirq vector. A 2026-10-28 source
+       audit found that generic ``handle_softirqs()`` dispatches a pending
+       ``RCU_SOFTIRQ`` without an accelerator-owner gate. The RCU nocb
+       transition helper rejects offload changes for online CPUs, so routing
+       must be established before owner admission rather than enabled as the
+       owner starts.
+     - No fault-injected asynchronous callback during ownership, per-callback
+       count, callback storm, or general routing proof. ``rcu_softirq_count``
+       counts vector dispatches, not callbacks, and admission does not require
+       the target CPU to have boot-time RCU callback offload enabled.
    * - Scheduler and ordinary task placement
      - **Deferred selectively.** Reschedule IPIs are counted and replayed
        after owner exit. The prototype reserves the target for selected

@@ -836,10 +836,14 @@ run-specific results must be recorded with the kernel build and test logs.
      - No device reset, teardown, or management-operation fault matrix.
    * - Exceptions, NMIs, and machine checks
      - **NMI escape is owner-terminating recovery for the tested ring-3
-       workload; general events are not contained.** NMI and MCE counts are
-       folded into ``arch_irq_count``; exceptions have no dedicated count.
-     - ``user_escape_count`` reports the escape experiment; the aggregate x86
-       IRQ counter includes NMI and MCE statistics. On 2026-10-28,
+       workload; general events are not contained.** Recovery state, error,
+       attempt count, timestamps, and successful escape count use fixed shared
+       ABI fields. MCE injection is deferred on this recovery-sensitive VM:
+       the in-tree injector's software mode only decodes a synthetic record,
+       while hardware mode invokes ``#MC`` and may panic.
+     - ``user_escape_count`` and recovery fields report the owner-termination
+       experiment; the aggregate x86 IRQ counter includes NMI and MCE
+       statistics. On 2026-10-28,
        ``test-user-escape-fault.sh`` passed on
        ``7.3.0-rc3-accel-tlbfix-phase8-irq-d08dba1-02098-gd08dba1bad4f``
        with one injected dropped escape NMI. The controller reported
@@ -849,8 +853,9 @@ run-specific results must be recorded with the kernel build and test logs.
        its continuation message, then verified no kernel-error match and
        restored ``user_escape_drop_count``. This validates the retry path for
        one deliberately dropped escape NMI only.
-     - No separate event counters, exception injection matrix, or safe MCE
-       injection evidence.
+     - No exception-specific counter or fault matrix, general NMI containment
+       evidence, or actual MCE injection. Hardware MCE injection requires a
+       disposable recovery-capable test system.
    * - No ordinary task or unbounded path; latency
      - **Selected invariants measured; no hard bound.** Existing counters do
        not prove absence of every ordinary Linux or unbounded kernel path.

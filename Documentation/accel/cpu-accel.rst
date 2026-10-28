@@ -782,6 +782,31 @@ run-specific results must be recorded with the kernel build and test logs.
      - Higher-volume hotplug, caller lock-order fault injection, a general
        ``stop_machine()`` fault injector, and disposition of out-of-tree direct
        ``stop_machine_cpuslocked()`` callers remain open.
+   * - Frequency, idle, thermal, power-policy, and watchdog changes
+     - **Unclassified by this Phase 8 audit.** The matrix establishes no
+       activity-specific policy for CPU frequency or idle transitions,
+       thermal and power-policy changes, or watchdog reconfiguration while an
+       accelerator owner is active.
+     - No targeted source-path inventory or runtime test for these operations
+       is recorded here.
+     - Their admission or maintenance disposition, event counters, fault
+       injection, and observed latency remain open.
+   * - Microcode updates
+     - **Owner-stop at the audited late-microcode ``stop_machine()`` callsite;
+       other update paths remain unclassified.** This call-site disposition
+       does not establish the behavior of a complete update transaction.
+     - The ``stop_machine()`` source review includes the late-microcode
+       caller; no microcode update was run during Phase 8 validation.
+     - Runtime update behavior, failure injection, event counters, and
+       run-specific latency evidence remain open.
+   * - Suspend, hibernate, kexec, reboot, and panic paths
+     - **Unclassified as a group.** Normal owner-stop and module teardown
+       evidence does not establish the full-system suspend, image, restart, or
+       panic lifecycle contract.
+     - No Phase 8 lifecycle or failure-injection run for these operations is
+       recorded.
+     - The admission or termination disposition and external continuity
+       evidence for each path remain open.
    * - Memory pressure and reclaim
      - **Safe only on audited completion paths; otherwise synchronous.** A
        clean file-page reclaim probe waits for owner reconciliation. Dirty or

@@ -506,6 +506,18 @@ run-specific results must be recorded with the kernel build and test logs.
        insufficient: the outstanding ``execmem_free()`` TLB flush escaped the
        owner after the probe reader was released. Increasing that test delay to
        three seconds allowed the rerun to pass.
+       The maximum 256-callback batch then passed three trials on build ``#68``
+       with all callbacks completing during CPU 2 ownership and
+       ``target_callbacks=0``. Two runs completed the 4.762 s owner interval;
+       callbacks ran on CPUs 1 and 0, respectively, and both produced 2,048
+       samples. Their observed ``max_lateness_ns`` values were 16,537 ns and
+       569,976 ns (the latter with tracepoints and a CPU 4 busy loop). In the
+       third run, all callbacks completed on CPU 3 by 20.3 ms after owner entry.
+       ``khugepaged`` then requested a generic owner stop from
+       ``__lru_add_drain_all`` (``tlb_flush_id=0``); the trace recorded owner
+       exit 61 us later and recovery to Linux mode. A separate full-duration
+       trace recorded three ``tlb_flush_wait`` begin/complete pairs while one
+       owner was active, with no owner-stop request.
      - These bounded batches do not cover a sustained callback storm or
        establish a latency bound. ``rcu_softirq_count`` counts softirq-vector
        dispatches, not callbacks.

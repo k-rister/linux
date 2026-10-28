@@ -41,6 +41,7 @@
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
 #include <linux/smp.h>
+#include <linux/srcu.h>
 #include <linux/uuid.h>
 #include <linux/xarray.h>
 
@@ -119,6 +120,7 @@ struct ffa_drv_info {
 	struct xarray partition_info;
 	DECLARE_HASHTABLE(notifier_hash, ilog2(FFA_MAX_NOTIFICATIONS));
 	rwlock_t notify_lock; /* lock to protect notifier hashtable  */
+	struct srcu_struct notify_srcu;
 };
 
 static struct ffa_drv_info *drv_info;
@@ -1215,7 +1217,7 @@ static int ffa_memory_lend(struct ffa_mem_ops_args *args)
 	return ffa_memory_ops(FFA_MEM_LEND, args);
 }
 
-#define ffa_notifications_disabled()	(!drv_info->notif_enabled)
+#define ffa_notifications_disabled()	(!READ_ONCE(drv_info->notif_enabled))
 
 struct notifier_cb_info {
 	struct hlist_node hnode;
@@ -1369,9 +1371,6 @@ static int __ffa_notify_relinquish(struct ffa_device *dev, int notify_id,
 {
 	int rc;
 
-	if (ffa_notifications_disabled())
-		return -EOPNOTSUPP;
-
 	if (notify_id >= FFA_MAX_NOTIFICATIONS)
 		return -EINVAL;
 
@@ -1383,11 +1382,11 @@ static int __ffa_notify_relinquish(struct ffa_device *dev, int notify_id,
 		write_unlock(&drv_info->notify_lock);
 		return rc;
 	}
-
-	if (!is_framework)
+	if (!is_framework && !ffa_notifications_disabled())
 		rc = ffa_notification_unbind(dev->vm_id, BIT(notify_id));
 
 	write_unlock(&drv_info->notify_lock);
+	synchronize_srcu(&drv_info->notify_srcu);
 
 	return rc;
 }
@@ -1428,6 +1427,10 @@ static int __ffa_notify_request(struct ffa_device *dev, bool is_per_vcpu,
 		cb_info->cb = cb;
 
 	write_lock(&drv_info->notify_lock);
+	if (ffa_notifications_disabled()) {
+		rc = -EOPNOTSUPP;
+		goto out_unlock_free;
+	}
 
 	if (!is_framework) {
 		if (is_per_vcpu)
@@ -1487,13 +1490,14 @@ static void handle_notif_callbacks(u64 bitmap, enum notify_type type)
 {
 	ffa_notifier_cb cb;
 	void *cb_data;
-	int notify_id;
+	int notify_id, srcu_idx;
 
 	for (notify_id = 0; notify_id <= FFA_MAX_NOTIFICATIONS && bitmap;
 	     notify_id++, bitmap >>= 1) {
 		if (!(bitmap & 1))
 			continue;
 
+		srcu_idx = srcu_read_lock(&drv_info->notify_srcu);
 		scoped_guard(read_lock, &drv_info->notify_lock) {
 			struct notifier_cb_info *cb_info;
 
@@ -1504,6 +1508,7 @@ static void handle_notif_callbacks(u64 bitmap, enum notify_type type)
 
 		if (cb)
 			cb(notify_id, cb_data);
+		srcu_read_unlock(&drv_info->notify_srcu, srcu_idx);
 	}
 }
 
@@ -1512,7 +1517,7 @@ static void handle_fwk_notif_callbacks(u32 bitmap)
 	void *buf;
 	uuid_t uuid;
 	void *fwk_cb_data;
-	int notify_id = 0, target;
+	int notify_id = 0, target, srcu_idx;
 	ffa_fwk_notifier_cb fwk_cb;
 	struct ffa_indirect_msg_hdr *msg;
 	size_t min_offset = offsetof(struct ffa_indirect_msg_hdr, uuid);
@@ -1550,6 +1555,7 @@ static void handle_fwk_notif_callbacks(u32 bitmap)
 		ffa_rx_release();
 	}
 
+	srcu_idx = srcu_read_lock(&drv_info->notify_srcu);
 	scoped_guard(read_lock, &drv_info->notify_lock) {
 		struct notifier_cb_info *cb_info;
 
@@ -1561,6 +1567,7 @@ static void handle_fwk_notif_callbacks(u32 bitmap)
 
 	if (fwk_cb)
 		fwk_cb(notify_id, fwk_cb_data, buf);
+	srcu_read_unlock(&drv_info->notify_srcu, srcu_idx);
 	kfree(buf);
 }
 
@@ -2054,8 +2061,28 @@ static int ffa_init_pcpu_irq(void)
 	return 0;
 }
 
+static void ffa_notifier_cleanup(void)
+{
+	struct notifier_cb_info *cb_info;
+	struct hlist_node *tmp;
+	int bkt;
+
+	write_lock(&drv_info->notify_lock);
+	hash_for_each_safe(drv_info->notifier_hash, bkt, tmp, cb_info, hnode) {
+		hash_del(&cb_info->hnode);
+		kfree(cb_info);
+	}
+	write_unlock(&drv_info->notify_lock);
+
+	synchronize_srcu(&drv_info->notify_srcu);
+}
+
 static void ffa_notifications_cleanup(void)
 {
+	write_lock(&drv_info->notify_lock);
+	WRITE_ONCE(drv_info->notif_enabled, false);
+	write_unlock(&drv_info->notify_lock);
+
 	ffa_uninit_pcpu_irq();
 	ffa_irq_unmap(drv_info->sched_recv_irq);
 	drv_info->sched_recv_irq = 0;
@@ -2066,7 +2093,6 @@ static void ffa_notifications_cleanup(void)
 		ffa_notification_bitmap_destroy();
 		drv_info->bitmap_created = false;
 	}
-	drv_info->notif_enabled = false;
 }
 
 static void ffa_notifications_setup(void)
@@ -2099,10 +2125,9 @@ static void ffa_notifications_setup(void)
 	if (ret)
 		goto cleanup;
 
-	hash_init(drv_info->notifier_hash);
-	rwlock_init(&drv_info->notify_lock);
-
-	drv_info->notif_enabled = true;
+	write_lock(&drv_info->notify_lock);
+	WRITE_ONCE(drv_info->notif_enabled, true);
+	write_unlock(&drv_info->notify_lock);
 	return;
 cleanup:
 	pr_info("Notification setup failed %d, not enabled\n", ret);
@@ -2126,7 +2151,17 @@ static int ffa_probe(struct platform_device *pdev)
 	drv_info = kzalloc_obj(*drv_info);
 	if (!drv_info)
 		return -ENOMEM;
+
+	ret = init_srcu_struct(&drv_info->notify_srcu);
+	if (ret) {
+		kfree(drv_info);
+		drv_info = NULL;
+		return ret;
+	}
+
 	platform_set_drvdata(pdev, drv_info);
+	hash_init(drv_info->notifier_hash);
+	rwlock_init(&drv_info->notify_lock);
 
 	ret = ffa_version_check(&drv_info->version);
 	if (ret) {
@@ -2202,6 +2237,8 @@ free_pages:
 		free_pages_exact(drv_info->tx_buffer, rxtx_bufsz);
 	free_pages_exact(drv_info->rx_buffer, rxtx_bufsz);
 free_drv_info:
+	ffa_notifier_cleanup();
+	cleanup_srcu_struct(&drv_info->notify_srcu);
 	platform_set_drvdata(pdev, NULL);
 	kfree(drv_info);
 	drv_info = NULL;
@@ -2214,6 +2251,8 @@ static void ffa_remove(struct platform_device *pdev)
 
 	ffa_notifications_cleanup();
 	ffa_partitions_cleanup();
+	ffa_notifier_cleanup();
+	cleanup_srcu_struct(&info->notify_srcu);
 	ffa_rxtx_unmap();
 	free_pages_exact(info->tx_buffer, info->rxtx_bufsz);
 	free_pages_exact(info->rx_buffer, info->rxtx_bufsz);

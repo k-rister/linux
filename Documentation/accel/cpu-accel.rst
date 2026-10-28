@@ -608,9 +608,12 @@ run-specific results must be recorded with the kernel build and test logs.
        ARM FF-A notification teardown also quiesces its producers before the
        owner-aware drain: ``cpuhp_remove_state()`` invokes the per-CPU disable
        callback for online CPUs, disabling both notification IRQs before the
-       workqueue is destroyed. The IRQ registrations and per-CPU data are
-       released afterward. This is a source-only audit; no FF-A hardware is
-       available for runtime validation.
+       workqueue is destroyed. Notifier dispatch now holds SRCU protection
+       through the client callback, so ``notify_relinquish()`` waits for
+       in-flight callbacks before the client can destroy its own queue. The
+       IRQ registrations and per-CPU data are released afterward. This is a
+       source-only audit; no FF-A hardware is available for runtime
+       validation.
      - The scripts cover selected producers and APIs, not every queue,
        callback, or synchronous wait site under load.
    * - ``mmap``/unmap and page-table changes on other CPUs

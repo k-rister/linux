@@ -236,6 +236,7 @@ int irq_do_set_affinity(struct irq_data *data, const struct cpumask *mask, bool 
 	struct irq_desc *desc = irq_data_to_desc(data);
 	struct irq_chip *chip = irq_data_get_irq_chip(data);
 	const struct cpumask  *prog_mask;
+	unsigned int cpu;
 	int ret;
 
 	if (!chip || !chip->irq_set_affinity)
@@ -281,12 +282,19 @@ int irq_do_set_affinity(struct irq_data *data, const struct cpumask *mask, bool 
 	 * case we do as we are told).
 	 */
 	cpumask_and(tmp_mask, prog_mask, cpu_online_mask);
-	if (!force && !cpumask_empty(tmp_mask))
-		ret = chip->irq_set_affinity(data, tmp_mask, force);
-	else if (force)
+	if (!force) {
+		/* Internal affinity updates must honor accelerator reservations too. */
+		for_each_cpu(cpu, tmp_mask)
+			if (irq_accel_cpu_reserved(cpu))
+				cpumask_clear_cpu(cpu, tmp_mask);
+
+		if (cpumask_empty(tmp_mask))
+			ret = -EBUSY;
+		else
+			ret = chip->irq_set_affinity(data, tmp_mask, false);
+	} else {
 		ret = chip->irq_set_affinity(data, mask, force);
-	else
-		ret = -EINVAL;
+	}
 
 	switch (ret) {
 	case IRQ_SET_MASK_OK:
@@ -498,10 +506,14 @@ EXPORT_SYMBOL_GPL(irq_set_affinity);
  * online cpus.
  *
  * Solely for low level cpu hotplug code, where we need to make per
- * cpu interrupts affine before the cpu becomes online.
+ * cpu interrupts affine before the cpu becomes online. Accelerator-owned
+ * CPUs remain unavailable to this interface.
  */
 int irq_force_affinity(unsigned int irq, const struct cpumask *cpumask)
 {
+	if (!irq_accel_affinity_allowed(cpumask))
+		return -EBUSY;
+
 	return __irq_set_affinity(irq, cpumask, true);
 }
 EXPORT_SYMBOL_GPL(irq_force_affinity);
@@ -598,6 +610,7 @@ int irq_setup_affinity(struct irq_desc *desc)
 {
 	struct cpumask *set = irq_default_affinity;
 	int node = irq_desc_get_node(desc);
+	unsigned int cpu;
 
 	static DEFINE_RAW_SPINLOCK(mask_lock);
 	static struct cpumask mask;
@@ -621,8 +634,17 @@ int irq_setup_affinity(struct irq_desc *desc)
 	}
 
 	cpumask_and(&mask, cpu_online_mask, set);
-	if (cpumask_empty(&mask))
+	for_each_cpu(cpu, &mask)
+		if (irq_accel_cpu_reserved(cpu))
+			cpumask_clear_cpu(cpu, &mask);
+	if (cpumask_empty(&mask)) {
 		cpumask_copy(&mask, cpu_online_mask);
+		for_each_cpu(cpu, &mask)
+			if (irq_accel_cpu_reserved(cpu))
+				cpumask_clear_cpu(cpu, &mask);
+	}
+	if (cpumask_empty(&mask))
+		return -EBUSY;
 
 	if (node != NUMA_NO_NODE) {
 		const struct cpumask *nodemask = cpumask_of_node(node);

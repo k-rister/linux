@@ -198,9 +198,12 @@ vector during this transition; this transition-time cross-CPU activity is
 not part of the accelerator interval.  It fails closed and rolls back if an
 active IRQ is per-CPU, non-balancable, has no affinity setter, or cannot be
 moved.  ``irq_quarantined`` reports the number moved;
-``irq_quarantine_blockers`` reports blockers from a rejected start.  This
-does not suppress IPIs, local timers, NMIs, firmware activity, or later IRQ
-affinity changes made through internal paths.
+``irq_quarantine_blockers`` reports blockers from a rejected start. This does
+not suppress IPIs, local timers, NMIs, or firmware activity. Generic internal
+affinity updates filter reserved CPUs, and public forced-affinity requests
+reject them. Quarantine restore may reapply a saved mask only during failed
+admission rollback or after the owner has stopped. Managed IRQs with no
+available target remain shut down and restart when ownership is released.
 ``CPU_ACCEL_FLAG_REQUIRE_QUIESCENT`` adds an
 entry admission check that rejects a target with a pending reschedule or
 softirq request and reports ``RECOVERY`` mode.  It is a precondition check,
@@ -385,18 +388,17 @@ run-specific results must be recorded with the kernel build and test logs.
    * - Normal IRQ affinity and IRQ storms
      - **Routed/rejected, opt-in.** IRQ quarantine moves migratable normal
        IRQs to other online CPUs and rejects admission if a blocker remains.
-       It does not cover IPIs, local timers, NMIs, firmware, or internal IRQ
-       affinity changes after admission.
+       It does not cover IPIs, local timers, NMIs, or firmware. Generic
+       internal updates filter reserved CPUs, and public forced-affinity
+       requests reject them; forced quarantine restore is limited to rollback
+       or owner-stopped teardown. Managed IRQs with no available target remain
+       shut down until ownership is released.
      - ``test-cpu-accel.sh`` has an optional ``--quarantine-irqs`` path;
-       shared results report moved IRQs and blockers.
-     - No IRQ-storm fault injector or post-admission affinity-change test.
-       Source review also found reservation-check bypasses: generic default
-       affinity setup, managed IRQ startup, and pending IRQ moves call
-       ``irq_do_set_affinity()`` directly.  Unlike
-       ``irq_set_affinity_locked()``, that helper does not reject masks that
-       include a CPU reserved by an active accelerator.  An internal update
-       applying such a mask can therefore route an IRQ back to the CPU after
-       admission; enforcement and runtime coverage remain open.
+       shared results report moved IRQs and blockers. IRQ KUnit coverage checks
+       default startup/internal updates and managed shutdown/restart around an
+       active reservation.
+     - No IRQ-storm fault injector; the new KUnit cases compile but have not
+       run, and no post-admission IRQ-stress run has been recorded.
    * - Local timers and timer activity
      - **Deferred only while maskable interrupts are disabled.** There is no
        general timer ownership or housekeeping-routing policy for an active

@@ -51,8 +51,12 @@ int irq_accel_reserve_cpu(unsigned int cpu)
 
 void irq_accel_release_cpu(unsigned int cpu)
 {
-	if (cpu < nr_cpu_ids)
-		atomic_set(per_cpu_ptr(&irq_accel_reserved, cpu), 0);
+	if (cpu >= nr_cpu_ids)
+		return;
+
+	atomic_set(per_cpu_ptr(&irq_accel_reserved, cpu), 0);
+	/* Restart managed IRQs that had no unreserved target while owned. */
+	irq_affinity_online_cpu(cpu);
 }
 
 struct irq_accel_quarantine_entry {
@@ -173,6 +177,11 @@ static int irq_accel_restore_entries(struct irq_accel_quarantine *quarantine)
 
 		/* Do not restore an IRQ while an earlier handler is still active. */
 		synchronize_irq(entry->irq);
+		/*
+		 * Force is needed to restore offline affinity bits. The reserved
+		 * target is safe here: admission has not completed, or its owner
+		 * has already stopped during teardown.
+		 */
 		ret = desc ? irq_accel_set_affinity(desc, entry->affinity, true) :
 			-EINVAL;
 		if (ret && !first_error)
@@ -261,13 +270,19 @@ int irq_accel_quarantine_cpu(unsigned int cpu,
 		struct irq_chip *chip;
 		const struct cpumask *affinity;
 		const struct cpumask *effective;
+		struct cpumask effective_mask;
+		unsigned long flags;
+		bool pending;
 
 		desc = irq_to_desc(irq);
+		raw_spin_lock_irqsave(&desc->lock, flags);
 		data = irq_desc_get_irq_data(desc);
 		affinity = irq_data_get_affinity_mask(data);
 		if (!irqd_is_started(data) ||
-		    !irq_accel_effective_targets_cpu(data, cpu, affinity))
+		    !irq_accel_effective_targets_cpu(data, cpu, affinity)) {
+			raw_spin_unlock_irqrestore(&desc->lock, flags);
 			continue;
+		}
 
 		chip = irq_data_get_irq_chip(data);
 		if (irqd_affinity_is_managed(data) ||
@@ -284,6 +299,7 @@ int irq_accel_quarantine_cpu(unsigned int cpu,
 				chip ? chip->name : "none",
 				chip ? chip->irq_set_affinity : NULL,
 				irqd_is_setaffinity_pending(data));
+			raw_spin_unlock_irqrestore(&desc->lock, flags);
 			ret = -EBUSY;
 			break;
 		}
@@ -294,6 +310,7 @@ int irq_accel_quarantine_cpu(unsigned int cpu,
 				free_cpumask_var(entry->affinity);
 				kfree(entry);
 			}
+			raw_spin_unlock_irqrestore(&desc->lock, flags);
 			ret = -ENOMEM;
 			break;
 		}
@@ -301,16 +318,19 @@ int irq_accel_quarantine_cpu(unsigned int cpu,
 		cpumask_copy(entry->affinity, affinity);
 
 		list_add_tail(&entry->node, &state->entries);
+		raw_spin_unlock_irqrestore(&desc->lock, flags);
 		ret = irq_accel_set_affinity(desc, state->destination, false);
+		raw_spin_lock_irqsave(&desc->lock, flags);
 		effective = irq_data_get_effective_affinity_mask(data);
-		if (ret || irqd_is_setaffinity_pending(data) ||
-		    cpumask_test_cpu(cpu, effective)) {
+		cpumask_copy(&effective_mask, effective);
+		pending = irqd_is_setaffinity_pending(data);
+		raw_spin_unlock_irqrestore(&desc->lock, flags);
+		if (ret || pending || cpumask_test_cpu(cpu, &effective_mask)) {
 			pr_warn_ratelimited(
 				"cpu_accel: IRQ %u could not leave CPU %u (ret=%d "
 				"requested=%*pbl effective=%*pbl pending=%u)\n", irq,
-				cpu, ret, cpumask_pr_args(affinity),
-				cpumask_pr_args(effective),
-				irqd_is_setaffinity_pending(data));
+				cpu, ret, cpumask_pr_args(entry->affinity),
+				cpumask_pr_args(&effective_mask), pending);
 			if (!ret)
 				ret = -EBUSY;
 			break;

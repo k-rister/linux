@@ -170,6 +170,17 @@ enum {
 };
 
 #ifdef CONFIG_SMP
+static bool irq_affinity_has_available_cpu(const struct cpumask *aff)
+{
+	unsigned int cpu;
+
+	for_each_cpu(cpu, aff)
+		if (cpu_online(cpu) && !irq_accel_cpu_reserved(cpu))
+			return true;
+
+	return false;
+}
+
 static int
 __irq_startup_managed(struct irq_desc *desc, const struct cpumask *aff,
 		      bool force)
@@ -181,20 +192,22 @@ __irq_startup_managed(struct irq_desc *desc, const struct cpumask *aff,
 
 	irqd_clr_managed_shutdown(d);
 
-	if (!cpumask_intersects(aff, cpu_online_mask)) {
+	if (!irq_affinity_has_available_cpu(aff)) {
+		bool online = cpumask_intersects(aff, cpu_online_mask);
+
 		/*
 		 * Catch code which fiddles with enable_irq() on a managed
 		 * and potentially shutdown IRQ. Chained interrupt
 		 * installment or irq auto probing should not happen on
 		 * managed irqs either.
 		 */
-		if (WARN_ON_ONCE(force))
+		if (WARN_ON_ONCE(force && !online))
 			return IRQ_STARTUP_ABORT;
 		/*
-		 * The interrupt was requested, but there is no online CPU
-		 * in it's affinity mask. Put it into managed shutdown
-		 * state and let the cpu hotplug mechanism start it up once
-		 * a CPU in the mask becomes available.
+		 * The interrupt was requested, but there is no online,
+		 * unreserved CPU in its affinity mask. Put it into managed
+		 * shutdown state. CPU hotplug or accelerator release will
+		 * start it once a suitable CPU becomes available.
 		 */
 		return IRQ_STARTUP_ABORT;
 	}
@@ -282,15 +295,30 @@ int irq_startup(struct irq_desc *desc, bool resend, bool force)
 		irq_enable(desc);
 	} else {
 		switch (__irq_startup_managed(desc, aff, force)) {
-		case IRQ_STARTUP_NORMAL:
-			if (d->chip->flags & IRQCHIP_AFFINITY_PRE_STARTUP)
+		case IRQ_STARTUP_NORMAL: {
+			bool affinity_pre =
+				d->chip->flags & IRQCHIP_AFFINITY_PRE_STARTUP;
+
+			/* Never start a new IRQ with an accelerator-owned target. */
+			if (!irq_accel_affinity_allowed(aff))
+				affinity_pre = true;
+
+			if (affinity_pre)
 				irq_setup_affinity(desc);
 			ret = __irq_startup(desc);
-			if (!(d->chip->flags & IRQCHIP_AFFINITY_PRE_STARTUP))
+			if (!affinity_pre)
 				irq_setup_affinity(desc);
 			break;
+		}
 		case IRQ_STARTUP_MANAGED:
-			irq_do_set_affinity(d, aff, false);
+			ret = irq_do_set_affinity(d, aff, false);
+			if (ret && !irq_accel_affinity_allowed(aff)) {
+				/* No safe target remains; release it after ownership ends. */
+				desc->depth = 1;
+				irqd_set_managed_shutdown(d);
+				irq_shutdown_and_deactivate(desc);
+				return 0;
+			}
 			ret = __irq_startup(desc);
 			break;
 		case IRQ_STARTUP_ABORT:

@@ -511,6 +511,10 @@ run-specific results must be recorded with the kernel build and test logs.
        focused flush probes. The source audit also converted default-bound
        notification teardown in the AOA GPIO Feature and PMF backends; those
        PowerPC-only objects were not build-tested on this x86 host.
+       A cross-file source pass compared per-CPU queue allocations with
+       direct queue-wide flush, drain, and destroy calls. Reviewed textual
+       overlaps were separate queue objects or already used owner-aware waits;
+       no additional direct same-queue raw wait was identified.
      - The scripts cover selected producers and APIs, not every queue,
        callback, or synchronous wait site under load.
    * - ``mmap``/unmap and page-table changes on other CPUs

@@ -587,6 +587,12 @@ run-specific results must be recorded with the kernel build and test logs.
        aborts the reset and clears ``LIO_IFSTATE_RESETTING`` if the stop
        fails. The ``lio_ethtool.o`` object builds on this x86 host, but no
        LiquidIO hardware is available for runtime validation.
+       A follow-up reviewed Vivid's global HDMI and S-Video control queues:
+       per-device release cancels both work items, platform driver/device
+       unregister precedes owner-aware queue destruction, and init unwind
+       unregisters the device before draining. KASAN's workqueue UAF test
+       intentionally queues its test item and already uses
+       ``destroy_workqueue_with_sync_wait()``.
      - The scripts cover selected producers and APIs, not every queue,
        callback, or synchronous wait site under load.
    * - ``mmap``/unmap and page-table changes on other CPUs

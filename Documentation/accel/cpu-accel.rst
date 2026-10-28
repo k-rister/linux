@@ -591,7 +591,16 @@ run-specific results must be recorded with the kernel build and test logs.
        workload; general events are not contained.** NMI and MCE counts are
        folded into ``arch_irq_count``; exceptions have no dedicated count.
      - ``user_escape_count`` reports the escape experiment; the aggregate x86
-       IRQ counter includes NMI and MCE statistics.
+       IRQ counter includes NMI and MCE statistics. On 2026-10-28,
+       ``test-user-escape-fault.sh`` passed on
+       ``7.3.0-rc3-accel-tlbfix-phase8-irq-d08dba1-02098-gd08dba1bad4f``
+       with one injected dropped escape NMI. The controller reported
+       ``state=7``, ``recovery_state=2``, ``recovery_attempts=2``,
+       ``user_escape_count=1``, and a 1,252,757,554 ns active interval. The
+       test observed exactly one expected unknown-NMI diagnostic on CPU 1 and
+       its continuation message, then verified no kernel-error match and
+       restored ``user_escape_drop_count``. This validates the retry path for
+       one deliberately dropped escape NMI only.
      - No separate event counters, exception injection matrix, or safe MCE
        injection evidence.
    * - No ordinary task or unbounded path; latency

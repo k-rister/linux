@@ -4,3 +4,4 @@ test-tlb-cow-churn
 test-seccomp-jit-churn
 test-sync-wait-prime
 test-perf-event-open
+test-user-escape-rescue

@@ -24,6 +24,10 @@ test-irq-storm: cpu-accelctl
 test-timerlat-owner: cpu-accelctl
 	CPU_ACCELCTL=./cpu-accelctl sh ./test-timerlat-owner.sh
 
+test-user-escape-fault: cpu-accelctl test-user-escape-rescue
+	CPU_ACCELCTL=./cpu-accelctl CPU_ACCEL_ESCAPE_RESCUE=./test-user-escape-rescue \
+		sh ./test-user-escape-fault.sh
+
 cpu-accelctl: cpu-accelctl.o libcpu_accel.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
@@ -42,20 +46,25 @@ test-sync-wait-prime: test-sync-wait-prime.o
 test-perf-event-open: test-perf-event-open.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
+test-user-escape-rescue: test-user-escape-rescue.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
 cpu-accelctl.o: cpu_accel_user_image.h
 cpu-accelctl.o libcpu_accel.o: cpu_accel.h ../../include/uapi/linux/cpu_accel.h
 test-tlb-generation.o: ../../include/uapi/linux/cpu_accel.h
 test-seccomp-jit-churn.o: CPPFLAGS := -D_GNU_SOURCE
 test-sync-wait-prime.o: CPPFLAGS := -D_GNU_SOURCE
 test-perf-event-open.o: CPPFLAGS := -D_GNU_SOURCE
+test-user-escape-rescue.o: CPPFLAGS := -D_GNU_SOURCE -Wno-cpp -I../../include/uapi
 
 clean:
 	rm -f cpu-accelctl test-tlb-generation test-tlb-generation.o \
 		test-tlb-cow-churn test-tlb-cow-churn.o \
 		test-seccomp-jit-churn test-seccomp-jit-churn.o \
 		test-sync-wait-prime test-sync-wait-prime.o \
-		test-perf-event-open test-perf-event-open.o \
+		test-perf-event-open test-perf-event-open.o test-user-escape-rescue \
+		test-user-escape-rescue.o \
 		cpu-accelctl.o libcpu_accel.o
 
 .PHONY: all clean test test-sync-work-owner-stop test-perf-owner-stop \
-	test-irq-storm test-timerlat-owner
+	test-irq-storm test-timerlat-owner test-user-escape-fault

@@ -14,6 +14,9 @@ probe_dir=/sys/kernel/debug/cpu_accel_rcu_callback_probe
 outdir=${CPU_ACCEL_TRACE_DIR:-$(mktemp -d /tmp/cpu-accel-rcu-routing.XXXXXX)}
 probe_loaded=0
 ctl_pid=
+active_marker=$outdir/active
+run_status=0
+owner_result=
 
 fail()
 {
@@ -23,6 +26,8 @@ fail()
 	[ ! -f "$outdir/taskset.log" ] || cat "$outdir/taskset.log" >&2
 	exit 1
 }
+
+mkdir -p "$outdir" || fail "could not create output directory"
 
 cpu_in_mask()
 {
@@ -162,29 +167,36 @@ grep -q 'reader_active=1' "$probe_dir/status" || \
 echo "$callback_count" >"$probe_dir/queue" || \
 	fail "could not queue callbacks on CPU $target_cpu"
 
-"$tool" run --cpu "$target_cpu" --duration-ms "$duration_ms" \
+# Release the reader as soon as ring-3 ownership is confirmed. A fixed delay
+# can let unrelated synchronous maintenance stop the owner before the batch
+# exercises callback routing.
+rm -f "$active_marker"
+CPU_ACCEL_ACTIVE_MARKER="$active_marker" \
+	"$tool" run --cpu "$target_cpu" --duration-ms "$duration_ms" \
 	--period-us 1000 --workload user-oslat >"$outdir/ctl.log" 2>&1 &
 ctl_pid=$!
-sleep 1
-kill -0 "$ctl_pid" 2>/dev/null || fail "owner run ended before callback release"
+active_wait=0
+while [ "$active_wait" -lt 100 ]; do
+	[ -e "$active_marker" ] && break
+	kill -0 "$ctl_pid" 2>/dev/null || \
+		fail "owner run ended before entering ring-3"
+	sleep 0.01
+	active_wait=$((active_wait + 1))
+done
+[ -e "$active_marker" ] || fail "timed out waiting for ring-3 ownership"
 echo 1 >"$probe_dir/release" || fail "could not release the RCU reader"
-if ! wait "$ctl_pid"; then
-	ctl_pid=
-	fail "ring-3 owner run failed"
+if wait "$ctl_pid"; then
+	run_status=0
+else
+	run_status=$?
 fi
 ctl_pid=
-
-grep -q 'state=3 mode=0 ' "$outdir/ctl.log" || \
-	fail "owner did not complete in Linux mode"
-grep -Eq 'samples=[1-9][0-9]* ' "$outdir/ctl.log" || \
-	fail "owner completed without workload samples"
-grep -q 'recovery_state=0 ' "$outdir/ctl.log" || \
-	fail "unexpected owner recovery state"
 
 attempt=0
 while [ "$attempt" -lt 100 ]; do
 	status=$(cat "$probe_dir/status")
 	completed=$(field "$status" completed)
+	printf '%s\n' "$status" >"$outdir/probe.log"
 	[ "$completed" = "$callback_count" ] && break
 	sleep 0.1
 	attempt=$((attempt + 1))
@@ -192,10 +204,33 @@ done
 [ "$completed" = "$callback_count" ] || \
 	fail "timed out waiting for all callbacks to complete"
 printf '%s\n' "$status" >"$outdir/probe.log"
+
+# Synchronous kernel maintenance may stop the owner early. Accept that clean
+# recovery only if the complete callback batch finished inside the owner
+# interval, which is checked below.
+if [ "$run_status" -eq 0 ]; then
+	grep -q 'state=3 mode=0 ' "$outdir/ctl.log" || \
+		fail "owner did not complete in Linux mode"
+	grep -Eq 'samples=[1-9][0-9]* ' "$outdir/ctl.log" || \
+		fail "owner completed without workload samples"
+	grep -q 'recovery_state=0 ' "$outdir/ctl.log" || \
+		fail "unexpected owner recovery state"
+	owner_result=completed
+else
+	grep -q 'state=7 mode=0 ' "$outdir/ctl.log" || \
+		fail "owner failed without returning to Linux mode"
+	grep -q 'recovery_state=2 recovery_error=0 ' "$outdir/ctl.log" || \
+		fail "owner did not recover cleanly after an early stop"
+	grep -q 'user_escape_count=1 ' "$outdir/ctl.log" || \
+		fail "early owner stop was not recorded exactly once"
+	owner_result=stopped-and-recovered
+fi
+
 queued=$(field "$status" queued)
 completed=$(field "$status" completed)
 target_callbacks=$(field "$status" target_callbacks)
 callback_first=$(field "$status" callback_first_ns)
+callback_last=$(field "$status" callback_last_ns)
 target_first=$(field "$status" target_first_ns)
 callback_cpus=$(field "$status" callback_cpus)
 active_start=$(field "$(cat "$outdir/ctl.log")" user_active_start_ns)
@@ -210,19 +245,17 @@ active_end=$(field "$(cat "$outdir/ctl.log")" user_active_end_ns)
 	fail "owner interval timestamps are invalid"
 [ "$callback_first" -ge "$active_start" ] || \
 	fail "callbacks completed before the recorded owner interval"
+[ "$callback_last" -lt "$active_end" ] || \
+	fail "the full callback batch did not complete during ownership"
 
 if [ "$target_callbacks" -gt 0 ]; then
 	[ "$target_first" -ge "$active_end" ] || \
 		fail "$target_callbacks callbacks ran on owner CPU $target_cpu during ownership"
 fi
 
-if [ "$callback_first" -lt "$active_end" ]; then
-	route=ran-off-owner-during-ownership
-else
-	route=no-callback-completed-during-ownership
-fi
+route=ran-off-owner-during-ownership
 
-echo "route=$route queued=$queued completed=$completed target_callbacks=$target_callbacks callback_cpus=$callback_cpus"
+echo "route=$route owner_result=$owner_result queued=$queued completed=$completed target_callbacks=$target_callbacks callback_cpus=$callback_cpus"
 echo "owner_start_ns=$active_start owner_end_ns=$active_end callback_first_ns=$callback_first target_first_ns=$target_first"
 cat "$outdir/ctl.log"
 echo "PASS: no RCU callback ran on the owned CPU during ring-3 ownership"

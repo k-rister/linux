@@ -404,10 +404,22 @@ run-specific results must be recorded with the kernel build and test logs.
        ``make -C tools/cpu_accel test-irq-storm`` with
        ``CPU_ACCEL_CPU``, ``CPU_ACCEL_IRQ_INTERFACE``, and
        ``CPU_ACCEL_IRQ_STORM_HOST`` set.
-     - No run-specific IRQ-stress result is recorded against the current
-       reservation-enforcing kernel. The new KUnit cases compile but have not
-       run. Software IRQ injection is not used because the x86 injection path
-       can prematurely complete an affinity change.
+     - On ``accelerator-dev``, kernel
+       ``7.3.0-rc3-accel-tlbfix-phase8-irq-d08dba1-02098-gd08dba1bad4f``
+       booted through the one-time GRUB entry. Because
+       ``CONFIG_KUNIT_DEFAULT_ENABLED`` is unset, ``kunit.enable=1`` was
+       required: ``irq_test_cases`` passed 6/6, including both accelerator
+       affinity/startup cases, and ``refcount_interrupt`` passed 4/4.
+       ``test-irq-storm.sh`` passed on ``ens18``/CPU 1 with a 1,000-packet
+       ping flood: 1,000 replies, 2,002 MSI deliveries, zero delivered to
+       CPU 1, ``irq_count=0``, five IRQs quarantined, zero blockers, and clean
+       STOP (state 4, mode 0). Maximum measured lateness was 11,606 ns. IRQ 38
+       was temporarily placed on CPU 1 to exercise the NIC output vector and
+       restored to CPU 3 after the run. A trial on CPU 3 was safely rejected
+       because managed virtio-blk IRQ 43 blocked quarantine; affinity rollback
+       succeeded. No soft lockup, hung-task, or RCU-stall report appeared in
+       the candidate boot. Software IRQ injection is not used because the x86
+       injection path can prematurely complete an affinity change.
    * - Local timers and timer activity
      - **Deferred only while maskable interrupts are disabled.** There is no
        general timer ownership or housekeeping-routing policy for an active

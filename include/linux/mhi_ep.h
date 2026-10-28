@@ -119,6 +119,7 @@ struct mhi_ep_buf_info {
  * @irq: IRQ used by the endpoint controller
  * @enabled: Check if the endpoint controller is enabled or not
  * @unregistering: Check if the endpoint controller is being unregistered
+ * @powering_down: Check if the endpoint controller is being powered down
  */
 struct mhi_ep_cntrl {
 	struct device *cntrl_dev;
@@ -180,6 +181,7 @@ struct mhi_ep_cntrl {
 	int irq;
 	bool enabled;
 	bool unregistering;
+	bool powering_down;
 };
 
 /**

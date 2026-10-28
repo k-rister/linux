@@ -992,7 +992,8 @@ static irqreturn_t mhi_ep_irq(int irq, void *data)
 	/* Acknowledge the ctrl interrupt */
 	int_value = mhi_ep_mmio_read(mhi_cntrl, MHI_CTRL_INT_STATUS);
 	mhi_ep_mmio_write(mhi_cntrl, MHI_CTRL_INT_CLEAR, int_value);
-	if (READ_ONCE(mhi_cntrl->unregistering))
+	if (READ_ONCE(mhi_cntrl->unregistering) ||
+	    READ_ONCE(mhi_cntrl->powering_down))
 		return IRQ_HANDLED;
 
 	/* Check for ctrl interrupt */
@@ -1130,7 +1131,9 @@ static void mhi_ep_reset_worker(struct work_struct *work)
 	 * issue reset during shutdown also and we don't need to do re-init in
 	 * that case.
 	 */
-	if (cur_state == MHI_STATE_SYS_ERR)
+	if (cur_state == MHI_STATE_SYS_ERR &&
+	    !READ_ONCE(mhi_cntrl->powering_down) &&
+	    !READ_ONCE(mhi_cntrl->unregistering))
 		mhi_ep_power_up(mhi_cntrl);
 }
 
@@ -1159,7 +1162,8 @@ int mhi_ep_power_up(struct mhi_ep_cntrl *mhi_cntrl)
 	struct device *dev = &mhi_cntrl->mhi_dev->dev;
 	int ret, i;
 
-	if (READ_ONCE(mhi_cntrl->unregistering))
+	if (READ_ONCE(mhi_cntrl->unregistering) ||
+	    READ_ONCE(mhi_cntrl->powering_down))
 		return -ESHUTDOWN;
 
 	/*
@@ -1215,7 +1219,12 @@ EXPORT_SYMBOL_GPL(mhi_ep_power_up);
 
 void mhi_ep_power_down(struct mhi_ep_cntrl *mhi_cntrl)
 {
+	/* Prevent an IRQ/reset worker from queuing or restarting during teardown. */
+	WRITE_ONCE(mhi_cntrl->powering_down, true);
+	synchronize_irq(mhi_cntrl->irq);
+	cancel_work_sync_with_sync_wait(&mhi_cntrl->reset_work);
 	mhi_ep_power_down_internal(mhi_cntrl, false);
+	WRITE_ONCE(mhi_cntrl->powering_down, false);
 }
 EXPORT_SYMBOL_GPL(mhi_ep_power_down);
 
@@ -1538,6 +1547,7 @@ int mhi_ep_register_controller(struct mhi_ep_cntrl *mhi_cntrl,
 	INIT_LIST_HEAD(&mhi_cntrl->st_transition_list);
 	INIT_LIST_HEAD(&mhi_cntrl->ch_db_list);
 	WRITE_ONCE(mhi_cntrl->unregistering, false);
+	WRITE_ONCE(mhi_cntrl->powering_down, false);
 	spin_lock_init(&mhi_cntrl->list_lock);
 	mutex_init(&mhi_cntrl->state_lock);
 	mutex_init(&mhi_cntrl->event_lock);
@@ -1617,8 +1627,6 @@ void mhi_ep_unregister_controller(struct mhi_ep_cntrl *mhi_cntrl)
 
 	/* Stop IRQ and reset-work producers before draining the endpoint workqueue. */
 	WRITE_ONCE(mhi_cntrl->unregistering, true);
-	synchronize_irq(mhi_cntrl->irq);
-	cancel_work_sync_with_sync_wait(&mhi_cntrl->reset_work);
 	mhi_ep_power_down(mhi_cntrl);
 	destroy_workqueue_with_sync_wait(mhi_cntrl->wq);
 

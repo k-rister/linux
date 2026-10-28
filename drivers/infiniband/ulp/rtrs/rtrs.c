@@ -11,6 +11,7 @@
 
 #include <linux/module.h>
 #include <linux/inet.h>
+#include <linux/workqueue.h>
 
 #include "rtrs-pri.h"
 #include "rtrs-log.h"
@@ -409,7 +410,7 @@ EXPORT_SYMBOL_GPL(rtrs_start_hb);
 
 void rtrs_stop_hb(struct rtrs_path *path)
 {
-	cancel_delayed_work_sync(&path->hb_dwork);
+	cancel_delayed_work_sync_with_sync_wait(&path->hb_dwork);
 	path->hb_missed_cnt = 0;
 }
 EXPORT_SYMBOL_GPL(rtrs_stop_hb);

@@ -817,7 +817,7 @@ extern void __warn_flushing_systemwide_wq(void)
 #define flush_scheduled_work()						\
 ({									\
 	__warn_flushing_systemwide_wq();				\
-	__flush_workqueue(system_percpu_wq);					\
+	__flush_workqueue_with_sync_wait(system_percpu_wq);		\
 })
 
 #define flush_workqueue(wq)						\

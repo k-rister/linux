@@ -1981,3 +1981,15 @@ The implementation checkpoints are:
     review found no in-tree late-enqueue bug or required code change here;
     out-of-tree references were not audited. Phase 8 remains open for the
     broader queue and isolation review.
+
+    MHI endpoint also owns a ``WQ_PERCPU`` queue whose state, command, and
+    channel-ring work is produced by its controller IRQ handler. Power-down
+    now disables the IRQ before aborting transfers and flushing that queue;
+    the reset path synchronizes the IRQ already disabled by its handler without
+    adding another IRQ-disable depth. Controller unregister marks the instance
+    as shutting down, synchronizes the IRQ, cancels reset work, and then powers
+    down before destroying the queue. The IRQ handler acknowledges and exits
+    during unregister, and power-up rejects a late reset-worker restart. This
+    closes the in-tree IRQ and reset-work producer paths before the drain. The
+    MHI endpoint object builds, but this VM has no MHI endpoint hardware for a
+    runtime check. Phase 8 remains open for broader queue and isolation review.

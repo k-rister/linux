@@ -118,6 +118,7 @@ struct mhi_ep_buf_info {
  * @index: MHI Endpoint controller index
  * @irq: IRQ used by the endpoint controller
  * @enabled: Check if the endpoint controller is enabled or not
+ * @unregistering: Check if the endpoint controller is being unregistered
  */
 struct mhi_ep_cntrl {
 	struct device *cntrl_dev;
@@ -178,6 +179,7 @@ struct mhi_ep_cntrl {
 	u32 index;
 	int irq;
 	bool enabled;
+	bool unregistering;
 };
 
 /**

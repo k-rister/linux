@@ -603,9 +603,10 @@ run-specific results must be recorded with the kernel build and test logs.
        gate completed, followed by a successful inactive-CPU rendezvous and
        CPU 1 online. The owner returned through the expected NMI escape path
        with recovery successful and 31 ms of active time; the timed escape
-       fallback was not reached. Candidate build ``#67`` passed a repeat with
-       a 3 s configured run: the owner exited after 35.658 ms, recovery
-       succeeded, and CPU 1 came online. Repeated and loaded hotplug races
+       fallback was not reached. Candidate build ``#67`` passed two repeat
+       runs: with a 3 s configured run the owner exited after 35.658 ms; with
+       a 5 s configured run it exited after 30.457 ms. Recovery succeeded in
+       both runs and CPU 1 came online. Repeated and loaded hotplug races
        remain unrepresented.
    * - ``stop_machine()`` requests
      - **Owner-stop on sleepable paths; reject unscoped inactive rendezvous.**

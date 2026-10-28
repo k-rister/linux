@@ -4,7 +4,7 @@
 set -eu
 
 tool=${CPU_ACCELCTL:-./cpu-accelctl}
-target_cpu=${CPU_ACCEL_CPU:-1}
+target_cpu=${CPU_ACCEL_CPU:-2}
 interface=${CPU_ACCEL_IRQ_INTERFACE:-}
 storm_host=${CPU_ACCEL_IRQ_STORM_HOST:-}
 duration=${CPU_ACCEL_IRQ_STORM_SECONDS:-3}

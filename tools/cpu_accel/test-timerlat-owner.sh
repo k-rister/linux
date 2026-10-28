@@ -6,7 +6,7 @@ set -eu
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 tool=${CPU_ACCELCTL:-$script_dir/cpu-accelctl}
 trace_root=${TRACEFS:-/sys/kernel/tracing}
-target_cpu=${CPU_ACCEL_TIMERLAT_CPU:-1}
+target_cpu=${CPU_ACCEL_TIMERLAT_CPU:-2}
 period_us=${CPU_ACCEL_TIMERLAT_PERIOD_US:-1000}
 escape_ms=${CPU_ACCEL_TIMERLAT_ESCAPE_AFTER_MS:-250}
 baseline_ms=${CPU_ACCEL_TIMERLAT_BASELINE_MS:-500}

@@ -6,7 +6,7 @@ set -eu
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 tool=${CPU_ACCELCTL:-$script_dir/cpu-accelctl}
 rescue=${CPU_ACCEL_ESCAPE_RESCUE:-$script_dir/test-user-escape-rescue}
-target_cpu=${CPU_ACCEL_ESCAPE_CPU:-1}
+target_cpu=${CPU_ACCEL_ESCAPE_CPU:-2}
 escape_ms=${CPU_ACCEL_ESCAPE_AFTER_MS:-250}
 duration_ms=5000
 drop_parameter=/sys/module/cpu_accel/parameters/user_escape_drop_count

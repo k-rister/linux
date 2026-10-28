@@ -4,7 +4,7 @@
 set -eu
 
 tool=${CPU_ACCELCTL:-./cpu-accelctl}
-target_cpu=${CPU_ACCEL_CPU:-1}
+target_cpu=${CPU_ACCEL_CPU:-2}
 online_file=/sys/devices/system/cpu/cpu${target_cpu}/online
 stop_output=$(mktemp)
 invalid_output=$(mktemp)

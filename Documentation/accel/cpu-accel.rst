@@ -460,11 +460,18 @@ run-specific results must be recorded with the kernel build and test logs.
      - These are focused cases, not an exhaustive test of module lifecycle or
        all executable-memory writers.
    * - Perf and tracing operations
-     - **Owner-stop for the audited ftrace maintenance path; otherwise
-       unclassified.**
+     - **Owner-stop for the audited ftrace maintenance path and per-CPU PMU
+       event installation; otherwise unclassified.** Perf's per-CPU event
+       installation uses a synchronous CPU callback, which enters the generic
+       owner-stop hook before it can complete on the target CPU.
      - ``test-ftrace-maintenance.sh`` tests function-graph teardown and
-       optional BPF JIT churn.
-     - No perf-event churn test or comprehensive tracing-operation matrix.
+       optional BPF JIT churn. ``test-perf-owner-stop.sh`` opens a per-CPU
+       ``cycles:u`` event while a ring-3 owner is active and checks the paired
+       owner-stop and exit tracepoints.
+     - The perf probe has not run against the accelerator kernel in the
+       current VM, and covers one hardware event install/close path only.
+       Repeated PMU churn, task-scoped events, PMI delivery during ownership,
+       and a comprehensive tracing-operation matrix remain open.
    * - Resctrl changes
      - **Owner-stop for synchronous remote CPU callbacks.** The x86 domain
        programming paths use ``smp_call_function_any(..., 1)`` and

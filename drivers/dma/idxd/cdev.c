@@ -323,7 +323,8 @@ failed:
 	return rc;
 }
 
-static void idxd_cdev_evl_drain_pasid(struct idxd_wq *wq, u32 pasid)
+static void idxd_cdev_evl_drain(struct idxd_wq *wq, u32 pasid,
+				bool match_pasid)
 {
 	struct idxd_device *idxd = wq->idxd;
 	struct idxd_evl *evl = idxd->evl;
@@ -343,7 +344,8 @@ static void idxd_cdev_evl_drain_pasid(struct idxd_wq *wq, u32 pasid)
 
 	while (h != t) {
 		entry_head = (struct __evl_entry *)(evl->log + (h * ent_size));
-		if (entry_head->pasid == pasid && entry_head->wq_idx == wq->id)
+		if ((!match_pasid || entry_head->pasid == pasid) &&
+		    entry_head->wq_idx == wq->id)
 			set_bit(h, evl->bmap);
 		h = (h + 1) % size;
 	}
@@ -351,6 +353,16 @@ static void idxd_cdev_evl_drain_pasid(struct idxd_wq *wq, u32 pasid)
 		drain_workqueue_with_sync_wait(wq->wq);
 
 	mutex_unlock(&evl->lock);
+}
+
+static void idxd_cdev_evl_drain_pasid(struct idxd_wq *wq, u32 pasid)
+{
+	idxd_cdev_evl_drain(wq, pasid, true);
+}
+
+static void idxd_cdev_evl_drain_wq(struct idxd_wq *wq)
+{
+	idxd_cdev_evl_drain(wq, 0, false);
 }
 
 static int idxd_cdev_release(struct inode *node, struct file *filep)
@@ -667,6 +679,12 @@ static void idxd_user_drv_remove(struct idxd_dev *idxd_dev)
 	mutex_lock(&wq->wq_lock);
 	idxd_wq_del_cdev(wq);
 	idxd_drv_disable_wq(wq);
+	/*
+	 * The event-log IRQ thread can still be processing the WQ's final
+	 * entries. Mark those entries as consumed and drain queued fault work
+	 * under evl->lock before destroying the per-WQ workqueue.
+	 */
+	idxd_cdev_evl_drain_wq(wq);
 	wq->type = IDXD_WQT_NONE;
 	destroy_workqueue_with_sync_wait(wq->wq);
 	wq->wq = NULL;

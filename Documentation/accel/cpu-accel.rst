@@ -622,6 +622,11 @@ run-specific results must be recorded with the kernel build and test logs.
        workqueue; the FF-A SRCU barrier above now makes that unregister wait
        for callbacks already selected for dispatch. This audit is source-only;
        no SMC secure-world or FF-A runtime test was available.
+       IDXD's event-log IRQ thread can queue fault work onto a user WQ's
+       private per-CPU queue. WQ teardown now serializes with event-log
+       processing, marks remaining entries for that WQ consumed, and drains
+       the private queue before destroying it. The IDXD cdev object builds on
+       this x86 host; no IDXD hardware is available for runtime validation.
      - The scripts cover selected producers and APIs, not every queue,
        callback, or synchronous wait site under load.
    * - ``mmap``/unmap and page-table changes on other CPUs

@@ -591,7 +591,12 @@ run-specific results must be recorded with the kernel build and test logs.
        A producer-lifecycle review of LiquidIO's indirect per-CPU queue fields
        found that NIC_INFO link-status work is queued while holding
        ``link_status_lock``; teardown clears the interface pointer under the
-       same lock before draining that work. RX OOM polling is queued from
+       same lock before draining that work. The shared NIC_INFO dispatch
+       callback can remain registered until device cleanup: taking the lock
+       waits for an in-flight producer, and clearing the interface pointer
+       prevents later callbacks from queueing for it. Synchronous delayed-work
+       cancellation then completes any queued or running callback before the
+       netdev is freed. RX OOM polling is queued from
        receive processing and may requeue itself; normal interface stop
        disables NAPI before the queue is drained. Channel reconfiguration
        previously ignored ``ndo_stop()`` errors and could proceed to queue

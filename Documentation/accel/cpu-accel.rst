@@ -566,9 +566,12 @@ run-specific results must be recorded with the kernel build and test logs.
        stop request from ``__smp_call_function_single`` with its exit 79 us
        later. The run reported ``state=7``, ``recovery_state=2``,
        ``user_escape_count=1``, ``arch_call_function_deferred=1``, and
-       ``migration_detected=0``, with no kernel-error records. Repeated PMU
-       churn, task-scoped events, PMI delivery during ownership, and a
-       comprehensive tracing-operation matrix remain open.
+       ``migration_detected=0``, with no kernel-error records. Three
+       additional serial runs passed, each taking 253--254 ms and reading
+       192--219 cycles. Every run verified the owner-stop and exit trace pair
+       and an empty kernel-error log. These four bounded runs do not cover
+       high-volume or concurrent PMU churn, task-scoped events, PMI delivery
+       during ownership, or a comprehensive tracing-operation matrix.
    * - Resctrl changes
      - **Owner-stop for synchronous remote CPU callbacks.** The x86 domain
        programming paths use ``smp_call_function_any(..., 1)`` and

@@ -149,6 +149,9 @@ threads, or modify its address space while active.  The x86 escape path only
 handles a user-mode frame on a live local APIC; it does not recover a CPU
 stuck in kernel mode, an NMI/SMI/machine-check path, a disabled or failed
 local APIC, a host or hypervisor fault, or a corrupted/self-modifying image.
+The module rejects Xen PV and HVM guests at initialization: this backend's
+staged IPI vectors and native TLB ownership hooks do not use Xen's IPI and
+TLB-flush paths.
 The image and stack are pinned only for the active epoch, and the current
 prototype still does not provide an IOMMU domain or a formal hard-latency
 bound.

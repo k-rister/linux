@@ -40,6 +40,7 @@
 #include <asm/ptrace.h>
 #include <asm/segment.h>
 #include <asm/vsyscall.h>
+#include <xen/xen.h>
 #endif
 
 #include <trace/events/workqueue.h>
@@ -2151,6 +2152,15 @@ static const struct file_operations cpu_accel_fops = {
 static int __init cpu_accel_init(void)
 {
 	int ret;
+
+#ifdef CONFIG_X86
+	/* Xen uses different IPI vectors and TLB-flush paths. */
+	if (xen_domain()) {
+		pr_err("cpu_accel: Xen guests are unsupported by the native x86 "
+		       "backend\n");
+		return -EOPNOTSUPP;
+	}
+#endif
 
 	BUILD_BUG_ON(sizeof(struct cpu_accel_shared) > CPU_ACCEL_MAP_SIZE);
 	BUILD_BUG_ON(sizeof(struct cpu_accel_shared_region) >

@@ -1963,3 +1963,16 @@ The implementation checkpoints are:
     ``WQ_PERCPU`` queue was found among these candidates. This bounded scan
     does not cover every cross-file work producer or non-workqueue wait site;
     Phase 8 remains open.
+
+    The driver-core ``device_link_wq`` is another ``WQ_PERCPU`` queue. Its
+    sole queue producer is ``devlink_dev_release()``, which queues removal
+    work when a device-link device reaches final release. OF overlay removal
+    synchronously unregisters detached platform devices; device teardown
+    purges their links before ``free_overlay_changeset()`` calls
+    ``of_changeset_destroy()``, whose wait uses
+    ``flush_workqueue_with_sync_wait()``. That orders ordinary link purges
+    before the flush and the queue itself has boot-long lifetime. The enqueue
+    still occurs at final release, however, so this review has not established
+    that a delayed final put cannot enqueue after the flush. No code change or
+    runtime coverage is justified yet; proving that producer-quiescence edge
+    remains open work for Phase 8.

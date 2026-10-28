@@ -365,3 +365,158 @@ and checkpoint 10 TLB policy are in place for the tested x86 prototype. IOMMU-
 backed memory and networking remain gated on the adversarial validation phase.
 A stronger latency claim must wait for those controls and for a defined
 recovery contract.
+
+Phase 8 isolation matrix
+========================
+
+This matrix maps the Phase 8 activity classes to the current x86 prototype's
+policy and evidence.  A listed test is a test entry point, not a claim that it
+passed on the current kernel.  The matrix records source and harness coverage;
+run-specific results must be recorded with the kernel build and test logs.
+
+.. list-table:: Phase 8 activity disposition and evidence
+   :header-rows: 1
+   :widths: 17 39 25 20
+
+   * - Activity
+     - Disposition and policy
+     - Evidence in tree
+     - Missing evidence or limitation
+   * - Normal IRQ affinity and IRQ storms
+     - **Routed/rejected, opt-in.** IRQ quarantine moves migratable normal
+       IRQs to other online CPUs and rejects admission if a blocker remains.
+       It does not cover IPIs, local timers, NMIs, firmware, or internal IRQ
+       affinity changes after admission.
+     - ``test-cpu-accel.sh`` has an optional ``--quarantine-irqs`` path;
+       shared results report moved IRQs and blockers.
+     - No IRQ-storm fault injector or post-admission affinity-change test.
+   * - Local timers and timer activity
+     - **Deferred only while maskable interrupts are disabled.** There is no
+       general timer ownership or housekeeping-routing policy for an active
+       CPU. Timer migration maintenance requests owner stop.
+     - ``test-sync-work-owner-stop.sh`` has a ``timer_migration`` case.
+       Timer and hrtimer softirq deltas are reported.
+     - No local-timer storm test; softirq counts do not count individual
+       timer callbacks or bound their latency.
+   * - RCU callbacks
+     - **Owner-stop for selected synchronous waits; otherwise unclassified.**
+       The IRQ quarantine is not an RCU callback-routing mechanism.
+     - The sync-work test covers selected RCU sheaf and SRCU cleanup paths;
+       ``rcu_softirq_count`` reports the softirq vector.
+     - No RCU callback count, callback storm, or general RCU-routing proof.
+   * - Scheduler and ordinary task placement
+     - **Deferred selectively.** Reschedule IPIs are counted and replayed
+       after owner exit. The prototype reserves the target for selected
+       execution sources; this is not a proof for every Linux kernel path.
+     - ``arch_reschedule_deferred``, context-switch and migration fields;
+       baseline and loaded oslat runs check selected invariants.
+     - No exhaustive task-placement or unbounded-kernel-path detector.
+   * - Asynchronous call-function work
+     - **Deferred.** The request remains queued and is replayed after owner
+       exit.
+     - ``arch_call_function_deferred`` and call-function owner-stop tests.
+     - Other IPI classes and arbitrary callback workloads are not covered by
+       this selective path.
+   * - Synchronous CPU calls and workqueue waits
+     - **Owner-stop, then synchronous completion.** A synchronous waiter
+       reserves the target, requests owner exit, and retains the reservation
+       until its callback completes. Unbound work is **routed** away from the
+       owner; per-CPU work is **deferred** until Linux mode resumes.
+     - ``test-call-function-owner-stop.sh``,
+       ``test-call-function-single-owner-stop.sh``, workqueue counters, and
+       ``test-sync-work-owner-stop.sh`` cover selected callbacks and waits,
+       including vmstat, LRU/SLUB drains, network backlog, vmalloc purge, and
+       focused flush probes. The source audit also converted default-bound
+       notification teardown in the AOA GPIO Feature and PMF backends; those
+       PowerPC-only objects were not build-tested on this x86 host.
+     - The scripts cover selected producers and APIs, not every queue,
+       callback, or synchronous wait site under load.
+   * - ``mmap``/unmap and page-table changes on other CPUs
+     - **Deferred with completion before eligible page reuse; synchronous for
+       remaining paths.** A different-mm ring-3 owner can carry a pending
+       generation and flush locally before reusing that ``mm``. Same-mm VMA
+       teardown cannot overlap the current sealed owner lifecycle.
+     - ``test-tlb-generation.c`` covers remote-mm unmap, COW, data/PTE-page
+       reuse, and a clean-file-page reclaim probe.
+     - Generic batch disposition and same-mm teardown during ownership are
+       outside the current lifecycle contract.
+   * - TLB shootdown pressure
+     - **Deferred selectively or owner-stop/synchronous.** The x86 path
+       filters only eligible different-mm ring-3 targets; same-mm range
+       flushes and kernel-mode owners remain synchronous. Eligible data-page
+       release waits for reconciliation; page-table release remains
+       synchronous.
+     - TLB target telemetry and flush-wait traces;
+       ``test-tlb-flush.sh`` and ``test-tlb-generation.c`` provide focused
+       pressure and reuse cases.
+     - Runtime ``INVLPGB`` validation requires AMD EPYC 7003-or-later
+       hardware, which is unavailable in this environment.
+   * - Module load/unload and executable-code maintenance
+     - **Owner-stop before audited maintenance.** The text and ftrace paths
+       with a reservation drain active owners before mutation.
+     - ``test-tlb-flush.sh`` loads a probe while the owner runs;
+       sync-work probes exercise selected ``rmmod`` cleanup. The ftrace test
+       tears down function-graph tracing and optionally runs BPF JIT churn.
+     - These are focused cases, not an exhaustive test of module lifecycle or
+       all executable-memory writers.
+   * - Perf and tracing operations
+     - **Owner-stop for the audited ftrace maintenance path; otherwise
+       unclassified.**
+     - ``test-ftrace-maintenance.sh`` tests function-graph teardown and
+       optional BPF JIT churn.
+     - No perf-event churn test or comprehensive tracing-operation matrix.
+   * - Resctrl changes
+     - **Unclassified.** No general admission, routing, or owner-stop rule is
+       established by the current evidence.
+     - No resctrl fault-injection test or dedicated counter.
+     - Must be classified and tested before claiming Phase 8 coverage.
+   * - CPU hotplug attempts
+     - **Owner-stop before offlining.** The offlining request waits until the
+       active owner exits, then removes the CPU.
+     - ``test-cpu-accel.sh`` starts an active owner, requests offlining from
+       CPU 0, and checks that the owner exits before the CPU goes offline.
+     - Repeated and loaded hotplug races are not represented by this case.
+   * - ``stop_machine()`` requests
+     - **Not proven rejected or safe.** Current documentation requires an
+       audited owner reservation or an explicit unsupported rule; a blanket
+       gate can invert existing lock order.
+     - Source review documents the lock-order hazard and audited text-patching
+       call sites.
+     - No general ``stop_machine()`` fault injector or complete caller
+       disposition table.
+   * - Memory pressure and reclaim
+     - **Safe only on audited completion paths; otherwise synchronous.** A
+       clean file-page reclaim probe waits for owner reconciliation. Dirty or
+       writeback reclaim and migration remain synchronous.
+     - ``test-tlb-generation.c`` exercises ``MADV_PAGEOUT``; sync-work tests
+       cover LRU/SLUB drains and vmalloc purge.
+     - No sustained pressure envelope or dirty/writeback/migration stress
+       report.
+   * - Device-management operations
+     - **Unclassified beyond tested network backlog work.** The backlog flush
+       test does not establish a general device ownership or reset policy.
+     - ``test-sync-work-owner-stop.sh`` has a veth/network-backlog case.
+     - No device reset, teardown, or management-operation fault matrix.
+   * - Exceptions, NMIs, and machine checks
+     - **NMI escape is owner-terminating recovery for the tested ring-3
+       workload; general events are not contained.** NMI and MCE counts are
+       folded into ``arch_irq_count``; exceptions have no dedicated count.
+     - ``user_escape_count`` reports the escape experiment; the aggregate x86
+       IRQ counter includes NMI and MCE statistics.
+     - No separate event counters, exception injection matrix, or safe MCE
+       injection evidence.
+   * - No ordinary task or unbounded path; latency
+     - **Selected invariants measured; no hard bound.** Existing counters do
+       not prove absence of every ordinary Linux or unbounded kernel path.
+     - Context-switch, migration, reschedule, IRQ/IPI/TLB, workqueue, and
+       workload-lateness fields; tests report observed maxima for selected
+       workloads.
+     - No full Phase 8 worst-case latency report, percentile distribution, or
+       complete event correlation across the listed stress classes.
+
+The plan's disposition vocabulary is safe, routed to housekeeping, deferred,
+rejected, or domain-terminating. Several rows remain unclassified or have only
+selective policies; those are open audit findings, not implied rejections.
+Phase 8 remains open until each activity has an enforced disposition, the
+fault-injection suite and counters cover the required events, and a
+run-specific worst-case latency report is recorded.

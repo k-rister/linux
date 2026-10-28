@@ -414,7 +414,7 @@ run-specific results must be recorded with the kernel build and test logs.
        ``make -C tools/cpu_accel test-irq-storm`` with
        ``CPU_ACCEL_CPU``, ``CPU_ACCEL_IRQ_INTERFACE``, and
        ``CPU_ACCEL_IRQ_STORM_HOST`` set.
-     - On ``accelerator-dev``, kernel
+       On ``accelerator-dev``, kernel
        ``7.3.0-rc3-accel-tlbfix-phase8-irq-d08dba1-02098-gd08dba1bad4f``
        booted through the one-time GRUB entry. Because
        ``CONFIG_KUNIT_DEFAULT_ENABLED`` is unset, ``kunit.enable=1`` was
@@ -428,8 +428,9 @@ run-specific results must be recorded with the kernel build and test logs.
        restored to CPU 3 after the run. A trial on CPU 3 was safely rejected
        because managed virtio-blk IRQ 43 blocked quarantine; affinity rollback
        succeeded. No soft lockup, hung-task, or RCU-stall report appeared in
-       the candidate boot. Software IRQ injection is not used because the x86
-       injection path can prematurely complete an affinity change.
+       the candidate boot.
+     - Software IRQ injection is not used because the x86 injection path can
+       prematurely complete an affinity change.
    * - Local timers and timer activity
      - **Deferred only while maskable interrupts are disabled.** There is no
        general timer ownership or housekeeping-routing policy for an active
@@ -444,7 +445,7 @@ run-specific results must be recorded with the kernel build and test logs.
        ``state=7``, ``recovery_state=2``, ``user_active_ns=15253680``,
        ``timer_softirq_count=0``, and ``hrtimer_softirq_count=0``. The run's
        dmesg and kernel-error deltas were empty.
-     - ``make -C tools/cpu_accel test-timerlat-owner`` pairs a 500 ms
+       ``make -C tools/cpu_accel test-timerlat-owner`` pairs a 500 ms
        CPU1 timerlat baseline with a ring-3 owner interval on the same kernel.
        On 2026-10-28 it passed on
        ``7.3.0-rc3-accel-tlbfix-phase8-irq-d08dba1-02098-gd08dba1bad4f``.
@@ -458,7 +459,7 @@ run-specific results must be recorded with the kernel build and test logs.
        ``recovery_state=2`` and one recovery attempt; no kernel warning or
        error appeared. The userspace controller is pinned to CPU0 so its timed
        escape remains runnable while CPU1 is owned.
-     - On 2026-10-28, the timerlat harness also passed on candidate build
+       On 2026-10-28, the timerlat harness also passed on candidate build
        ``#66`` (``e406bf98cb01``) with a 100 us period on owned CPU 2. The
        500 ms baseline recorded 5,036 IRQ and 5,036 thread samples; IRQ
        p50/p95/p99/max were 1,404/19,652/27,125/44,033 ns, and thread
@@ -466,7 +467,8 @@ run-specific results must be recorded with the kernel build and test logs.
        252,899,414 ns owner interval, one timerlat IRQ sample was observed;
        its maximum latency was 252,811,508 ns and the maximum IRQ gap was
        252,911,000 ns. The accelerator reported zero timer and hrtimer
-       softirq-vector dispatches. This is a high-rate periodic timerlat probe,
+       softirq-vector dispatches.
+     - This is a high-rate periodic timerlat probe,
        not a timer-callback storm or a latency bound; the softirq counters do
        not count individual timer callbacks.
    * - RCU callbacks
@@ -485,7 +487,7 @@ run-specific results must be recorded with the kernel build and test logs.
        ``rcuog/*`` thread had ``Cpus_allowed_list=0-1,3-7``; a ``taskset``
        attempt to move a callback worker to CPU 2 was rejected because the
        kthread has ``PF_NO_SETAFFINITY`` set.
-     - On the same build, ``test-rcu-callback-routing.sh`` passed with 64 of
+       On the same build, ``test-rcu-callback-routing.sh`` passed with 64 of
        64 callbacks completed on CPU 6 while the CPU 2 owner was active;
        ``target_callbacks=0``. The first callback completed 990 ms after the
        owner interval began, and the owner completed its 4.762 s interval with
@@ -493,7 +495,7 @@ run-specific results must be recorded with the kernel build and test logs.
        waits for module-init reclamation to drain before holding its RCU reader:
        that cleanup uses ``execmem_free()`` and a global kernel TLB flush, which
        correctly stops an active owner if the test delays its grace period.
-     - Candidate build ``#68`` (``7.3.0-rc3-accel-tlbfix-02114-gb36ad836e944``)
+       Candidate build ``#68`` (``7.3.0-rc3-accel-tlbfix-02114-gb36ad836e944``)
        passed ``test-rcu-nocb-admission.sh``: CPU 1 was rejected for lacking
        callback offload and CPU 2 completed a 100 ms run with 100 samples and
        no escape. The 64-callback routing test also passed: all callbacks ran
@@ -503,9 +505,10 @@ run-specific results must be recorded with the kernel build and test logs.
        attempt ended early because the one-second module-init drain delay was
        insufficient: the outstanding ``execmem_free()`` TLB flush escaped the
        owner after the probe reader was released. Increasing that test delay to
-       three seconds allowed the rerun to pass. These bounded batches do not
-       cover a sustained callback storm or establish a latency bound.
-       ``rcu_softirq_count`` counts softirq-vector dispatches, not callbacks.
+       three seconds allowed the rerun to pass.
+     - These bounded batches do not cover a sustained callback storm or
+       establish a latency bound. ``rcu_softirq_count`` counts softirq-vector
+       dispatches, not callbacks.
    * - Scheduler and ordinary task placement
      - **Deferred selectively.** Reschedule IPIs are counted and replayed
        after owner exit. The prototype reserves the target for selected
@@ -534,7 +537,7 @@ run-specific results must be recorded with the kernel build and test logs.
        ``sysvec_irq_work()``, and accelerator exit ordering identifies the
        local-vector policy. The aggregate ``arch_irq_count`` includes
        ``IRQ_COUNT_IRQ_WORK`` deliveries.
-     - On 2026-10-28, one initial run returned ``-EIO`` without failure
+       On 2026-10-28, one initial run returned ``-EIO`` without failure
        counters. After adding failure-only probe diagnostics, 16 consecutive
        bounded runs on
        ``7.3.0-rc3-accel-tlbfix-02114-gb36ad836e944`` passed. Each queued one
@@ -567,6 +570,12 @@ run-specific results must be recorded with the kernel build and test logs.
        and owner-aware cancellation, while NetUP's ``struct netup_dma`` uses
        its own single-thread queue. This was a textual false positive, not a
        raw wait on ddbridge's per-CPU queue.
+       A cross-file ``system_percpu_wq`` item-name scan returned four textual
+       hits. The NVMe host and target ``ka_work`` items belong to distinct
+       control types. The mt76 raw waits belong to the separate mt7915 and
+       mt7996 device types; mt792x teardown already uses owner-aware
+       cancellation. Source review found no additional raw wait on
+       ``system_percpu_wq``.
        A producer-lifecycle review of LiquidIO's indirect per-CPU queue fields
        found that NIC_INFO link-status work is queued while holding
        ``link_status_lock``; teardown clears the interface pointer under the
@@ -617,7 +626,7 @@ run-specific results must be recorded with the kernel build and test logs.
        optional BPF JIT churn. ``test-perf-owner-stop.sh`` opens a per-CPU
        ``cycles:u`` event while a ring-3 owner is active and checks the paired
        owner-stop and exit tracepoints.
-     - On 2026-10-28, ``test-perf-owner-stop.sh`` passed on
+       On 2026-10-28, ``test-perf-owner-stop.sh`` passed on
        ``7.3.0-rc3-accel-tlbfix-phase8-irq-d08dba1-02098-gd08dba1bad4f``
        with target CPU 2 and a 3-second escape delay. The per-CPU
        ``cycles:u`` helper completed in 253 ms and read 380 cycles. The trace
@@ -625,8 +634,7 @@ run-specific results must be recorded with the kernel build and test logs.
        ``__smp_call_function_single`` with its exit 75 us later. The run
        reported ``state=7``, ``recovery_state=2``, ``user_escape_count=1``,
        ``arch_call_function_deferred=1``, and ``migration_detected=0``; the
-       captured kernel-error and new-dmesg logs were empty. This covers one
-       hardware-event install/close path only. On the same date, the test also
+       captured kernel-error and new-dmesg logs were empty. The test also
        passed on candidate build ``#67``
        (``7.3.0-rc3-accel-tlbfix-02104-ge406bf98cb01-dirty``). The helper
        completed in 254 ms and read 211 cycles; the trace paired owner 10's
@@ -636,9 +644,11 @@ run-specific results must be recorded with the kernel build and test logs.
        ``migration_detected=0``, with no kernel-error records. Three
        additional serial runs passed, each taking 253--254 ms and reading
        192--219 cycles. Every run verified the owner-stop and exit trace pair
-       and an empty kernel-error log. These four bounded runs do not cover
-       high-volume or concurrent PMU churn, task-scoped events, PMI delivery
-       during ownership, or a comprehensive tracing-operation matrix.
+       and an empty kernel-error log.
+     - The four bounded runs cover one hardware-event install/close path only;
+       they do not cover high-volume or concurrent PMU churn, task-scoped
+       events, PMI delivery during ownership, or a comprehensive
+       tracing-operation matrix.
    * - Resctrl changes
      - **Owner-stop for synchronous remote CPU callbacks.** The x86 domain
        programming paths use ``smp_call_function_any(..., 1)`` and
@@ -661,7 +671,7 @@ run-specific results must be recorded with the kernel build and test logs.
        CPU 0, and checks that the owner exits before the CPU goes offline.
        ``test-stop-machine-inactive-owner.sh`` now checks the CPU-up gate,
        owner-exit ordering, and successful inactive-CPU rendezvous.
-     - On candidate build ``#65`` (``d08dba1``), the CPU-up test reproduced a
+       On candidate build ``#65`` (``d08dba1``), the CPU-up test reproduced a
        safety failure: the inactive stop-machine try gate returned ``-EBUSY``,
        but the sysfs write returned success and CPU 1 became online while CPU
        2 still owned the accelerator. On candidate build ``#66``
@@ -673,10 +683,11 @@ run-specific results must be recorded with the kernel build and test logs.
        fallback was not reached. Candidate build ``#67`` passed two repeat
        runs: with a 3 s configured run the owner exited after 35.658 ms; with
        a 5 s configured run it exited after 30.457 ms. Recovery succeeded in
-       both runs and CPU 1 came online. Repeated and loaded hotplug races
-       remain unrepresented. Candidate build ``#68`` passed one 3 s run:
+       both runs and CPU 1 came online. Candidate build ``#68`` passed one
+       3 s run:
        owner active time was 34.544 ms, recovery succeeded, and CPU 1 came
        online after owner exit.
+     - Repeated and loaded hotplug races remain unrepresented.
    * - ``stop_machine()`` requests
      - **Owner-stop on sleepable paths; reject unscoped inactive rendezvous.**
        The public ``stop_machine()`` wrapper drains owners before taking
@@ -700,7 +711,8 @@ run-specific results must be recorded with the kernel build and test logs.
        inactive-CPU reservation returning true and stop-machine returning
        success. Candidate build ``#68`` passed one more traced CPU-up run with
        the same ordering, reservation true, and inactive stop-machine return
-       value zero. Repeated hotplug, caller lock ordering, a general
+       value zero.
+     - Repeated hotplug, caller lock ordering, a general
        ``stop_machine()`` fault injector, and disposition of out-of-tree direct
        ``stop_machine_cpuslocked()`` callers remain open.
    * - Memory pressure and reclaim

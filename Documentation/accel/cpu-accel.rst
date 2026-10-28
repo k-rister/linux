@@ -559,9 +559,16 @@ run-specific results must be recorded with the kernel build and test logs.
        reported ``state=7``, ``recovery_state=2``, ``user_escape_count=1``,
        ``arch_call_function_deferred=1``, and ``migration_detected=0``; the
        captured kernel-error and new-dmesg logs were empty. This covers one
-       hardware-event install/close path only. Repeated PMU churn,
-       task-scoped events, PMI delivery during ownership, and a comprehensive
-       tracing-operation matrix remain open.
+       hardware-event install/close path only. On the same date, the test also
+       passed on candidate build ``#67``
+       (``7.3.0-rc3-accel-tlbfix-02104-ge406bf98cb01-dirty``). The helper
+       completed in 254 ms and read 211 cycles; the trace paired owner 10's
+       stop request from ``__smp_call_function_single`` with its exit 79 us
+       later. The run reported ``state=7``, ``recovery_state=2``,
+       ``user_escape_count=1``, ``arch_call_function_deferred=1``, and
+       ``migration_detected=0``, with no kernel-error records. Repeated PMU
+       churn, task-scoped events, PMI delivery during ownership, and a
+       comprehensive tracing-operation matrix remain open.
    * - Resctrl changes
      - **Owner-stop for synchronous remote CPU callbacks.** The x86 domain
        programming paths use ``smp_call_function_any(..., 1)`` and

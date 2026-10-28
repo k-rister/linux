@@ -1971,8 +1971,13 @@ The implementation checkpoints are:
     purges their links before ``free_overlay_changeset()`` calls
     ``of_changeset_destroy()``, whose wait uses
     ``flush_workqueue_with_sync_wait()``. That orders ordinary link purges
-    before the flush and the queue itself has boot-long lifetime. The enqueue
-    still occurs at final release, however, so this review has not established
-    that a delayed final put cannot enqueue after the flush. No code change or
-    runtime coverage is justified yet; proving that producer-quiescence edge
-    remains open work for Phase 8.
+    before the flush and the queue itself has boot-long lifetime. Producer
+    quiescence was checked against device teardown: ``device_del()`` calls
+    ``device_links_purge()`` synchronously, and the purge unregisters each
+    link device before it returns. No in-tree extra
+    ``get_device()`` reference to ``link_dev`` was found, so its final release
+    queues the removal work before the purge returns. The OF changeset flush
+    therefore follows the in-tree producers for the detached devices. This
+    review found no in-tree late-enqueue bug or required code change here;
+    out-of-tree references were not audited. Phase 8 remains open for the
+    broader queue and isolation review.

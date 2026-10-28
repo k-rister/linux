@@ -448,8 +448,17 @@ run-specific results must be recorded with the kernel build and test logs.
        ``recovery_state=2`` and one recovery attempt; no kernel warning or
        error appeared. The userspace controller is pinned to CPU0 so its timed
        escape remains runnable while CPU1 is owned.
-     - No local-timer storm test; softirq counts do not count individual
-       timer callbacks or bound their latency.
+     - On 2026-10-28, the timerlat harness also passed on candidate build
+       ``#66`` (``e406bf98cb01``) with a 100 us period on owned CPU 2. The
+       500 ms baseline recorded 5,036 IRQ and 5,036 thread samples; IRQ
+       p50/p95/p99/max were 1,404/19,652/27,125/44,033 ns, and thread
+       p50/p95/p99/max were 4,505/35,994/41,646/63,794 ns. During the
+       252,899,414 ns owner interval, one timerlat IRQ sample was observed;
+       its maximum latency was 252,811,508 ns and the maximum IRQ gap was
+       252,911,000 ns. The accelerator reported zero timer and hrtimer
+       softirq-vector dispatches. This is a high-rate periodic timerlat probe,
+       not a timer-callback storm or a latency bound; the softirq counters do
+       not count individual timer callbacks.
    * - RCU callbacks
      - **Enforced policy.** x86 admission requires
        the target CPU to be both RCU-offloaded and outside

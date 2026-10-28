@@ -511,7 +511,19 @@ run-specific results must be recorded with the kernel build and test logs.
        exit.
      - ``arch_call_function_deferred`` and call-function owner-stop tests.
      - Other IPI classes and arbitrary callback workloads are not covered by
-       this selective path.
+       this selective call-function path.
+   * - Local IRQ work callbacks
+     - **Deferred by interrupt masking.** The owner interval keeps IF clear,
+       so the local ``IRQ_WORK_VECTOR`` cannot run until ownership exits.
+       Remote ``irq_work_queue_on()`` requests use the call-function queue and
+       follow its deferral policy. Ring-3 exit retires the mm owner and
+       reconciles TLB state before enabling interrupts.
+     - Source review of ``irq_work_queue()``, ``arch_irq_work_raise()``,
+       ``sysvec_irq_work()``, and the accelerator exit ordering. The aggregate
+       ``arch_irq_count`` includes ``IRQ_COUNT_IRQ_WORK`` deliveries.
+     - No focused injection that queues local IRQ work during ownership, or
+       callback completion/storm evidence. ``arch_irq_count`` does not
+       identify the callback or whether work remained pending at exit.
    * - Synchronous CPU calls and workqueue waits
      - **Owner-stop, then synchronous completion.** A synchronous waiter
        reserves the target, requests owner exit, and retains the reservation

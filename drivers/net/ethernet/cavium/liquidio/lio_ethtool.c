@@ -607,6 +607,7 @@ lio_ethtool_set_channels(struct net_device *dev,
 	struct lio *lio = GET_LIO(dev);
 	struct octeon_device *oct = lio->oct_dev;
 	int stopped = 0;
+	int ret;
 
 	if (strcmp(oct->fw_info.liquidio_firmware_version, "1.6.1") < 0) {
 		dev_err(&oct->pci_dev->dev, "Minimum firmware version required is 1.6.1\n");
@@ -650,7 +651,11 @@ lio_ethtool_set_channels(struct net_device *dev,
 	ifstate_set(lio, LIO_IFSTATE_RESETTING);
 
 	if (netif_running(dev)) {
-		dev->netdev_ops->ndo_stop(dev);
+		ret = dev->netdev_ops->ndo_stop(dev);
+		if (ret) {
+			ifstate_reset(lio, LIO_IFSTATE_RESETTING);
+			return ret;
+		}
 		stopped = 1;
 	}
 

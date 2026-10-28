@@ -531,6 +531,17 @@ run-specific results must be recorded with the kernel build and test logs.
        and owner-aware cancellation, while NetUP's ``struct netup_dma`` uses
        its own single-thread queue. This was a textual false positive, not a
        raw wait on ddbridge's per-CPU queue.
+       A producer-lifecycle review of LiquidIO's indirect per-CPU queue fields
+       found that NIC_INFO link-status work is queued while holding
+       ``link_status_lock``; teardown clears the interface pointer under the
+       same lock before draining that work. RX OOM polling is queued from
+       receive processing and may requeue itself; normal interface stop
+       disables NAPI before the queue is drained. Channel reconfiguration
+       previously ignored ``ndo_stop()`` errors and could proceed to queue
+       teardown without that guarantee. ``lio_ethtool_set_channels()`` now
+       aborts the reset and clears ``LIO_IFSTATE_RESETTING`` if the stop
+       fails. The ``lio_ethtool.o`` object builds on this x86 host, but no
+       LiquidIO hardware is available for runtime validation.
      - The scripts cover selected producers and APIs, not every queue,
        callback, or synchronous wait site under load.
    * - ``mmap``/unmap and page-table changes on other CPUs

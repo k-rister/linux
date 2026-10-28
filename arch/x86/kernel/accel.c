@@ -10,8 +10,10 @@
 #include <linux/mmap_lock.h>
 #include <linux/mutex.h>
 #include <linux/sched/mm.h>
+#include <linux/sched/isolation.h>
 #include <linux/types.h>
 #include <linux/percpu.h>
+#include <linux/rcu_nocb.h>
 #include <linux/sched.h>
 #include <linux/smp.h>
 #include <linux/spinlock.h>
@@ -679,6 +681,12 @@ int x86_cpu_accel_user_enter(unsigned int cpu, struct mm_struct *mm,
 		if (cpu != raw_smp_processor_id()) {
 			preempt_enable();
 			return -EXDEV;
+		}
+		/* RCU nocb workers must remain on RCU housekeeping CPUs. */
+		if (!rcu_current_cpu_is_offloaded() ||
+		    housekeeping_test_cpu(cpu, HK_TYPE_RCU)) {
+			preempt_enable();
+			return -EOPNOTSUPP;
 		}
 		__flush_tlb_all();
 		ret = x86_cpu_accel_owner_enter(cpu, tlb_targets, mm,

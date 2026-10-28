@@ -4,6 +4,7 @@ CC ?= gcc
 CFLAGS ?= -O2 -g
 CFLAGS += -Wall -Wextra -std=c11 -fno-stack-protector -pthread
 CPPFLAGS += -D_GNU_SOURCE -Wno-cpp -I../../include/uapi -I../../usr/include
+KDIR ?= $(abspath ../..)
 
 all: cpu-accelctl
 
@@ -27,6 +28,17 @@ test-timerlat-owner: cpu-accelctl
 test-user-escape-fault: cpu-accelctl test-user-escape-rescue
 	CPU_ACCELCTL=./cpu-accelctl CPU_ACCEL_ESCAPE_RESCUE=./test-user-escape-rescue \
 		sh ./test-user-escape-fault.sh
+
+test-rcu-nocb-admission: cpu-accelctl
+	CPU_ACCELCTL=./cpu-accelctl sh ./test-rcu-nocb-admission.sh
+
+test-rcu-callback-routing: cpu-accelctl rcu-probe
+	CPU_ACCELCTL=./cpu-accelctl \
+		CPU_ACCEL_RCU_PROBE=$(CURDIR)/rcu-probe/cpu_accel_rcu_callback_probe.ko \
+		sh ./test-rcu-callback-routing.sh
+
+rcu-probe:
+	$(MAKE) -C $(KDIR) M=$(CURDIR)/rcu-probe modules
 
 cpu-accelctl: cpu-accelctl.o libcpu_accel.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
@@ -65,6 +77,8 @@ clean:
 		test-perf-event-open test-perf-event-open.o test-user-escape-rescue \
 		test-user-escape-rescue.o \
 		cpu-accelctl.o libcpu_accel.o
+	$(MAKE) -C $(KDIR) M=$(CURDIR)/rcu-probe clean
 
 .PHONY: all clean test test-sync-work-owner-stop test-perf-owner-stop \
-	test-irq-storm test-timerlat-owner test-user-escape-fault
+	test-irq-storm test-timerlat-owner test-user-escape-fault \
+	test-rcu-nocb-admission test-rcu-callback-routing rcu-probe

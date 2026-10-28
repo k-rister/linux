@@ -1448,12 +1448,15 @@ static void rcu_spawn_cpu_nocb_kthread(int cpu)
 	rdp_gp = rdp->nocb_gp_rdp;
 	mutex_lock(&rdp_gp->nocb_gp_kthread_mutex);
 	if (!rdp_gp->nocb_gp_kthread) {
-		t = kthread_run(rcu_nocb_gp_kthread, rdp_gp,
-				"rcuog/%d", rdp_gp->cpu);
+		t = kthread_create(rcu_nocb_gp_kthread, rdp_gp,
+				   "rcuog/%d", rdp_gp->cpu);
 		if (WARN_ONCE(IS_ERR(t), "%s: Could not start rcuo GP kthread, OOM is now expected behavior\n", __func__)) {
 			mutex_unlock(&rdp_gp->nocb_gp_kthread_mutex);
 			goto err;
 		}
+		/* Keep nocb GP work off CPUs isolated from kernel noise. */
+		kthread_bind_mask(t, housekeeping_cpumask(HK_TYPE_RCU));
+		wake_up_process(t);
 		WRITE_ONCE(rdp_gp->nocb_gp_kthread, t);
 		if (kthread_prio)
 			sched_setscheduler_nocheck(t, SCHED_FIFO, &sp);
@@ -1466,6 +1469,8 @@ static void rcu_spawn_cpu_nocb_kthread(int cpu)
 	if (WARN_ONCE(IS_ERR(t), "%s: Could not start rcuo CB kthread, OOM is now expected behavior\n", __func__))
 		goto err;
 
+	/* Prevent affinity changes from routing callback work onto isolated CPUs. */
+	kthread_bind_mask(t, housekeeping_cpumask(HK_TYPE_RCU));
 	if (rcu_rdp_is_offloaded(rdp))
 		wake_up_process(t);
 	else

@@ -614,6 +614,14 @@ run-specific results must be recorded with the kernel build and test logs.
        IRQ registrations and per-CPU data are released afterward. This is a
        source-only audit; no FF-A hardware is available for runtime
        validation.
+       OP-TEE's SMC notification teardown requests asynchronous notification
+       stop, removes the CPU-hotplug IRQ state, drains its owner-aware
+       workqueue,
+       and only then frees the per-CPU IRQ registration and data. Its FF-A
+       teardown relinquishes the notifier before destroying the client
+       workqueue; the FF-A SRCU barrier above now makes that unregister wait
+       for callbacks already selected for dispatch. This audit is source-only;
+       no SMC secure-world or FF-A runtime test was available.
      - The scripts cover selected producers and APIs, not every queue,
        callback, or synchronous wait site under load.
    * - ``mmap``/unmap and page-table changes on other CPUs

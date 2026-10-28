@@ -483,9 +483,19 @@ run-specific results must be recorded with the kernel build and test logs.
        waits for module-init reclamation to drain before holding its RCU reader:
        that cleanup uses ``execmem_free()`` and a global kernel TLB flush, which
        correctly stops an active owner if the test delays its grace period.
-       This bounded batch does not cover a sustained callback storm or
-       establish a latency bound. ``rcu_softirq_count`` counts softirq-vector
-       dispatches, not individual callbacks.
+     - Candidate build ``#68`` (``7.3.0-rc3-accel-tlbfix-02114-gb36ad836e944``)
+       passed ``test-rcu-nocb-admission.sh``: CPU 1 was rejected for lacking
+       callback offload and CPU 2 completed a 100 ms run with 100 samples and
+       no escape. The 64-callback routing test also passed: all callbacks ran
+       on CPU 0, ``target_callbacks=0``, and the first callback completed
+       993 ms after owner entry. The owner completed 4.762 s with 2,048
+       samples, ``user_escape_count=0``, and ``recovery_state=0``. Its first
+       attempt ended early because the one-second module-init drain delay was
+       insufficient: the outstanding ``execmem_free()`` TLB flush escaped the
+       owner after the probe reader was released. Increasing that test delay to
+       three seconds allowed the rerun to pass. These bounded batches do not
+       cover a sustained callback storm or establish a latency bound.
+       ``rcu_softirq_count`` counts softirq-vector dispatches, not callbacks.
    * - Scheduler and ordinary task placement
      - **Deferred selectively.** Reschedule IPIs are counted and replayed
        after owner exit. The prototype reserves the target for selected
@@ -617,7 +627,9 @@ run-specific results must be recorded with the kernel build and test logs.
        runs: with a 3 s configured run the owner exited after 35.658 ms; with
        a 5 s configured run it exited after 30.457 ms. Recovery succeeded in
        both runs and CPU 1 came online. Repeated and loaded hotplug races
-       remain unrepresented.
+       remain unrepresented. Candidate build ``#68`` passed one 3 s run:
+       owner active time was 34.544 ms, recovery succeeded, and CPU 1 came
+       online after owner exit.
    * - ``stop_machine()`` requests
      - **Owner-stop on sleepable paths; reject unscoped inactive rendezvous.**
        The public ``stop_machine()`` wrapper drains owners before taking
@@ -639,7 +651,9 @@ run-specific results must be recorded with the kernel build and test logs.
        < stop``, with the reservation returning true and stop-machine returning
        success. Candidate build ``#67`` repeated that trace order, with the
        inactive-CPU reservation returning true and stop-machine returning
-       success. Repeated hotplug, caller lock ordering, a general
+       success. Candidate build ``#68`` passed one more traced CPU-up run with
+       the same ordering, reservation true, and inactive stop-machine return
+       value zero. Repeated hotplug, caller lock ordering, a general
        ``stop_machine()`` fault injector, and disposition of out-of-tree direct
        ``stop_machine_cpuslocked()`` callers remain open.
    * - Memory pressure and reclaim

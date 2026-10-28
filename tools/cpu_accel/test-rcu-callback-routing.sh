@@ -151,7 +151,10 @@ probe_loaded=1
 # Module init text is reclaimed asynchronously after an RCU grace period.
 # Let that work finish before holding another read-side section; its execmem
 # cleanup performs a kernel-wide TLB flush that correctly stops an active owner.
-sleep 1
+# One second was not sufficient on the test VM: the first grace period could
+# still be pending when the probe reader was acquired, so the later TLB flush
+# interrupted the owner run. Give init-text reclamation three seconds to drain.
+sleep 3
 
 echo 1 >"$probe_dir/hold" || fail "could not hold an RCU read-side section"
 grep -q 'reader_active=1' "$probe_dir/status" || \

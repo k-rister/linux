@@ -485,13 +485,27 @@ run-specific results must be recorded with the kernel build and test logs.
        CPU 0, and checks that the owner exits before the CPU goes offline.
      - Repeated and loaded hotplug races are not represented by this case.
    * - ``stop_machine()`` requests
-     - **Not proven rejected or safe.** Current documentation requires an
-       audited owner reservation or an explicit unsupported rule; a blanket
-       gate can invert existing lock order.
-     - Source review documents the lock-order hazard and audited text-patching
-       call sites.
-     - No general ``stop_machine()`` fault injector or complete caller
-       disposition table.
+     - **Owner-stop on sleepable paths; conditional reject on inactive-CPU
+       rendezvous.** The public ``stop_machine()`` wrapper drains owners before
+       taking CPU-hotplug locks. Each in-tree x86 caller of
+       ``stop_machine_cpuslocked()`` has a caller-side maintenance gate before
+       its locks and rendezvous. When called,
+       ``stop_machine_from_inactive_cpu()`` uses a nonblocking reservation and
+       returns ``-EBUSY`` if an owner prevents it. The x86 cache-CPU-online
+       caller can skip that rendezvous when cache-control setup is disabled or
+       delayed AP initialization remains active. No in-tree x86 caller of
+       ``stop_core_cpuslocked()`` was found.
+     - The callsite review covers CPU hotplug, MTRR updates, late microcode,
+       TDX module installation, and cache initialization. Existing CPU
+       hotplug and ftrace tests cover selected owner-stop paths. A bounded VM
+       probe confirmed the ring-3 owner was active before bringing CPU 3
+       online, but CPU 3 still came online. The test did not establish whether
+       the conditional cache rendezvous ran, so this is not a busy-reject
+       result.
+     - No general ``stop_machine()`` fault injector or counter proves which
+       conditional path ran. The active-owner CPU-up probe is inconclusive;
+       caller lock-order testing and disposition of out-of-tree direct
+       ``stop_machine_cpuslocked()`` callers also remain open.
    * - Memory pressure and reclaim
      - **Safe only on audited completion paths; otherwise synchronous.** A
        clean file-page reclaim probe waits for owner reconciliation. Dirty or

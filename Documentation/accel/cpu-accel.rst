@@ -466,10 +466,18 @@ run-specific results must be recorded with the kernel build and test logs.
        optional BPF JIT churn.
      - No perf-event churn test or comprehensive tracing-operation matrix.
    * - Resctrl changes
-     - **Unclassified.** No general admission, routing, or owner-stop rule is
-       established by the current evidence.
-     - No resctrl fault-injection test or dedicated counter.
-     - Must be classified and tested before claiming Phase 8 coverage.
+     - **Owner-stop for synchronous remote CPU callbacks.** The x86 domain
+       programming paths use ``smp_call_function_any(..., 1)`` and
+       ``on_each_cpu_mask(..., 1)``; the generic synchronous-call hooks reserve
+       each remote CPU and request owner exit before waiting for its callback.
+       Task-group changes and other resctrl activity have no subsystem-specific
+       policy established here.
+     - Source review covers the resctrl callback sites and their path through
+       ``arch_smp_sync_wait_begin/stop/end``. The call-function owner-stop
+       tests cover that generic callback machinery.
+     - No resctrl operation has been fault-injected while an owner is active,
+       and there is no resctrl-specific counter or policy for the remaining
+       task-group and monitoring paths.
    * - CPU hotplug attempts
      - **Owner-stop before offlining.** The offlining request waits until the
        active owner exits, then removes the CPU.

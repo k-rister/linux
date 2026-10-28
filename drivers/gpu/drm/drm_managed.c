@@ -316,6 +316,6 @@ void __drmm_workqueue_release(struct drm_device *device, void *res)
 {
 	struct workqueue_struct *wq = res;
 
-	destroy_workqueue(wq);
+	destroy_workqueue_with_sync_wait(wq);
 }
 EXPORT_SYMBOL(__drmm_workqueue_release);

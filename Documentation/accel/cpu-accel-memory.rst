@@ -1924,3 +1924,27 @@ The implementation checkpoints are:
     not reproduce the original intermittent 00604 lockup; retain the
     synchronous fallback and existing stop/ack protocol while the
     investigation continues.
+
+    On 2026-10-28, a cross-translation-unit workqueue review checked NVMe
+    target and OVPN queue lifetimes. The enabled NVMe target core's
+    ``buffered_io_wq`` and ``zbd_wq`` are per-CPU queues; namespace disable
+    flushes buffered I/O with owner coordination, and both queue destruction
+    paths coordinate owners. NVMe/TCP's per-CPU I/O queue uses owner-aware
+    cancellation during queue release and owner-aware destruction. NVMe/FC
+    flushes and destroys its per-queue per-CPU workqueues with the same
+    helpers. Its raw module-exit flushes target the unbound ``nvmet_wq``.
+    OVPN creates its per-CPU queue before registering interfaces and, at
+    module exit, unregisters the netlink family and link kind before flushing,
+    waiting for RCU work, and destroying the queue with owner coordination;
+    OVPN is disabled in this build configuration, so this is source review
+    only.
+
+    The Xe per-CPU queue audit found ``xe_hw_engine_group::resume_wq`` was
+    released through DRM's generic ``__drmm_workqueue_release()``, which used
+    raw ``destroy_workqueue()``. Managed workqueue release now uses
+    ``destroy_workqueue_with_sync_wait()`` so per-CPU managed queues stop
+    active owners before draining. The other Xe per-CPU teardown sites use
+    owner-aware destruction or drain helpers. ``drm_managed.o`` and
+    ``xe_hw_engine_group.o`` compiled successfully; runtime testing is
+    unavailable because the VM has no Xe GPU. The broader Phase 8 wait-site
+    and isolation audit remains open.

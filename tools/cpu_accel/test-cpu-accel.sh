@@ -31,6 +31,13 @@ fail()
 	exit 1
 }
 
+assert_no_quarantined_irq_delivery()
+{
+	[ -n "$quarantine_arg" ] || return 0
+	printf '%s\n' "$1" | grep -q 'irq_count=0 ' || \
+		fail "IRQ reached accelerator CPU during measured interval"
+}
+
 cleanup()
 {
 	if [ "$run_pid" -ne 0 ]; then
@@ -66,6 +73,7 @@ while [ "$run" -le "$repeats" ]; do
 	output=$($tool run --cpu "$target_cpu" --duration-ms 20 --period-us 1000 \
 		$quiescent_arg $quarantine_arg)
 	echo "$output"
+	assert_no_quarantined_irq_delivery "$output"
 	case "$output" in
 		state=3\ *) ;;
 		*) fail "normal run did not complete" ;;
@@ -115,6 +123,7 @@ memmove_output=$($tool run --cpu "$target_cpu" --duration-ms 20 \
 	--period-us 1000 --workload memmove --work-bytes 4096 \
 	$quiescent_arg $quarantine_arg)
 echo "$memmove_output"
+assert_no_quarantined_irq_delivery "$memmove_output"
 case "$memmove_output" in
 	state=3\ *) ;;
 	*) fail "memmove run did not complete" ;;
@@ -136,6 +145,7 @@ shared_output=$($tool run --cpu "$target_cpu" --duration-ms 20 \
 	--period-us 1000 --workload shared-memmove --work-bytes 4096 \
 	$quiescent_arg $quarantine_arg)
 echo "$shared_output"
+assert_no_quarantined_irq_delivery "$shared_output"
 case "$shared_output" in
 	state=3\ *) ;;
 	*) fail "shared memmove run did not complete" ;;
@@ -167,6 +177,7 @@ x86_64)
 			--period-us 1000 --workload user-oslat \
 			$quiescent_arg $quarantine_arg)
 		echo "$user_output"
+		assert_no_quarantined_irq_delivery "$user_output"
 		case "$user_output" in
 			state=3\ *) ;;
 			*) fail "user-oslat run did not complete" ;;

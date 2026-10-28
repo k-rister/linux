@@ -394,7 +394,8 @@ run-specific results must be recorded with the kernel build and test logs.
        or owner-stopped teardown. Managed IRQs with no available target remain
        shut down until ownership is released.
      - ``test-cpu-accel.sh`` has an optional ``--quarantine-irqs`` path;
-       shared results report moved IRQs and blockers. IRQ KUnit coverage checks
+       it checks moved IRQs, zero blockers, and zero measured ``irq_count`` for
+       kernel, shared-memory, and ring-3 workloads. IRQ KUnit coverage checks
        default startup/internal updates and managed shutdown/restart around an
        active reservation.
      - No IRQ-storm fault injector; the new KUnit cases compile but have not

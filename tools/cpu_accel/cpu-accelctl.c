@@ -993,6 +993,12 @@ static int run_user_workload(const struct cpu_accel_config *requested,
 		cpu_accel_close(&handle);
 		return 2;
 	}
+	/* Keep timeout and escape control runnable while the target is owned. */
+	if (pin_control_cpu() < 0) {
+		perror("pin user control process to CPU 0");
+		cpu_accel_close(&handle);
+		return 1;
+	}
 
 	/* The device opener is the companion, not a valid accelerator worker. */
 	errno = 0;

@@ -434,6 +434,20 @@ run-specific results must be recorded with the kernel build and test logs.
        ``state=7``, ``recovery_state=2``, ``user_active_ns=15253680``,
        ``timer_softirq_count=0``, and ``hrtimer_softirq_count=0``. The run's
        dmesg and kernel-error deltas were empty.
+     - ``make -C tools/cpu_accel test-timerlat-owner`` pairs a 500 ms
+       CPU1 timerlat baseline with a ring-3 owner interval on the same kernel.
+       On 2026-10-28 it passed on
+       ``7.3.0-rc3-accel-tlbfix-phase8-irq-d08dba1-02098-gd08dba1bad4f``.
+       The baseline had 503 IRQ and 503 thread samples at a 1 ms period; IRQ
+       p50/p95/p99/max were 2,160/21,420/27,065/34,946 ns, and thread
+       p50/p95/p99/max were 6,280/38,868/46,572/51,524 ns. During the
+       253,144,053 ns owner interval, one IRQ sample measured 252,562,339 ns
+       of latency; the maximum IRQ gap in the owner trace was 253,559,000 ns.
+       The maximum thread latency was 252,583,299 ns and was recorded just
+       after the active interval. The owner escaped once and recovered with
+       ``recovery_state=2`` and one recovery attempt; no kernel warning or
+       error appeared. The userspace controller is pinned to CPU0 so its timed
+       escape remains runnable while CPU1 is owned.
      - No local-timer storm test; softirq counts do not count individual
        timer callbacks or bound their latency.
    * - RCU callbacks

@@ -897,6 +897,60 @@ static bool user_reclaim_owner_stop_completed(
 	       __atomic_load_n(&shared->user_escape_count, __ATOMIC_ACQUIRE) == 0;
 }
 
+static int wait_for_user_worker(pid_t child, int *status,
+				const volatile struct cpu_accel_shared *shared)
+{
+	/* Test harnesses may wait for the ring-3 owner before injecting activity. */
+	const char *active_marker = getenv("CPU_ACCEL_ACTIVE_MARKER");
+	const struct timespec poll_delay = {
+		.tv_sec = 0,
+		.tv_nsec = 1000000,
+	};
+	bool marker_written = false;
+
+	if (!active_marker || !*active_marker)
+		return waitpid(child, status, 0) < 0 ? -1 : 0;
+
+	for (;;) {
+		pid_t waited;
+
+		if (!marker_written &&
+		    __atomic_load_n(&shared->state, __ATOMIC_ACQUIRE) ==
+			    CPU_ACCEL_STATE_RUNNING &&
+		    __atomic_load_n(&shared->mode, __ATOMIC_ACQUIRE) ==
+			    CPU_ACCEL_MODE_ACCELERATOR &&
+		    __atomic_load_n(&shared->user_active_start_ns,
+				    __ATOMIC_ACQUIRE) &&
+		    !__atomic_load_n(&shared->user_active_end_ns,
+				     __ATOMIC_ACQUIRE)) {
+			static const char ready[] = "active\n";
+			int fd = open(active_marker,
+				      O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC,
+				      0600);
+
+			if (fd < 0) {
+				perror("create active marker");
+				return -1;
+			}
+			if (write(fd, ready, sizeof(ready) - 1) !=
+			    sizeof(ready) - 1) {
+				perror("write active marker");
+				close(fd);
+				return -1;
+			}
+			close(fd);
+			marker_written = true;
+		}
+
+		waited = waitpid(child, status, WNOHANG);
+		if (waited == child)
+			return 0;
+		if (waited < 0)
+			return -1;
+		nanosleep(&poll_delay, NULL);
+	}
+}
+
 static int run_user_workload(const struct cpu_accel_config *requested,
 			     uint64_t escape_after_ms,
 			     uint64_t escape_attempts,
@@ -1019,7 +1073,7 @@ static int run_user_workload(const struct cpu_accel_config *requested,
 				perror("user escape");
 		}
 	}
-	if (waitpid(child, &status, 0) < 0) {
+	if (wait_for_user_worker(child, &status, handle.shared) < 0) {
 		perror("wait for user accelerator");
 		ret = -1;
 	} else if (WIFEXITED(status) && WEXITSTATUS(status)) {

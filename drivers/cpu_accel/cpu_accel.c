@@ -339,7 +339,8 @@ static unsigned int cpu_accel_user_escape_drop_count;
 module_param_named(user_escape_drop_count, cpu_accel_user_escape_drop_count,
 			   uint, 0644);
 MODULE_PARM_DESC(user_escape_drop_count,
-			 "drop this many x86 user escape NMIs for fault-injection testing");
+		 "suppress the NMI of this many upcoming x86 user escape "
+		 "attempts for fault-injection testing");
 #endif
 
 #ifdef CONFIG_X86
@@ -356,6 +357,23 @@ static int cpu_accel_arch_send_user_escape(unsigned int cpu)
 	(void)cpu;
 	return -EOPNOTSUPP;
 #endif
+}
+
+/*
+ * Consume a fault-injection drop on the sending side so that unrelated
+ * NMIs reaching the target cannot eat a drop slot; the attempt then fails
+ * its deadline like a genuinely lost NMI.
+ */
+static int cpu_accel_user_escape_send(unsigned int cpu)
+{
+	if (READ_ONCE(cpu_accel_user_escape_drop_count)) {
+		unsigned int drops = READ_ONCE(cpu_accel_user_escape_drop_count);
+
+		if (cmpxchg(&cpu_accel_user_escape_drop_count, drops,
+			     drops - 1) == drops)
+			return 0;
+	}
+	return cpu_accel_arch_send_user_escape(cpu);
 }
 
 #ifdef CONFIG_X86_LOCAL_APIC
@@ -387,13 +405,6 @@ static int cpu_accel_user_nmi(unsigned int type, struct pt_regs *regs)
 	    raw_smp_processor_id() != READ_ONCE(dev->config.cpu) ||
 	    !user_mode(regs))
 		return NMI_DONE;
-	if (READ_ONCE(cpu_accel_user_escape_drop_count)) {
-		unsigned int drops = READ_ONCE(cpu_accel_user_escape_drop_count);
-
-		if (cmpxchg(&cpu_accel_user_escape_drop_count, drops,
-			     drops - 1) == drops)
-			return NMI_DONE;
-	}
 
 	/*
 	 * Complete the owner exit before the escape tail re-enables
@@ -470,7 +481,7 @@ static int cpu_accel_user_escape(struct cpu_accel_device *dev)
 
 	/* Publish the escape request before raising the target CPU's NMI. */
 	smp_wmb();
-	ret = cpu_accel_arch_send_user_escape(cpu);
+	ret = cpu_accel_user_escape_send(cpu);
 	if (ret) {
 		mutex_lock(&dev->lock);
 		atomic_set(&dev->user_escape_requested, 0);

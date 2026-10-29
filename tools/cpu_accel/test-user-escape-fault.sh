@@ -8,9 +8,13 @@ tool=${CPU_ACCELCTL:-$script_dir/cpu-accelctl}
 rescue=${CPU_ACCEL_ESCAPE_RESCUE:-$script_dir/test-user-escape-rescue}
 target_cpu=${CPU_ACCEL_ESCAPE_CPU:-2}
 escape_ms=${CPU_ACCEL_ESCAPE_AFTER_MS:-250}
+drop_count=${CPU_ACCEL_ESCAPE_DROP_COUNT:-1}
 duration_ms=5000
 drop_parameter=/sys/module/cpu_accel/parameters/user_escape_drop_count
 outdir=${CPU_ACCEL_TRACE_DIR:-$(mktemp -d /tmp/cpu-accel-escape-fault.XXXXXX)}
+thp_enabled_path=/sys/kernel/mm/transparent_hugepage/enabled
+thp_enabled_saved=
+thp_enabled_changed=0
 saved_drop_count=
 drop_count_saved=0
 dmesg_pid=
@@ -51,6 +55,12 @@ cleanup()
 		fi
 		drop_count_saved=0
 	fi
+	if [ "$thp_enabled_changed" -eq 1 ]; then
+		timeout --kill-after=2s 8s sh -c \
+			"echo '$thp_enabled_saved' > '$thp_enabled_path'" \
+			2>/dev/null || true
+		thp_enabled_changed=0
+	fi
 	exit "$status"
 }
 
@@ -66,9 +76,14 @@ trap 'exit 1' HUP INT TERM
 case "$target_cpu:$escape_ms" in
 *[!0-9:]*|0:*|*:0) fail "CPU and escape delay must be positive integers" ;;
 esac
+case "$drop_count" in
+''|*[!0-9]*) fail "drop count must be a non-negative integer" ;;
+esac
 [ "$target_cpu" -ne 0 ] || fail "target CPU must differ from the CPU0 escape controller"
 [ "$escape_ms" -lt 3000 ] || \
 	fail "escape delay must leave time for the independent rescue helper"
+[ "$drop_count" -le 3 ] || \
+	fail "drop count must leave time for the independent rescue helper"
 [ "$(cat "/sys/devices/system/cpu/cpu$target_cpu/online")" = 1 ] || \
 	fail "target CPU $target_cpu is offline"
 
@@ -77,7 +92,28 @@ case "$saved_drop_count" in
 ''|*[!0-9]*) fail "unexpected drop parameter value: $saved_drop_count" ;;
 esac
 drop_count_saved=1
-echo 1 >"$drop_parameter"
+echo "$drop_count" >"$drop_parameter"
+
+# khugepaged's lru_add_drain_all() stops every owned CPU on its scan period,
+# which would end the run before the injected window completes. Disable THP
+# for the run; cleanup restores the selected mode.
+if [ -r "$thp_enabled_path" ] && [ -w "$thp_enabled_path" ]; then
+	thp_enabled_state=$(cat "$thp_enabled_path")
+	thp_enabled_saved=$(printf '%s\n' "$thp_enabled_state" |
+		sed -n 's/.*\[\([^]]*\)\].*/\1/p')
+	[ -n "$thp_enabled_saved" ] || \
+		fail "could not read the selected transparent hugepage mode"
+	if [ "$thp_enabled_saved" != never ]; then
+		thp_enabled_changed=1
+		echo never >"$thp_enabled_path" || \
+			fail "could not disable transparent hugepages for the escape fault test"
+	fi
+	case "$(cat "$thp_enabled_path")" in
+	*'[never]'*) ;;
+	*) fail "transparent hugepages did not enter never mode" ;;
+	esac
+	echo "INFO: transparent hugepages temporarily disabled (previous mode: $thp_enabled_saved)"
+fi
 
 dmesg --follow-new >"$outdir/dmesg-new.log" 2>&1 &
 dmesg_pid=$!
@@ -86,11 +122,11 @@ rescue_pid=$!
 sleep 0.05
 
 # The independent rescue helper issues a clean NMI after five seconds if the
-# retry path fails. The injected drop should make the second attempt win first.
+# retry path fails. The suppressed attempts should make the final attempt win.
 owner_started=1
 if ! "$tool" run --cpu "$target_cpu" --duration-ms "$duration_ms" \
 	--period-us 1000 --workload user-hang --escape-after-ms "$escape_ms" \
-	--escape-retries 2 >"$outdir/ctl.log" 2>&1; then
+	--escape-retries $((drop_count + 1)) >"$outdir/ctl.log" 2>&1; then
 	owner_finished=1
 	fail "bounded retry run failed"
 fi
@@ -102,21 +138,23 @@ dmesg_pid=
 
 grep -q 'state=7 mode=0 ' "$outdir/ctl.log" || \
 	fail "fault-injected escape did not reach ESCAPED/Linux state"
-grep -q 'recovery_state=2 recovery_error=0 recovery_attempts=2 ' \
+grep -q "recovery_state=2 recovery_error=0 recovery_attempts=$((drop_count + 1)) " \
 	"$outdir/ctl.log" || fail "escape retry result was not reported exactly"
 grep -q 'user_escape_count=1 ' "$outdir/ctl.log" || \
 	fail "successful escape NMI was not counted exactly once"
 grep -Eq 'user_active_ns=[1-9][0-9]* ' "$outdir/ctl.log" || \
 	fail "owner active interval was not reported"
 [ "$(cat "$drop_parameter")" = 0 ] || \
-	fail "the injected NMI drop was not consumed exactly once"
+	fail "the injected NMI drops were not all consumed"
+# Suppressed attempts never send an NMI, so no unclaimed-NMI diagnostic may
+# appear on the target CPU; the final delivered escape NMI is claimed.
 nmi_count=$(grep -F 'Uhhuh. NMI received for unknown reason' \
 	"$outdir/dmesg-new.log" | grep -F -c "on CPU $target_cpu." || true)
-[ "$nmi_count" = 1 ] || \
-	fail "expected one unclaimed injected NMI diagnostic on CPU $target_cpu"
+[ "$nmi_count" = 0 ] || \
+	fail "unexpected unclaimed NMI diagnostics on CPU $target_cpu"
 [ "$(grep -F -c 'Dazed and confused, but trying to continue' \
-	"$outdir/dmesg-new.log" || true)" = 1 ] || \
-	fail "expected the matching unknown-NMI continuation diagnostic"
+	"$outdir/dmesg-new.log" || true)" = 0 ] || \
+	fail "unexpected unknown-NMI continuation diagnostics"
 
 grep -Ei 'BUG:|Oops:|soft lockup|blocked for more than|RCU.*stall|Kernel panic' \
 	"$outdir/dmesg-new.log" >"$outdir/kernel-errors.log" || true
@@ -124,5 +162,9 @@ grep -Ei 'BUG:|Oops:|soft lockup|blocked for more than|RCU.*stall|Kernel panic' 
 	fail "kernel error appeared during the NMI retry test"
 
 cat "$outdir/ctl.log"
-echo "PASS: one dropped escape NMI was retried and one successful escape was counted"
+if [ "$drop_count" = 0 ]; then
+	echo "PASS: unmodified escape was counted exactly once"
+else
+	echo "PASS: $drop_count suppressed escape attempts were retried and one successful escape was counted"
+fi
 echo "logs: $outdir"

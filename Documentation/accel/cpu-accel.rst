@@ -317,6 +317,46 @@ ring-3 ownership; the NMI queues local IRQ work, the probe checks that its
 callback count stays zero, then a synchronous call stops the owner and the
 probe checks callback completion.
 
+Fault injection uses the ``user_escape_drop_count`` module parameter, which
+suppresses the NMI of that many upcoming user-escape attempts on the sending
+side. A suppressed attempt fails its one-second deadline exactly like a
+genuinely lost NMI, so the controller's retry loop is what recovers the run.
+Consuming the drop on the sender keeps unrelated NMIs from eating a drop
+slot; an earlier receiver-side design let an external NMI arriving during
+the request window consume a drop nondeterministically. The focused test
+runs a bounded ``user-hang`` owner, an independent NMI rescue helper as a
+five-second backstop, and asserts the exact retry accounting::
+
+  sudo sh tools/cpu_accel/test-user-escape-fault.sh
+  sudo env CPU_ACCEL_ESCAPE_DROP_COUNT=2 \
+    sh tools/cpu_accel/test-user-escape-fault.sh
+
+``CPU_ACCEL_ESCAPE_DROP_COUNT`` accepts 0 through 3; the test issues
+``drop + 1`` escape attempts and requires ``recovery_attempts`` equal to
+``drop + 1``, ``user_escape_count`` of exactly one, no unclaimed-NMI
+diagnostics on the target CPU, and full consumption of the drop parameter.
+The test temporarily selects ``never`` in transparent hugepage's ``enabled``
+control and restores the previous mode after the run: ``khugepaged``'s
+``lru_add_drain_all()`` stops every owned CPU on its scan period and would
+otherwise end the run before the injected window completes. On 2026-10-29,
+drop counts 0, 1, and 2 each passed on
+``7.3.0-rc3-accel-tlbfix-02150-gde9255a04ef7`` with the rebuilt driver,
+including a ten-run drop-2 stability loop with no kernel-error match.
+
+The fault-injection coverage by required event is: a lost or suppressed
+escape NMI (this test, drop counts 0 through 3); the timed escape fallback
+(every bounded owner-stop test reaches its timed escape); admission
+rejection under an enabled lockup detector (``test-watchdog-owner-admission.sh``);
+and the ``stop_machine()`` CPU-up rendezvous returning ``-EBUSY`` while its
+caller continues (return-probe evidence on candidate build ``#65``). A
+kernel-initiated stop during a fault-injection run still outranks the
+injected window: the owner-stop contract stops the owner first, the run
+reports the stop path's accounting instead of the retry loop's, and the test
+treats such a run as failed rather than passing it. General exception and
+NMI containment beyond the escape path, and machine-check injection, remain
+open: the in-tree MCE injector's software mode only decodes a synthetic
+record, while hardware mode requires a disposable recovery-capable system.
+
 The opt-in ``flush_work_with_sync_wait()`` API can be checked with a probe
 that queues work on the active owner CPU, then flushes it from another CPU.
 ``flush_workqueue_with_sync_wait()`` covers per-CPU queues whose flush may
@@ -979,21 +1019,29 @@ run-specific results must be recorded with the kernel build and test logs.
        ABI fields. MCE injection is deferred on this recovery-sensitive VM:
        the in-tree injector's software mode only decodes a synthetic record,
        while hardware mode invokes ``#MC`` and may panic.
-     - ``user_escape_count`` and recovery fields report the owner-termination
-       experiment; the aggregate x86 IRQ counter includes NMI and MCE
-       statistics. On 2026-10-28,
-       ``test-user-escape-fault.sh`` passed on
-       ``7.3.0-rc3-accel-tlbfix-phase8-irq-d08dba1-02098-gd08dba1bad4f``
-       with one injected dropped escape NMI. The controller reported
-       ``state=7``, ``recovery_state=2``, ``recovery_attempts=2``,
-       ``user_escape_count=1``, and a 1,252,757,554 ns active interval. The
-       test observed exactly one expected unknown-NMI diagnostic on CPU 1 and
-       its continuation message, then verified no kernel-error match and
-       restored ``user_escape_drop_count``. This validates the retry path for
-       one deliberately dropped escape NMI only.
-     - No exception-specific counter or fault matrix, general NMI containment
-       evidence, or actual MCE injection. Hardware MCE injection requires a
-       disposable recovery-capable test system.
+      - ``user_escape_count`` and recovery fields report the owner-termination
+        experiment; the aggregate x86 IRQ counter includes NMI and MCE
+        statistics. On 2026-10-29,
+        ``test-user-escape-fault.sh`` passed on
+        ``7.3.0-rc3-accel-tlbfix-02150-gde9255a04ef7`` with the sender-side
+        drop parameter for counts 0, 1, and 2, including a ten-run drop-2
+        stability loop: each run reported
+        ``recovery_attempts`` equal to ``drop + 1``,
+        ``user_escape_count=1``, no unknown-NMI diagnostics, no kernel-error
+        match, and full drop consumption, with the transparent hugepage mode
+        restored after each run. This validates the retry path for up to three
+        deliberately suppressed escape NMIs. The earlier 2026-10-28
+        receiver-side drop on
+        ``7.3.0-rc3-accel-tlbfix-phase8-irq-d08dba1-02098-gd08dba1bad4f``
+        demonstrated that an unrelated NMI can consume a drop slot and was
+        replaced by sender-side suppression.
+      - No exception-specific counter or fault matrix, general NMI containment
+        evidence, or actual MCE injection. Hardware MCE injection requires a
+        disposable recovery-capable test system. A kernel-initiated stop
+        (for example ``khugepaged``'s ``lru_add_drain_all()``) outranks an
+        injected drop window and ends the run early; the focused test
+        disables transparent hugepages during the run to keep that source out
+        of the window.
    * - No ordinary task or unbounded path; latency
      - **Selected invariants measured; no hard bound.** Existing counters do
        not prove absence of every ordinary Linux or unbounded kernel path.

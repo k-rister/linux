@@ -2,7 +2,7 @@
 
 Date: 2026-10-29
 Branch: `codex/accelerator-oslat`
-Status: design, pending review and implementation plan
+Status: design, verification recorded, pending implementation
 
 ## Problem
 
@@ -129,6 +129,70 @@ released by `arch_smp_sync_wait_end()`.
    `atomic_dec` of the active count).
 4. Audit other consumers of the early IPI service window (none expected:
    the CPU is not doing useful work while owned).
+
+## Implementation verification
+
+Findings for the four verification items above (2026-10-29):
+
+1. **Interrupt re-enable point.** The implementation does not order a
+   single re-enable point; it completes the owner exit in the stop NMI
+   handler itself (the driver's `cpu_accel_user_nmi`, NMI context on the
+   owned CPU). While the CPU is in NMI context, and afterwards in user
+   mode with the image's forced `IF=0`, no vector (call-function CSD,
+   IRQ work, or any other IPI) can be serviced. The first interrupt
+   re-enable after the escape - whether at the escape tail's syscall
+   entry or at `local_irq_enable()` in the USER_EXIT handler - is
+   therefore ordered after `x86_cpu_accel_owner_exit_finish()` by
+   construction.
+2. **NMI-safety of the local reconcile.** Verified against the current
+   tree: `x86_cpu_accel_owner_exit()` takes only raw spinlocks and calls
+   `mmu_owner_unregister()` (raw spinlocks plus `mmput_async()`),
+   `__flush_tlb_all()` takes no locks,
+   `mmu_owner_subscription_complete_all()` runs only atomics and
+   `schedule_work()` (the production subscriber,
+   `mmu_gather_completion_owner_ops`, is atomic-context safe), and
+   `x86_cpu_accel_owner_exit_finish()` takes a raw spinlock, one
+   `atomic_dec()`, and `wake_up_all()`. No blocking lock and no sleeping.
+   The `stop_inflight` spin at the end of `x86_cpu_accel_owner_exit()`
+   is bounded: the requester decrements `stop_inflight` immediately
+   after the asynchronous NMI send, and the requester CPU spins in the
+   call-function wait loop, so it always runs.
+3. **Release-path idempotency.** `x86_cpu_accel_user_exit()` is already
+   idempotent: `x86_cpu_accel_owner_exit()` publishes the exit with
+   `atomic_xchg(&request->active, 0)` and
+   `x86_cpu_accel_owner_exit_finish()` is a no-op when the exit did not
+   happen, so the global active count is decremented exactly once. One
+   telemetry correction is required: the release path overwrites
+   `shared->arch_tlb_shootdown_targets` from a delta based on the
+   return value of `x86_cpu_accel_user_exit()`, which reads zero when
+   the stop-context exit already ran; the NMI handler captures the exit
+   snapshot and the release path prefers it.
+4. **Early service-window consumers.** None: the owned CPU performs no
+   useful work, and the deferred reschedule/call-function IPIs that
+   `x86_cpu_accel_owner_exit()` re-sends to the local CPU are serviced
+   after the exit has completed.
+
+## Implementation plan
+
+1. `arch/x86/kernel/accel.c`: add exported
+   `x86_cpu_accel_user_stop_exit(unsigned int cpu)`, running
+   `x86_cpu_accel_owner_exit()`, then `x86_cpu_accel_tlb_reconcile()`
+   (always the local branch: the stop target is the calling CPU, so no
+   remote acknowledgement is needed and none can be issued from NMI),
+   then `x86_cpu_accel_owner_exit_finish()`, returning the
+   `tlb_shootdown_targets` snapshot like `x86_cpu_accel_user_exit()`.
+   Assert the calling-CPU invariant with `WARN_ON_ONCE`. Add the
+   non-LAPIC stub next to the `user_enter`/`user_exit` stubs in
+   `arch/x86/include/asm/cpu_accel.h`.
+2. `drivers/cpu_accel/cpu_accel.c`: `cpu_accel_user_nmi()` calls
+   `x86_cpu_accel_user_stop_exit()` (after the drop check, before
+   redirecting to the escape tail) and records the snapshot plus a done
+   flag in `struct cpu_accel_device`. The release path uses the captured
+   snapshot for `shared->arch_tlb_shootdown_targets` when the
+   stop-context exit ran.
+3. Build the candidate kernel, boot it on `accelerator-dev`, and run the
+   test plan below; the `irq-work` probe must show
+   `irq_work_callback_owner_active_count=0`.
 
 ## Test plan
 

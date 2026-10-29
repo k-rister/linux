@@ -784,8 +784,12 @@ run-specific results must be recorded with the kernel build and test logs.
        ``stop_machine_cpuslocked()`` callers remain open.
    * - Frequency, idle, thermal, power-policy, and watchdog changes
      - **Watchdog admission is rejected when an enabled lockup detector
-       covers the target CPU; frequency, idle, thermal, and other power
-       changes remain unclassified.** Soft-lockup watchdog reconfiguration
+       covers the target CPU; in-tree x86 per-CPU MSR policy writes are
+       waited call-function callbacks subject to the sync-callback gap;
+       cpuidle driver maintenance requests owner exit and coupled-idle
+       pokes are deferred; autonomous hardware frequency and thermal
+       behavior is outside the kernel policy envelope.** Soft-lockup
+       watchdog reconfiguration
        uses ``smp_call_on_cpu()`` for per-CPU timer work. A remote call
        requests owner exit and waits for that work to complete. The default
        watchdog mask uses timer-housekeeping CPUs, but the privileged
@@ -803,18 +807,41 @@ run-specific results must be recorded with the kernel build and test logs.
        exit. Waiting for the callback therefore does not prove that the policy
        operation runs after ownership ends; an owner-exit-before-callback
        handshake is still required.
+       A source review of the in-tree x86 per-CPU MSR paths found the same
+       waited ``smp_call_function_single()`` mechanism (``wrmsrq_on_cpu()``
+       and ``rdmsrq_on_cpu()`` in ``arch/x86/lib/msr-smp.c``) for the
+       remaining power-policy writers: ``amd-pstate`` (CPPC_REQ, CPPC_REQ2,
+       and PERF_CTL), ``p4-clockmod`` (THERM_CONTROL),
+       ``speedstep-centrino`` (PERF_CTL), ``intel_epb``
+       (``arch/x86/kernel/cpu/intel_epb.c``, ENERGY_PERF_BIAS),
+       ``x86_pkg_temp_thermal`` (PACKAGE_THERM_INTERRUPT),
+       ``intel-uncore-frequency`` (UNCORE_RATIO_LIMIT), and AMD HFI
+       (WORKLOAD_CLASS_CONFIG and WORKLOAD_HRST). The read-side paths of
+       ``acpi-cpufreq``, ``amd_freq_sensitivity``, ``coretemp``, and the
+       drivers above use the waited ``rdmsrq_on_cpu()``. The user-facing
+       MSR driver (``arch/x86/kernel/msr.c``) writes any online CPU's MSR
+       through ``wrmsrq_safe_on_cpu()`` and carries the same
+       queue-before-stop gap. CPU-idle driver register and unregister run
+       ``cpuidle_setup_broadcast_timer()`` over the driver cpumask through a
+       waited ``on_each_cpu_mask()``, so the generic sync hooks reserve each
+       CPU and request owner exit before the callback; the coupled-idle poke
+       instead queues ``smp_call_function_single_async()`` with no stop
+       request and follows the deferred call-function policy.
+       ``intel_powerclamp`` performs local residency-MSR reads only in this
+       tree, and the legacy ACPI processor throttling driver is absent.
        CPU-frequency cooling updates a frequency-QoS request and may reach
-       this driver path. Other cpufreq drivers and cooling actions are not
-       covered by this source review. Scheduler idle entry is reached through
-       the idle task after its reschedule check; this does not classify idle
-       policy changes or autonomous hardware frequency and thermal changes.
+       this driver path. Scheduler idle entry is reached through the idle
+       task after its reschedule check; this does not classify idle
+       policy changes or autonomous hardware frequency and thermal changes,
+       which do not pass through these kernel callbacks.
      - ``test-watchdog-owner-admission.sh`` changes the watchdog mask to the
        selected CPU and expects owner entry to fail with ``-EBUSY``; it restores
        the prior mask on exit. The x86 object builds, and one bounded run passed
        on candidate kernel
-       ``7.3.0-rc3-accel-tlbfix-02141-g1c9eb2e109a0``. Runtime frequency, idle,
-       thermal, and power-policy tests, event counters, fault injection, and
-       observed latency remain open.
+       ``7.3.0-rc3-accel-tlbfix-02141-g1c9eb2e109a0``. The power-policy MSR
+       review is source-only; runtime frequency, idle, thermal, and
+       power-policy tests, event counters, fault injection, and observed
+       latency remain open.
    * - Microcode updates
      - **Owner-stop at the audited late-microcode ``stop_machine()`` callsite;
        other update paths remain unclassified.** This call-site disposition

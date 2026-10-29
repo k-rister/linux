@@ -783,14 +783,27 @@ run-specific results must be recorded with the kernel build and test logs.
        ``stop_machine()`` fault injector, and disposition of out-of-tree direct
        ``stop_machine_cpuslocked()`` callers remain open.
    * - Frequency, idle, thermal, power-policy, and watchdog changes
-     - **Unclassified by this Phase 8 audit.** The matrix establishes no
-       activity-specific policy for CPU frequency or idle transitions,
-       thermal and power-policy changes, or watchdog reconfiguration while an
-       accelerator owner is active.
-     - No targeted source-path inventory or runtime test for these operations
-       is recorded here.
-     - Their admission or maintenance disposition, event counters, fault
-       injection, and observed latency remain open.
+     - **Partially source-reviewed; the overall disposition remains
+       unclassified.** Soft-lockup watchdog reconfiguration uses
+       ``smp_call_on_cpu()`` for per-CPU timer work. A remote call requests
+       owner exit and waits for that work to complete. The default watchdog
+       mask uses timer-housekeeping CPUs, but the privileged
+       ``watchdog_cpumask`` sysctl can add a possible CPU. The hard-lockup
+       perf-NMI path has no owner-specific disposition here.
+     - Intel P-state policy updates can write a target CPU MSR through
+       ``wrmsrq_on_cpu()``, which uses a waited ``smp_call_function_single()``.
+       Its x86 sync-wait hook requests owner exit, but the synchronous call
+       waits for the IPI callback, not for owner release; that request alone
+       does not establish that the policy operation runs after ownership ends.
+       CPU-frequency cooling updates a frequency-QoS request and may reach
+       this driver path. Other cpufreq drivers and cooling actions are not
+       covered by this source review. Scheduler idle entry is reached through
+       the idle task after its reschedule check; this does not classify idle
+       policy changes or autonomous hardware frequency and thermal changes.
+     - No runtime frequency, idle, thermal, power-policy, or watchdog
+       reconfiguration test is recorded. A complete admission or maintenance
+       disposition, event counters, fault injection, and observed latency
+       remain open.
    * - Microcode updates
      - **Owner-stop at the audited late-microcode ``stop_machine()`` callsite;
        other update paths remain unclassified.** This call-site disposition

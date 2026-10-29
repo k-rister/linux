@@ -9,6 +9,7 @@
 #include <linux/list.h>
 #include <linux/mmap_lock.h>
 #include <linux/mutex.h>
+#include <linux/nmi.h>
 #include <linux/sched/mm.h>
 #include <linux/sched/isolation.h>
 #include <linux/types.h>
@@ -112,6 +113,22 @@ static int x86_cpu_accel_cpu_up_cpu = -1;
 static unsigned int x86_cpu_accel_cpu_up_depth;
 static unsigned int x86_cpu_accel_kgdb_breakpoints;
 
+static bool x86_cpu_accel_watchdog_active(unsigned int cpu)
+{
+#ifdef CONFIG_LOCKUP_DETECTOR
+	unsigned long enabled = READ_ONCE(watchdog_enabled);
+	const unsigned long *mask = cpumask_bits(&watchdog_cpumask);
+
+	if (!(enabled & (WATCHDOG_HARDLOCKUP_ENABLED |
+			 WATCHDOG_SOFTLOCKUP_ENABLED)))
+		return false;
+
+	return READ_ONCE(mask[BIT_WORD(cpu)]) & BIT_MASK(cpu);
+#else
+	return false;
+#endif
+}
+
 static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets,
 				     struct mm_struct *owner_mm,
 				     x86_cpu_accel_stop_fn owner_stop,
@@ -127,6 +144,11 @@ static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets,
 	if (wrong_cpu || cpu >= nr_cpu_ids || !cpu_online(cpu)) {
 		preempt_enable();
 		return wrong_cpu ? -EXDEV : -EINVAL;
+	}
+	/* A live lockup detector can interrupt or schedule on an owned CPU. */
+	if (x86_cpu_accel_watchdog_active(cpu)) {
+		preempt_enable();
+		return -EBUSY;
 	}
 
 	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);

@@ -25,6 +25,9 @@ test-irq-storm: cpu-accelctl
 test-timerlat-owner: cpu-accelctl
 	CPU_ACCELCTL=./cpu-accelctl sh ./test-timerlat-owner.sh
 
+test-watchdog-owner-admission: cpu-accelctl
+	CPU_ACCELCTL=./cpu-accelctl sh ./test-watchdog-owner-admission.sh
+
 test-user-escape-fault: cpu-accelctl test-user-escape-rescue
 	CPU_ACCELCTL=./cpu-accelctl CPU_ACCEL_ESCAPE_RESCUE=./test-user-escape-rescue \
 		sh ./test-user-escape-fault.sh
@@ -81,4 +84,5 @@ clean:
 
 .PHONY: all clean test test-sync-work-owner-stop test-perf-owner-stop \
 	test-irq-storm test-timerlat-owner test-user-escape-fault \
-	test-rcu-nocb-admission test-rcu-callback-routing rcu-probe
+	test-watchdog-owner-admission test-rcu-nocb-admission \
+	test-rcu-callback-routing rcu-probe

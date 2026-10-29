@@ -804,10 +804,10 @@ run-specific results must be recorded with the kernel build and test logs.
        A syscall from the accelerated user image enables interrupts before
        dispatch, so the queued IPI callback can run before
        ``CPU_ACCEL_IOC_USER_EXIT`` reconciles TLB state and completes owner
-       exit. Waiting for the callback therefore does not prove that the policy
-       operation runs after ownership ends; an owner-exit-before-callback
-       handshake is still required.
-       On 2026-10-29, one bounded run of
+        exit. Waiting for the callback therefore does not prove that the policy
+        operation runs after ownership ends; an owner-exit-before-callback
+        handshake is required and is implemented and verified below.
+        On 2026-10-29, one bounded run of
        ``test-call-function-single-owner-stop.sh irq-work`` confirmed that
        gap on kernel
        ``7.3.0-rc3-accel-tlbfix-02141-g1c9eb2e109a0``. With a 5 s user-hang
@@ -824,10 +824,34 @@ run-specific results must be recorded with the kernel build and test logs.
        completed. The run reported ``state=7``, ``recovery_state=2``,
        ``user_escape_count=1``, the paired owner-stop and owner-exit trace
        events, an empty kernel-error log, and clean module and owner
-       cleanup; it was recorded as gap confirmation, and the
-       owner-exit-before-callback handshake design is the required
-       follow-up.
-       A source review of the in-tree x86 per-CPU MSR paths found the same
+        cleanup; it was recorded as gap confirmation, and the
+        owner-exit-before-callback handshake design is the required
+        follow-up.
+        On 2026-10-29, that handshake (Option C in
+        ``phase8-owner-exit-handshake-design.md``) was implemented in
+        ``de9255a04ef7``: the stop NMI handler completes the owner's
+        remaining exit steps (``x86_cpu_accel_owner_exit()``, the
+        local-branch ``x86_cpu_accel_tlb_reconcile()``, and
+        ``x86_cpu_accel_owner_exit_finish()``) through the new
+        ``x86_cpu_accel_user_stop_exit()`` before redirecting to the escape
+        tail, so no vector can be serviced before the exit publishes; the
+        release path stays idempotent and prefers the NMI-captured
+        ``tlb_shootdown_targets`` snapshot for telemetry. On candidate
+        kernel ``7.3.0-rc3-accel-tlbfix-02150-gde9255a04ef7``, four bounded
+        ``irq-work`` probe runs each reported
+        ``irq_work_callback_owner_active_count=0 callback_count=1`` with
+        ``state=7``, ``recovery_state=2``, ``user_escape_count=1``, the
+        paired owner-stop and owner-exit trace events, and empty
+        kernel-error logs. The regression modes ``sync``,
+        ``smp-call-on-cpu``, and ``work-on-cpu`` each passed with empty
+        kernel-error logs, ``test-watchdog-owner-admission.sh`` passed
+        (admission rejected with ``-EBUSY`` while the lockup detector
+        covered CPU 2, mask restored on exit), and
+        ``test-perf-owner-stop.sh`` passed with the per-CPU perf event
+        stopping the owner before the timed escape. The sync-callback
+        ordering gap is closed for the waited call-function path on this
+        build.
+        A source review of the in-tree x86 per-CPU MSR paths found the same
        waited ``smp_call_function_single()`` mechanism (``wrmsrq_on_cpu()``
        and ``rdmsrq_on_cpu()`` in ``arch/x86/lib/msr-smp.c``) for the
        remaining power-policy writers: ``amd-pstate`` (CPPC_REQ, CPPC_REQ2,
@@ -854,13 +878,15 @@ run-specific results must be recorded with the kernel build and test logs.
        task after its reschedule check; this does not classify idle
        policy changes or autonomous hardware frequency and thermal changes,
        which do not pass through these kernel callbacks.
-     - ``test-watchdog-owner-admission.sh`` changes the watchdog mask to the
-       selected CPU and expects owner entry to fail with ``-EBUSY``; it restores
-       the prior mask on exit. The x86 object builds, and one bounded run passed
-       on candidate kernel
-       ``7.3.0-rc3-accel-tlbfix-02141-g1c9eb2e109a0``. The power-policy MSR
-       review is source-only, and the bounded irq-work run above is a
-       single observation, not a stress envelope or a latency bound.
+      - ``test-watchdog-owner-admission.sh`` changes the watchdog mask to the
+        selected CPU and expects owner entry to fail with ``-EBUSY``; it restores
+        the prior mask on exit. The x86 object builds, and one bounded run passed
+        on candidate kernel
+        ``7.3.0-rc3-accel-tlbfix-02141-g1c9eb2e109a0`` and a repeated bounded
+        run passed on
+        ``7.3.0-rc3-accel-tlbfix-02150-gde9255a04ef7``. The power-policy MSR
+        review is source-only, and the bounded irq-work runs above are
+        observations, not a stress envelope or a latency bound.
        Runtime frequency, idle, thermal, and power-policy tests, event
        counters, fault injection, and observed latency remain open.
    * - Microcode updates

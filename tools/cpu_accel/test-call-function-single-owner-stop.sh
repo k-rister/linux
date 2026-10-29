@@ -198,9 +198,12 @@ fi
 if [ "$mode" = irq-work ]; then
 	grep -q 'irq_work_callback_count_while_owner=0' "$outdir/dmesg-new.log" || \
 		fail "IRQ-work callback ran before the owner exited"
-	grep -Eq 'irq_work_callback_count_after_exit=[1-9][0-9]*' \
+	grep -Eq 'irq_work_callback_count_after_sync=[1-9][0-9]*' \
 		"$outdir/dmesg-new.log" || \
-		fail "deferred IRQ-work callback did not complete after owner exit"
+		fail "deferred IRQ-work callback did not complete after sync wait"
+	grep -q 'irq_work_callback_owner_active_count=0' \
+		"$outdir/dmesg-new.log" || \
+		fail "IRQ-work callback ran before owner release completed"
 fi
 if ! awk -v target="$target_cpu" '
 function number(line, name, rest, pos)

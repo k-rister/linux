@@ -13,6 +13,8 @@
 #include <linux/smp.h>
 #include <linux/workqueue.h>
 
+#include <asm/cpu_accel.h>
+
 static int target_cpu = 2;
 module_param(target_cpu, int, 0444);
 
@@ -20,6 +22,7 @@ static atomic_t callback_count = ATOMIC_INIT(0);
 static atomic_t irq_work_callback_count = ATOMIC_INIT(0);
 static atomic_t irq_work_overflow_count = ATOMIC_INIT(0);
 static atomic_t irq_work_queue_count = ATOMIC_INIT(0);
+static atomic_t irq_work_callback_owner_active_count = ATOMIC_INIT(0);
 static atomic_t irq_work_probe_armed = ATOMIC_INIT(0);
 static bool fire;
 static bool fire_reuse;
@@ -49,6 +52,8 @@ static long cpu_accel_work_on_cpu_probe_callback(void *data)
 static void cpu_accel_irq_work_probe_callback(struct irq_work *work)
 {
 	(void)work;
+	if (x86_cpu_accel_any_active())
+		atomic_inc(&irq_work_callback_owner_active_count);
 	atomic_inc(&irq_work_callback_count);
 }
 
@@ -202,7 +207,8 @@ static int probe_fire_irq_work(const char *value,
 	int overflow_count;
 	int queue_count;
 	int callback_count_while_owner;
-	int callback_count_after_exit;
+	int callback_count_after_sync;
+	int callback_owner_active_count;
 	int ret;
 
 	(void)kp;
@@ -220,6 +226,7 @@ static int probe_fire_irq_work(const char *value,
 	atomic_set(&irq_work_callback_count, 0);
 	atomic_set(&irq_work_overflow_count, 0);
 	atomic_set(&irq_work_queue_count, 0);
+	atomic_set(&irq_work_callback_owner_active_count, 0);
 	atomic_set(&irq_work_probe_armed, 1);
 
 	/* A PMU NMI queues local IRQ work while the target is in ring 3. */
@@ -247,13 +254,18 @@ static int probe_fire_irq_work(const char *value,
 	}
 
 	cpu_accel_irq_work_probe_stop();
-	callback_count_after_exit = atomic_read(&irq_work_callback_count);
+	callback_count_after_sync = atomic_read(&irq_work_callback_count);
+	callback_owner_active_count =
+		atomic_read(&irq_work_callback_owner_active_count);
 	if (atomic_read(&callback_count) != 1 ||
-	    callback_count_after_exit < queue_count) {
+	    callback_count_after_sync < queue_count ||
+	    callback_owner_active_count) {
 		pr_info("cpu_accel_call_function_single_probe: mode=irq-work "
-			"post_exit irq_work_queued=%d "
-			"irq_work_callback_count_after_exit=%d callback_count=%d\n",
-			queue_count, callback_count_after_exit,
+			"post_sync irq_work_queued=%d "
+			"irq_work_callback_count_after_sync=%d "
+			"irq_work_callback_owner_active_count=%d callback_count=%d\n",
+			queue_count, callback_count_after_sync,
+			callback_owner_active_count,
 			atomic_read(&callback_count));
 		return -EIO;
 	}
@@ -261,10 +273,12 @@ static int probe_fire_irq_work(const char *value,
 	pr_info("cpu_accel_call_function_single_probe: cpu=%d mode=irq-work "
 		"nmi_overflows=%d irq_work_queued=%d "
 		"irq_work_callback_count_while_owner=%d "
-		"irq_work_callback_count_after_exit=%d callback_count=%d\n",
+		"irq_work_callback_count_after_sync=%d "
+		"irq_work_callback_owner_active_count=%d callback_count=%d\n",
 		target_cpu, overflow_count, queue_count,
 		callback_count_while_owner,
-		callback_count_after_exit, atomic_read(&callback_count));
+		callback_count_after_sync, callback_owner_active_count,
+		atomic_read(&callback_count));
 	return 0;
 }
 

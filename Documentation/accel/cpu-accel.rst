@@ -1042,14 +1042,34 @@ run-specific results must be recorded with the kernel build and test logs.
         injected drop window and ends the run early; the focused test
         disables transparent hugepages during the run to keep that source out
         of the window.
-   * - No ordinary task or unbounded path; latency
-     - **Selected invariants measured; no hard bound.** Existing counters do
-       not prove absence of every ordinary Linux or unbounded kernel path.
-     - Context-switch, migration, reschedule, IRQ/IPI/TLB, workqueue, and
-       workload-lateness fields; tests report observed maxima for selected
-       workloads.
-     - No full Phase 8 worst-case latency report, percentile distribution, or
-       complete event correlation across the listed stress classes.
+    * - No ordinary task or unbounded path; latency
+      - **Measured envelope per bounded stress class; no hard bound.**
+        Existing counters do not prove absence of every ordinary Linux or
+        unbounded kernel path.
+      - ABI 18 adds a 64-bin log2 lateness histogram to the shared struct;
+        both owner-side sampling paths fill it and ``cpu-accelctl`` reports
+        the non-zero bins plus p50/p90/p99/p999 upper-edge estimates.
+        ``test-wcl-report.sh`` runs one bounded stress class at a time
+        (transparent hugepages disabled for the matrix to keep
+        ``khugepaged`` out of the window) and records the distribution and
+        counter correlation per class. On 2026-10-29 on
+        ``7.3.0-rc3-accel-tlbfix-02150-gde9255a04ef7``, the 5 s
+        ``user-oslat`` baseline and five-busy-CPU load runs each produced
+        5000 samples with p50=8 ns, p90=16 ns, p999=16384 ns, and maxima
+        of 15137 ns and 16350 ns; the vmstat, lru, slub_shrink,
+        ring_resize, call_function, and irq_work owner-stop runs each
+        completed with their stop/exit trace pair and the expected
+        deferred-work and IPI counters; and the timerlat baseline on CPU 2
+        measured p99 of 7874 ns (irq) / 13000 ns (thread) with a 253 ms
+        max-active timer IRQ during the owner interval, bounded by the
+        owner stop. The full report is
+        ``Documentation/accel/phase8-wcl-report.md``.
+      - No hard bound; log2-bin percentiles are factor-of-two ceilings.
+        The ``net_backlog`` and ``timer_migration`` classes are deferred to
+        a boot whose ``rcu_nocbs`` covers their owner CPU, ``irq_storm``
+        needs a test NIC, and the sync-work script's function-graph
+        stop/exit pairing assertion fails on this image (verified
+        pre-existing with the unmodified module and ABI-17 controller).
 
 The plan's disposition vocabulary is safe, routed to housekeeping, deferred,
 rejected, or domain-terminating. Several rows remain unclassified or have only

@@ -207,6 +207,16 @@ static void cpu_accel_user_escape_image(void *argument)
 }
 
 CPU_ACCEL_USER_IMAGE
+static unsigned int cpu_accel_user_lateness_bin(uint64_t lateness_ns)
+{
+	if (!lateness_ns)
+		return 0;
+	return lateness_ns > (1ULL << (CPU_ACCEL_LATENESS_HIST_BINS - 1)) ?
+		CPU_ACCEL_LATENESS_HIST_BINS - 1 :
+		64 - __builtin_clzll(lateness_ns);
+}
+
+CPU_ACCEL_USER_IMAGE
 static void cpu_accel_user_oslat(void *argument)
 {
 	struct cpu_accel_user_context *context = argument;
@@ -261,6 +271,8 @@ static void cpu_accel_user_oslat(void *argument)
 		if (lateness_ns < min_lateness)
 			min_lateness = lateness_ns;
 		last_lateness = lateness_ns;
+		shared->lateness_hist[
+			cpu_accel_user_lateness_bin(lateness_ns)]++;
 		if (__atomic_load_n(&shared->stop_requested, __ATOMIC_RELAXED) ||
 		    now - start_tsc >= duration_cycles)
 			break;
@@ -477,11 +489,41 @@ static int parse_u64(const char *text, uint64_t *value)
 	return 0;
 }
 
+static uint64_t cpu_accel_hist_total(
+		const volatile struct cpu_accel_shared *shared)
+{
+	uint64_t total = 0;
+
+	for (unsigned int i = 0; i < CPU_ACCEL_LATENESS_HIST_BINS; i++)
+		total += shared->lateness_hist[i];
+	return total;
+}
+
+/* Upper edge of the log2 bin containing the given permille rank. */
+static uint64_t cpu_accel_hist_percentile(
+		const volatile struct cpu_accel_shared *shared,
+		uint64_t total, uint32_t permille)
+{
+	uint64_t target = (total * permille + 999) / 1000;
+	uint64_t cum = 0;
+	unsigned int i;
+
+	if (!total || !target)
+		return 0;
+	for (i = 0; i < CPU_ACCEL_LATENESS_HIST_BINS; i++) {
+		cum += shared->lateness_hist[i];
+		if (cum >= target)
+			return i ? 1ULL << i : 0;
+	}
+	return 0;
+}
+
 static void print_status(const volatile struct cpu_accel_shared *shared)
 {
 	uint64_t user_active_ns =
 		shared->user_active_end_ns > shared->user_active_start_ns ?
 		shared->user_active_end_ns - shared->user_active_start_ns : 0;
+	uint64_t hist_total = cpu_accel_hist_total(shared);
 
 	printf("state=%u mode=%u sequence=%" PRIu64 " cpu=%u backend=%u backend_flags=%u"
 	       " recovery_state=%u recovery_error=%d recovery_attempts=%u"
@@ -510,7 +552,10 @@ static void print_status(const volatile struct cpu_accel_shared *shared)
 	       " softirq_pending_entry=%u softirq_pending_exit=%u"
 	       " preempt_count_entry=%u preempt_count_exit=%u"
 	       " arch_counters_valid=%u lifecycle_cpu_entry=%u"
-	       " lifecycle_cpu_exit=%u migration_detected=%u\n",
+	       " lifecycle_cpu_exit=%u migration_detected=%u"
+	       " hist_total=%" PRIu64
+	       " hist_p50_ns=%" PRIu64 " hist_p90_ns=%" PRIu64
+	       " hist_p99_ns=%" PRIu64 " hist_p999_ns=%" PRIu64 "\n",
 	       shared->state, shared->mode, (uint64_t)shared->sequence,
 	       shared->cpu,
 	       shared->backend,
@@ -557,7 +602,21 @@ static void print_status(const volatile struct cpu_accel_shared *shared)
 	       shared->preempt_count_entry, shared->preempt_count_exit,
 	       shared->arch_counters_valid,
 	       shared->lifecycle_cpu_entry, shared->lifecycle_cpu_exit,
-	       shared->migration_detected);
+	       shared->migration_detected,
+	       hist_total,
+	       cpu_accel_hist_percentile(shared, hist_total, 500),
+	       cpu_accel_hist_percentile(shared, hist_total, 900),
+	       cpu_accel_hist_percentile(shared, hist_total, 990),
+	       cpu_accel_hist_percentile(shared, hist_total, 999));
+
+	for (unsigned int i = 0; i < CPU_ACCEL_LATENESS_HIST_BINS; i++) {
+		if (!shared->lateness_hist[i])
+			continue;
+		printf("lateness_hist_bin=%u range_ns=[%" PRIu64 ",%" PRIu64
+		       ") count=%u\n", i,
+		       i ? 1ULL << (i - 1) : 0, 1ULL << i,
+		       shared->lateness_hist[i]);
+	}
 }
 
 static void usage(FILE *stream, const char *program)

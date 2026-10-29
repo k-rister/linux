@@ -1485,6 +1485,15 @@ static int cpu_accel_user_exit_locked(struct cpu_accel_device *dev)
 #endif
 }
 
+/* Map a lateness value to its log2 histogram bin (see the uapi header). */
+static unsigned int cpu_accel_lateness_bin(u64 lateness_ns)
+{
+	if (!lateness_ns)
+		return 0;
+	return min_t(unsigned int, CPU_ACCEL_LATENESS_HIST_BINS - 1,
+		     64 - __builtin_clzll(lateness_ns));
+}
+
 /*
  * This is the first architecture-neutral accelerator workload.  The
  * lifecycle backend dispatches this function synchronously to the target CPU.
@@ -1535,6 +1544,7 @@ static void cpu_accel_run(struct cpu_accel_device *dev,
 		samples++;
 		max_lateness = max(max_lateness, lateness);
 		min_lateness = min(min_lateness, lateness);
+		shared->lateness_hist[cpu_accel_lateness_bin(lateness)]++;
 		if (dev->work_region.address) {
 			char *buffer = dev->work_region.address;
 			size_t bytes = dev->work_region.bytes / 2;
@@ -1879,6 +1889,8 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 	dev->shared->max_lateness_ns = 0;
 	dev->shared->min_lateness_ns = 0;
 	dev->shared->last_lateness_ns = 0;
+	memset(dev->shared->lateness_hist, 0,
+	       sizeof(dev->shared->lateness_hist));
 	dev->shared->lifecycle_entry_ns = 0;
 	dev->shared->lifecycle_exit_ns = 0;
 	dev->shared->user_active_start_ns = 0;

@@ -11,8 +11,10 @@ unclassified activity classes, incomplete fault-injection and event-counter
 coverage, and no run-specific worst-case latency report. The disposition and
 exit criteria are in `cpu-accel.rst`.
 
-The latest pushed commit is `c73189d085cd` (`Documentation: accel: clarify
-sync callback ordering`). It records an important ordering gap for waited
+The branch head is `3664834c7a0f` (`Documentation: accel: audit x86
+power-policy MSR paths`), pushed to `origin/codex/accelerator-oslat`.
+Commit `c73189d085cd` (`Documentation: accel: clarify sync callback
+ordering`) records an important ordering gap for waited
 per-CPU callbacks: `smp_call_function_single()` queues its callback before the
 x86 sync-wait hook requests accelerator-owner exit. Syscall entry enables
 interrupts before dispatch, so that callback can run before
@@ -22,12 +24,15 @@ MSR update ran after ownership ended. A stronger owner-exit-before-callback
 handshake is still required.
 
 The watchdog-admission case has one bounded passing run on
-`7.3.0-rc3-accel-tlbfix-02141-g1c9eb2e109a0`. Frequency, idle, thermal, and
-other power-policy behavior remains unclassified or untested.
+`7.3.0-rc3-accel-tlbfix-02141-g1c9eb2e109a0`. In-tree x86 power-policy MSR
+paths are classified by source audit, and the sync-callback ordering gap is
+confirmed by one bounded irq-work probe run on the same kernel (2026-10-29);
+see the Phase 8 matrix in `cpu-accel.rst`.
 
 ## Worktree
 
-Two uncommitted files contain a more discriminating IRQ-work ordering probe:
+The committed probe changes (`5c4065efd7e8`) contain a more discriminating
+IRQ-work ordering probe:
 
 - `tools/cpu_accel/tlb-flush-probe/cpu_accel_call_function_single_probe.c`
   checks `x86_cpu_accel_any_active()` from inside the IRQ-work callback and
@@ -101,12 +106,16 @@ handoff step 2 (booted-kernel match) automatically.
    on the copied probe. The last task notes report kernel
    `7.3.0-rc3-accel-tlbfix-02141-g1c9eb2e109a0`; a console recovery excerpt
    elsewhere in the session reported `02104`, so verify with `uname -r`.
-3. Obtain a reviewable, non-disruptive test plan that clears the test-action
-   gate, then run the focused probe and record whether its callback observed
-   an active owner. If it does, treat that as confirmation of the ordering
-   gap and design the required handshake before broadening stress coverage.
+3. [Done] The bounded test plan
+   (`phase8-irq-work-probe-test-plan.md`) cleared the test-action gate and
+   one run on `accelerator-dev` completed on 2026-10-29. The IRQ-work
+   callback observed an active owner (`irq_work_callback_owner_active_count=1`
+   in the post-sync line on kernel
+   `7.3.0-rc3-accel-tlbfix-02141-g1c9eb2e109a0`), confirming the ordering
+   gap. The owner-exit-before-callback handshake design is the required
+   follow-up before broadening stress coverage.
 4. Keep changes driver-sized and update the Phase 8 matrix and evidence in
    `Documentation/accel/cpu-accel.rst` as each disposition is established.
 
-Do not commit or push the two current probe changes until they have been
-reviewed and their intended test semantics are settled.
+The probe changes are reviewed (see above), committed, and pushed; the
+settled test semantics are recorded in the probe review section.

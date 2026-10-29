@@ -807,6 +807,26 @@ run-specific results must be recorded with the kernel build and test logs.
        exit. Waiting for the callback therefore does not prove that the policy
        operation runs after ownership ends; an owner-exit-before-callback
        handshake is still required.
+       On 2026-10-29, one bounded run of
+       ``test-call-function-single-owner-stop.sh irq-work`` confirmed that
+       gap on kernel
+       ``7.3.0-rc3-accel-tlbfix-02141-g1c9eb2e109a0``. With a 5 s user-hang
+       owner on CPU 2, one 100 ms PMU NMI window, and one synchronous
+       call-function request from CPU 3, the deferred IRQ-work callback ran
+       after the synchronous wait returned and observed
+       ``x86_cpu_accel_any_active()`` set: the probe's post-sync line
+       reported ``irq_work_queued=1
+       irq_work_callback_count_after_sync=1
+       irq_work_callback_owner_active_count=1 callback_count=1``. By the
+       happens-before chain recorded in
+       ``phase8-handoff-2026-10-28.md``, the waited CSD callback therefore
+       also ran before the owner's exit, including TLB reconciliation,
+       completed. The run reported ``state=7``, ``recovery_state=2``,
+       ``user_escape_count=1``, the paired owner-stop and owner-exit trace
+       events, an empty kernel-error log, and clean module and owner
+       cleanup; it was recorded as gap confirmation, and the
+       owner-exit-before-callback handshake design is the required
+       follow-up.
        A source review of the in-tree x86 per-CPU MSR paths found the same
        waited ``smp_call_function_single()`` mechanism (``wrmsrq_on_cpu()``
        and ``rdmsrq_on_cpu()`` in ``arch/x86/lib/msr-smp.c``) for the
@@ -839,9 +859,10 @@ run-specific results must be recorded with the kernel build and test logs.
        the prior mask on exit. The x86 object builds, and one bounded run passed
        on candidate kernel
        ``7.3.0-rc3-accel-tlbfix-02141-g1c9eb2e109a0``. The power-policy MSR
-       review is source-only; runtime frequency, idle, thermal, and
-       power-policy tests, event counters, fault injection, and observed
-       latency remain open.
+       review is source-only, and the bounded irq-work run above is a
+       single observation, not a stress envelope or a latency bound.
+       Runtime frequency, idle, thermal, and power-policy tests, event
+       counters, fault injection, and observed latency remain open.
    * - Microcode updates
      - **Owner-stop at the audited late-microcode ``stop_machine()`` callsite;
        other update paths remain unclassified.** This call-site disposition

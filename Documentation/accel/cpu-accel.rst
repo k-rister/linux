@@ -927,11 +927,35 @@ run-specific results must be recorded with the kernel build and test logs.
        cover LRU/SLUB drains and vmalloc purge.
      - No sustained pressure envelope or dirty/writeback/migration stress
        report.
-   * - Device-management operations
-     - **Unclassified beyond tested network backlog work.** The backlog flush
-       test does not establish a general device ownership or reset policy.
-     - ``test-sync-work-owner-stop.sh`` has a veth/network-backlog case.
-     - No device reset, teardown, or management-operation fault matrix.
+    * - Device-management operations
+      - **Caller-local management is safe by construction; device-specific
+        steering is rejected or routed to housekeeping at configuration time;
+        the one residual steering path to an owned CPU is deferred.**
+      - 2026-10-29 source audit. Management operations (driver-core
+        probe/remove/bind/unbind, PCI/FLR and reset-control resets, sysfs
+        handlers, netdev register/unregister) run in caller context and never
+        execute code on the target CPU. RPS configuration is filtered by
+        ``rps_cpumask_housekeeping()`` (``net/core/net-sysfs.c``), which
+        intersects ``rps_cpus`` and ``rps_default_mask`` with the housekeeping
+        mask and rejects an empty result, so RPS cannot steer to an isolated
+        CPU; the veth/network-backlog case of
+        ``test-sync-work-owner-stop.sh`` exercises this routed path. XPS
+        selects the transmit queue on the current CPU only, so it performs no
+        cross-CPU execution. NAPI and tasklets run on the current or IRQ CPU,
+        which the IRQ-affinity quarantine excludes. The RFS flow table targets
+        the CPU where the socket last received data and is not filtered at
+        configuration time, so a flow recorded on an owned CPU keeps targeting
+        it while owned; delivery then rides the general mechanisms, either
+        ``smp_call_function_single_async()`` of the non-threaded backlog RPS
+        IPI (``net/core/dev.c``) or a ``wake_up_process()`` of the per-CPU
+        ``backlog_napi`` thread in threaded mode, both of which leave the work
+        pending until the owner exits. Device operations that use waited or
+        deferred call-function, workqueues, stop machine, or CPU hotplug
+        inherit the corresponding row's disposition.
+      - No device reset, teardown, or management-operation fault matrix. The
+        RFS-to-owned-CPU case is source-classified only; no runtime run holds
+        an RFS flow on the owned CPU during ownership to observe the deferred
+        backlog drain.
    * - Exceptions, NMIs, and machine checks
      - **NMI escape is owner-terminating recovery for the tested ring-3
        workload; general events are not contained.** Recovery state, error,

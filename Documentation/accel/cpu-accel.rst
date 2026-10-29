@@ -889,14 +889,30 @@ run-specific results must be recorded with the kernel build and test logs.
         observations, not a stress envelope or a latency bound.
        Runtime frequency, idle, thermal, and power-policy tests, event
        counters, fault injection, and observed latency remain open.
-   * - Microcode updates
-     - **Owner-stop at the audited late-microcode ``stop_machine()`` callsite;
-       other update paths remain unclassified.** This call-site disposition
-       does not establish the behavior of a complete update transaction.
-     - The ``stop_machine()`` source review includes the late-microcode
-       caller; no microcode update was run during Phase 8 validation.
-     - Runtime update behavior, failure injection, event counters, and
-       run-specific latency evidence remain open.
+    * - Microcode updates
+      - **The complete update transaction is gated: runtime reload drains
+        owners before the stop-machine rendezvous; early and hotplug paths are
+        out of scope or caller-local; resume applies on the BSP only.**
+      - 2026-10-29 source audit of all x86 microcode update paths (built-in,
+        no module-load trigger). Runtime reload through
+        ``/sys/devices/system/cpu/microcode/reload`` is the only cross-CPU
+        update entry point: ``reload_store()`` in
+        ``arch/x86/kernel/cpu/microcode/core.c`` takes the
+        ``x86_cpu_accel_maintenance_begin()`` owner-drain gate before
+        ``cpus_read_lock()`` and ``load_late_locked()`` reaches the
+        ``stop_machine_cpuslocked()`` rendezvous on ``cpu_online_mask``
+        (``core.c``), already audited under the ``stop_machine()`` row; the
+        Intel NMI rendezvous variant self-NMIs each stopped CPU and the AMD
+        variant invokes the update handler directly in the stopped context.
+        Early boot loading is per-CPU before SMP, when no ownership exists.
+        The CPU-hotplug callback only collects CPU information and manages
+        the sysfs group; it performs no update and is synchronized with the
+        update path by ``cpus_read_lock()``. The suspend-resume syscore
+        callback applies cached firmware on the BSP only, inside the
+        owner-drain span of the suspend row. No microcode update was run
+        during Phase 8 validation.
+      - No runtime update run is recorded; failure injection, event counters,
+        and run-specific latency evidence remain open.
    * - Suspend and hibernate
      - **Owner-drain gate spans CPU freeze through thaw.** The gate nests
        with each CPU-hotplug transition and prevents admission on the retained

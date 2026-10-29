@@ -796,9 +796,13 @@ run-specific results must be recorded with the kernel build and test logs.
        share an accelerator CPU.
      - Intel P-state policy updates can write a target CPU MSR through
        ``wrmsrq_on_cpu()``, which uses a waited ``smp_call_function_single()``.
-       Its x86 sync-wait hook requests owner exit, but the synchronous call
-       waits for the IPI callback, not for owner release; that request alone
-       does not establish that the policy operation runs after ownership ends.
+       The x86 sync-wait hook requests owner exit after queueing the callback.
+       A syscall from the accelerated user image enables interrupts before
+       dispatch, so the queued IPI callback can run before
+       ``CPU_ACCEL_IOC_USER_EXIT`` reconciles TLB state and completes owner
+       exit. Waiting for the callback therefore does not prove that the policy
+       operation runs after ownership ends; an owner-exit-before-callback
+       handshake is still required.
        CPU-frequency cooling updates a frequency-QoS request and may reach
        this driver path. Other cpufreq drivers and cooling actions are not
        covered by this source review. Scheduler idle entry is reached through
@@ -806,10 +810,11 @@ run-specific results must be recorded with the kernel build and test logs.
        policy changes or autonomous hardware frequency and thermal changes.
      - ``test-watchdog-owner-admission.sh`` changes the watchdog mask to the
        selected CPU and expects owner entry to fail with ``-EBUSY``; it restores
-       the prior mask on exit. The x86 object builds, but this regression test
-       has not run on the candidate kernel. Runtime frequency, idle, thermal,
-       and power-policy tests, event counters, fault injection, and observed
-       latency remain open.
+       the prior mask on exit. The x86 object builds, and one bounded run passed
+       on candidate kernel
+       ``7.3.0-rc3-accel-tlbfix-02141-g1c9eb2e109a0``. Runtime frequency, idle,
+       thermal, and power-policy tests, event counters, fault injection, and
+       observed latency remain open.
    * - Microcode updates
      - **Owner-stop at the audited late-microcode ``stop_machine()`` callsite;
        other update paths remain unclassified.** This call-site disposition

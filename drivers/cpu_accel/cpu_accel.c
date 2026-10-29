@@ -305,6 +305,9 @@ struct cpu_accel_device {
 	atomic64_t workqueue_queued;
 	atomic64_t workqueue_executed;
 	atomic64_t user_escape_count;
+	/* Set in the stop NMI when it completed the owner's exit. */
+	atomic64_t user_stop_exit_tlb_targets;
+	atomic_t user_stop_exit_done;
 	struct cpu_accel_region work_region;
 	unsigned int sequence;
 	unsigned int controller_cpu;
@@ -375,6 +378,7 @@ static int cpu_accel_user_nmi(unsigned int type, struct pt_regs *regs)
 {
 	struct cpu_accel_device *dev = &cpu_accel;
 	struct cpu_accel_user_image *image = &dev->user_image;
+	u64 targets;
 
 	(void)type;
 
@@ -390,6 +394,15 @@ static int cpu_accel_user_nmi(unsigned int type, struct pt_regs *regs)
 			     drops - 1) == drops)
 			return NMI_DONE;
 	}
+
+	/*
+	 * Complete the owner exit before the escape tail re-enables
+	 * interrupts; queued call-function work must observe a fully exited
+	 * owner.
+	 */
+	targets = x86_cpu_accel_user_stop_exit(READ_ONCE(dev->config.cpu));
+	atomic64_set(&dev->user_stop_exit_tlb_targets, targets);
+	atomic_set(&dev->user_stop_exit_done, 1);
 
 	/* The image and stack were admitted and pinned before this NMI. */
 	regs->ip = image->escape_ip;
@@ -1097,11 +1110,20 @@ static void cpu_accel_user_image_release(struct cpu_accel_device *dev)
 	if (image->owner_active) {
 		u64 targets = x86_cpu_accel_user_exit(dev->config.cpu);
 
+		/*
+		 * Prefer the stop-context snapshot: the release path runs
+		 * after the NMI exit, so its read can include targets counted
+		 * after ownership ended.
+		 */
+		if (atomic_read(&dev->user_stop_exit_done))
+			targets = atomic64_read(&dev->user_stop_exit_tlb_targets);
 		dev->shared->arch_tlb_shootdown_targets =
 			cpu_accel_counter_delta(targets, dev->user_observation.
 				arch_tlb_shootdown_targets_entry);
 		image->owner_active = false;
 	}
+	atomic_set(&dev->user_stop_exit_done, 0);
+	atomic64_set(&dev->user_stop_exit_tlb_targets, 0);
 #endif
 	if (image->mm_locked) {
 		mmap_write_unlock(image->mm);

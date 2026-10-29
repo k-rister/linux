@@ -53,6 +53,8 @@ int x86_cpu_accel_user_enter(unsigned int cpu, struct mm_struct *mm,
 			     x86_cpu_accel_stop_fn stop, void *data,
 			     u64 *tlb_targets);
 u64 x86_cpu_accel_user_exit(unsigned int cpu);
+/* Complete an escaped owner's exit from the stop NMI before the CSD drains. */
+u64 x86_cpu_accel_user_stop_exit(unsigned int cpu);
 void x86_cpu_accel_tlb_unmap_begin(struct mm_struct *mm);
 void x86_cpu_accel_tlb_unmap_end(struct mm_struct *mm);
 bool x86_cpu_accel_any_active(void);
@@ -115,6 +117,12 @@ static inline int x86_cpu_accel_user_enter(unsigned int cpu,
 }
 
 static inline u64 x86_cpu_accel_user_exit(unsigned int cpu)
+{
+	(void)cpu;
+	return 0;
+}
+
+static inline u64 x86_cpu_accel_user_stop_exit(unsigned int cpu)
 {
 	(void)cpu;
 	return 0;

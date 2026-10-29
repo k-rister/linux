@@ -792,6 +792,26 @@ u64 x86_cpu_accel_user_exit(unsigned int cpu)
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_user_exit);
 
+u64 x86_cpu_accel_user_stop_exit(unsigned int cpu)
+{
+	LIST_HEAD(subscriptions);
+	bool local_tlb_flush;
+	bool owner_exited;
+	u64 targets = x86_cpu_accel_owner_exit(cpu, &local_tlb_flush,
+						      &subscriptions,
+						      &owner_exited);
+
+	/*
+	 * The stop NMI runs on the target CPU, so the reconcile always takes
+	 * the local branch; a nested call-function cannot issue from NMI.
+	 */
+	WARN_ON_ONCE(cpu != raw_smp_processor_id());
+	x86_cpu_accel_tlb_reconcile(cpu, local_tlb_flush, &subscriptions);
+	x86_cpu_accel_owner_exit_finish(cpu, owner_exited);
+	return targets;
+}
+EXPORT_SYMBOL_GPL(x86_cpu_accel_user_stop_exit);
+
 void x86_cpu_accel_tlb_unmap_begin(struct mm_struct *mm)
 {
 	unsigned long flags;

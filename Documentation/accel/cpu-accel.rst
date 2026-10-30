@@ -356,6 +356,8 @@ treats such a run as failed rather than passing it. General exception and
 NMI containment beyond the escape path, and machine-check injection, remain
 open: the in-tree MCE injector's software mode only decodes a synthetic
 record, while hardware mode requires a disposable recovery-capable system.
+The source-level classification in the matrix additionally identifies a
+stale ``user_image.active`` hazard after a ``#MC`` kills the user owner.
 
 The opt-in ``flush_work_with_sync_wait()`` API can be checked with a probe
 that queues work on the active owner CPU, then flushes it from another CPU.
@@ -1013,12 +1015,14 @@ run-specific results must be recorded with the kernel build and test logs.
         an RFS flow on the owned CPU during ownership to observe the deferred
         backlog drain.
    * - Exceptions, NMIs, and machine checks
-     - **NMI escape is owner-terminating recovery for the tested ring-3
-       workload; general events are not contained.** Recovery state, error,
-       attempt count, timestamps, and successful escape count use fixed shared
-       ABI fields. MCE injection is deferred on this recovery-sensitive VM:
-       the in-tree injector's software mode only decodes a synthetic record,
-       while hardware mode invokes ``#MC`` and may panic.
+      - **NMI escape is owner-terminating recovery for the tested ring-3
+        workload, and a hardware ``#MC`` is source-classified as
+        domain-terminating for the owner with a residual stale-state hazard;
+        general events are not contained.** Recovery state, error, attempt
+        count, timestamps, and successful escape count use fixed shared ABI
+        fields. MCE injection is deferred on this recovery-sensitive VM:
+        the in-tree injector's software mode only decodes a synthetic record,
+        while hardware mode invokes ``#MC`` and may panic.
       - ``user_escape_count`` and recovery fields report the owner-termination
         experiment; the aggregate x86 IRQ counter includes NMI and MCE
         statistics. On 2026-10-29,
@@ -1035,9 +1039,32 @@ run-specific results must be recorded with the kernel build and test logs.
         ``7.3.0-rc3-accel-tlbfix-phase8-irq-d08dba1-02098-gd08dba1bad4f``
         demonstrated that an unrelated NMI can consume a drop slot and was
         replaced by sender-side suppression.
-      - No exception-specific counter or fault matrix, general NMI containment
-        evidence, or actual MCE injection. Hardware MCE injection requires a
-        disposable recovery-capable test system. A kernel-initiated stop
+       - **MCE source classification (injection itself deferred).** A
+         user-mode ``#MC`` on the owner (for example the user-reclaim workload
+         reading a poisoned page) is dispatched by ``do_machine_check()``
+         through ``queue_task_work()`` (``task_work_add(TWA_RESUME)``) to
+         ``kill_me_maybe()`` or ``kill_me_now()``: the owner dies from
+         ``memory_failure()`` page isolation plus SIGBUS, or a direct SIGBUS,
+         at the next resume to user mode. The driver has no task-death hook
+         and the ``USER_EXIT`` ioctl never runs, so ``user_image.active``
+         stays set, the pinned image/stack/rseq/reclaim pages remain pinned,
+         the work region stays ``CPU_ACCEL_REGION_ACCELERATOR`` owned, and
+         ``CONFIG`` and start are rejected with ``-EBUSY`` until module
+         reload. In addition, ``cpu_accel_arch_stop_user()`` still observes
+         ``active`` and sends the escape NMI, and the NMI handler has no mm
+         check, so a later stop request (for example CPU offline) can rewrite
+         an unrelated user-mode task's IP and SP to the dead owner's
+         ``escape_ip`` and ``stack_top``. A kernel-mode ``#MC`` (kernel owner
+         or the owner's kernel entry/exit window) reaches ``mce_panic()`` and
+         is domain-terminating for the whole system, so no owner
+         reconciliation is needed there. Corrected machine checks (CMCI) are
+         logged by the per-CPU ``mce_timer`` poll pass
+         (``machine_check_poll()``): bounded timer and softirq activity on
+         the owned CPU that does not change owner state and is counted by the
+         IRQ and softirq telemetry.
+       - No exception-specific counter or fault matrix, general NMI containment
+         evidence, or actual MCE injection. Hardware MCE injection requires a
+         disposable recovery-capable test system. A kernel-initiated stop
         (for example ``khugepaged``'s ``lru_add_drain_all()``) outranks an
         injected drop window and ends the run early; the focused test
         disables transparent hugepages during the run to keep that source out

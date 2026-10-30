@@ -891,9 +891,18 @@ run-specific results must be recorded with the kernel build and test logs.
         covered CPU 2, mask restored on exit), and
         ``test-perf-owner-stop.sh`` passed with the per-CPU perf event
         stopping the owner before the timed escape. The sync-callback
-        ordering gap is closed for the waited call-function path on this
-        build.
-        A source review of the in-tree x86 per-CPU MSR paths found the same
+         ordering gap is closed for the waited call-function path on this
+         build.
+         On 2026-10-30, the same four probe modes re-validated on
+         ``7.3.0-rc3-accel-tlbfix-gb381f8577d1a-dirty`` (build #80): the
+         ``irq-work`` mode reported
+         ``irq_work_callback_count_while_owner=0
+         irq_work_callback_owner_active_count=0 callback_count=1`` with
+         ``state=7``, ``recovery_state=2``, and an empty kernel-error log;
+         the ``sync``, ``smp-call-on-cpu``, and ``work-on-cpu`` regression
+         modes each passed with ``callback_count=1`` and empty kernel-error
+         logs. The sync-callback ordering gap remains closed on this build.
+         A source review of the in-tree x86 per-CPU MSR paths found the same
        waited ``smp_call_function_single()`` mechanism (``wrmsrq_on_cpu()``
        and ``rdmsrq_on_cpu()`` in ``arch/x86/lib/msr-smp.c``) for the
        remaining power-policy writers: ``amd-pstate`` (CPPC_REQ, CPPC_REQ2,

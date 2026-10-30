@@ -135,6 +135,38 @@ bound for a missed timer on the owned CPU is the owner's stop latency,
 which the stop paths above bound at microsecond scale once the stop
 request is issued.
 
+### 2026-10-30 re-validation (build #80)
+
+Environment: `7.3.0-rc3-accel-tlbfix-gb381f8577d1a-dirty`,
+`isolcpus=managed_irq,2 irqaffinity=0-1,3-7 nohz_full=2 rcu_nocbs=2`,
+owner CPU 2, 1 ms sampling period. THP temporarily set to `never`.
+
+baseline (5000 samples):
+
+| range_ns  | [0,1) | [1,2) | [2,4) | [4,8) | [8,16) | [16,32) | [32,64) | [128,256) | [256,512) | [512,1k) | [1k,2k) | [2k,4k) | [4k,8k) | [8k,16k) | [16k,32k) | [32k,64k) | [64k,128k) | [128k,256k) |
+|-----------|-------|-------|-------|-------|--------|---------|---------|-----------|-----------|----------|---------|---------|---------|----------|-----------|-----------|------------|-------------|
+| count     | 315   | 319   | 579   | 1277  | 2293   | 91      | 1       | 2         | 2         | 5        | 16      | 22      | 32      | 38       | 4         | 2         | 1          | 1           |
+
+p50=16 ns, p90=16 ns, p99=8192 ns, p999=32768 ns, max=247595 ns.
+`irq_count=0 softirq_count=0 workqueue_queued=1 context_switches=0`.
+
+load (5000 samples, five busy housekeeping CPUs):
+
+| range_ns  | [0,1) | [1,2) | [2,4) | [4,8) | [8,16) | [16,32) | [64,128) | [128,256) | [512,1k) | [1k,2k) | [2k,4k) | [4k,8k) | [8k,16k) | [16k,32k) | [64k,128k) |
+|-----------|-------|-------|-------|-------|--------|---------|----------|-----------|----------|---------|---------|---------|----------|-----------|------------|
+| count     | 327   | 320   | 618   | 1239  | 2294   | 130     | 1        | 2         | 3        | 4       | 15      | 19      | 22       | 4         | 2          |
+
+p50=8 ns, p90=16 ns, p99=4096 ns, p999=32768 ns, max=81825 ns.
+`irq_count=0 softirq_count=0 workqueue_queued=1 context_switches=0`.
+
+The sync-work classes (vmstat, lru, slub_shrink, ring_resize) hit the
+known pre-existing function-graph trace pairing assertion (see Known
+limitations); their runs completed with the stop/exit trace pair present
+and `state=7`, `arch_ipi_count=2`, `workqueue_queued=1`.
+`call_function` passed (`state=7`, `arch_ipi_count=1`); `irq_work`
+passed (`state=7`, `arch_ipi_count=2`); `timerlat` passed
+(`state=7`, `arch_ipi_count=2`).
+
 ## Known limitations and open items
 
 - No hard bound is claimed. The measured maxima are envelopes for the
@@ -177,3 +209,4 @@ Per-class logs and the summary TSV land in `$CPU_ACCEL_TRACE_DIR`
 (default: a fresh `/tmp/cpu-accel-wcl.XXXXXX`).
 
 — AI-signed: opencode | model: radiance/qwen3.8-27b | effort: not specified
+— AI-signed: opencode | model: radiance/qwen3.8-27b | effort: not specified | contribution: added 2026-10-30 re-validation section (build #80)

@@ -1417,12 +1417,13 @@ static int __ref _cpu_down(unsigned int cpu, int tasks_frozen,
 		return -EINVAL;
 
 	/*
-	 * The teardown rendezvous below uses stop_machine_cpuslocked(). Drain
-	 * accelerator owners before taking the CPU-hotplug write lock, which
-	 * they do not participate in.
+	 * The teardown rendezvous below uses stop_machine_cpuslocked(). Let
+	 * bounded accelerator owners drain before taking the CPU-hotplug
+	 * write lock, which they do not participate in; the stop request
+	 * escalates to owner termination only past the owner's own deadline.
 	 */
 #ifdef CONFIG_X86
-	x86_cpu_accel_maintenance_begin();
+	x86_cpu_accel_maintenance_begin(X86_CPU_ACCEL_STOP_DRAIN);
 #endif
 	cpus_write_lock();
 
@@ -1930,7 +1931,7 @@ int freeze_secondary_cpus(int primary)
 	 * release would otherwise allow an owner onto the retained primary CPU.
 	 */
 #ifdef CONFIG_X86
-	x86_cpu_accel_maintenance_begin();
+	x86_cpu_accel_maintenance_begin(X86_CPU_ACCEL_STOP_TERMINATE);
 	x86_cpu_accel_freeze_maintenance = true;
 #endif
 	if (primary == -1) {

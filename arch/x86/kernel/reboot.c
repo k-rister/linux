@@ -676,7 +676,7 @@ void native_machine_shutdown(void)
 	 * the one-way transfer to the next kernel.
 	 */
 	if (kexec_in_progress)
-		x86_cpu_accel_maintenance_begin();
+		x86_cpu_accel_maintenance_begin(X86_CPU_ACCEL_STOP_TERMINATE);
 
 	/*
 	 * Call enc_kexec_begin() while all CPUs are still active and

@@ -67,7 +67,8 @@ static DEFINE_PER_CPU(struct x86_cpu_accel_request, x86_cpu_accel_request) = {
 
 static void x86_cpu_accel_request_stop_owner_gen(unsigned int cpu,
 						u64 owner_generation,
-						u64 tlb_flush_id);
+						u64 tlb_flush_id,
+						unsigned int stop_flags);
 
 /* Per-CPU request storage is permanent, so snapshot pinning is a no-op. */
 static bool x86_cpu_accel_owner_data_get(void *data)
@@ -85,7 +86,8 @@ static void x86_cpu_accel_owner_request_stop(void *data, u64 generation)
 {
 	struct x86_cpu_accel_request *request = data;
 
-	x86_cpu_accel_request_stop_owner_gen(request->cpu, generation, 0);
+	x86_cpu_accel_request_stop_owner_gen(request->cpu, generation, 0,
+					     X86_CPU_ACCEL_STOP_TERMINATE);
 }
 
 static const struct mmu_owner_ops x86_cpu_accel_owner_ops = {
@@ -287,7 +289,7 @@ EXPORT_SYMBOL_GPL(x86_cpu_accel_tlb_flush_end);
 /* Generation zero selects the current active owner without an identity check. */
 static void
 x86_cpu_accel_request_stop_owner_gen(unsigned int cpu, u64 owner_generation,
-				     u64 tlb_flush_id)
+				     u64 tlb_flush_id, unsigned int stop_flags)
 {
 	struct x86_cpu_accel_request *request;
 	x86_cpu_accel_stop_fn stop = NULL;
@@ -326,20 +328,21 @@ x86_cpu_accel_request_stop_owner_gen(unsigned int cpu, u64 owner_generation,
 					 tlb_flush_id, caller);
 		if (stop) {
 			/* This callback only publishes a stop request; it must not wait. */
-			stop(data);
+			stop(data, stop_flags);
 		}
 		atomic_dec_return_release(&request->stop_inflight);
 	}
 }
 
-void x86_cpu_accel_request_stop_owner(unsigned int cpu)
+void x86_cpu_accel_request_stop_owner(unsigned int cpu, unsigned int stop_flags)
 {
-	x86_cpu_accel_request_stop_owner_gen(cpu, 0, 0);
+	x86_cpu_accel_request_stop_owner_gen(cpu, 0, 0, stop_flags);
 }
 
 void x86_cpu_accel_request_stop_owner_tlb_flush(unsigned int cpu, u64 flush_id)
 {
-	x86_cpu_accel_request_stop_owner_gen(cpu, 0, flush_id);
+	x86_cpu_accel_request_stop_owner_gen(cpu, 0, flush_id,
+					     X86_CPU_ACCEL_STOP_TERMINATE);
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_request_stop_owner_tlb_flush);
 
@@ -374,7 +377,8 @@ void arch_smp_sync_wait_stop(int cpu)
 
 	/* Request owner exit when active ownership can block a waiter. */
 	if (owner_generation)
-		x86_cpu_accel_request_stop_owner_gen(cpu, owner_generation, 0);
+		x86_cpu_accel_request_stop_owner_gen(cpu, owner_generation, 0,
+						     X86_CPU_ACCEL_STOP_TERMINATE);
 }
 
 void arch_smp_sync_wait_end(int cpu)
@@ -550,7 +554,7 @@ static void x86_cpu_accel_direct_owner_exit(unsigned int cpu)
 	x86_cpu_accel_owner_exit_finish(cpu, owner_exited);
 }
 
-void x86_cpu_accel_maintenance_begin(void)
+void x86_cpu_accel_maintenance_begin(unsigned int stop_flags)
 {
 	unsigned int cpu;
 	unsigned long flags;
@@ -587,7 +591,7 @@ void x86_cpu_accel_maintenance_begin(void)
 	 * and does not acknowledge owner exit or TLB completion.
 	 */
 	for_each_possible_cpu(cpu)
-		x86_cpu_accel_request_stop_owner(cpu);
+		x86_cpu_accel_request_stop_owner(cpu, stop_flags);
 
 	/*
 	 * owner_exit_finish() drops active_count only after local TLB
@@ -626,7 +630,7 @@ void x86_cpu_accel_cpu_up_maintenance_begin(unsigned int cpu)
 {
 	unsigned long flags;
 
-	x86_cpu_accel_maintenance_begin();
+	x86_cpu_accel_maintenance_begin(X86_CPU_ACCEL_STOP_TERMINATE);
 	raw_spin_lock_irqsave(&x86_cpu_accel_ownership_lock, flags);
 	if (WARN_ON_ONCE(x86_cpu_accel_cpu_up_depth &&
 			 x86_cpu_accel_cpu_up_cpu != cpu)) {

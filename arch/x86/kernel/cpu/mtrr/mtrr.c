@@ -256,7 +256,7 @@ int mtrr_add_page(unsigned long base, unsigned long size,
 	replace = -1;
 
 	/* MTRR updates stop all CPUs and change their memory cache policy. */
-	x86_cpu_accel_maintenance_begin();
+	x86_cpu_accel_maintenance_begin(X86_CPU_ACCEL_STOP_TERMINATE);
 
 	/* No CPU hotplug when we change MTRR entries */
 	cpus_read_lock();
@@ -409,7 +409,7 @@ int mtrr_del_page(int reg, unsigned long base, unsigned long size)
 
 	max = num_var_ranges;
 	/* Keep accelerator owners out of the stop-machine MTRR rendezvous. */
-	x86_cpu_accel_maintenance_begin();
+	x86_cpu_accel_maintenance_begin(X86_CPU_ACCEL_STOP_TERMINATE);
 	/* No CPU hotplug when we change MTRR entries */
 	cpus_read_lock();
 	mutex_lock(&mtrr_mutex);

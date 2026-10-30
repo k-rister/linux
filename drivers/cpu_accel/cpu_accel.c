@@ -23,6 +23,7 @@
 #include <linux/smp.h>
 #include <linux/string.h>
 #include <linux/timekeeping.h>
+#include <trace/events/sched.h>
 #include <linux/timer.h>
 #include <linux/uaccess.h>
 #include <linux/vmalloc.h>
@@ -70,14 +71,31 @@ struct cpu_accel_observation {
 typedef void (*cpu_accel_entry_fn)(void *data);
 
 #ifdef CONFIG_X86_LOCAL_APIC
-static void cpu_accel_arch_stop_direct(void *data);
+static void cpu_accel_arch_stop_direct(void *data, unsigned int stop_flags);
+#endif
+#ifdef CONFIG_X86
+static void cpu_accel_owner_death(void *data, struct task_struct *task,
+				  bool group_dead);
+static void cpu_accel_owner_exit_early(void *data, struct task_struct *task);
 #endif
 
 static bool cpu_accel_user_workload(u32 workload)
 {
 	return workload == CPU_ACCEL_WORKLOAD_USER_OSLAT ||
 		workload == CPU_ACCEL_WORKLOAD_USER_HANG ||
-		workload == CPU_ACCEL_WORKLOAD_USER_RECLAIM;
+		workload == CPU_ACCEL_WORKLOAD_USER_RECLAIM ||
+		workload == CPU_ACCEL_WORKLOAD_USER_DEATH;
+}
+
+/*
+ * The user-death workload is a test-only stand-in for a fatal #MC killing the
+ * owner.  It runs in a normal, interruptible and preemptible context (rather
+ * than the low-latency preempt/irq-disabled one) so that a SIGKILL can reach
+ * it and its syscall/exit paths stay legal; only driver ownership is set up.
+ */
+static bool cpu_accel_user_death_safe(u32 workload)
+{
+	return workload == CPU_ACCEL_WORKLOAD_USER_DEATH;
 }
 
 #ifdef CONFIG_X86
@@ -289,6 +307,8 @@ struct cpu_accel_device {
 	struct completion lifecycle_done;
 	struct task_struct *lifecycle_thread;
 	struct timer_list watchdog_timer;
+	struct timer_list stop_escalation_timer;
+	struct work_struct owner_death_work;
 	struct irq_accel_quarantine *irq_quarantine;
 	struct cpu_accel_shared *shared;
 	struct cpu_accel_shared_region *shared_region;
@@ -325,9 +345,16 @@ struct cpu_accel_device {
 static struct cpu_accel_device cpu_accel;
 
 #ifdef CONFIG_X86_LOCAL_APIC
-static void cpu_accel_arch_stop_direct(void *data)
+static void cpu_accel_arch_stop_direct(void *data, unsigned int stop_flags)
 {
 	struct cpu_accel_device *dev = data;
+
+	/*
+	 * Draining callers let the bounded kernel run complete on its own;
+	 * only terminating requests publish the stop flag.
+	 */
+	if (stop_flags & X86_CPU_ACCEL_STOP_DRAIN)
+		return;
 
 	atomic_set(&dev->stop_requested, 1);
 	WRITE_ONCE(dev->shared->stop_requested, 1);
@@ -377,12 +404,63 @@ static int cpu_accel_user_escape_send(unsigned int cpu)
 }
 
 #ifdef CONFIG_X86_LOCAL_APIC
-static void cpu_accel_arch_stop_user(void *data)
+/* Grace past the owner's own deadline before a drain escalates. */
+#define CPU_ACCEL_STOP_ESCALATION_GRACE_NS	(100 * NSEC_PER_MSEC)
+/* Owners without a bounded duration escalate after this window. */
+#define CPU_ACCEL_STOP_MIN_DURATION_NS		(100 * NSEC_PER_MSEC)
+
+static unsigned long cpu_accel_stop_escalation_when(struct cpu_accel_device *dev)
+{
+	u64 now = ktime_get_mono_fast_ns();
+	u64 duration = max_t(u64, dev->config.duration_ns,
+			     CPU_ACCEL_STOP_MIN_DURATION_NS);
+	u64 deadline_ns = now + duration + CPU_ACCEL_STOP_ESCALATION_GRACE_NS;
+
+	if (READ_ONCE(dev->shared->start_ns))
+		deadline_ns = READ_ONCE(dev->shared->start_ns) +
+			duration + CPU_ACCEL_STOP_ESCALATION_GRACE_NS;
+	if (deadline_ns <= now)
+		return jiffies;
+	return jiffies + nsecs_to_jiffies(deadline_ns - now);
+}
+
+static void cpu_accel_stop_escalation(struct timer_list *timer)
+{
+	struct cpu_accel_device *dev =
+		container_of(timer, struct cpu_accel_device,
+			     stop_escalation_timer);
+	unsigned int cpu;
+
+	if (!READ_ONCE(dev->user_image.active))
+		return;
+
+	cpu = READ_ONCE(dev->config.cpu);
+	/*
+	 * The owner did not exit on its own within the drain window;
+	 * escalate to the owner-terminating escape NMI.
+	 */
+	atomic_set(&dev->user_escape_requested, 1);
+	smp_wmb();
+	cpu_accel_arch_send_user_escape(cpu);
+}
+
+static void cpu_accel_arch_stop_user(void *data, unsigned int stop_flags)
 {
 	struct cpu_accel_device *dev = data;
 
 	if (!READ_ONCE(dev->user_image.active))
 		return;
+
+	if (stop_flags & X86_CPU_ACCEL_STOP_DRAIN) {
+		/*
+		 * Hotplug maintenance: let the bounded owner complete and
+		 * exit on its own; escalate only if it is still active past
+		 * its own deadline. The callback itself must not wait.
+		 */
+		mod_timer(&dev->stop_escalation_timer,
+			  cpu_accel_stop_escalation_when(dev));
+		return;
+	}
 
 	atomic_set(&dev->stop_requested, 1);
 	WRITE_ONCE(dev->shared->stop_requested, 1);
@@ -400,10 +478,18 @@ static int cpu_accel_user_nmi(unsigned int type, struct pt_regs *regs)
 
 	(void)type;
 
+	/*
+	 * Only the admitted owner task may be redirected to the escape
+	 * code; a stale active flag (owner died without its exit path)
+	 * must not retarget an unrelated user-mode task on the CPU.
+	 * Compare the task, not the mm: sibling threads share an mm,
+	 * and while active holds, image->task is a held reference.
+	 */
 	if (!atomic_read(&dev->user_escape_requested) ||
 	    !READ_ONCE(image->active) ||
 	    raw_smp_processor_id() != READ_ONCE(dev->config.cpu) ||
-	    !user_mode(regs))
+	    !user_mode(regs) ||
+	    current != image->task)
 		return NMI_DONE;
 
 	/*
@@ -799,7 +885,7 @@ static void cpu_accel_workqueue_execute_start(void *data,
 		atomic64_inc(&dev->workqueue_executed);
 }
 
-static int cpu_accel_register_workqueue_tracepoints(void)
+static int cpu_accel_register_tracepoints(void)
 {
 	int ret;
 
@@ -811,13 +897,40 @@ static int cpu_accel_register_workqueue_tracepoints(void)
 	ret = register_trace_workqueue_execute_start(
 		cpu_accel_workqueue_execute_start, &cpu_accel);
 	if (ret)
-		unregister_trace_workqueue_queue_work(cpu_accel_workqueue_queue,
-						      &cpu_accel);
+		goto out_queue_work;
+
+#ifdef CONFIG_X86
+	ret = register_trace_sched_process_exit_early(cpu_accel_owner_exit_early,
+						      NULL);
+	if (ret)
+		goto out_execute_start;
+
+	ret = register_trace_sched_process_exit(cpu_accel_owner_death, NULL);
+	if (ret)
+		goto out_exit_early;
+#endif
+	return 0;
+#ifdef CONFIG_X86
+out_exit_early:
+	unregister_trace_sched_process_exit_early(cpu_accel_owner_exit_early,
+						  NULL);
+out_execute_start:
+	unregister_trace_workqueue_execute_start(
+		cpu_accel_workqueue_execute_start, &cpu_accel);
+#endif
+out_queue_work:
+	unregister_trace_workqueue_queue_work(cpu_accel_workqueue_queue,
+					      &cpu_accel);
 	return ret;
 }
 
-static void cpu_accel_unregister_workqueue_tracepoints(void)
+static void cpu_accel_unregister_tracepoints(void)
 {
+#ifdef CONFIG_X86
+	unregister_trace_sched_process_exit(cpu_accel_owner_death, NULL);
+	unregister_trace_sched_process_exit_early(cpu_accel_owner_exit_early,
+						 NULL);
+#endif
 	unregister_trace_workqueue_execute_start(
 		cpu_accel_workqueue_execute_start, &cpu_accel);
 	unregister_trace_workqueue_queue_work(cpu_accel_workqueue_queue,
@@ -1336,18 +1449,26 @@ static int cpu_accel_arch_user_enter(struct cpu_accel_device *dev)
 {
 	struct cpu_accel_user_image *image = &dev->user_image;
 	struct pt_regs *regs = current_pt_regs();
+	bool death_safe = cpu_accel_user_death_safe(dev->config.workload);
 #ifdef CONFIG_X86_LOCAL_APIC
-	u64 tlb_targets_entry;
-	int ret;
+	u64 tlb_targets_entry = 0;
+	int ret = 0;
 #endif
 
 #ifdef CONFIG_X86_LOCAL_APIC
-	ret = x86_cpu_accel_user_enter(raw_smp_processor_id(), image->mm,
-				       cpu_accel_arch_stop_user, dev,
-				       &tlb_targets_entry);
-	if (ret)
-		return ret;
-	image->owner_active = true;
+	/*
+	 * Accelerated owners register the mmu-owner stop callback (escape NMI
+	 * on a later stop/MCE).  Death-safe owners are ordinary tasks and need
+	 * no stop hook, so leave owner_active false.
+	 */
+	if (!death_safe) {
+		ret = x86_cpu_accel_user_enter(raw_smp_processor_id(), image->mm,
+					       cpu_accel_arch_stop_user, dev,
+					       &tlb_targets_entry);
+		if (ret)
+			return ret;
+		image->owner_active = true;
+	}
 #endif
 	cpu_accel_observation_begin(&dev->user_observation);
 #ifdef CONFIG_X86_LOCAL_APIC
@@ -1366,8 +1487,13 @@ static int cpu_accel_arch_user_enter(struct cpu_accel_device *dev)
 	regs->csx = __USER_CS;
 	regs->ssx = __USER_DS;
 	regs->di = image->arg;
-	/* Force the syscall exit path to use IRET and enter with IF cleared. */
-	regs->flags = X86_EFLAGS_FIXED;
+	/*
+	 * Force the syscall exit path to use IRET.  Accelerated owners enter
+	 * with IF cleared (no interrupts in the protected interval); death-safe
+	 * owners keep IF set so a fatal signal can interrupt them.
+	 */
+	regs->flags = death_safe ?
+		(X86_EFLAGS_FIXED | X86_EFLAGS_IF) : X86_EFLAGS_FIXED;
 	regs->cx = ~regs->ip;
 	regs->r11 = ~regs->flags;
 	return 0;
@@ -1473,10 +1599,14 @@ static int cpu_accel_user_exit_locked(struct cpu_accel_device *dev)
 	local_irq_disable();
 	/*
 	 * Module code cannot use preempt_enable_no_resched(); keep this decrement
-	 * non-scheduling while interrupts remain disabled.
+	 * non-scheduling while interrupts remain disabled.  Accelerated owners
+	 * entered with preempt_disable() (pc 0->1); death-safe owners entered
+	 * with pc already 0, so only decrement the accelerated case.
 	 */
-	barrier();
-	preempt_count_dec();
+	if (!cpu_accel_user_death_safe(dev->config.workload)) {
+		barrier();
+		preempt_count_dec();
+	}
 	cpu_accel_arch_user_exit(&return_regs);
 	return irq_ret;
 #else
@@ -1484,6 +1614,126 @@ static int cpu_accel_user_exit_locked(struct cpu_accel_device *dev)
 	return -EOPNOTSUPP;
 #endif
 }
+
+#ifdef CONFIG_X86
+/*
+ * Accelerated owners enter the user image with interrupts and preemption
+ * disabled and holding the image mm write lock (see cpu_accel_arch_user_enter
+ * and cpu_accel_user_image_prepare).  A fatal signal -- a killed owner, a
+ * fatal #MC delivered as SIGBUS at the next return to user mode -- takes it
+ * into do_exit(), which may sleep (acct_collect, exit_mm): illegal while
+ * preemption is disabled, and exit_mm's mmap_read_lock() would deadlock
+ * against the held write lock.  Death-safe owners are ordinary tasks (no
+ * context to restore) but still hold the mm write lock, so they need the
+ * unlock too.  Do the mode-appropriate part here, early in do_exit() and
+ * before acct_collect().  The full image release (mmput, state) is deferred
+ * to the sched_process_exit death work, which runs later in the same do_exit().
+ */
+static void cpu_accel_owner_exit_early(void *data, struct task_struct *task)
+{
+	struct cpu_accel_user_image *image = &cpu_accel.user_image;
+
+	/* Fires for every process exit; the compare is the whole cost. */
+	(void)data;
+	if (task != READ_ONCE(image->task))
+		return;
+	if (!READ_ONCE(image->active))
+		return;
+
+	/*
+	 * Accelerated owners (owner_active): balance the entry's
+	 * preempt_disable(); with interrupts still disabled this decrement
+	 * cannot reschedule, then re-enable interrupts so do_exit() may
+	 * sleep.  Death-safe owners are already a normal task, so skip this
+	 * (a decrement would underflow their preempt count).
+	 */
+	if (READ_ONCE(image->owner_active)) {
+		preempt_count_dec();
+		local_irq_enable();
+	}
+	/*
+	 * Both modes: drop the mm write lock so exit_mm's read lock cannot
+	 * deadlock.  mm_locked=false tells the deferred release to skip its
+	 * own unlock.
+	 */
+	if (READ_ONCE(image->mm_locked)) {
+		mmap_write_unlock(image->mm);
+		WRITE_ONCE(image->mm_locked, false);
+	}
+}
+
+/*
+ * The owner can die without running its exit path (for example a fatal
+ * #MC kills it with SIGBUS at the next return to user mode). Release the
+ * image once the task has fully exited so the driver state does not stay
+ * stale and the work region and CPU ownership can reconcile.
+ */
+static void cpu_accel_owner_death(void *data, struct task_struct *task,
+				  bool group_dead)
+{
+	/* Fires for every process exit; the compare is the whole cost. */
+	(void)data;
+	(void)group_dead;
+	if (task != READ_ONCE(cpu_accel.user_image.task))
+		return;
+	if (!READ_ONCE(cpu_accel.user_image.active))
+		return;
+
+	schedule_work(&cpu_accel.owner_death_work);
+}
+
+static void cpu_accel_owner_death_work(struct work_struct *work)
+{
+	struct cpu_accel_device *dev =
+		container_of(work, struct cpu_accel_device, owner_death_work);
+	struct cpu_accel_user_image *image = &dev->user_image;
+	u64 now;
+	int irq_ret;
+
+	mutex_lock(&dev->lock);
+	/*
+	 * The image is released only through the exit path or here, both
+	 * under this lock, so a live image is still the probed owner's.
+	 * PF_EXITING is set at the start of do_exit(), so it holds for the
+	 * whole death window, unlike TASK_DEAD which is set at the end.
+	 */
+	if (!image->active ||
+	    !(READ_ONCE(image->task->flags) & PF_EXITING)) {
+		mutex_unlock(&dev->lock);
+		return;
+	}
+	now = ktime_get_mono_fast_ns();
+	WRITE_ONCE(dev->shared->user_active_end_ns, now);
+	dev->shared->end_ns = now;
+	dev->shared->stop_requested = 0;
+	atomic_set(&dev->running, 0);
+	dev->shared->user_escape_count =
+		atomic64_read(&dev->user_escape_count);
+	WRITE_ONCE(dev->shared->recovery_state, CPU_ACCEL_RECOVERY_FAILED);
+	WRITE_ONCE(dev->shared->recovery_error, -ESRCH);
+	WRITE_ONCE(dev->shared->recovery_completed_ns, now);
+	dev->user_image.active = false;
+	atomic_set(&dev->enter_requested, 0);
+	atomic_set(&dev->stop_requested, 0);
+	atomic_set(&dev->watchdog_fired, 0);
+	atomic_set(&dev->user_escape_requested, 0);
+#ifdef CONFIG_X86_LOCAL_APIC
+	timer_delete_sync(&dev->stop_escalation_timer);
+#endif
+	/*
+	 * The owner mm is still alive here: the driver holds its own
+	 * reference and the mmu-owner registry keeps one until
+	 * user_exit() unregisters, so the standard release stays safe.
+	 */
+	cpu_accel_user_image_release(dev);
+	irq_ret = cpu_accel_restore_irq_quarantine(dev);
+	if (!irq_ret)
+		cpu_accel_release_workqueue(dev);
+	WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_LINUX);
+	WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_ERROR);
+	mutex_unlock(&dev->lock);
+}
+#endif
 
 /* Map a lateness value to its log2 histogram bin (see the uapi header). */
 static unsigned int cpu_accel_lateness_bin(u64 lateness_ns)
@@ -1952,7 +2202,13 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 		WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_RUNNING);
 		local_irq_disable();
 		ret = cpu_accel_arch_user_enter(dev);
-		if (!ret)
+		/*
+		 * Accelerated owners must not be preempted or interrupted in
+		 * the protected interval, so disable preemption here (their
+		 * IF is cleared by the entry).  Death-safe owners stay a
+		 * normal task and are left preemptible.
+		 */
+		if (!ret && !cpu_accel_user_death_safe(dev->config.workload))
 			preempt_disable();
 		local_irq_enable();
 		if (!ret && dev->config.flags & CPU_ACCEL_FLAG_PERSISTENT) {
@@ -2053,7 +2309,7 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 				     CPU_ACCEL_FLAG_REQUIRE_QUIESCENT |
 				     CPU_ACCEL_FLAG_IRQ_QUARANTINE) ||
 		    config.reserved || config.reserved2 ||
-		    config.workload > CPU_ACCEL_WORKLOAD_USER_RECLAIM ||
+		    config.workload > CPU_ACCEL_WORKLOAD_USER_DEATH ||
 		    config.work_bytes > CPU_ACCEL_MAX_WORK_BYTES ||
 		    (config.workload != CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE &&
 		     config.shared_entry) ||
@@ -2224,6 +2480,13 @@ static int __init cpu_accel_init(void)
 	atomic64_set(&cpu_accel.workqueue_executed, 0);
 	atomic64_set(&cpu_accel.user_escape_count, 0);
 	timer_setup(&cpu_accel.watchdog_timer, cpu_accel_watchdog, 0);
+#ifdef CONFIG_X86_LOCAL_APIC
+	timer_setup(&cpu_accel.stop_escalation_timer, cpu_accel_stop_escalation,
+		   0);
+#endif
+#ifdef CONFIG_X86
+	INIT_WORK(&cpu_accel.owner_death_work, cpu_accel_owner_death_work);
+#endif
 	cpu_accel.shared = vmalloc_user(CPU_ACCEL_MAP_SIZE);
 	if (!cpu_accel.shared)
 		return -ENOMEM;
@@ -2248,10 +2511,11 @@ static int __init cpu_accel_init(void)
 		return ret;
 	}
 #endif
-	ret = cpu_accel_register_workqueue_tracepoints();
+	ret = cpu_accel_register_tracepoints();
 	if (ret) {
 #ifdef CONFIG_X86_LOCAL_APIC
 		unregister_nmi_handler(NMI_LOCAL, "cpu_accel");
+		timer_delete(&cpu_accel.stop_escalation_timer);
 #endif
 		vfree(cpu_accel.shared_region);
 		vfree(cpu_accel.shared);
@@ -2264,9 +2528,10 @@ static int __init cpu_accel_init(void)
 	cpu_accel.misc.mode = 0600;
 	ret = misc_register(&cpu_accel.misc);
 	if (ret) {
-		cpu_accel_unregister_workqueue_tracepoints();
+		cpu_accel_unregister_tracepoints();
 #ifdef CONFIG_X86_LOCAL_APIC
 		unregister_nmi_handler(NMI_LOCAL, "cpu_accel");
+		timer_delete(&cpu_accel.stop_escalation_timer);
 #endif
 		vfree(cpu_accel.shared_region);
 		vfree(cpu_accel.shared);
@@ -2279,6 +2544,14 @@ static int __init cpu_accel_init(void)
 
 static void __exit cpu_accel_exit(void)
 {
+	/*
+	 * Stop the death probe before draining the death work: the work
+	 * takes the device lock and must not outlive the module data.
+	 */
+	cpu_accel_unregister_tracepoints();
+#ifdef CONFIG_X86
+	flush_work(&cpu_accel.owner_death_work);
+#endif
 	mutex_lock(&cpu_accel.lock);
 	if (READ_ONCE(cpu_accel.shared->state) == CPU_ACCEL_STATE_READY ||
 	    READ_ONCE(cpu_accel.shared->state) == CPU_ACCEL_STATE_RUNNING) {
@@ -2288,6 +2561,9 @@ static void __exit cpu_accel_exit(void)
 	if (cpu_accel.lifecycle_thread)
 		cpu_accel_lifecycle_exit(&cpu_accel);
 	timer_delete_sync(&cpu_accel.watchdog_timer);
+#ifdef CONFIG_X86_LOCAL_APIC
+	timer_delete_sync(&cpu_accel.stop_escalation_timer);
+#endif
 	if (cpu_accel.work_region_shared)
 		cpu_accel_shared_reclaim(&cpu_accel,
 					cpu_accel.config.shared_entry);
@@ -2298,7 +2574,6 @@ static void __exit cpu_accel_exit(void)
 #ifdef CONFIG_X86_LOCAL_APIC
 	unregister_nmi_handler(NMI_LOCAL, "cpu_accel");
 #endif
-	cpu_accel_unregister_workqueue_tracepoints();
 	vfree(cpu_accel.shared_region);
 	cpu_accel.shared_region = NULL;
 	vfree(cpu_accel.shared);

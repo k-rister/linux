@@ -340,7 +340,7 @@ int seamldr_install_module(const u8 *data, u32 data_len)
 		goto out;
 
 	/* Ensure a stable set of online CPUs for the update process. */
-	x86_cpu_accel_maintenance_begin();
+	x86_cpu_accel_maintenance_begin(X86_CPU_ACCEL_STOP_TERMINATE);
 	cpus_read_lock();
 	init_state(&update_ctrl);
 	ret = stop_machine_cpuslocked(do_seamldr_install_module, params,

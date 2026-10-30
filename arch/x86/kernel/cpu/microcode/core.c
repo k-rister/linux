@@ -772,7 +772,7 @@ static ssize_t reload_store(struct device *dev,
 		return -EINVAL;
 
 	/* Drain owners before the update's stop-machine and text-patch work. */
-	x86_cpu_accel_maintenance_begin();
+	x86_cpu_accel_maintenance_begin(X86_CPU_ACCEL_STOP_TERMINATE);
 	cpus_read_lock();
 	ret = load_late_locked();
 	cpus_read_unlock();

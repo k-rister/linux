@@ -326,6 +326,35 @@ DEFINE_EVENT(sched_process_template, sched_process_free,
 	     TP_ARGS(p));
 
 /*
+ * Tracepoint for a task beginning its exit.  It fires early in do_exit(),
+ * after PF_EXITING is set but before the exit processing that may sleep
+ * (acct_collect, exit_mm).  A subsystem that keeps a task in a
+ * non-schedulable context -- e.g. with preemption or interrupts disabled, or
+ * holding a lock that the exit path takes -- can use this to restore a
+ * schedulable, lock-free context before do_exit() sleeps.
+ */
+TRACE_EVENT(sched_process_exit_early,
+
+	TP_PROTO(struct task_struct *p),
+
+	TP_ARGS(p),
+
+	TP_STRUCT__entry(
+		__array(	char,	comm,	TASK_COMM_LEN	)
+		__field(	pid_t,	pid			)
+	),
+
+	TP_fast_assign(
+		memcpy(__entry->comm, p->comm, TASK_COMM_LEN);
+		__entry->pid		= p->pid;
+	),
+
+	TP_printk("comm=%s pid=%d",
+		  __entry->comm, __entry->pid
+	)
+);
+
+/*
  * Tracepoint for a task exiting.
  * Note, it's a superset of sched_process_template and should be kept
  * compatible as much as possible. sched_process_exits has an extra

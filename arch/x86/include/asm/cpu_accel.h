@@ -9,7 +9,16 @@
 
 typedef void (*x86_cpu_accel_entry_fn)(void *data);
 /* Optional stop callbacks must be nonblocking; no accelerator lock is held. */
-typedef void (*x86_cpu_accel_stop_fn)(void *data);
+typedef void (*x86_cpu_accel_stop_fn)(void *data, unsigned int stop_flags);
+
+/*
+ * Owner stop request modes. TERMINATE publishes the stop request and
+ * escalates to the owner's terminating recovery. DRAIN lets bounded owner
+ * work complete first and escalates only if the owner is still active
+ * past its own deadline.
+ */
+#define X86_CPU_ACCEL_STOP_TERMINATE	0
+#define X86_CPU_ACCEL_STOP_DRAIN	1
 
 struct x86_cpu_accel_tlb_flush {
 	cpumask_t targets;
@@ -59,7 +68,7 @@ void x86_cpu_accel_tlb_unmap_begin(struct mm_struct *mm);
 void x86_cpu_accel_tlb_unmap_end(struct mm_struct *mm);
 bool x86_cpu_accel_any_active(void);
 /* Drain owners, block admission, and allow same-task nesting. */
-void x86_cpu_accel_maintenance_begin(void);
+void x86_cpu_accel_maintenance_begin(unsigned int stop_flags);
 void x86_cpu_accel_maintenance_end(void);
 /* Keep admission closed across a CPU-up transition and its inactive rendezvous. */
 void x86_cpu_accel_cpu_up_maintenance_begin(unsigned int cpu);
@@ -80,7 +89,7 @@ void x86_cpu_accel_tlb_flush_begin(struct x86_cpu_accel_tlb_flush *flush,
 				   const struct cpumask *targets);
 void x86_cpu_accel_tlb_flush_end(struct x86_cpu_accel_tlb_flush *flush);
 /* Request a registered, nonblocking owner stop before a synchronous flush. */
-void x86_cpu_accel_request_stop_owner(unsigned int cpu);
+void x86_cpu_accel_request_stop_owner(unsigned int cpu, unsigned int stop_flags);
 /* Associate the stop request with the active synchronous TLB flush. */
 void x86_cpu_accel_request_stop_owner_tlb_flush(unsigned int cpu, u64 flush_id);
 bool x86_cpu_accel_note_tlb_shootdown(unsigned int cpu,
@@ -170,8 +179,9 @@ static inline bool x86_cpu_accel_any_active(void)
 	return false;
 }
 
-static inline void x86_cpu_accel_maintenance_begin(void)
+static inline void x86_cpu_accel_maintenance_begin(unsigned int stop_flags)
 {
+	(void)stop_flags;
 }
 
 static inline void x86_cpu_accel_maintenance_end(void)
@@ -225,9 +235,11 @@ x86_cpu_accel_tlb_flush_end(struct x86_cpu_accel_tlb_flush *flush)
 	(void)flush;
 }
 
-static inline void x86_cpu_accel_request_stop_owner(unsigned int cpu)
+static inline void
+x86_cpu_accel_request_stop_owner(unsigned int cpu, unsigned int stop_flags)
 {
 	(void)cpu;
+	(void)stop_flags;
 }
 
 static inline void
@@ -283,7 +295,7 @@ static inline u64 x86_cpu_accel_tlb_shootdown_targets(unsigned int cpu)
 static inline void x86_cpu_accel_text_mutex_lock(void)
 	__acquires(&text_mutex)
 {
-	x86_cpu_accel_maintenance_begin();
+	x86_cpu_accel_maintenance_begin(X86_CPU_ACCEL_STOP_TERMINATE);
 	mutex_lock(&text_mutex);
 }
 

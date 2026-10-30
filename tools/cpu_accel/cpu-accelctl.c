@@ -308,6 +308,55 @@ static void cpu_accel_user_hang(void *argument)
 	}
 }
 
+/*
+ * Test-only owner-death workload.  Unlike oslat/hang this loop takes a
+ * signal checkpoint (getpid) once per period, so a pending SIGKILL is
+ * delivered while the user image is still active.  The owner then exits
+ * through do_exit() without the USER_EXIT ioctl, exercising the
+ * sched_process_exit death-detection path.  A clean duration/stop exit
+ * still uses USER_EXIT.
+ */
+CPU_ACCEL_USER_IMAGE
+static void cpu_accel_user_death(void *argument)
+{
+	struct cpu_accel_user_context *context = argument;
+	struct cpu_accel_shared *shared = context->shared;
+	uint64_t cycles_per_ns = context->cycles_per_ns;
+	uint64_t start_tsc = cpu_accel_read_tsc();
+	uint64_t period_ns = __atomic_load_n(&shared->period_ns,
+					      __ATOMIC_RELAXED);
+	uint64_t duration_ns = __atomic_load_n(&shared->duration_ns,
+					       __ATOMIC_RELAXED);
+	uint64_t period_cycles;
+	uint64_t duration_cycles;
+	uint64_t now;
+
+	if (!cycles_per_ns)
+		cycles_per_ns = 1;
+	period_cycles = period_ns * cycles_per_ns;
+	duration_cycles = duration_ns * cycles_per_ns;
+	if (!period_cycles)
+		period_cycles = 1;
+	if (!duration_cycles)
+		duration_cycles = period_cycles;
+
+	for (;;) {
+		(void)cpu_accel_user_syscall1(SYS_getpid, 0);
+		now = cpu_accel_read_tsc();
+		if (__atomic_load_n(&shared->stop_requested, __ATOMIC_RELAXED) ||
+		    now - start_tsc >= duration_cycles)
+			break;
+		while (cpu_accel_read_tsc() < now + period_cycles)
+			__asm__ volatile("pause" ::: "memory");
+	}
+
+	__atomic_store_n(&shared->samples_produced, 1, __ATOMIC_RELAXED);
+	__atomic_store_n(&shared->work_iterations, 1, __ATOMIC_RELAXED);
+	__atomic_thread_fence(__ATOMIC_RELEASE);
+	(void)cpu_accel_user_exit_syscall(context->fd);
+	__builtin_unreachable();
+}
+
 static uint64_t cpu_accel_calibrate_cycles_per_ns(void)
 {
 	struct timespec start, end, delay = {
@@ -625,7 +674,7 @@ static void usage(FILE *stream, const char *program)
 		"Usage:\n"
 		"  %s run [--cpu N] [--duration-ms N] [--period-us N]\n"
 		"      [--workload timestamp|memmove|shared-memmove|user-oslat|\n"
-		"                   user-hang|user-reclaim]\n"
+		"                   user-hang|user-reclaim|user-death]\n"
 		"      [--work-bytes N] [--shared-entry N]\n"
 		"      [--test-reclaim-file PATH]\n"
 		"      [--escape-after-ms N] [--escape-retries N]\n"
@@ -726,6 +775,7 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 	int reclaim_fd = -1;
 	int user_hang = config->workload == CPU_ACCEL_WORKLOAD_USER_HANG;
 	int user_reclaim = config->workload == CPU_ACCEL_WORKLOAD_USER_RECLAIM;
+	int user_death = config->workload == CPU_ACCEL_WORKLOAD_USER_DEATH;
 	int ret = 1;
 
 	page_size = sysconf(_SC_PAGESIZE);
@@ -814,8 +864,12 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 	context->reclaim_bytes = reclaim_bytes;
 	context->fd = handle->fd;
 	context->cycles_per_ns = cpu_accel_calibrate_cycles_per_ns();
-	entry_ip = user_hang ? (uintptr_t)cpu_accel_user_hang :
-		(uintptr_t)cpu_accel_user_oslat;
+	if (user_hang)
+		entry_ip = (uintptr_t)cpu_accel_user_hang;
+	else if (user_death)
+		entry_ip = (uintptr_t)cpu_accel_user_death;
+	else
+		entry_ip = (uintptr_t)cpu_accel_user_oslat;
 	config->flags |= CPU_ACCEL_FLAG_PERSISTENT;
 	config->user_entry_ip = entry_ip;
 	config->user_escape_ip = (uintptr_t)cpu_accel_user_escape_image;
@@ -895,11 +949,12 @@ static int run_user_worker(int argc, char **argv)
 		}
 	}
 	if (values[0] > INT_MAX || values[1] > UINT_MAX ||
-	    values[2] > CPU_ACCEL_WORKLOAD_USER_RECLAIM ||
+	    values[2] > CPU_ACCEL_WORKLOAD_USER_DEATH ||
 	    values[3] > UINT_MAX ||
 	    (values[2] != CPU_ACCEL_WORKLOAD_USER_OSLAT &&
 	     values[2] != CPU_ACCEL_WORKLOAD_USER_HANG &&
-	     values[2] != CPU_ACCEL_WORKLOAD_USER_RECLAIM)) {
+	     values[2] != CPU_ACCEL_WORKLOAD_USER_RECLAIM &&
+	     values[2] != CPU_ACCEL_WORKLOAD_USER_DEATH)) {
 		fprintf(stderr, "out-of-range internal user-worker argument\n");
 		return 2;
 	}
@@ -1253,6 +1308,8 @@ static int run_workload(const char *program, int argc, char **argv)
 				config.workload = CPU_ACCEL_WORKLOAD_USER_HANG;
 			else if (!strcmp(workload, "user-reclaim"))
 				config.workload = CPU_ACCEL_WORKLOAD_USER_RECLAIM;
+			else if (!strcmp(workload, "user-death"))
+				config.workload = CPU_ACCEL_WORKLOAD_USER_DEATH;
 			else {
 				fprintf(stderr, "%s: invalid workload\n", program);
 				return 2;
@@ -1319,7 +1376,8 @@ static int run_workload(const char *program, int argc, char **argv)
 		config.flags |= CPU_ACCEL_FLAG_IRQ_QUARANTINE;
 	if (escape_after_ms && config.workload != CPU_ACCEL_WORKLOAD_USER_OSLAT &&
 	    config.workload != CPU_ACCEL_WORKLOAD_USER_HANG &&
-	    config.workload != CPU_ACCEL_WORKLOAD_USER_RECLAIM) {
+	    config.workload != CPU_ACCEL_WORKLOAD_USER_RECLAIM &&
+	    config.workload != CPU_ACCEL_WORKLOAD_USER_DEATH) {
 		fprintf(stderr,
 			"%s: --escape-after-ms requires a user workload\n",
 			program);
@@ -1338,7 +1396,8 @@ static int run_workload(const char *program, int argc, char **argv)
 	}
 	if (config.workload == CPU_ACCEL_WORKLOAD_USER_OSLAT ||
 	    config.workload == CPU_ACCEL_WORKLOAD_USER_HANG ||
-	    config.workload == CPU_ACCEL_WORKLOAD_USER_RECLAIM)
+	    config.workload == CPU_ACCEL_WORKLOAD_USER_RECLAIM ||
+	    config.workload == CPU_ACCEL_WORKLOAD_USER_DEATH)
 		return run_user_workload(&config, escape_after_ms, escape_attempts,
 					 reclaim_file, worker_cgroup);
 	if (worker_cgroup) {

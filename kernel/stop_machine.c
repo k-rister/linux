@@ -628,7 +628,7 @@ int stop_machine(cpu_stop_fn_t fn, void *data, const struct cpumask *cpus)
 
 	/* Drain owners before taking CPU-hotplug locks or stopping any CPU. */
 #ifdef CONFIG_X86
-	x86_cpu_accel_maintenance_begin();
+	x86_cpu_accel_maintenance_begin(X86_CPU_ACCEL_STOP_TERMINATE);
 #endif
 	/* No CPUs can come up or down during this. */
 	cpus_read_lock();

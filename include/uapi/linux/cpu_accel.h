@@ -80,6 +80,8 @@ enum cpu_accel_workload {
 	CPU_ACCEL_WORKLOAD_USER_HANG,
 	/* Test-only ring-3 workload that reads one reclaimable file-backed page. */
 	CPU_ACCEL_WORKLOAD_USER_RECLAIM,
+	/* Test-only ring-3 workload that takes a signal checkpoint each period. */
+	CPU_ACCEL_WORKLOAD_USER_DEATH,
 };
 
 enum cpu_accel_shared_owner {

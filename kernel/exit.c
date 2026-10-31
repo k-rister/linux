@@ -2037,4 +2037,7 @@ __weak __function_aligned void abort(void)
 	/* if that doesn't kill us, halt */
 	panic("Oops failed to kill thread");
 }
+
+EXPORT_TRACEPOINT_SYMBOL_GPL(sched_process_exit);
+EXPORT_TRACEPOINT_SYMBOL_GPL(sched_process_exit_early);
 EXPORT_SYMBOL(abort);

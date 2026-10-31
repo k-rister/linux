@@ -990,10 +990,16 @@ run-specific results must be recorded with the kernel build and test logs.
      - **Safe only on audited completion paths; otherwise synchronous.** A
        clean file-page reclaim probe waits for owner reconciliation. Dirty or
        writeback reclaim and migration remain synchronous.
-     - ``test-tlb-generation.c`` exercises ``MADV_PAGEOUT``; sync-work tests
-       cover LRU/SLUB drains and vmalloc purge.
-     - No sustained pressure envelope or dirty/writeback/migration stress
-       report.
+      - ``test-tlb-generation.c`` exercises ``MADV_PAGEOUT``; sync-work tests
+        cover LRU/SLUB drains and vmalloc purge. On 2026-10-30, a sustained
+        5 s ``user-oslat`` run on
+        ``7.3.0-rc3-accel-tlbfix-gb381f8577d1a-dirty`` with concurrent
+        ``drop_caches`` and 256 MB page-allocation churn (three iterations)
+        completed with ``state=3``, 5000 samples, p50=8 ns, p90=16 ns,
+        p99=8192 ns, max=169377 ns, ``arch_tlb_shootdown_targets=3``,
+        ``user_escape_count=0``, and an empty kernel-error log. The three
+        TLB shootdowns from reclaim were absorbed without an escape.
+      - No dirty/writeback/migration stress report.
     * - Device-management operations
       - **Caller-local management is safe by construction; device-specific
         steering is rejected or routed to housekeeping at configuration time;
@@ -1019,8 +1025,16 @@ run-specific results must be recorded with the kernel build and test logs.
         pending until the owner exits. Device operations that use waited or
         deferred call-function, workqueues, stop machine, or CPU hotplug
         inherit the corresponding row's disposition.
-      - No device reset, teardown, or management-operation fault matrix. The
-        RFS-to-owned-CPU case is source-classified only; no runtime run holds
+       - On 2026-10-30, a 3 s ``user-oslat`` run on
+         ``7.3.0-rc3-accel-tlbfix-gb381f8577d1a-dirty`` with a concurrent
+         NIC down/up cycle (``ip link set ens18 down`` / ``up``) and an ARP
+         flush completed with ``state=7``, ``recovery_state=2``,
+         ``user_escape_count=1``, ``arch_tlb_shootdown_targets=1``, 1583
+         samples before the escape, and an empty kernel-error log. The NIC
+         stop path requested an owner stop through the generic
+         call-function mechanism; the operation completed and the owner
+         recovered. The RFS-to-owned-CPU case is source-classified only; no
+         runtime run holds
         an RFS flow on the owned CPU during ownership to observe the deferred
         backlog drain.
    * - Exceptions, NMIs, and machine checks

@@ -768,6 +768,10 @@ int x86_cpu_accel_user_enter(unsigned int cpu, struct mm_struct *mm,
 		if (!rcu_current_cpu_is_offloaded() ||
 		    housekeeping_test_cpu(cpu, HK_TYPE_RCU)) {
 			preempt_enable();
+			pr_warn("cpu_accel: CPU %u is not RCU-offloaded; "
+				"boot with rcu_nocbs=%u nohz_full=%u "
+				"isolcpus=managed_irq,%u\n",
+				cpu, cpu, cpu, cpu);
 			return -EOPNOTSUPP;
 		}
 		__flush_tlb_all();

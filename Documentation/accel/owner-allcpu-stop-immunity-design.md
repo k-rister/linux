@@ -73,65 +73,88 @@ durable run-duration knob should be defined against a stable timebase.
 
 ## Design goals
 
-- An active bounded owner is not terminated by an all-CPU stop op (text_poke, hotplug, MTRR,
-  microcode, ...); the run survives it and reaches its full duration.
-- Correctness preserved: the owned CPU still stops long enough for the op to land (no
-  half-patched instruction executes; MTRR / microcode / hotplug complete).
-- No unbounded starvation of the all-CPU op: a deferred op must be allowed to proceed within
-  a bounded time even if the owner keeps running.
-- Retain and generalise the existing DRAIN (hotplug-maintenance) semantics.
+- The looping user workload runs -- potentially unbounded ("forever") -- without unintended
+  interruption: a spurious all-CPU stop op must not tear the run down.
+- The only intended stop is the control program's explicit exit, and the run must honor it
+  in a timely fashion (within seconds).
+- Correctness preserved: for an op that does run, every CPU it actually needs is quiesced;
+  a CPU the op does not need (the ring-3 owned CPU, which is not executing the patched
+  target) is left running and safe.
 - No added latency on the non-stopped path.
 
-## Candidate designs
+## Why "defer the op" does not work for a forever-run
 
-### Option 1: admission-gate / defer the op (recommended direction)
+Deferring (the op waits for the owner to exit) is not viable when the run is unbounded:
 
-While an owner is active, a new `STOP_TERMINATE` maintenance op is *deferred* (queued) until
-the owner exits, with a bounded wait; the op's text_poke then lands. This matches the
-"admission closes, the set cannot grow" model already in
-`x86_cpu_accel_maintenance_begin()`.
+- The op's caller blocks in `x86_cpu_accel_maintenance_begin()` until
+  `x86_cpu_accel_active_count == 0` (accel.c:616). A forever-owner never exits, so the
+  caller (e.g. the BPF-JIT / SSH thread) wedges indefinitely.
+- The physical all-CPU stop is per-CPU: `arch_smp_sync_wait_stop()` (accel.c:364) runs on
+  each quiesced CPU, and the stop waits for every target CPU to reach it. A ring-3 owned
+  CPU is masked and does not quiesce, so the stop would hang on it. This is exactly why
+  `maintenance_begin` forces the owner out *before* the stop today.
 
-- Pros: the owner window is never broken.
-- Cons: the op is delayed by the owner's remaining time. On x86, text_poke uses a full
-  all-CPU stop, so the whole op (not just the owned CPU's commit) waits. A bound is required
-  so a long or misbehaving owner cannot starve it; the bounded fallback is the current
-  terminal escape.
+So the op cannot wait its turn while the run is unbounded; the run and the op must not be
+serialised on the owned CPU.
 
-### Option 2: non-terminal stop for bounded owners (yield the op, keep the run)
+## Design: exclude the owned (ring-3) CPU from the op (safe-to-skip)
 
-Make the driver stop callback, for a *bounded* user owner, take a yield-not-terminate path:
-the owner finishes its in-flight deadline, the stop/escape context lets the op land, and the
-run resumes for the remainder of its duration. This is distinct from the per-cpu-work
-yield-and-resume that was ruled out: here the op is a global all-CPU stop that *must*
-involve the CPU, so the run must survive it rather than the per-cpu work being avoided.
+The owned CPU, while active, runs ring-3 and is not executing the kernel text a
+`text_poke`-class op patches. It is safe to leave it *out* of the all-CPU stop: the op
+proceeds on every other CPU and the owned CPU keeps running. The owned CPU's own
+(lazy/queued) commit of the patched site is deferred until it next re-enters the kernel;
+on x86 the instruction cache is coherent, so it observes the patched instruction then.
 
-- Pros: the op is never deferred (no starvation); the run reaches its full duration.
-- Cons: re-entering a user image after an NMI escape is a large state-machine change; the
-  current escape is terminal by construction (redirects to `escape_ip`, image released).
-  Re-entry needs a save/restore or re-admission (context, TLB, `mmu_owner` re-registration,
-  watchdog re-arm).
+This is the direction this doc now tracks. It is not "defer the op" (the op is not delayed)
+and not "interrupt and re-admit the owner" (the owner is never stopped). It works for an
+unbounded run because the owned CPU never has to stop.
 
-### Option 3: keep it terminal; require quiesced sources (status quo + policy)
+### Op classification
 
-Keep the terminal stop and define a "clean host" policy: disable BPF JIT, avoid
-ftrace/kprobes/dynamic-debug, avoid set_memory/MTRR churn and microcode updates during a
-run. This is the policy that produced the clean 49-min run.
+- **Safe-to-skip (immune for an unbounded run):** `text_poke` consumers -- BPF JIT (the
+  SSH-seccomp case), jump-labels / static keys, ftrace / kprobes, `set_memory_*` (non-MTRR).
+  The owned CPU is not executing the patched target, so excluding it is safe.
+- **Must-stop (cannot be skipped or deferred; ends the run):** MTRR / CKSC (changes the
+  owned CPU's own memory-type state), microcode load, hotplug / `cpu_down`, reboot, TDX.
+  These require the owned CPU to physically stop or the CPU to be removed. On a dedicated
+  accelerator host this class must be absent (no MTRR churn, no hotplug / reboot /
+  microcode on the owned CPU); otherwise a running owner legitimately ends.
 
-- Pros: no code change.
-- Cons: not robust (any unanticipated text_poke consumer ends the run); a host policy is
-  not a design guarantee. Rejected as the solution; retained only as a test-harness
-  constraint.
+### Concrete change (outline)
+
+- Add a stop flag, e.g. `X86_CPU_ACCEL_STOP_SKIP_OK`, meaning "the op may proceed without
+  the owned CPU because the owned CPU is not executing the op's target." `text_poke` callers
+  pass it; must-stop callers do not.
+- `x86_cpu_accel_maintenance_begin(stop_flags)`: when `SKIP_OK` and a CPU is owned and in
+  ring-3, do not force the owner out; instead mark that CPU skip-able for the in-flight
+  stop. Without `SKIP_OK`, keep today's force-exit (terminal / drain).
+- The physical stop (`arch_smp_sync_wait_*` / the op's stop path) omits skip-able owned CPUs
+  from its target set and does not wait for them to quiesce.
+- The owned CPU's queued commit of a patched site lands on re-entry (control-program exit or
+  natural completion); no change beyond the existing re-entry path.
+- The control-program exit is unchanged: the owner polls `stop_requested` and exits within
+  ~one period (well under seconds).
+
+### Ruled-out alternatives (for the record)
+
+- *Defer the op* (former Option 1): not viable for an unbounded run (see above).
+- *Interrupt and re-admit the owner* (former Option 2): unnecessary if the owned CPU is
+  excluded from the op; it would only be needed for the must-stop class, where the run ends
+  anyway.
+- *Quiesce the sources* (former Option 3): a host policy, not a design guarantee; retained
+  only as a test-harness constraint.
 
 ## Open questions
 
-- Can text_poke be split so the owned CPU's commit is independent of the other CPUs
-  (enabling deferral without a full all-CPU stall)? Current x86 `text_poke` is a
-  stop_machine-style full stop; confirm whether a per-CPU commit-barrier variant exists or
-  is feasible.
-- What starvation bound fits the latency contract for Option 1, and does the bounded terminal
-  fallback stay within it?
-- For Option 2, is re-admission of the user image after an NMI escape feasible and safe
-  (context save/restore, TLB, `mmu_owner` re-registration, watchdog re-arm)?
+- Which all-CPU stop mechanism each safe-to-skip caller actually uses (`stop_machine` vs
+  `smp_call_function`-style sync) and whether it can omit a single CPU from its wait set.
+  `stop_machine` is all-or-nothing; a per-CPU `smp`-sync stop can exclude CPUs. This decides
+  whether each caller is SKIP_OK-able as-is or needs its stop reworked.
+- Should the must-stop class be refused / failed while a ring-3 owner is active (so a
+  misconfigured host cannot silently end a run), or is "absent on a dedicated host" sufficient?
+- Confirm the safe-to-skip set is closed: enumerate every caller of
+  `x86_cpu_accel_maintenance_begin()` / the physical stop and tag it safe-to-skip or
+  must-stop.
 
 ## Out of scope
 
@@ -139,4 +162,3 @@ run. This is the policy that produced the clean 49-min run.
   out as a goal (that work should not be processed on the owned CPU at all).
 - The `isolcpus` / `irqaffinity` boot-config gap on the current box (separate host-isolation
   item, not the immunity design).
-- Unbounded / duration-less owners (the escalation grace window already exists).

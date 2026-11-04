@@ -111,6 +111,7 @@ static struct task_struct *x86_cpu_accel_maintenance_owner;
 static unsigned int x86_cpu_accel_maintenance_depth;
 static bool x86_cpu_accel_maintenance;
 static bool x86_cpu_accel_maintenance_try;
+static unsigned int x86_cpu_accel_maintenance_joined;
 static int x86_cpu_accel_cpu_up_cpu = -1;
 static unsigned int x86_cpu_accel_cpu_up_depth;
 static unsigned int x86_cpu_accel_kgdb_breakpoints;
@@ -566,6 +567,19 @@ void x86_cpu_accel_maintenance_begin(unsigned int stop_flags)
 		raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
 		return;
 	}
+	/*
+	 * A maintenance window is already open by another task, e.g. _cpu_down()
+	 * holding it across cpuhp_kick_ap_work() while the target cpu's cpuhp
+	 * worker runs a down-callback that repatches jump labels. Join that window
+	 * instead of blocking on the owner's mutex: the initiator's drain and
+	 * admission close already cover us, and blocking would deadlock the cpuhp
+	 * worker against the initiator.
+	 */
+	if (x86_cpu_accel_maintenance) {
+		x86_cpu_accel_maintenance_joined++;
+		raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
+		return;
+	}
 	raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
 
 	mutex_lock(&x86_cpu_accel_maintenance_mutex);
@@ -609,20 +623,33 @@ void x86_cpu_accel_maintenance_end(void)
 	unsigned long flags;
 
 	raw_spin_lock_irqsave(&x86_cpu_accel_ownership_lock, flags);
-	if (WARN_ON_ONCE(x86_cpu_accel_maintenance_owner != current ||
-			 !x86_cpu_accel_maintenance_depth)) {
-		raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock,
-					   flags);
+	if (x86_cpu_accel_maintenance_owner == current) {
+		if (WARN_ON_ONCE(!x86_cpu_accel_maintenance_depth)) {
+			raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock,
+						   flags);
+			return;
+		}
+		if (--x86_cpu_accel_maintenance_depth) {
+			raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock,
+						   flags);
+			return;
+		}
+		x86_cpu_accel_maintenance_owner = NULL;
+		x86_cpu_accel_maintenance = false;
+		raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
+		mutex_unlock(&x86_cpu_accel_maintenance_mutex);
 		return;
 	}
-	if (--x86_cpu_accel_maintenance_depth) {
+	/*
+	 * A non-owner that joined an active window via
+	 * x86_cpu_accel_maintenance_begin(); just leave the window.
+	 */
+	if (WARN_ON_ONCE(!x86_cpu_accel_maintenance_joined)) {
 		raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
 		return;
 	}
-	x86_cpu_accel_maintenance_owner = NULL;
-	x86_cpu_accel_maintenance = false;
+	x86_cpu_accel_maintenance_joined--;
 	raw_spin_unlock_irqrestore(&x86_cpu_accel_ownership_lock, flags);
-	mutex_unlock(&x86_cpu_accel_maintenance_mutex);
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_maintenance_end);
 

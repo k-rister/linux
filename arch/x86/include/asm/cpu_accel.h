@@ -15,10 +15,15 @@ typedef void (*x86_cpu_accel_stop_fn)(void *data, unsigned int stop_flags);
  * Owner stop request modes. TERMINATE publishes the stop request and
  * escalates to the owner's terminating recovery. DRAIN lets bounded owner
  * work complete first and escalates only if the owner is still active
- * past its own deadline.
+ * past its own deadline. SKIP_OK marks an op that may proceed without the
+ * owned CPU: an active ring-3 (user_mm) owner is not executing the op's
+ * target, so it is left running, exempted from the drain, and dropped from
+ * the op's all-CPU stop. Must-stop ops (MTRR, microcode, hotplug, reboot,
+ * TDX) must not set it.
  */
 #define X86_CPU_ACCEL_STOP_TERMINATE	0
 #define X86_CPU_ACCEL_STOP_DRAIN	1
+#define X86_CPU_ACCEL_STOP_SKIP_OK	2
 
 struct x86_cpu_accel_tlb_flush {
 	cpumask_t targets;
@@ -67,6 +72,8 @@ u64 x86_cpu_accel_user_stop_exit(unsigned int cpu);
 void x86_cpu_accel_tlb_unmap_begin(struct mm_struct *mm);
 void x86_cpu_accel_tlb_unmap_end(struct mm_struct *mm);
 bool x86_cpu_accel_any_active(void);
+/* True while the CPU is running an admitted ring-3 (user_mm) owner image. */
+bool x86_cpu_accel_cpu_active_user_owner(unsigned int cpu);
 /* Drain owners, block admission, and allow same-task nesting. */
 void x86_cpu_accel_maintenance_begin(unsigned int stop_flags);
 void x86_cpu_accel_maintenance_end(void);
@@ -176,6 +183,12 @@ x86_cpu_accel_reclaim_release(struct x86_cpu_accel_tlb_reclaim_completion *comp)
 
 static inline bool x86_cpu_accel_any_active(void)
 {
+	return false;
+}
+
+static inline bool x86_cpu_accel_cpu_active_user_owner(unsigned int cpu)
+{
+	(void)cpu;
 	return false;
 }
 
@@ -295,7 +308,8 @@ static inline u64 x86_cpu_accel_tlb_shootdown_targets(unsigned int cpu)
 static inline void x86_cpu_accel_text_mutex_lock(void)
 	__acquires(&text_mutex)
 {
-	x86_cpu_accel_maintenance_begin(X86_CPU_ACCEL_STOP_TERMINATE);
+	x86_cpu_accel_maintenance_begin(X86_CPU_ACCEL_STOP_TERMINATE |
+					 X86_CPU_ACCEL_STOP_SKIP_OK);
 	mutex_lock(&text_mutex);
 }
 

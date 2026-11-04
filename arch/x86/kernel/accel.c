@@ -103,6 +103,7 @@ static const struct mmu_owner_ops x86_cpu_accel_owner_no_stop_ops = {
 
 static DEFINE_PER_CPU(unsigned int, x86_cpu_accel_tlb_flush_count);
 static atomic_t x86_cpu_accel_active_count = ATOMIC_INIT(0);
+static atomic_t x86_cpu_accel_user_owner_count = ATOMIC_INIT(0);
 static atomic64_t x86_cpu_accel_tlb_flush_id = ATOMIC64_INIT(0);
 static DEFINE_RAW_SPINLOCK(x86_cpu_accel_ownership_lock);
 static DEFINE_MUTEX(x86_cpu_accel_maintenance_mutex);
@@ -225,6 +226,8 @@ static int x86_cpu_accel_owner_enter(unsigned int cpu, u64 *tlb_targets,
 		}
 	}
 	atomic_inc(&x86_cpu_accel_active_count);
+	if (owner_mm)
+		atomic_inc(&x86_cpu_accel_user_owner_count);
 	atomic_set(&request->active, 1);
 	if (tlb_targets)
 		*tlb_targets = atomic64_read(&request->tlb_shootdown_targets);
@@ -505,6 +508,8 @@ static void x86_cpu_accel_owner_exit_finish(unsigned int cpu, bool owner_exited)
 	request->exit_unscoped_tlb_flush = false;
 	request->exiting = false;
 	atomic_dec(&x86_cpu_accel_active_count);
+	if (user_mm)
+		atomic_dec(&x86_cpu_accel_user_owner_count);
 	raw_spin_unlock_irqrestore(&request->lock, flags);
 	wake_up_all(&x86_cpu_accel_owner_wait);
 }
@@ -559,6 +564,8 @@ void x86_cpu_accel_maintenance_begin(unsigned int stop_flags)
 {
 	unsigned int cpu;
 	unsigned long flags;
+	bool skip_ok = stop_flags & X86_CPU_ACCEL_STOP_SKIP_OK;
+	unsigned int owner_flags = stop_flags & ~X86_CPU_ACCEL_STOP_SKIP_OK;
 
 	might_sleep();
 	raw_spin_lock_irqsave(&x86_cpu_accel_ownership_lock, flags);
@@ -602,19 +609,32 @@ void x86_cpu_accel_maintenance_begin(unsigned int stop_flags)
 	/*
 	 * Admission is closed, so this set cannot grow. Ask owners with a
 	 * registered stop callback to leave; the callback only requests a stop
-	 * and does not acknowledge owner exit or TLB completion.
+	 * and does not acknowledge owner exit or TLB completion. An op that
+	 * may proceed without the owned CPU (SKIP_OK) leaves active ring-3
+	 * owners running: they are not executing the patched target, so they
+	 * are neither asked to stop nor waited on.
 	 */
-	for_each_possible_cpu(cpu)
-		x86_cpu_accel_request_stop_owner(cpu, stop_flags);
+	for_each_possible_cpu(cpu) {
+		if (skip_ok && x86_cpu_accel_cpu_active_user_owner(cpu))
+			continue;
+		x86_cpu_accel_request_stop_owner(cpu, owner_flags);
+	}
 
 	/*
 	 * owner_exit_finish() drops active_count only after local TLB
 	 * reconciliation and any reclaim acknowledgements have completed.
 	 * Owners without a stop callback, or which do not honor the request,
-	 * retain the existing synchronous wait.
+	 * retain the existing synchronous wait. With SKIP_OK the wait is only
+	 * for the non-ring-3 owners to drain; the active ring-3 owners left
+	 * running are exempt, so the stop proceeds once the two counts match.
 	 */
-	wait_event(x86_cpu_accel_owner_wait,
-		   !atomic_read(&x86_cpu_accel_active_count));
+	if (skip_ok)
+		wait_event(x86_cpu_accel_owner_wait,
+			   atomic_read(&x86_cpu_accel_active_count) ==
+			   atomic_read(&x86_cpu_accel_user_owner_count));
+	else
+		wait_event(x86_cpu_accel_owner_wait,
+			   !atomic_read(&x86_cpu_accel_active_count));
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_maintenance_begin);
 
@@ -1182,6 +1202,23 @@ bool x86_cpu_accel_any_active(void)
 	return atomic_read(&x86_cpu_accel_active_count) != 0;
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_any_active);
+
+bool x86_cpu_accel_cpu_active_user_owner(unsigned int cpu)
+{
+	struct x86_cpu_accel_request *request;
+	unsigned long flags;
+	bool user_owner;
+
+	if (cpu >= nr_cpu_ids)
+		return false;
+	request = per_cpu_ptr(&x86_cpu_accel_request, cpu);
+	raw_spin_lock_irqsave(&request->lock, flags);
+	user_owner = atomic_read(&request->active) &&
+		     request->owner_user_mm;
+	raw_spin_unlock_irqrestore(&request->lock, flags);
+	return user_owner;
+}
+EXPORT_SYMBOL_GPL(x86_cpu_accel_cpu_active_user_owner);
 
 u64 x86_cpu_accel_tlb_shootdown_targets(unsigned int cpu)
 {

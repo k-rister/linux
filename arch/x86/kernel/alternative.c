@@ -2637,7 +2637,19 @@ static void do_sync_core(void *info)
 
 void smp_text_poke_sync_each_cpu(void)
 {
-	on_each_cpu(do_sync_core, NULL, 1);
+	cpumask_t mask;
+	unsigned int cpu;
+
+	/*
+	 * A ring-3 owned CPU is not executing the patched kernel text, so it
+	 * needs no sync_core(); excluding it keeps the run from being stopped
+	 * (its lazy commit lands on re-entry via i-cache coherence).
+	 */
+	cpumask_copy(&mask, cpu_online_mask);
+	for_each_online_cpu(cpu)
+		if (x86_cpu_accel_cpu_active_user_owner(cpu))
+			cpumask_clear_cpu(cpu, &mask);
+	on_each_cpu_mask(&mask, do_sync_core, NULL, 1);
 }
 
 /*

@@ -6,7 +6,7 @@ CFLAGS += -Wall -Wextra -std=c11 -fno-stack-protector -pthread
 CPPFLAGS += -D_GNU_SOURCE -Wno-cpp -I../../include/uapi -I../../usr/include
 KDIR ?= $(abspath ../..)
 
-all: cpu-accelctl
+all: cpu-accelctl cpu-accel-oslat
 
 test: cpu-accelctl test-tlb-generation test-tlb-cow-churn
 	CPU_ACCELCTL=./cpu-accelctl sh ./test-cpu-accel.sh
@@ -46,6 +46,9 @@ rcu-probe:
 cpu-accelctl: cpu-accelctl.o libcpu_accel.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
+cpu-accel-oslat: cpu-accel-oslat.o libcpu_accel.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
 test-tlb-generation: test-tlb-generation.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
@@ -64,8 +67,8 @@ test-perf-event-open: test-perf-event-open.o
 test-user-escape-rescue: test-user-escape-rescue.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-cpu-accelctl.o: cpu_accel_user_image.h
-cpu-accelctl.o libcpu_accel.o: cpu_accel.h ../../include/uapi/linux/cpu_accel.h
+cpu-accelctl.o cpu-accel-oslat.o: cpu_accel_user_image.h
+cpu-accelctl.o cpu-accel-oslat.o libcpu_accel.o: cpu_accel.h ../../include/uapi/linux/cpu_accel.h
 test-tlb-generation.o: ../../include/uapi/linux/cpu_accel.h
 test-seccomp-jit-churn.o: CPPFLAGS := -D_GNU_SOURCE
 test-sync-wait-prime.o: CPPFLAGS := -D_GNU_SOURCE
@@ -73,13 +76,13 @@ test-perf-event-open.o: CPPFLAGS := -D_GNU_SOURCE
 test-user-escape-rescue.o: CPPFLAGS := -D_GNU_SOURCE -Wno-cpp -I../../include/uapi
 
 clean:
-	rm -f cpu-accelctl test-tlb-generation test-tlb-generation.o \
+	rm -f cpu-accelctl cpu-accel-oslat test-tlb-generation test-tlb-generation.o \
 		test-tlb-cow-churn test-tlb-cow-churn.o \
 		test-seccomp-jit-churn test-seccomp-jit-churn.o \
 		test-sync-wait-prime test-sync-wait-prime.o \
 		test-perf-event-open test-perf-event-open.o test-user-escape-rescue \
 		test-user-escape-rescue.o \
-		cpu-accelctl.o libcpu_accel.o
+		cpu-accelctl.o cpu-accel-oslat.o libcpu_accel.o
 	$(MAKE) -C $(KDIR) M=$(CURDIR)/rcu-probe clean
 
 .PHONY: all clean test test-sync-work-owner-stop test-perf-owner-stop \

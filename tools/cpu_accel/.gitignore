@@ -1,4 +1,5 @@
 cpu-accelctl
+cpu-accel-oslat
 test-tlb-generation
 test-tlb-cow-churn
 test-seccomp-jit-churn

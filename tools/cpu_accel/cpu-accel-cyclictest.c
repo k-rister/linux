@@ -1107,7 +1107,7 @@ static int run_user_worker(int argc, char **argv)
 				     reclaim_file);
 }
 
-static bool __attribute__((unused)) user_escape_completed(
+static bool user_escape_completed(
 		const volatile struct cpu_accel_shared *shared)
 {
 	return __atomic_load_n(&shared->state, __ATOMIC_ACQUIRE) ==
@@ -1133,7 +1133,11 @@ static bool user_reclaim_owner_stop_completed(
 	       __atomic_load_n(&shared->user_escape_count, __ATOMIC_ACQUIRE) == 0;
 }
 
-static int __attribute__((unused)) wait_for_user_worker(pid_t child, int *status,
+static int maybe_write_active_marker(
+		const volatile struct cpu_accel_shared *shared,
+		bool *marker_written);
+
+static int wait_for_user_worker(pid_t child, int *status,
 				const volatile struct cpu_accel_shared *shared,
 				uint64_t timeout_ms)
 {
@@ -1152,33 +1156,8 @@ static int __attribute__((unused)) wait_for_user_worker(pid_t child, int *status
 	for (;;) {
 		pid_t waited;
 
-		if (!marker_written && active_marker && *active_marker &&
-		    __atomic_load_n(&shared->state, __ATOMIC_ACQUIRE) ==
-			    CPU_ACCEL_STATE_RUNNING &&
-		    __atomic_load_n(&shared->mode, __ATOMIC_ACQUIRE) ==
-			    CPU_ACCEL_MODE_ACCELERATOR &&
-		    __atomic_load_n(&shared->user_active_start_ns,
-				    __ATOMIC_ACQUIRE) &&
-		    !__atomic_load_n(&shared->user_active_end_ns,
-				     __ATOMIC_ACQUIRE)) {
-			static const char ready[] = "active\n";
-			int fd = open(active_marker,
-				      O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC,
-				      0600);
-
-			if (fd < 0) {
-				perror("create active marker");
-				return -1;
-			}
-			if (write(fd, ready, sizeof(ready) - 1) !=
-			    sizeof(ready) - 1) {
-				perror("write active marker");
-				close(fd);
-				return -1;
-			}
-			close(fd);
-			marker_written = true;
-		}
+		if (maybe_write_active_marker(shared, &marker_written) < 0)
+			return -1;
 
 		waited = waitpid(child, status, WNOHANG);
 		if (waited == child)
@@ -1193,6 +1172,42 @@ static int __attribute__((unused)) wait_for_user_worker(pid_t child, int *status
 	}
 }
 
+/* Publish CPU_ACCEL_ACTIVE_MARKER once the owner is verifiably active so test
+ * harnesses can inject activity (e.g. RCU callbacks) without a fixed delay.
+ * Returns 0 when no write was needed or it succeeded, -1 on write error.
+ */
+static int maybe_write_active_marker(
+		const volatile struct cpu_accel_shared *shared,
+		bool *marker_written)
+{
+	const char *active_marker = getenv("CPU_ACCEL_ACTIVE_MARKER");
+	static const char ready[] = "active\n";
+	int fd;
+
+	if (*marker_written || !active_marker || !*active_marker)
+		return 0;
+	if (__atomic_load_n(&shared->state, __ATOMIC_ACQUIRE) !=
+	    CPU_ACCEL_STATE_RUNNING ||
+	    __atomic_load_n(&shared->mode, __ATOMIC_ACQUIRE) !=
+	    CPU_ACCEL_MODE_ACCELERATOR ||
+	    !__atomic_load_n(&shared->user_active_start_ns, __ATOMIC_ACQUIRE) ||
+	    __atomic_load_n(&shared->user_active_end_ns, __ATOMIC_ACQUIRE))
+		return 0;
+	fd = open(active_marker, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+	if (fd < 0) {
+		perror("create active marker");
+		return -1;
+	}
+	if (write(fd, ready, sizeof(ready) - 1) != sizeof(ready) - 1) {
+		perror("write active marker");
+		close(fd);
+		return -1;
+	}
+	close(fd);
+	*marker_written = true;
+	return 0;
+}
+
 /* A2: the manager owns the wall-clock duration. Wait for the owner to reach
  * RUNNING, sleep the requested duration against CLOCK_MONOTONIC (this process
  * is pinned to a ticked CPU, so the absolute sleep is accurate), then send an
@@ -1204,6 +1219,8 @@ static int cpu_accel_cyclictest_run_until_stop(struct cpu_accel_handle *handle,
 	const struct timespec poll = { 0, 1000000 };
 	struct timespec now;
 	struct timespec abs;
+	bool marker_written = false;
+	bool need_marker = getenv("CPU_ACCEL_ACTIVE_MARKER") != NULL;
 
 	for (;;) {
 		pid_t waited = waitpid(child, status, WNOHANG);
@@ -1212,8 +1229,11 @@ static int cpu_accel_cyclictest_run_until_stop(struct cpu_accel_handle *handle,
 			return 0;	/* owner already exited (early) */
 		if (waited < 0)
 			return -1;
+		if (maybe_write_active_marker(handle->shared, &marker_written) < 0)
+			return -1;
 		if (__atomic_load_n(&handle->shared->state, __ATOMIC_ACQUIRE) ==
-		    CPU_ACCEL_STATE_RUNNING)
+		    CPU_ACCEL_STATE_RUNNING &&
+		    (!need_marker || marker_written))
 			break;
 		nanosleep(&poll, NULL);
 	}
@@ -1261,9 +1281,9 @@ static int run_user_workload(const struct cpu_accel_config *requested,
 	int user_reclaim = requested->workload ==
 		CPU_ACCEL_WORKLOAD_USER_RECLAIM;
 	bool reclaim_owner_stopped;
+	int escape_ret = 0;
 	int ret;
 
-	(void)escape_attempts;
 	if (cpu_accel_open(&handle) < 0) {
 		perror("open /dev/cpu_accel");
 		return 1;
@@ -1337,13 +1357,62 @@ static int run_user_workload(const struct cpu_accel_config *requested,
 		_exit(127);
 	}
 
-	/* A2: the manager (this process, pinned to CPU 0, a ticked CPU) owns
-	 * the wall-clock duration. The owner's cyclictest image is open-ended (no
-	 * PERSISTENT, no kernel watchdog), so the run is run-forever until this
-	 * manager sends an orderly STOP. The STOP sets stop_requested; the image
-	 * breaks, exits via USER_EXIT, and the driver records state=COMPLETE. */
-	if (cpu_accel_cyclictest_run_until_stop(&handle, child, &status,
-					   config.duration_ns) < 0) {
+	/* No escape: A2 -- this manager (pinned to CPU 0, a ticked CPU) owns the
+	 * wall-clock duration. The owner's cyclictest image is open-ended (no
+	 * PERSISTENT, no kernel watchdog), so it runs forever until this manager
+	 * sends an orderly STOP. The STOP sets stop_requested; the image breaks,
+	 * exits via USER_EXIT, and the driver records state=COMPLETE.
+	 *
+	 * With --escape-after-ms: wait that long for the owner to stop on its own
+	 * (e.g. kernel maintenance draining it); if it is still active, fire the
+	 * timed NMI escape and wait for recovery.
+	 */
+	if (escape_after_ms) {
+		int wait_ret = wait_for_user_worker(child, &status,
+						    handle.shared,
+						    escape_after_ms);
+
+		if (wait_ret == 1) {
+			for (uint64_t attempt = 0; attempt < escape_attempts;
+			     attempt++) {
+				escape_ret = cpu_accel_user_escape(&handle);
+				if (!escape_ret)
+					break;
+				if (errno == EINVAL &&
+				    user_escape_completed(handle.shared)) {
+					escape_ret = 0;
+					break;
+				}
+				if (errno == EALREADY && user_reclaim &&
+				    user_reclaim_owner_stop_completed(handle.shared)) {
+					/* Reclaim's subscribed stop beat the timed NMI. */
+					escape_ret = 0;
+					break;
+				}
+			}
+			if (escape_ret)
+				perror("user escape");
+			wait_ret = wait_for_user_worker(child, &status,
+							handle.shared, 0);
+		}
+		if (wait_ret < 0) {
+			ret = -1;
+		} else if (escape_ret) {
+			ret = -1;
+		} else if (WIFEXITED(status) && WEXITSTATUS(status)) {
+			fprintf(stderr,
+				"user accelerator child failed with status %d\n",
+				WEXITSTATUS(status));
+			ret = -1;
+		} else if (WIFSIGNALED(status)) {
+			fprintf(stderr, "user accelerator child killed by signal %d\n",
+				WTERMSIG(status));
+			ret = -1;
+		} else {
+			ret = 0;
+		}
+	} else if (cpu_accel_cyclictest_run_until_stop(&handle, child, &status,
+						       config.duration_ns) < 0) {
 		perror("cyclictest manager duration/stop");
 		ret = -1;
 	} else if (WIFEXITED(status) && WEXITSTATUS(status)) {

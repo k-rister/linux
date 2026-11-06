@@ -216,8 +216,13 @@ static unsigned int cpu_accel_user_lateness_bin(uint64_t lateness_ns)
 		64U - __builtin_clzll(lateness_ns);
 }
 
+/*
+ * Test-only user-reclaim workload image.  Holds the owned CPU in a periodic
+ * deadline loop while a file-backed reclaim mapping (reclaim_page) stays
+ * mapped, so the kernel reclaims those PTEs while the CPU is active.
+ */
 CPU_ACCEL_USER_IMAGE
-static void cpu_accel_user_cyclictest(void *argument)
+static void cpu_accel_user_reclaim(void *argument)
 {
 	struct cpu_accel_user_context *context = argument;
 	struct cpu_accel_shared *shared = context->shared;
@@ -309,7 +314,7 @@ static void cpu_accel_user_hang(void *argument)
 }
 
 /*
- * Test-only owner-death workload.  Unlike cyclictest/hang this loop takes a
+ * Test-only owner-death workload.  Unlike reclaim/hang this loop takes a
  * signal checkpoint (getpid) once per period, so a pending SIGKILL is
  * delivered while the user image is still active.  The owner then exits
  * through do_exit() without the USER_EXIT ioctl, exercising the
@@ -674,8 +679,8 @@ static void usage(FILE *stream, const char *program)
 	fprintf(stream,
 		"Usage:\n"
 		"  %s run [--cpu N] [--duration-ms N] [--period-us N]\n"
-		"      [--workload timestamp|memmove|shared-memmove|user-cyclictest|\n"
-		"                   user-hang|user-reclaim|user-death]\n"
+		"      [--workload timestamp|memmove|shared-memmove|user-hang|\n"
+		"                   user-reclaim|user-death]\n"
 		"      [--work-bytes N] [--shared-entry N]\n"
 		"      [--test-reclaim-file PATH]\n"
 		"      [--escape-after-ms N] [--escape-retries N]\n"
@@ -870,7 +875,7 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 	else if (user_death)
 		entry_ip = (uintptr_t)cpu_accel_user_death;
 	else
-		entry_ip = (uintptr_t)cpu_accel_user_cyclictest;
+		entry_ip = (uintptr_t)cpu_accel_user_reclaim;
 	config->flags |= CPU_ACCEL_FLAG_PERSISTENT;
 	config->user_entry_ip = entry_ip;
 	config->user_escape_ip = (uintptr_t)cpu_accel_user_escape_image;
@@ -952,8 +957,7 @@ static int run_user_worker(int argc, char **argv)
 	if (values[0] > INT_MAX || values[1] > UINT_MAX ||
 	    values[2] > CPU_ACCEL_WORKLOAD_USER_DEATH ||
 	    values[3] > UINT_MAX ||
-	    (values[2] != CPU_ACCEL_WORKLOAD_USER_CYCLICTEST &&
-	     values[2] != CPU_ACCEL_WORKLOAD_USER_HANG &&
+	    (values[2] != CPU_ACCEL_WORKLOAD_USER_HANG &&
 	     values[2] != CPU_ACCEL_WORKLOAD_USER_RECLAIM &&
 	     values[2] != CPU_ACCEL_WORKLOAD_USER_DEATH)) {
 		fprintf(stderr, "out-of-range internal user-worker argument\n");
@@ -1303,8 +1307,6 @@ static int run_workload(const char *program, int argc, char **argv)
 				config.workload = CPU_ACCEL_WORKLOAD_MEMMOVE;
 			else if (!strcmp(workload, "shared-memmove"))
 				config.workload = CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE;
-			else if (!strcmp(workload, "user-cyclictest"))
-				config.workload = CPU_ACCEL_WORKLOAD_USER_CYCLICTEST;
 			else if (!strcmp(workload, "user-hang"))
 				config.workload = CPU_ACCEL_WORKLOAD_USER_HANG;
 			else if (!strcmp(workload, "user-reclaim"))
@@ -1375,7 +1377,7 @@ static int run_workload(const char *program, int argc, char **argv)
 		config.flags |= CPU_ACCEL_FLAG_REQUIRE_QUIESCENT;
 	if (quarantine_irqs)
 		config.flags |= CPU_ACCEL_FLAG_IRQ_QUARANTINE;
-	if (escape_after_ms && config.workload != CPU_ACCEL_WORKLOAD_USER_CYCLICTEST &&
+	if (escape_after_ms &&
 	    config.workload != CPU_ACCEL_WORKLOAD_USER_HANG &&
 	    config.workload != CPU_ACCEL_WORKLOAD_USER_RECLAIM &&
 	    config.workload != CPU_ACCEL_WORKLOAD_USER_DEATH) {
@@ -1395,8 +1397,7 @@ static int run_workload(const char *program, int argc, char **argv)
 			"%s: --test-reclaim-file requires user-reclaim\n", program);
 		return 2;
 	}
-	if (config.workload == CPU_ACCEL_WORKLOAD_USER_CYCLICTEST ||
-	    config.workload == CPU_ACCEL_WORKLOAD_USER_HANG ||
+	if (config.workload == CPU_ACCEL_WORKLOAD_USER_HANG ||
 	    config.workload == CPU_ACCEL_WORKLOAD_USER_RECLAIM ||
 	    config.workload == CPU_ACCEL_WORKLOAD_USER_DEATH)
 		return run_user_workload(&config, escape_after_ms, escape_attempts,

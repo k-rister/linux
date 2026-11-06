@@ -5,6 +5,7 @@ set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 tool=${CPU_ACCELCTL:-$script_dir/cpu-accelctl}
+cyclictest_tool=${CPU_ACCEL_CYCLICTEST:-$script_dir/cpu-accel-cyclictest}
 probe_module=${CPU_ACCEL_RCU_PROBE:-$script_dir/rcu-probe/cpu_accel_rcu_callback_probe.ko}
 target_cpu=${CPU_ACCEL_RCU_CPU:-2}
 reader_cpu=${CPU_ACCEL_RCU_READER_CPU:-0}
@@ -115,6 +116,8 @@ field()
 
 [ "$(id -u)" -eq 0 ] || fail "run as root"
 [ -x "$tool" ] || fail "cpu-accelctl is not executable: $tool"
+[ -x "$cyclictest_tool" ] || \
+	fail "cpu-accel-cyclictest is not executable: $cyclictest_tool"
 [ -c /dev/cpu_accel ] || fail "/dev/cpu_accel is unavailable"
 [ -f "$probe_module" ] || fail "RCU probe module is missing: $probe_module"
 [ -d /sys/kernel/debug ] || fail "debugfs is unavailable"
@@ -172,7 +175,7 @@ echo "$callback_count" >"$probe_dir/queue" || \
 # exercises callback routing.
 rm -f "$active_marker"
 CPU_ACCEL_ACTIVE_MARKER="$active_marker" \
-	"$tool" run --cpu "$target_cpu" --duration-ms "$duration_ms" \
+	"$cyclictest_tool" run --cpu "$target_cpu" --duration-ms "$duration_ms" \
 	--period-us 1000 --workload user-cyclictest >"$outdir/ctl.log" 2>&1 &
 ctl_pid=$!
 active_wait=0

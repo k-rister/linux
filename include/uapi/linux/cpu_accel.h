@@ -76,7 +76,7 @@ enum cpu_accel_workload {
 	CPU_ACCEL_WORKLOAD_TIMESTAMP = 0,
 	CPU_ACCEL_WORKLOAD_MEMMOVE,
 	CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE,
-	CPU_ACCEL_WORKLOAD_USER_OSLAT,
+	CPU_ACCEL_WORKLOAD_USER_CYCLICTEST,
 	/* Noncooperative ring-3 fault-injection workload; requires USER_ESCAPE. */
 	CPU_ACCEL_WORKLOAD_USER_HANG,
 	/* Test-only ring-3 workload that reads one reclaimable file-backed page. */

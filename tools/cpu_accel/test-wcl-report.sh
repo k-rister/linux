@@ -170,7 +170,7 @@ run_class()
 baseline_run()
 {
 	"$tool" run --cpu "$target_cpu" --duration-ms "$duration_ms" \
-		--period-us 1000 --workload user-oslat --quarantine-irqs
+		--period-us 1000 --workload user-cyclictest --quarantine-irqs
 }
 
 load_run()

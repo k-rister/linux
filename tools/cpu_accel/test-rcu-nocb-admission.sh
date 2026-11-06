@@ -61,7 +61,7 @@ cpulist_contains "$nohz_full" "$offloaded_cpu" || \
 if [ "$other_offloaded" -eq 1 ]; then
 	if cpulist_contains "$nohz_full" "$other_cpu"; then
 		"$tool" run --cpu "$other_cpu" --duration-ms 100 \
-			--period-us 1000 --workload user-oslat >"$outdir/other.log" 2>&1 || \
+			--period-us 1000 --workload user-cyclictest >"$outdir/other.log" 2>&1 || \
 			fail "offloaded and isolated comparison CPU was rejected"
 		grep -q 'state=3 mode=0 ' "$outdir/other.log" || \
 			fail "offloaded comparison CPU completed with an invalid state"
@@ -70,7 +70,7 @@ if [ "$other_offloaded" -eq 1 ]; then
 		other_result="admitted (offloaded and RCU-isolated)"
 	else
 		if "$tool" run --cpu "$other_cpu" --duration-ms 100 \
-			--period-us 1000 --workload user-oslat >"$outdir/other.log" 2>&1; then
+			--period-us 1000 --workload user-cyclictest >"$outdir/other.log" 2>&1; then
 			fail "offloaded housekeeping comparison CPU was admitted"
 		fi
 		grep -q 'state=5 mode=4 ' "$outdir/other.log" || \
@@ -81,7 +81,7 @@ if [ "$other_offloaded" -eq 1 ]; then
 	fi
 else
 	if "$tool" run --cpu "$other_cpu" --duration-ms 100 \
-		--period-us 1000 --workload user-oslat >"$outdir/other.log" 2>&1; then
+		--period-us 1000 --workload user-cyclictest >"$outdir/other.log" 2>&1; then
 		fail "non-offloaded comparison CPU was admitted"
 	fi
 	grep -q 'state=5 mode=4 ' "$outdir/other.log" || \
@@ -92,7 +92,7 @@ else
 fi
 
 "$tool" run --cpu "$offloaded_cpu" --duration-ms 100 \
-	--period-us 1000 --workload user-oslat >"$outdir/offloaded.log" 2>&1 || \
+	--period-us 1000 --workload user-cyclictest >"$outdir/offloaded.log" 2>&1 || \
 	fail "offloaded CPU admission or workload failed"
 grep -q 'state=3 mode=0 ' "$outdir/offloaded.log" || \
 	fail "offloaded CPU did not complete in Linux mode"

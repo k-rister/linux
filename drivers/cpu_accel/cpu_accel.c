@@ -81,7 +81,7 @@ static void cpu_accel_owner_exit_early(void *data, struct task_struct *task);
 
 static bool cpu_accel_user_workload(u32 workload)
 {
-	return workload == CPU_ACCEL_WORKLOAD_USER_OSLAT ||
+	return workload == CPU_ACCEL_WORKLOAD_USER_CYCLICTEST ||
 		workload == CPU_ACCEL_WORKLOAD_USER_HANG ||
 		workload == CPU_ACCEL_WORKLOAD_USER_RECLAIM ||
 		workload == CPU_ACCEL_WORKLOAD_USER_DEATH;

@@ -146,7 +146,7 @@ echo 0 >"$hotplug_file" || fail "could not offline test CPU $hotplug_cpu"
 rm -f "$active_marker"
 CPU_ACCEL_ACTIVE_MARKER="$active_marker" \
 	"$tool" run --cpu "$target_cpu" --duration-ms "$duration_ms" \
-	--period-us 1000 --workload user-oslat \
+	--period-us 1000 --workload user-cyclictest \
 	--escape-after-ms "$escape_after_ms" >"$run_output" 2>&1 &
 run_pid=$!
 

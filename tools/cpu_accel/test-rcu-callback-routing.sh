@@ -173,7 +173,7 @@ echo "$callback_count" >"$probe_dir/queue" || \
 rm -f "$active_marker"
 CPU_ACCEL_ACTIVE_MARKER="$active_marker" \
 	"$tool" run --cpu "$target_cpu" --duration-ms "$duration_ms" \
-	--period-us 1000 --workload user-oslat >"$outdir/ctl.log" 2>&1 &
+	--period-us 1000 --workload user-cyclictest >"$outdir/ctl.log" 2>&1 &
 ctl_pid=$!
 active_wait=0
 while [ "$active_wait" -lt 100 ]; do

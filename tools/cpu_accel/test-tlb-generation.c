@@ -1207,7 +1207,7 @@ int main(int argc, char **argv)
 		cli_argv[cli_argc++] = "--period-us";
 		cli_argv[cli_argc++] = "1000";
 		cli_argv[cli_argc++] = "--workload";
-		cli_argv[cli_argc++] = "user-oslat";
+		cli_argv[cli_argc++] = "user-cyclictest";
 		cli_argv[cli_argc++] = "--escape-after-ms";
 		cli_argv[cli_argc++] = ACCEL_ESCAPE_AFTER_MS;
 		cli_argv[cli_argc++] = "--escape-retries";

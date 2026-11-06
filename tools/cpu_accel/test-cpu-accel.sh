@@ -174,51 +174,51 @@ x86_64)
 	user_run=1
 	while [ "$user_run" -le "$repeats" ]; do
 		user_output=$($tool run --cpu "$target_cpu" --duration-ms 20 \
-			--period-us 1000 --workload user-oslat \
+			--period-us 1000 --workload user-cyclictest \
 			$quiescent_arg $quarantine_arg)
 		echo "$user_output"
 		assert_no_quarantined_irq_delivery "$user_output"
 		case "$user_output" in
 			state=3\ *) ;;
-			*) fail "user-oslat run did not complete" ;;
+			*) fail "user-cyclictest run did not complete" ;;
 		esac
 		echo "$user_output" | grep -q 'mode=0' || \
-			fail "user-oslat run did not return to Linux mode"
+			fail "user-cyclictest run did not return to Linux mode"
 		echo "$user_output" | grep -q 'backend=2' || \
 			fail "x86 ring-3 backend was not selected"
 		echo "$user_output" | grep -q 'backend_flags=7' || \
 			fail "user workload backend capabilities were not reported"
 		echo "$user_output" | grep -q 'workload=3' || \
-			fail "user-oslat workload was not selected"
+			fail "user-cyclictest workload was not selected"
 		echo "$user_output" | grep -q 'samples=[1-9][0-9]*' || \
-			fail "user-oslat workload did not produce samples"
+			fail "user-cyclictest workload did not produce samples"
 		echo "$user_output" | grep -q 'user_active_start_ns=[1-9][0-9]*' || \
-			fail "user-oslat active start timestamp was not recorded"
+			fail "user-cyclictest active start timestamp was not recorded"
 		echo "$user_output" | grep -q 'user_active_end_ns=[1-9][0-9]*' || \
-			fail "user-oslat active end timestamp was not recorded"
+			fail "user-cyclictest active end timestamp was not recorded"
 		echo "$user_output" | grep -q 'user_active_ns=[1-9][0-9]*' || \
-			fail "user-oslat active interval was not recorded"
+			fail "user-cyclictest active interval was not recorded"
 		echo "$user_output" | grep -q 'context_switches=0' || \
-			fail "user-oslat workload performed a context switch"
+			fail "user-cyclictest workload performed a context switch"
 		echo "$user_output" | grep -q 'migration_detected=0' || \
-			fail "user-oslat workload migrated CPUs"
+			fail "user-cyclictest workload migrated CPUs"
 		user_run=$((user_run + 1))
 	done
 	deferred_user_output=$($tool run --cpu "$target_cpu" --duration-ms 500 \
-		--period-us 1000 --workload user-oslat)
+		--period-us 1000 --workload user-cyclictest)
 	echo "$deferred_user_output"
 	case "$deferred_user_output" in
 		state=3\ *) ;;
-		*) fail "500 ms user-oslat run did not complete" ;;
+		*) fail "500 ms user-cyclictest run did not complete" ;;
 	esac
 	echo "$deferred_user_output" | grep -q 'mode=0' || \
-		fail "500 ms user-oslat run did not return to Linux mode"
+		fail "500 ms user-cyclictest run did not return to Linux mode"
 	[ "$(cat "$online_file")" = 1 ] || \
 		fail "target CPU is offline before the hotplug gate test"
 	command -v taskset >/dev/null 2>&1 || \
 		fail "taskset is required for the CPU hotplug gate test"
 	$tool run --cpu "$target_cpu" --duration-ms 3000 --period-us 1000 \
-		--workload user-oslat $quiescent_arg $quarantine_arg \
+		--workload user-cyclictest $quiescent_arg $quarantine_arg \
 		>"$hotplug_output" 2>&1 &
 	run_pid=$!
 	sleep 0.2
@@ -264,32 +264,32 @@ x86_64)
 		$quarantine_arg)
 	echo "$tlb_generation_output"
 	escape_output=$($tool run --cpu "$target_cpu" --duration-ms 5000 \
-		--period-us 1000 --workload user-oslat --escape-after-ms 500 \
+		--period-us 1000 --workload user-cyclictest --escape-after-ms 500 \
 		--escape-retries "$escape_retries" \
 		$quiescent_arg $quarantine_arg)
 	echo "$escape_output"
 	case "$escape_output" in
 		state=7\ *) ;;
-		*) fail "user-oslat escape run did not complete" ;;
+		*) fail "user-cyclictest escape run did not complete" ;;
 	esac
 	echo "$escape_output" | grep -q 'mode=0' || \
-		fail "user-oslat escape did not return to Linux mode"
+		fail "user-cyclictest escape did not return to Linux mode"
 	echo "$escape_output" | grep -q 'backend=2' || \
-		fail "user-oslat escape selected the wrong backend"
+		fail "user-cyclictest escape selected the wrong backend"
 	echo "$escape_output" | grep -q 'backend_flags=7' || \
-		fail "user-oslat escape backend capabilities were not reported"
+		fail "user-cyclictest escape backend capabilities were not reported"
 	echo "$escape_output" | grep -q 'user_escape_count=1' || \
-		fail "user-oslat escape was not observed exactly once"
+		fail "user-cyclictest escape was not observed exactly once"
 	echo "$escape_output" | grep -q 'recovery_state=2' || \
-		fail "user-oslat escape did not report successful recovery"
+		fail "user-cyclictest escape did not report successful recovery"
 	echo "$escape_output" | grep -q 'recovery_attempts=[1-9][0-9]*' || \
-		fail "user-oslat escape attempts were not reported"
+		fail "user-cyclictest escape attempts were not reported"
 	echo "$escape_output" | grep -q 'user_active_ns=[1-9][0-9]*' || \
-		fail "user-oslat escape did not report an active interval"
+		fail "user-cyclictest escape did not report an active interval"
 	echo "$escape_output" | grep -q 'context_switches=0' || \
-		fail "user-oslat escape performed a context switch"
+		fail "user-cyclictest escape performed a context switch"
 	echo "$escape_output" | grep -q 'migration_detected=0' || \
-		fail "user-oslat escape migrated CPUs"
+		fail "user-cyclictest escape migrated CPUs"
 	hang_output=$($tool run --cpu "$target_cpu" --duration-ms 5000 \
 		--period-us 1000 --workload user-hang --escape-after-ms 500 \
 		--escape-retries "$escape_retries" \

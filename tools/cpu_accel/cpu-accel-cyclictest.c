@@ -983,7 +983,7 @@ static int run_user_worker(int argc, char **argv)
 	if (values[0] > INT_MAX || values[1] > UINT_MAX ||
 	    values[2] > CPU_ACCEL_WORKLOAD_USER_DEATH ||
 	    values[3] > UINT_MAX ||
-	    (values[2] != CPU_ACCEL_WORKLOAD_USER_OSLAT &&
+	    (values[2] != CPU_ACCEL_WORKLOAD_USER_CYCLICTEST &&
 	     values[2] != CPU_ACCEL_WORKLOAD_USER_HANG &&
 	     values[2] != CPU_ACCEL_WORKLOAD_USER_RECLAIM &&
 	     values[2] != CPU_ACCEL_WORKLOAD_USER_DEATH)) {
@@ -1365,7 +1365,7 @@ static int run_workload(const char *program, int argc, char **argv)
 			else if (!strcmp(workload, "shared-memmove"))
 				config.workload = CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE;
 			else if (!strcmp(workload, "user-cyclictest"))
-				config.workload = CPU_ACCEL_WORKLOAD_USER_OSLAT;
+				config.workload = CPU_ACCEL_WORKLOAD_USER_CYCLICTEST;
 			else if (!strcmp(workload, "user-hang"))
 				config.workload = CPU_ACCEL_WORKLOAD_USER_HANG;
 			else if (!strcmp(workload, "user-reclaim"))
@@ -1436,7 +1436,7 @@ static int run_workload(const char *program, int argc, char **argv)
 		config.flags |= CPU_ACCEL_FLAG_REQUIRE_QUIESCENT;
 	if (quarantine_irqs)
 		config.flags |= CPU_ACCEL_FLAG_IRQ_QUARANTINE;
-	if (escape_after_ms && config.workload != CPU_ACCEL_WORKLOAD_USER_OSLAT &&
+	if (escape_after_ms && config.workload != CPU_ACCEL_WORKLOAD_USER_CYCLICTEST &&
 	    config.workload != CPU_ACCEL_WORKLOAD_USER_HANG &&
 	    config.workload != CPU_ACCEL_WORKLOAD_USER_RECLAIM &&
 	    config.workload != CPU_ACCEL_WORKLOAD_USER_DEATH) {
@@ -1456,7 +1456,7 @@ static int run_workload(const char *program, int argc, char **argv)
 			"%s: --test-reclaim-file requires user-reclaim\n", program);
 		return 2;
 	}
-	if (config.workload == CPU_ACCEL_WORKLOAD_USER_OSLAT ||
+	if (config.workload == CPU_ACCEL_WORKLOAD_USER_CYCLICTEST ||
 	    config.workload == CPU_ACCEL_WORKLOAD_USER_HANG ||
 	    config.workload == CPU_ACCEL_WORKLOAD_USER_RECLAIM ||
 	    config.workload == CPU_ACCEL_WORKLOAD_USER_DEATH)

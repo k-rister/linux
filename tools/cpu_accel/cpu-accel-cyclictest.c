@@ -220,7 +220,7 @@ static unsigned int cpu_accel_user_lateness_bin(uint64_t lateness_ns)
 }
 
 CPU_ACCEL_USER_IMAGE
-static void cpu_accel_user_oslat(void *argument)
+static void cpu_accel_user_cyclictest(void *argument)
 {
 	struct cpu_accel_user_context *context = argument;
 	struct cpu_accel_shared *shared = context->shared;
@@ -311,7 +311,7 @@ static void cpu_accel_user_hang(void *argument)
 }
 
 /*
- * Test-only owner-death workload.  Unlike oslat/hang this loop takes a
+ * Test-only owner-death workload.  Unlike cyclictest/hang this loop takes a
  * signal checkpoint (getpid) once per period, so a pending SIGKILL is
  * delivered while the user image is still active.  The owner then exits
  * through do_exit() without the USER_EXIT ioctl, exercising the
@@ -677,7 +677,7 @@ static void usage(FILE *stream, const char *program)
 	fprintf(stream,
 		"Usage:\n"
 		"  %s run [--cpu N] [--duration-ms N] [--period-us N]\n"
-		"      [--workload timestamp|memmove|shared-memmove|user-oslat|\n"
+		"      [--workload timestamp|memmove|shared-memmove|user-cyclictest|\n"
 		"                   user-hang|user-reclaim|user-death]\n"
 		"      [--work-bytes N] [--shared-entry N]\n"
 		"      [--test-reclaim-file PATH]\n"
@@ -873,7 +873,7 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 	else if (user_death)
 		entry_ip = (uintptr_t)cpu_accel_user_death;
 	else
-		entry_ip = (uintptr_t)cpu_accel_user_oslat;
+		entry_ip = (uintptr_t)cpu_accel_user_cyclictest;
 	config->flags |= CPU_ACCEL_FLAG_PERSISTENT;
 	config->user_entry_ip = entry_ip;
 	config->user_escape_ip = (uintptr_t)cpu_accel_user_escape_image;
@@ -1080,7 +1080,7 @@ static int __attribute__((unused)) wait_for_user_worker(pid_t child, int *status
  * RUNNING, sleep the requested duration against CLOCK_MONOTONIC (this process
  * is pinned to a ticked CPU, so the absolute sleep is accurate), then send an
  * orderly STOP. Sets *status to the owner's wait status on return. */
-static int cpu_accel_oslat_run_until_stop(struct cpu_accel_handle *handle,
+static int cpu_accel_cyclictest_run_until_stop(struct cpu_accel_handle *handle,
 					  pid_t child, int *status,
 					  uint64_t duration_ns)
 {
@@ -1133,7 +1133,7 @@ static int run_user_workload(const struct cpu_accel_config *requested,
 	char flags_arg[24], duration_arg[24], period_arg[24];
 	const char *reclaim_file_arg = reclaim_file ? reclaim_file : "-";
 	char *const worker_argv[] = {
-		"/proc/self/exe", "--cpu-accel-oslat-owner", fd_arg,
+		"/proc/self/exe", "--cpu-accel-cyclictest-owner", fd_arg,
 		cpu_arg, workload_arg, flags_arg, duration_arg, period_arg,
 		(char *)reclaim_file_arg, NULL,
 	};
@@ -1177,7 +1177,7 @@ static int run_user_workload(const struct cpu_accel_config *requested,
 		return 1;
 	}
 	config = *requested;
-	/* A2: no CPU_ACCEL_FLAG_PERSISTENT -- no kernel watchdog. The oslat
+	/* A2: no CPU_ACCEL_FLAG_PERSISTENT -- no kernel watchdog. The cyclictest
 	 * image is open-ended (run-forever); the manager owns the wall-clock
 	 * duration and sends the orderly STOP. */
 	snprintf(fd_arg, sizeof(fd_arg), "%d", handle.fd);
@@ -1221,13 +1221,13 @@ static int run_user_workload(const struct cpu_accel_config *requested,
 	}
 
 	/* A2: the manager (this process, pinned to CPU 0, a ticked CPU) owns
-	 * the wall-clock duration. The owner's oslat image is open-ended (no
+	 * the wall-clock duration. The owner's cyclictest image is open-ended (no
 	 * PERSISTENT, no kernel watchdog), so the run is run-forever until this
 	 * manager sends an orderly STOP. The STOP sets stop_requested; the image
 	 * breaks, exits via USER_EXIT, and the driver records state=COMPLETE. */
-	if (cpu_accel_oslat_run_until_stop(&handle, child, &status,
+	if (cpu_accel_cyclictest_run_until_stop(&handle, child, &status,
 					   config.duration_ns) < 0) {
-		perror("oslat manager duration/stop");
+		perror("cyclictest manager duration/stop");
 		ret = -1;
 	} else if (WIFEXITED(status) && WEXITSTATUS(status)) {
 		fprintf(stderr, "user accelerator child failed with status %d\n",
@@ -1336,7 +1336,7 @@ static int run_workload(const char *program, int argc, char **argv)
 				config.workload = CPU_ACCEL_WORKLOAD_MEMMOVE;
 			else if (!strcmp(workload, "shared-memmove"))
 				config.workload = CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE;
-			else if (!strcmp(workload, "user-oslat"))
+			else if (!strcmp(workload, "user-cyclictest"))
 				config.workload = CPU_ACCEL_WORKLOAD_USER_OSLAT;
 			else if (!strcmp(workload, "user-hang"))
 				config.workload = CPU_ACCEL_WORKLOAD_USER_HANG;
@@ -1517,7 +1517,7 @@ int main(int argc, char **argv)
 		usage(stderr, argv[0]);
 		return 2;
 	}
-	if (!strcmp(argv[1], "--cpu-accel-oslat-owner"))
+	if (!strcmp(argv[1], "--cpu-accel-cyclictest-owner"))
 		return run_user_worker(argc, argv);
 	if (!strcmp(argv[1], "run"))
 		return run_workload(argv[0], argc - 2, argv + 2);

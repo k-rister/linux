@@ -70,16 +70,19 @@ path that serves the *kernel* workloads (timestamp/memmove); it does not drive u
 earlier doc's "fast-mono stale on the tickless CPU" theory was a misattribution for this
 workload -- the TSC itself is stable; the calibration integer-truncation is the defect.
 
-### Design: a dedicated oslat program owns the run (A1 + A2)
+### Design: a dedicated cyclictest probe owns the run (A1 + A2)
 
 The generic control plane is the **driver** (`/dev/cpu_accel` ioctls + the shared mmap).
-`cpu-accelctl` is a workload-agnostic CLI wrapper over it. The oslat use case -- the ring-3
+`cpu-accelctl` is a workload-agnostic CLI wrapper over it. The cyclictest-style latency probe -- the ring-3
 user image plus its timing/control -- does **not** belong in that generic tool, so it moves out
 into a dedicated program:
 
-- **`cpu-accel-oslat`** (new, tools/cpu_accel/) is the oslat use case. It drives the driver via
-  the ioctl interface, hosts its **own** ring-3 oslat user image, and owns the oslat-specific
-  control. Two pieces of work:
+- **`cpu-accel-cyclictest`** (new, tools/cpu_accel/) is a cyclictest-style periodic
+  deadline-latency probe: fixed period, `lateness = now - deadline`, grid-anchored deadline. It
+  drives the driver via the ioctl interface, hosts its **own** ring-3 periodic user image, and owns
+  the probe-specific control. (This is the cyclictest-model variant, NOT the oslat
+  workload-duration model; the oslat-equivalent is a separate tool still to be built.) Two pieces
+  of work:
   - **A1 -- correct the clock.** Compute `cycles_per_ns` at sub-integer (fixed-point) precision
     so the ring-3 sample cadence, the absolute lateness scale, and the TSC-based durations are
     all accurate (the integer-truncation bug, Root cause above).
@@ -87,20 +90,20 @@ into a dedicated program:
     split for user workloads: the manager (`run_user_workload`) pins itself to CPU 0 (ticked),
     opens the device, `fork()`s + re-execs the owner (`--cpu-accel-user-worker`) pinned to the
     target CPU (cpu-accelctl.c:1111, 1140-1166); the manager keeps its own handle on the shared
-    fd. `cpu-accel-oslat` follows that same pattern, specialized to oslat. The change: today the
+    fd. `cpu-accel-cyclictest` follows that same pattern, specialized to the probe. The change: today the
     manager passes `duration_ns` to the owner and the owner's image self-terminates on its TSC
-    (the bug); instead the **manager owns the wall-clock duration** -- the owner's oslat image
+    (the bug); instead the **manager owns the wall-clock duration** -- the owner's probe image
     runs **open-ended** (until stopped, the run-forever model), and the manager (on CPU 0) waits
     for `RUNNING`, `clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, t0 + duration)`, then sends
     a clean **duration-quit** `STOP` via its own handle (same fd -- no new IPC). The driver
     records `state=COMPLETE` for a duration-quit (the intended end), not `STOPPED`.
 - **`libcpu_accel.c`** (already exists, tools/cpu_accel/) already provides the generic control
   API -- `open`/`attach_fd`/`configure`/`start`/`stop`/`exit`/`reset`/`wait` + the
-  `cpu_accel_handle`. No extraction is needed; `cpu-accel-oslat` links it directly. The
+  `cpu_accel_handle`. No extraction is needed; `cpu-accel-cyclictest` links it directly. The
   `attach_fd` entry is what lets the manager hold its own handle on the shared fd to send the
   STOP.
 - **`cpu-accelctl`** keeps the generic CLI; its built-in `user-oslat` (user image + timing) is
-  **removed** once `cpu-accel-oslat` works, to avoid two drifting copies.
+  **removed** once `cpu-accel-cyclictest` works, to avoid two drifting copies.
 
 Why the manager owns duration (rather than the worker's TSC clock):
 
@@ -132,7 +135,7 @@ recent-window (or drop it) -- it is a debug convenience, not a budget.
 
 ### Sampling-clock accuracy
 
-Making the per-sample **latency** wall-clock-true collides with the oslat tight spin, which
+Making the per-sample **latency** wall-clock-true collides with the probe tight spin, which
 relies on the fast clock for speed. Decision in "Sampling clock (decision)" below: keep the
 fast clock for the per-sample steady-state (preserve resolution), take the run length
 manager-side (wall-clock), and measure the must-stop spike with a dedicated wall-clock
@@ -237,7 +240,7 @@ path stays on the fast clock. Given that:
   fast clock runs ~24% fast on the tickless CPU, so the *absolute* scale of the steady-state
   numbers (and the effective period, ~0.81 ms instead of 1 ms) carries a known offset -- but
   the *resolution* is preserved. Making the steady-state wall-clock-true would require the
-  accurate clock in the spin (resolution loss) or an hrtimer schedule (changes what oslat
+  accurate clock in the spin (resolution loss) or an hrtimer schedule (changes what the probe
   measures); that is a separate, deferred fix (the fast-mono tickless refresh), out of scope now.
 - **Run length: manager-owned** (Point 1) -- wall-clock accurate, off the tickless CPU.
 - **The spike (Point 2): a dedicated wall-clock timestamp pair.** At the preempt boundary
@@ -254,17 +257,17 @@ with the accurate clock, only when it happens.
 
 ## Implementation plan
 
-**Phase A -- Point 1 (the durable oslat run; A1 + A2 together):**
+**Phase A -- Point 1 (the durable cyclictest run; A1 + A2 together):**
 
 1. **`libcpu_accel.c`** already provides the generic control API (incl. `attach_fd`) -- no
-   extraction needed. `cpu-accel-oslat` links it directly.
+   extraction needed. `cpu-accel-cyclictest` links it directly.
 2. **Driver / uapi: no change needed.** An orderly `STOP` (`cpu_accel_stop`) only sets
-   `stop_requested` (cpu_accel.c:2380-2389); the oslat image breaks on it and exits via
+   `stop_requested` (cpu_accel.c:2380-2389); the probe image breaks on it and exits via
    `USER_EXIT` -> `cpu_accel_user_exit_locked`, which records `state=COMPLETE` for a non-escaped
    exit (cpu_accel.c:1594). So the manager's `STOP` already yields the intended `COMPLETE` end.
-   (The `PERSISTENT`/watchdog interaction is handled in the oslat program so the manager -- not a
+   (The `PERSISTENT`/watchdog interaction is handled in the probe program so the manager -- not a
    kernel timer -- is the duration authority.)
-3. **`cpu-accel-oslat`**: new standalone program. Hosts its own oslat user image. **A1**:
+3. **`cpu-accel-cyclictest`**: new standalone program. Hosts its own periodic user image. **A1**:
    sub-integer (fixed-point) `cycles_per_ns` + the `* cpn` / `/ cpn` sites in the image.
    **A2**: `fork()` parent=manager (ticked CPU) / child=owner (open-ended image); the manager
    owns the wall-clock duration + sends the duration-quit `STOP`.

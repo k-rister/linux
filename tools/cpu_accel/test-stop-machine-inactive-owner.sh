@@ -4,7 +4,6 @@
 set -eu
 
 tool=${CPU_ACCELCTL:-./cpu-accelctl}
-cyclictest_tool=${CPU_ACCEL_CYCLICTEST:-./cpu-accel-cyclictest}
 target_cpu=${CPU_ACCEL_CPU:-2}
 hotplug_cpu=${CPU_ACCEL_HOTPLUG_CPU:-}
 duration_ms=${CPU_ACCEL_DURATION_MS:-5000}
@@ -76,8 +75,6 @@ trap 'exit 1' HUP INT TERM
 
 [ "$(id -u)" -eq 0 ] || fail "run as root"
 [ -x "$tool" ] || fail "cpu-accelctl is not executable: $tool"
-[ -x "$cyclictest_tool" ] || \
-	fail "cpu-accel-cyclictest is not executable: $cyclictest_tool"
 [ -c /dev/cpu_accel ] || fail "/dev/cpu_accel is unavailable"
 command -v timeout >/dev/null 2>&1 || fail "timeout is required"
 
@@ -148,7 +145,7 @@ echo 0 >"$hotplug_file" || fail "could not offline test CPU $hotplug_cpu"
 
 rm -f "$active_marker"
 CPU_ACCEL_ACTIVE_MARKER="$active_marker" \
-	"$cyclictest_tool" run --cpu "$target_cpu" --duration-ms "$duration_ms" \
+	"$tool" run --cpu "$target_cpu" --duration-ms "$duration_ms" \
 	--period-us 1000 --workload user-cyclictest \
 	--escape-after-ms "$escape_after_ms" >"$run_output" 2>&1 &
 run_pid=$!

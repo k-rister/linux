@@ -13,7 +13,6 @@ set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 tool=${CPU_ACCELCTL:-$script_dir/cpu-accelctl}
-cyclictest_tool=${CPU_ACCEL_CYCLICTEST:-$script_dir/cpu-accel-cyclictest}
 outdir=${CPU_ACCEL_TRACE_DIR:-$(mktemp -d /tmp/cpu-accel-wcl.XXXXXX)}
 target_cpu=${CPU_ACCEL_WCL_CPU:-2}
 duration_ms=${CPU_ACCEL_WCL_DURATION_MS:-5000}
@@ -32,8 +31,6 @@ fail()
 
 [ "$(id -u)" -eq 0 ] || fail "run as root"
 [ -x "$tool" ] || fail "cpu-accelctl not found or not executable: $tool"
-[ -x "$cyclictest_tool" ] || \
-	fail "cpu-accel-cyclictest not found or not executable: $cyclictest_tool"
 mkdir -p "$outdir"
 printf 'class\texit\tstate\tsamples\tmin_ns\tp50_ns\tp90_ns\tp99_ns\tp999_ns\tmax_ns\thist_total\tirq_count\tsoftirq_count\tworkqueue_queued\tarch_ipi_count\tarch_tlb_count\tcontext_switches\n' \
 	>"$summary"
@@ -172,7 +169,7 @@ run_class()
 
 baseline_run()
 {
-	"$cyclictest_tool" run --cpu "$target_cpu" --duration-ms "$duration_ms" \
+	"$tool" run --cpu "$target_cpu" --duration-ms "$duration_ms" \
 		--period-us 1000 --workload user-cyclictest --quarantine-irqs
 }
 

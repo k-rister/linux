@@ -2,7 +2,13 @@
 
 Date: 2026-11-05
 Branch: `codex/accelerator-oslat`
-Status: open design (not implemented). Continues `owner-allcpu-stop-immunity-design.md`.
+Status: implemented. Continues `owner-allcpu-stop-immunity-design.md`.
+
+**Final outcome (supersedes the plan below):** the probe was not shipped as a standalone
+`cpu-accel-cyclictest`. `cpu-accelctl` absorbed it: the `user-cyclictest` + `user-oslat` workloads,
+the A2 manager-owned-duration model (`cpu_accel_run_until_stop`), and the ABI-19 latency metrics
+were merged into `cpu-accelctl`, now the single general tool for all 8 workloads;
+`cpu-accel-cyclictest` was retired. The A1/A2 reasoning below still applies.
 
 ## Where this picks up
 
@@ -102,8 +108,10 @@ into a dedicated program:
   `cpu_accel_handle`. No extraction is needed; `cpu-accel-cyclictest` links it directly. The
   `attach_fd` entry is what lets the manager hold its own handle on the shared fd to send the
   STOP.
-- **`cpu-accelctl`** keeps the generic CLI; its built-in `user-oslat` (user image + timing) is
-  **removed** once `cpu-accel-cyclictest` works, to avoid two drifting copies.
+- **`cpu-accelctl`** keeps the generic CLI. (Original plan: remove its built-in `user-oslat` once the
+  standalone probe worked, to avoid two drifting copies. **Reversed in practice:** the standalone
+  `cpu-accel-cyclictest` was merged *into* `cpu-accelctl` instead, which now hosts the generic CLI
+  **and** `user-cyclictest` + `user-oslat`.)
 
 Why the manager owns duration (rather than the worker's TSC clock):
 
@@ -271,7 +279,8 @@ with the accurate clock, only when it happens.
    sub-integer (fixed-point) `cycles_per_ns` + the `* cpn` / `/ cpn` sites in the image.
    **A2**: `fork()` parent=manager (ticked CPU) / child=owner (open-ended image); the manager
    owns the wall-clock duration + sends the duration-quit `STOP`.
-4. **Remove** `cpu-accelctl`'s built-in `user-oslat` (user image + timing) once (3) works.
+4. (Superseded: the standalone `cpu-accel-cyclictest` was merged *into* `cpu-accelctl`, which keeps
+   `user-oslat` **and** gains `user-cyclictest`.)
 5. Validate: a 12h run on CPU 6 completes at ~12h **wall** (RTC-confirmed), ~43.2M samples at a
    true ~1 ms cadence, correct absolute lateness scale, zero escapes.
 

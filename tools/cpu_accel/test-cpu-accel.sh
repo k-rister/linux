@@ -4,7 +4,6 @@
 set -eu
 
 tool=${CPU_ACCELCTL:-./cpu-accelctl}
-cyclictest_tool=${CPU_ACCEL_CYCLICTEST:-./cpu-accel-cyclictest}
 target_cpu=${CPU_ACCEL_CPU:-2}
 online_file=/sys/devices/system/cpu/cpu${target_cpu}/online
 stop_output=$(mktemp)
@@ -56,7 +55,6 @@ cleanup()
 trap cleanup EXIT
 
 [ -x "$tool" ] || fail "control tool is not executable: $tool"
-[ -x "$cyclictest_tool" ] || fail "cyclictest tool is not executable: $cyclictest_tool"
 [ -c /dev/cpu_accel ] || fail "/dev/cpu_accel is unavailable"
 
 case "$repeats" in
@@ -175,7 +173,7 @@ case "$(uname -m)" in
 x86_64)
 	user_run=1
 	while [ "$user_run" -le "$repeats" ]; do
-		user_output=$($cyclictest_tool run --cpu "$target_cpu" --duration-ms 20 \
+		user_output=$($tool run --cpu "$target_cpu" --duration-ms 20 \
 			--period-us 1000 --workload user-cyclictest \
 			$quiescent_arg $quarantine_arg)
 		echo "$user_output"
@@ -206,7 +204,7 @@ x86_64)
 			fail "user-cyclictest workload migrated CPUs"
 		user_run=$((user_run + 1))
 	done
-	deferred_user_output=$($cyclictest_tool run --cpu "$target_cpu" --duration-ms 500 \
+	deferred_user_output=$($tool run --cpu "$target_cpu" --duration-ms 500 \
 		--period-us 1000 --workload user-cyclictest)
 	echo "$deferred_user_output"
 	case "$deferred_user_output" in
@@ -219,7 +217,7 @@ x86_64)
 		fail "target CPU is offline before the hotplug gate test"
 	command -v taskset >/dev/null 2>&1 || \
 		fail "taskset is required for the CPU hotplug gate test"
-	$cyclictest_tool run --cpu "$target_cpu" --duration-ms 3000 --period-us 1000 \
+	$tool run --cpu "$target_cpu" --duration-ms 3000 --period-us 1000 \
 		--workload user-cyclictest $quiescent_arg $quarantine_arg \
 		>"$hotplug_output" 2>&1 &
 	run_pid=$!
@@ -262,7 +260,7 @@ x86_64)
 	[ "$(cat "$online_file")" = 1 ] || \
 		fail "target CPU did not return online after hotplug test"
 	echo "cpu_accel: owner drained before CPU offlining (${hotplug_wait_ms} ms)"
-	tlb_generation_output=$(./test-tlb-generation "$target_cpu" "$cyclictest_tool" \
+	tlb_generation_output=$(./test-tlb-generation "$target_cpu" "$tool" \
 		$quarantine_arg)
 	echo "$tlb_generation_output"
 	hang_output=$($tool run --cpu "$target_cpu" --duration-ms 5000 \

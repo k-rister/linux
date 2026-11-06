@@ -5,7 +5,6 @@ set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 tool=${CPU_ACCELCTL:-$script_dir/cpu-accelctl}
-cyclictest_tool=${CPU_ACCEL_CYCLICTEST:-$script_dir/cpu-accel-cyclictest}
 offloaded_cpu=${CPU_ACCEL_RCU_OFFLOADED_CPU:-2}
 other_cpu=${CPU_ACCEL_RCU_OTHER_CPU:-1}
 other_offloaded=${CPU_ACCEL_RCU_OTHER_OFFLOADED:-0}
@@ -37,8 +36,6 @@ cpulist_contains()
 
 [ "$(id -u)" -eq 0 ] || fail "run as root"
 [ -x "$tool" ] || fail "cpu-accelctl is not executable: $tool"
-[ -x "$cyclictest_tool" ] || \
-	fail "cpu-accel-cyclictest is not executable: $cyclictest_tool"
 [ -c /dev/cpu_accel ] || fail "/dev/cpu_accel is unavailable"
 case "$offloaded_cpu:$other_cpu" in
 *[!0-9:]*|0:*|*:0) fail "CPU IDs must be positive integers" ;;
@@ -63,7 +60,7 @@ cpulist_contains "$nohz_full" "$offloaded_cpu" || \
 
 if [ "$other_offloaded" -eq 1 ]; then
 	if cpulist_contains "$nohz_full" "$other_cpu"; then
-		"$cyclictest_tool" run --cpu "$other_cpu" --duration-ms 100 \
+		"$tool" run --cpu "$other_cpu" --duration-ms 100 \
 			--period-us 1000 --workload user-cyclictest >"$outdir/other.log" 2>&1 || \
 			fail "offloaded and isolated comparison CPU was rejected"
 		grep -q 'state=3 mode=0 ' "$outdir/other.log" || \
@@ -72,7 +69,7 @@ if [ "$other_offloaded" -eq 1 ]; then
 			fail "offloaded comparison CPU completed without workload samples"
 		other_result="admitted (offloaded and RCU-isolated)"
 	else
-		if "$cyclictest_tool" run --cpu "$other_cpu" --duration-ms 100 \
+		if "$tool" run --cpu "$other_cpu" --duration-ms 100 \
 			--period-us 1000 --workload user-cyclictest >"$outdir/other.log" 2>&1; then
 			fail "offloaded housekeeping comparison CPU was admitted"
 		fi
@@ -83,7 +80,7 @@ if [ "$other_offloaded" -eq 1 ]; then
 		other_result="rejected (still an RCU housekeeping CPU)"
 	fi
 else
-	if "$cyclictest_tool" run --cpu "$other_cpu" --duration-ms 100 \
+	if "$tool" run --cpu "$other_cpu" --duration-ms 100 \
 		--period-us 1000 --workload user-cyclictest >"$outdir/other.log" 2>&1; then
 		fail "non-offloaded comparison CPU was admitted"
 	fi
@@ -94,7 +91,7 @@ else
 	other_result="rejected (target lacks RCU callback offload)"
 fi
 
-"$cyclictest_tool" run --cpu "$offloaded_cpu" --duration-ms 100 \
+"$tool" run --cpu "$offloaded_cpu" --duration-ms 100 \
 	--period-us 1000 --workload user-cyclictest >"$outdir/offloaded.log" 2>&1 || \
 	fail "offloaded CPU admission or workload failed"
 grep -q 'state=3 mode=0 ' "$outdir/offloaded.log" || \

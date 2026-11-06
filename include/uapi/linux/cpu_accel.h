@@ -83,6 +83,8 @@ enum cpu_accel_workload {
 	CPU_ACCEL_WORKLOAD_USER_RECLAIM,
 	/* Test-only ring-3 workload that takes a signal checkpoint each period. */
 	CPU_ACCEL_WORKLOAD_USER_DEATH,
+	/* Tight-loop inter-iteration (oslat) latency probe on the owned CPU. */
+	CPU_ACCEL_WORKLOAD_USER_OSLAT,
 };
 
 enum cpu_accel_shared_owner {

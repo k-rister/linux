@@ -105,6 +105,20 @@ static inline uint64_t cpu_accel_read_tsc(void)
 	return ((uint64_t)high << 32) | low;
 }
 
+/* Ordered (lfence;rdtsc) read so the oslat inter-iteration delta is not
+ * skewed by a speculated-early counter.
+ */
+static inline uint64_t cpu_accel_read_tsc_ordered(void)
+{
+	uint32_t low;
+	uint32_t high;
+
+	__asm__ volatile("lfence\n\t"
+			 "rdtsc"
+			 : "=a"(low), "=d"(high));
+	return ((uint64_t)high << 32) | low;
+}
+
 static __attribute__((always_inline)) inline long
 cpu_accel_user_syscall1(long number, unsigned long arg1)
 {
@@ -298,6 +312,77 @@ static void cpu_accel_user_cyclictest(void *argument)
 	__atomic_store_n(&shared->last_lateness_ns, last_lateness,
 			__ATOMIC_RELAXED);
 	__atomic_store_n(&shared->sum_lateness_ns, sum_lateness,
+			__ATOMIC_RELAXED);
+	__atomic_store_n(&shared->work_iterations, samples, __ATOMIC_RELAXED);
+	__atomic_thread_fence(__ATOMIC_RELEASE);
+	(void)cpu_accel_user_exit_syscall(context->fd);
+	__builtin_unreachable();
+}
+
+/*
+ * Tight-loop (oslat) inter-iteration latency probe. Unlike the cyclictest
+ * image's periodic deadline, this runs back-to-back and records the time
+ * between consecutive ordered TSC reads. On a clean owned CPU each delta is
+ * small and stable; any IPI, IRQ or forced reschedule widens one delta, so
+ * the histogram spikes reveal OS latency on the owned CPU.
+ */
+CPU_ACCEL_USER_IMAGE
+static void cpu_accel_user_oslat(void *argument)
+{
+	struct cpu_accel_user_context *context = argument;
+	struct cpu_accel_shared *shared = context->shared;
+	uint64_t cpm = context->cycles_per_ns;	/* A1: milli-cycles per ns */
+	uint64_t start_tsc = cpu_accel_read_tsc_ordered();
+	uint64_t prev = start_tsc;
+	uint64_t samples = 0;
+	uint64_t max_delta = 0;
+	uint64_t min_delta = UINT64_MAX;
+	uint64_t last_delta = 0;
+	uint64_t sum_delta = 0;
+	uint32_t samples_valid = 0;
+
+	if (!cpm)
+		cpm = CPU_ACCEL_CP_SCALE;
+
+	for (;;) {
+		uint64_t now = cpu_accel_read_tsc_ordered();
+		uint64_t delta_ns;
+
+		delta_ns = ((now - prev) * CPU_ACCEL_CP_SCALE) / cpm;
+		prev = now;
+		if (samples_valid < CPU_ACCEL_MAX_SAMPLES) {
+			shared->samples[samples_valid].timestamp_ns =
+				__atomic_load_n(&shared->start_ns,
+						 __ATOMIC_RELAXED) +
+				((now - start_tsc) * CPU_ACCEL_CP_SCALE) / cpm;
+			shared->samples[samples_valid].lateness_ns = delta_ns;
+			samples_valid++;
+		}
+		samples++;
+		if (delta_ns > max_delta)
+			max_delta = delta_ns;
+		if (delta_ns < min_delta)
+			min_delta = delta_ns;
+		last_delta = delta_ns;
+		shared->lateness_hist[
+			cpu_accel_user_lateness_bin(delta_ns)]++;
+		if (delta_ns < CPU_ACCEL_LINEAR_NS_HIST_BINS)
+			shared->linear_ns_hist[delta_ns]++;
+		else
+			shared->linear_ns_hist[CPU_ACCEL_LINEAR_NS_HIST_BINS]++;
+		sum_delta += delta_ns;
+		if (__atomic_load_n(&shared->stop_requested, __ATOMIC_RELAXED))
+			break;
+	}
+
+	__atomic_store_n(&shared->samples_produced, samples, __ATOMIC_RELAXED);
+	__atomic_store_n(&shared->samples_valid, samples_valid, __ATOMIC_RELAXED);
+	__atomic_store_n(&shared->max_lateness_ns, max_delta, __ATOMIC_RELAXED);
+	__atomic_store_n(&shared->min_lateness_ns,
+			 samples ? min_delta : 0, __ATOMIC_RELAXED);
+	__atomic_store_n(&shared->last_lateness_ns, last_delta,
+			__ATOMIC_RELAXED);
+	__atomic_store_n(&shared->sum_lateness_ns, sum_delta,
 			__ATOMIC_RELAXED);
 	__atomic_store_n(&shared->work_iterations, samples, __ATOMIC_RELAXED);
 	__atomic_thread_fence(__ATOMIC_RELEASE);
@@ -706,7 +791,7 @@ static void usage(FILE *stream, const char *program)
 		"Usage:\n"
 		"  %s run [--cpu N] [--duration-ms N] [--period-us N]\n"
 		"      [--workload timestamp|memmove|shared-memmove|user-cyclictest|\n"
-		"                   user-hang|user-reclaim|user-death]\n"
+		"                   user-hang|user-reclaim|user-death|user-oslat]\n"
 		"      [--work-bytes N] [--shared-entry N]\n"
 		"      [--test-reclaim-file PATH]\n"
 		"      [--escape-after-ms N] [--escape-retries N]\n"
@@ -808,6 +893,7 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 	int user_hang = config->workload == CPU_ACCEL_WORKLOAD_USER_HANG;
 	int user_reclaim = config->workload == CPU_ACCEL_WORKLOAD_USER_RECLAIM;
 	int user_death = config->workload == CPU_ACCEL_WORKLOAD_USER_DEATH;
+	int user_oslat = config->workload == CPU_ACCEL_WORKLOAD_USER_OSLAT;
 	int ret = 1;
 
 	page_size = sysconf(_SC_PAGESIZE);
@@ -900,6 +986,8 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 		entry_ip = (uintptr_t)cpu_accel_user_hang;
 	else if (user_death)
 		entry_ip = (uintptr_t)cpu_accel_user_death;
+	else if (user_oslat)
+		entry_ip = (uintptr_t)cpu_accel_user_oslat;
 	else
 		entry_ip = (uintptr_t)cpu_accel_user_cyclictest;
 	config->flags |= CPU_ACCEL_FLAG_PERSISTENT;
@@ -981,12 +1069,13 @@ static int run_user_worker(int argc, char **argv)
 		}
 	}
 	if (values[0] > INT_MAX || values[1] > UINT_MAX ||
-	    values[2] > CPU_ACCEL_WORKLOAD_USER_DEATH ||
+	    values[2] > CPU_ACCEL_WORKLOAD_USER_OSLAT ||
 	    values[3] > UINT_MAX ||
 	    (values[2] != CPU_ACCEL_WORKLOAD_USER_CYCLICTEST &&
 	     values[2] != CPU_ACCEL_WORKLOAD_USER_HANG &&
 	     values[2] != CPU_ACCEL_WORKLOAD_USER_RECLAIM &&
-	     values[2] != CPU_ACCEL_WORKLOAD_USER_DEATH)) {
+	     values[2] != CPU_ACCEL_WORKLOAD_USER_DEATH &&
+	     values[2] != CPU_ACCEL_WORKLOAD_USER_OSLAT)) {
 		fprintf(stderr, "out-of-range internal user-worker argument\n");
 		return 2;
 	}
@@ -1372,6 +1461,8 @@ static int run_workload(const char *program, int argc, char **argv)
 				config.workload = CPU_ACCEL_WORKLOAD_USER_RECLAIM;
 			else if (!strcmp(workload, "user-death"))
 				config.workload = CPU_ACCEL_WORKLOAD_USER_DEATH;
+			else if (!strcmp(workload, "user-oslat"))
+				config.workload = CPU_ACCEL_WORKLOAD_USER_OSLAT;
 			else {
 				fprintf(stderr, "%s: invalid workload\n", program);
 				return 2;
@@ -1439,7 +1530,8 @@ static int run_workload(const char *program, int argc, char **argv)
 	if (escape_after_ms && config.workload != CPU_ACCEL_WORKLOAD_USER_CYCLICTEST &&
 	    config.workload != CPU_ACCEL_WORKLOAD_USER_HANG &&
 	    config.workload != CPU_ACCEL_WORKLOAD_USER_RECLAIM &&
-	    config.workload != CPU_ACCEL_WORKLOAD_USER_DEATH) {
+	    config.workload != CPU_ACCEL_WORKLOAD_USER_DEATH &&
+	    config.workload != CPU_ACCEL_WORKLOAD_USER_OSLAT) {
 		fprintf(stderr,
 			"%s: --escape-after-ms requires a user workload\n",
 			program);
@@ -1459,7 +1551,8 @@ static int run_workload(const char *program, int argc, char **argv)
 	if (config.workload == CPU_ACCEL_WORKLOAD_USER_CYCLICTEST ||
 	    config.workload == CPU_ACCEL_WORKLOAD_USER_HANG ||
 	    config.workload == CPU_ACCEL_WORKLOAD_USER_RECLAIM ||
-	    config.workload == CPU_ACCEL_WORKLOAD_USER_DEATH)
+	    config.workload == CPU_ACCEL_WORKLOAD_USER_DEATH ||
+	    config.workload == CPU_ACCEL_WORKLOAD_USER_OSLAT)
 		return run_user_workload(&config, escape_after_ms, escape_attempts,
 					 reclaim_file, worker_cgroup);
 	if (worker_cgroup) {

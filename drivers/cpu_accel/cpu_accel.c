@@ -84,7 +84,8 @@ static bool cpu_accel_user_workload(u32 workload)
 	return workload == CPU_ACCEL_WORKLOAD_USER_CYCLICTEST ||
 		workload == CPU_ACCEL_WORKLOAD_USER_HANG ||
 		workload == CPU_ACCEL_WORKLOAD_USER_RECLAIM ||
-		workload == CPU_ACCEL_WORKLOAD_USER_DEATH;
+		workload == CPU_ACCEL_WORKLOAD_USER_DEATH ||
+		workload == CPU_ACCEL_WORKLOAD_USER_OSLAT;
 }
 
 /*
@@ -2309,7 +2310,7 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 				     CPU_ACCEL_FLAG_REQUIRE_QUIESCENT |
 				     CPU_ACCEL_FLAG_IRQ_QUARANTINE) ||
 		    config.reserved || config.reserved2 ||
-		    config.workload > CPU_ACCEL_WORKLOAD_USER_DEATH ||
+		    config.workload > CPU_ACCEL_WORKLOAD_USER_OSLAT ||
 		    config.work_bytes > CPU_ACCEL_MAX_WORK_BYTES ||
 		    (config.workload != CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE &&
 		     config.shared_entry) ||

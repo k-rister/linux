@@ -6,7 +6,7 @@
 #include <linux/types.h>
 
 /* The prototype uses separate fixed-size control and shared-data mappings. */
-#define CPU_ACCEL_ABI_VERSION		18
+#define CPU_ACCEL_ABI_VERSION		19
 #define CPU_ACCEL_MAP_SIZE		(64U * 1024U)
 #define CPU_ACCEL_SHARED_MAP_SIZE	(64U * 1024U)
 #define CPU_ACCEL_SHARED_MAP_OFFSET	CPU_ACCEL_MAP_SIZE
@@ -15,6 +15,7 @@
 #define CPU_ACCEL_MAX_SAMPLES		2048U
 #define CPU_ACCEL_MAX_WORK_BYTES	(64U * 1024U)
 #define CPU_ACCEL_LATENESS_HIST_BINS	64U
+#define CPU_ACCEL_LINEAR_NS_HIST_BINS	2048U
 
 #define CPU_ACCEL_DEFAULT_DURATION_NS	(100ULL * 1000ULL * 1000ULL)
 #define CPU_ACCEL_DEFAULT_PERIOD_NS	(1ULL * 1000ULL * 1000ULL)
@@ -197,6 +198,20 @@ struct cpu_accel_shared {
 	 * the containing bin.
 	 */
 	__u32 lateness_hist[CPU_ACCEL_LATENESS_HIST_BINS];
+	/*
+	 * Sum of per-sample lateness in ns, present from ABI 19. The mean
+	 * latency is avg = sum_lateness_ns / samples_produced.
+	 */
+	__u64 sum_lateness_ns;
+	/*
+	 * Linear per-ns lateness histogram, present from ABI 19. Bin i counts
+	 * samples with exactly i ns of lateness for i <
+	 * CPU_ACCEL_LINEAR_NS_HIST_BINS; the final bin (index
+	 * CPU_ACCEL_LINEAR_NS_HIST_BINS) counts samples at or above that
+	 * boundary (the microsecond+ overflow), whose magnitude is still
+	 * resolved by the log2 lateness_hist above.
+	 */
+	__u32 linear_ns_hist[CPU_ACCEL_LINEAR_NS_HIST_BINS + 1];
 };
 
 struct cpu_accel_shared_entry {

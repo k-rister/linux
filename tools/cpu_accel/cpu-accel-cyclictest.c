@@ -216,7 +216,7 @@ static unsigned int cpu_accel_user_lateness_bin(uint64_t lateness_ns)
 		return 0;
 	return lateness_ns > (1ULL << (CPU_ACCEL_LATENESS_HIST_BINS - 1)) ?
 		CPU_ACCEL_LATENESS_HIST_BINS - 1 :
-		64 - __builtin_clzll(lateness_ns);
+		64U - __builtin_clzll(lateness_ns);
 }
 
 CPU_ACCEL_USER_IMAGE
@@ -234,6 +234,7 @@ static void cpu_accel_user_cyclictest(void *argument)
 	uint64_t max_lateness = 0;
 	uint64_t min_lateness = UINT64_MAX;
 	uint64_t last_lateness = 0;
+	uint64_t sum_lateness = 0;
 	uint32_t samples_valid = 0;
 
 	if (!cpm)
@@ -275,6 +276,11 @@ static void cpu_accel_user_cyclictest(void *argument)
 		last_lateness = lateness_ns;
 		shared->lateness_hist[
 			cpu_accel_user_lateness_bin(lateness_ns)]++;
+		if (lateness_ns < CPU_ACCEL_LINEAR_NS_HIST_BINS)
+			shared->linear_ns_hist[lateness_ns]++;
+		else
+			shared->linear_ns_hist[CPU_ACCEL_LINEAR_NS_HIST_BINS]++;
+		sum_lateness += lateness_ns;
 		/* A2: open-ended -- only a manager STOP ends the run. */
 		if (__atomic_load_n(&shared->stop_requested, __ATOMIC_RELAXED))
 			break;
@@ -290,7 +296,9 @@ static void cpu_accel_user_cyclictest(void *argument)
 	__atomic_store_n(&shared->min_lateness_ns,
 				samples ? min_lateness : 0, __ATOMIC_RELAXED);
 	__atomic_store_n(&shared->last_lateness_ns, last_lateness,
-				__ATOMIC_RELAXED);
+			__ATOMIC_RELAXED);
+	__atomic_store_n(&shared->sum_lateness_ns, sum_lateness,
+			__ATOMIC_RELAXED);
 	__atomic_store_n(&shared->work_iterations, samples, __ATOMIC_RELAXED);
 	__atomic_thread_fence(__ATOMIC_RELEASE);
 	(void)cpu_accel_user_exit_syscall(context->fd);
@@ -577,6 +585,11 @@ static void print_status(const volatile struct cpu_accel_shared *shared)
 		shared->user_active_end_ns > shared->user_active_start_ns ?
 		shared->user_active_end_ns - shared->user_active_start_ns : 0;
 	uint64_t hist_total = cpu_accel_hist_total(shared);
+	/* hist_total is the true per-sample count (the driver clamps
+	 * samples_produced to the detail-buffer size, so it cannot be used
+	 * as the mean's divisor). */
+	uint64_t avg_lateness_ns = hist_total ?
+		(uint64_t)shared->sum_lateness_ns / hist_total : 0;
 
 	printf("state=%u mode=%u sequence=%" PRIu64 " cpu=%u backend=%u backend_flags=%u"
 	       " recovery_state=%u recovery_error=%d recovery_attempts=%u"
@@ -608,7 +621,8 @@ static void print_status(const volatile struct cpu_accel_shared *shared)
 	       " lifecycle_cpu_exit=%u migration_detected=%u"
 	       " hist_total=%" PRIu64
 	       " hist_p50_ns=%" PRIu64 " hist_p90_ns=%" PRIu64
-	       " hist_p99_ns=%" PRIu64 " hist_p999_ns=%" PRIu64 "\n",
+	       " hist_p99_ns=%" PRIu64 " hist_p999_ns=%" PRIu64
+	       " avg_lateness_ns=%" PRIu64 "\n",
 	       shared->state, shared->mode, (uint64_t)shared->sequence,
 	       shared->cpu,
 	       shared->backend,
@@ -660,15 +674,29 @@ static void print_status(const volatile struct cpu_accel_shared *shared)
 	       cpu_accel_hist_percentile(shared, hist_total, 500),
 	       cpu_accel_hist_percentile(shared, hist_total, 900),
 	       cpu_accel_hist_percentile(shared, hist_total, 990),
-	       cpu_accel_hist_percentile(shared, hist_total, 999));
+	       cpu_accel_hist_percentile(shared, hist_total, 999),
+	       (uint64_t)avg_lateness_ns);
 
 	for (unsigned int i = 0; i < CPU_ACCEL_LATENESS_HIST_BINS; i++) {
 		if (!shared->lateness_hist[i])
 			continue;
 		printf("lateness_hist_bin=%u range_ns=[%" PRIu64 ",%" PRIu64
 		       ") count=%u\n", i,
-		       i ? 1ULL << (i - 1) : 0, 1ULL << i,
+		       (uint64_t)(i ? 1ULL << (i - 1) : 0),
+		       (uint64_t)(1ULL << i),
 		       shared->lateness_hist[i]);
+	}
+
+	for (unsigned int i = 0; i <= CPU_ACCEL_LINEAR_NS_HIST_BINS; i++) {
+		if (!shared->linear_ns_hist[i])
+			continue;
+		if (i < CPU_ACCEL_LINEAR_NS_HIST_BINS)
+			printf("linear_ns_hist_ns=%u count=%u\n", i,
+			       shared->linear_ns_hist[i]);
+		else
+			printf("linear_ns_hist_ns>=%u count=%u\n",
+			       (unsigned int)CPU_ACCEL_LINEAR_NS_HIST_BINS,
+			       shared->linear_ns_hist[i]);
 	}
 }
 

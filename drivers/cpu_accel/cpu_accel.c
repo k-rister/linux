@@ -957,6 +957,7 @@ static void cpu_accel_reset_shared(struct cpu_accel_device *dev)
 	memset(dev->shared, 0, CPU_ACCEL_MAP_SIZE);
 	dev->shared->abi_version = CPU_ACCEL_ABI_VERSION;
 	dev->shared->struct_size = sizeof(*dev->shared);
+	dev->shared->layout_fingerprint = CPU_ACCEL_LAYOUT_FINGERPRINT();
 	dev->shared->backend = cpu_accel_backend_id();
 	dev->shared->backend_flags = 0;
 	dev->shared->recovery_state = CPU_ACCEL_RECOVERY_NONE;

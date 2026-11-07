@@ -766,22 +766,22 @@ static void print_status(const volatile struct cpu_accel_shared *shared)
 		if (!shared->lateness_hist[i])
 			continue;
 		printf("lateness_hist_bin=%u range_ns=[%" PRIu64 ",%" PRIu64
-		       ") count=%u\n", i,
+		       ") count=%" PRIu64 "\n", i,
 		       (uint64_t)(i ? 1ULL << (i - 1) : 0),
 		       (uint64_t)(1ULL << i),
-		       shared->lateness_hist[i]);
+		       (unsigned long)shared->lateness_hist[i]);
 	}
 
 	for (unsigned int i = 0; i <= CPU_ACCEL_LINEAR_NS_HIST_BINS; i++) {
 		if (!shared->linear_ns_hist[i])
 			continue;
 		if (i < CPU_ACCEL_LINEAR_NS_HIST_BINS)
-			printf("linear_ns_hist_ns=%u count=%u\n", i,
-			       shared->linear_ns_hist[i]);
+			printf("linear_ns_hist_ns=%u count=%" PRIu64 "\n", i,
+			       (unsigned long)shared->linear_ns_hist[i]);
 		else
-			printf("linear_ns_hist_ns>=%u count=%u\n",
+			printf("linear_ns_hist_ns>=%u count=%" PRIu64 "\n",
 			       (unsigned int)CPU_ACCEL_LINEAR_NS_HIST_BINS,
-			       shared->linear_ns_hist[i]);
+			       (unsigned long)shared->linear_ns_hist[i]);
 	}
 }
 

@@ -4,6 +4,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/ioctl.h>
@@ -73,9 +74,11 @@ int cpu_accel_attach_fd(struct cpu_accel_handle *handle, int fd)
 	handle->shared = mapping;
 	handle->shared_region = shared_mapping;
 	if (handle->shared->abi_version != CPU_ACCEL_ABI_VERSION ||
-	    handle->shared->struct_size < sizeof(struct cpu_accel_shared) ||
+	    handle->shared->struct_size != sizeof(struct cpu_accel_shared) ||
+	    handle->shared->layout_fingerprint !=
+		    CPU_ACCEL_LAYOUT_FINGERPRINT() ||
 	    handle->shared_region->abi_version != CPU_ACCEL_ABI_VERSION ||
-	    handle->shared_region->struct_size <
+	    handle->shared_region->struct_size !=
 		    sizeof(struct cpu_accel_shared_region) ||
 	    handle->shared_region->entry_count != CPU_ACCEL_SHARED_ENTRY_COUNT ||
 		    handle->shared_region->entry_size !=

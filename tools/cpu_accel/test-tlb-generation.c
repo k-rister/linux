@@ -483,7 +483,7 @@ static int cli_owner_active(void)
 	struct cpu_accel_shared status;
 	struct iovec local = {
 		.iov_base = &status,
-		.iov_len = offsetof(struct cpu_accel_shared, samples),
+		.iov_len = sizeof(status),
 	};
 	struct iovec remote;
 

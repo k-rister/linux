@@ -46,8 +46,6 @@ int cpu_accel_open(struct cpu_accel_handle *handle)
 int cpu_accel_attach_fd(struct cpu_accel_handle *handle, int fd)
 {
 	void *mapping;
-	void *shared_mapping;
-	int saved_errno;
 
 	memset(handle, 0, sizeof(*handle));
 	handle->fd = -1;
@@ -56,36 +54,17 @@ int cpu_accel_attach_fd(struct cpu_accel_handle *handle, int fd)
 		return -1;
 	}
 
-	mapping = mmap(NULL, CPU_ACCEL_MAP_SIZE, PROT_READ | PROT_WRITE,
-			       MAP_SHARED, fd, 0);
+	mapping = mmap(NULL, CPU_ACCEL_MAP_SIZE, PROT_READ, MAP_SHARED, fd, 0);
 	if (mapping == MAP_FAILED)
 		return -1;
-	shared_mapping = mmap(NULL, CPU_ACCEL_SHARED_MAP_SIZE,
-			      PROT_READ | PROT_WRITE, MAP_SHARED, fd,
-			      CPU_ACCEL_SHARED_MAP_OFFSET);
-	if (shared_mapping == MAP_FAILED) {
-		saved_errno = errno;
-		munmap(mapping, CPU_ACCEL_MAP_SIZE);
-		errno = saved_errno;
-		return -1;
-	}
 
 	handle->fd = fd;
 	handle->shared = mapping;
-	handle->shared_region = shared_mapping;
 	if (handle->shared->abi_version != CPU_ACCEL_ABI_VERSION ||
 	    handle->shared->struct_size != sizeof(struct cpu_accel_shared) ||
 	    handle->shared->layout_fingerprint !=
-		    CPU_ACCEL_LAYOUT_FINGERPRINT() ||
-	    handle->shared_region->abi_version != CPU_ACCEL_ABI_VERSION ||
-	    handle->shared_region->struct_size !=
-		    sizeof(struct cpu_accel_shared_region) ||
-	    handle->shared_region->entry_count != CPU_ACCEL_SHARED_ENTRY_COUNT ||
-		    handle->shared_region->entry_size !=
-			    sizeof(struct cpu_accel_shared_entry)) {
+		    CPU_ACCEL_LAYOUT_FINGERPRINT()) {
 		munmap((void *)handle->shared, CPU_ACCEL_MAP_SIZE);
-		munmap((void *)handle->shared_region,
-		       CPU_ACCEL_SHARED_MAP_SIZE);
 		memset(handle, 0, sizeof(*handle));
 		handle->fd = -1;
 		errno = EPROTO;
@@ -99,12 +78,9 @@ void cpu_accel_close(struct cpu_accel_handle *handle)
 {
 	if (handle->shared && handle->shared != MAP_FAILED)
 		munmap((void *)handle->shared, CPU_ACCEL_MAP_SIZE);
-	if (handle->shared_region && handle->shared_region != MAP_FAILED)
-		munmap((void *)handle->shared_region, CPU_ACCEL_SHARED_MAP_SIZE);
 	if (handle->fd >= 0)
 		close(handle->fd);
 	handle->shared = NULL;
-	handle->shared_region = NULL;
 	handle->fd = -1;
 }
 
@@ -140,23 +116,58 @@ int cpu_accel_reset(struct cpu_accel_handle *handle)
 	return cpu_accel_ioctl(handle->fd, CPU_ACCEL_IOC_RESET, NULL);
 }
 
-int cpu_accel_shared_ready(struct cpu_accel_handle *handle,
-				   uint32_t entry, uint64_t bytes)
+int cpu_accel_get_capabilities(struct cpu_accel_handle *handle,
+			       struct cpu_accel_capabilities *capabilities)
 {
-	struct cpu_accel_shared_handoff handoff = {
-		.entry = entry,
-		.bytes = bytes,
-	};
-
-	return cpu_accel_ioctl(handle->fd, CPU_ACCEL_IOC_SHARED_READY,
-			       &handoff);
+	return cpu_accel_ioctl(handle->fd, CPU_ACCEL_IOC_GET_CAPABILITIES,
+			       capabilities);
 }
 
-int cpu_accel_shared_reclaim(struct cpu_accel_handle *handle,
-				     uint32_t entry)
+int cpu_accel_region_create(struct cpu_accel_handle *handle,
+			    struct cpu_accel_region_create *create)
 {
-	return cpu_accel_ioctl(handle->fd, CPU_ACCEL_IOC_SHARED_RECLAIM,
-			       &entry);
+	return cpu_accel_ioctl(handle->fd, CPU_ACCEL_IOC_REGION_CREATE, create);
+}
+
+int cpu_accel_region_attach(struct cpu_accel_handle *handle,
+			    struct cpu_accel_region_ref *ref)
+{
+	return cpu_accel_ioctl(handle->fd, CPU_ACCEL_IOC_REGION_ATTACH, ref);
+}
+
+int cpu_accel_region_detach(struct cpu_accel_handle *handle,
+			    struct cpu_accel_region_ref *ref)
+{
+	return cpu_accel_ioctl(handle->fd, CPU_ACCEL_IOC_REGION_DETACH, ref);
+}
+
+int cpu_accel_region_destroy(struct cpu_accel_handle *handle,
+			     struct cpu_accel_region_ref *ref)
+{
+	return cpu_accel_ioctl(handle->fd, CPU_ACCEL_IOC_REGION_DESTROY, ref);
+}
+
+int cpu_accel_region_get_info(struct cpu_accel_handle *handle,
+			      struct cpu_accel_region_info *info)
+{
+	return cpu_accel_ioctl(handle->fd, CPU_ACCEL_IOC_REGION_GET_INFO, info);
+}
+
+void *cpu_accel_region_mmap(struct cpu_accel_handle *handle,
+			    const struct cpu_accel_region_create *create,
+			    bool manager)
+{
+	int prot = PROT_READ;
+
+	if (manager && (create->permissions &
+			CPU_ACCEL_REGION_PERM_MANAGER_WRITE))
+		prot |= PROT_WRITE;
+	if (!manager && (create->permissions &
+			 CPU_ACCEL_REGION_PERM_OWNER_WRITE))
+		prot |= PROT_WRITE;
+
+	return mmap(NULL, create->size_bytes, prot, MAP_SHARED, handle->fd,
+		    create->mmap_token);
 }
 
 static uint64_t cpu_accel_now_ns(void)

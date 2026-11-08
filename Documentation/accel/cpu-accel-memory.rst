@@ -10,16 +10,18 @@ Status and scope
 This document defines the memory model for the CPU accelerator prototype. It
 is a design contract, not an ABI specification or an implementation claim.
 The kernel-mode timestamp and ``memmove`` workloads use kernel-owned buffers
-and the shared control/telemetry mapping; the current ``memmove`` workload does
+and the fixed control/status mapping; the current ``memmove`` workload does
 not execute user code. The x86 ring-3 path is a separate sealed-process-``mm``
 prototype described below, not the final protected address-space model.
 
-The kernel prototype now tracks an internal owner and generation epoch for
-the workload region. Private kernel-owned buffers return to Linux ownership
-after lifecycle exit. Shared entries remain in ``COMPLETE`` or ``ERROR``
-ownership until the companion explicitly reclaims them. This is lifecycle
-bookkeeping, not yet protection against an untrusted accelerator or a device
-DMA engine.
+ABI 22 removes the fixed workload-data mapping from the control structure.
+The companion explicitly creates variable-size shared regions, maps them by
+opaque token, and attaches the selected set before configuration. Region
+contents are workload-owned bytes: the kernel does not parse or modify them.
+Normal owner exit marks attached regions ``COMPLETE``; escape, error, watchdog
+failure, and admission failure mark them ``ERROR``. Reset detaches regions
+without destroying them. This is lifecycle bookkeeping, not yet protection
+against an untrusted accelerator or a device DMA engine.
 
 The model is intended to support a non-networked protected workload first and
 then a NIC-backed dataplane. It must preserve the single-OS model: Linux,
@@ -33,9 +35,9 @@ Memory classes
 Every mapping visible to an accelerator is assigned one explicit class:
 
 ``CONTROL``
-    Linux-owned control and telemetry pages. The companion may map these
-    pages, but accelerator code does not use them as general data memory.
-    State transitions are published with release/acquire operations.
+    Linux-owned control and status pages. Both the companion and worker map
+    these pages read-only. The owner may observe lifecycle fields, but cannot
+    forge control state by writing them.
 
 ``ACCEL_PRIVATE``
     Pages mapped only in the accelerator address space. Linux allocates and
@@ -43,11 +45,12 @@ Every mapping visible to an accelerator is assigned one explicit class:
     change their permissions while the accelerator is active. These pages
     hold code, stacks, private state, and scratch data.
 
-``SHARED``
-    Pages mapped into both the companion address space and the accelerator
-    address space. They are the only intended bidirectional communication
-    path during accelerator execution. Each shared region has an ownership
-    protocol; a writable mapping alone is not an ownership protocol.
+``SHARED_REGION``
+    Kernel-owned ``vmalloc_user`` pages explicitly mapped into the companion
+    address space and one worker address space. They are the only intended
+    workload communication path during accelerator execution. Each region has
+    workload-defined completion and sequence rules; a writable mapping alone is
+    not an ownership protocol.
 
 ``DMA``
     A shared or private region additionally mapped into a device IOMMU
@@ -55,10 +58,48 @@ Every mapping visible to an accelerator is assigned one explicit class:
     The IOMMU mapping is established before accelerator entry and is not
     changed during the dataplane interval.
 
-The control mapping and data mappings must use different handles and offsets.
-The existing fixed shared mapping should not grow into an implicit general
-purpose data channel: doing so would make it difficult to audit which pages
-the accelerator and a device may modify.
+The control mapping and region mappings use the device file but different
+offsets and sizes. A region mapping must use the token returned by
+``REGION_CREATE``, map the complete region with ``MAP_SHARED``, have no
+execute permission, and use only the permissions granted to the manager or
+owner role. Region count, per-region size, and total size are runtime
+capabilities and module limits, not fields in the control payload.
+
+ABI 22 supports three permission combinations: bidirectional; manager writable
+with owner read-only; and owner writable with manager read-only. Write access
+always requires read access. Execution, DMA, private-region, and reserved
+flags are rejected. Regions begin in ``CREATED``, become ``ATTACHED`` when the
+companion selects them, become ``ACTIVE`` at configuration, and end in
+``COMPLETE`` or ``ERROR``. Attach, detach, reset, and reuse increment the
+region epoch so workload code can reject stale mappings or results.
+
+Only the companion ``mm`` captured at device open may create, attach, detach,
+or destroy regions, and those operations are rejected while a workload is
+configured, ready, or active. A mapping made by the companion receives manager
+permissions; a mapping made by another ``mm`` receives owner permissions.
+Configuration atomically snapshots the attached set and requires exactly one
+manager mapping and one owner mapping for each attached region. All owner
+mappings must belong to the single worker ``mm`` performing configuration.
+The worker's exact VMA allowlist permits only the architecture VSYSCALL,
+image, stack, registered RSEQ, test-only reclaim mapping, one read-only control
+mapping, and one mapping for each attached region.
+
+Region backing is zeroed, page-aligned kernel-owned memory allocated before
+admission and accounted against the companion's locked-VM limit. It remains
+allocated until all mappings are closed and the companion destroys the region.
+The default module limits are a 1 GiB maximum per-region size, 4 GiB total
+region memory, and 64 regions; ``GET_CAPABILITIES`` reports the configured
+runtime values. The active topology is immutable: region count, size, tokens,
+permissions, and worker mappings cannot change while the owner is active.
+Dynamic capacity means selecting a per-run size and payload layout, not
+growing or remapping a region during the active interval.
+The manager and owner own the workload ABI. A workload may place a private
+header at the start of each region for magic, version, role, offsets,
+completion, and sequence fields, followed by arbitrary samples, histograms,
+rings, tables, commands, or result records. The kernel does not interpret
+these bytes. ABI 22 does not add DMA, user-registered memory, hugepage
+registration, or active-region growth; those extensions require separate
+registration and isolation review.
 
 Protected address-space contract
 =================================
@@ -68,8 +109,8 @@ accelerator ``mm_struct``. The address space contains only:
 
 * a prevalidated accelerator image and read-only code;
 * preallocated, prefaulted private data and stack pages;
-* explicitly registered shared windows; and
-* optional device-DMA pages with matching IOMMU permissions.
+* exactly one mapping for each attached shared region; and
+* optional device-DMA pages with matching IOMMU permissions in a future ABI.
 
 The accelerator must not run in the companion process's ``mm`` and must not
 be given arbitrary user virtual addresses. The control plane passes opaque
@@ -81,7 +122,7 @@ Before entry, the admission path must:
 * pin or otherwise make every required page resident;
 * populate all required page-table levels and remove lazy allocation,
   copy-on-write, migration, and reclaim from the active set;
-* validate code, stack, private, shared, and DMA permissions;
+* validate code, stack, private, control, shared-region, and DMA permissions;
 * install guard pages where the architecture supports them; and
 * freeze address-space mutation for the active epoch.
 
@@ -89,8 +130,8 @@ No page fault, allocation, filesystem access, system call, signal delivery,
 or dynamic mapping operation is part of the accelerator contract. A fault is
 an admission or execution failure, not a supported slow path. The companion
 may prepare the next buffer or process completed work, but it must not alter
-the active accelerator address space or its page contents outside the shared
-region ownership protocol.
+the active accelerator address space or its page contents outside the
+workload's shared-region ownership protocol.
 
 The active ``mm`` must not undergo VMA or permission changes while it is
 running. The write lock enforces that rule for the current prototype. Reclaim
@@ -116,7 +157,7 @@ does not retain the companion's copy-on-write mappings.
 
 Before START, the worker switches to its admitted stack and unmaps every
 removable VMA except the executable image, private stack, control mapping,
-shared-data mapping, and the page containing the worker's registered RSEQ
+attached region mappings, and the page containing the worker's registered RSEQ
 area, when present. The test-only ``user-reclaim`` workload additionally
 retains a read-only regular-file mapping. The focused reclaim test uses one
 shared page and leaves it unpinned so reclaim can remove it. The validator
@@ -155,10 +196,10 @@ and non-executable. The legacy x86 ``[vsyscall]`` VMA is
 fixed at ``VSYSCALL_ADDR`` and rejects ``munmap``; the worker leaves it mapped,
 and the driver accepts only that exact executable-only architecture mapping. The
 image must be file-backed private RX, the stack anonymous private RW without
-execute permission, and the device maps RW shared at their exact offsets and
-sizes (including a single VMA if the adjacent maps are coalesced). The driver
-validates the complete remaining VMA set, pins the image and stack, and holds
-the worker ``mm``'s ``mmap_lock`` for write during the active epoch. The
+execute permission, the device maps control read-only, and each attached
+region maps with its exact role-specific permissions, offset, and size. The
+driver validates the complete remaining VMA set, pins the image and stack, and
+holds the worker ``mm``'s ``mmap_lock`` for write during the active epoch. The
 user fixtures, seal/start trampoline, exit syscall helper, and escape
 trampoline are emitted into one page-aligned executable section, and the CLI
 passes that section's page-rounded bounds as the admitted image. This avoids
@@ -1064,21 +1105,22 @@ required for correctness. A region may have one producer and one consumer
 initially. Multi-producer or multi-consumer ownership should be added only
 after the ordering and cache-coherency costs are measured.
 
-The current ABI 8 proof uses a fixed 64 KiB shared-data mapping containing two
-8 KiB entries. The kernel validates the selected entry and length, prefaults
-the backing allocation at module initialization, and exposes only bounded
-entry data through the mapping. ``CPU_ACCEL_IOC_SHARED_READY`` transfers a
-Linux-prepared entry to the accelerator with its current epoch;
-``CPU_ACCEL_IOC_SHARED_RECLAIM`` returns a terminal entry to Linux. The
-mapping is intentionally small and fixed so it can be audited and is page
-size compatible with common 4 KiB, 16 KiB, and 64 KiB Linux targets. It does
-not yet establish a protected ring-3 mapping or IOMMU domain.
+The ABI 8 proof used a fixed 64 KiB shared-data mapping and explicit
+ready/reclaim handoff ioctls. ABI 22 replaces that proof with explicit,
+variable-size regions: the kernel validates creation, attachment, mapping
+topology, and permissions, but leaves region contents and handoff ownership to
+the workload protocol. This keeps per-run sizing independent of the core
+control layout and avoids growing a fixed mapping into an unauditable implicit
+data channel.
 
-The kernel must reject a start if a shared region is still owned by Linux or
-has an incomplete handoff. On orderly completion, stop, or watchdog, the
-kernel retains ``COMPLETE`` ownership until reclaim. On execution error, it
-retains ``ERROR`` ownership until recovery. This prevents a late accelerator
-store from corrupting a buffer that Linux has already recycled.
+The kernel must reject configuration if an attached region lacks exactly one
+manager mapping and one owner mapping, if the owner mappings do not all belong
+to the configuring worker ``mm``, or if any worker VMA is outside the exact
+admission allowlist. On orderly completion, the kernel marks the region
+``COMPLETE``; on execution error, escape, watchdog failure, or admission
+failure, it marks the region ``ERROR``. Reset detaches the region and advances
+its epoch. Workload code must additionally use private sequence and completion
+fields so a late store cannot be mistaken for a result from a stale epoch.
 
 Proposed control-plane objects
 ==============================
@@ -1995,3 +2037,9 @@ The implementation checkpoints are:
     closes the in-tree IRQ and reset-work producer paths before the drain. The
     MHI endpoint object builds, but this VM has no MHI endpoint hardware for a
     runtime check. Phase 8 remains open for broader queue and isolation review.
+11. [completed] Introduce ABI 22 explicit shared regions. Move workload
+    telemetry and buffers out of the fixed control mapping, make region size
+    and count runtime configuration, enforce role-specific exact mappings and
+    the worker VMA allowlist, and leave all workload payload schemas to the
+    manager and owner. DMA, user-registered memory, hugepage registration, and
+    active-region growth remain future extensions.

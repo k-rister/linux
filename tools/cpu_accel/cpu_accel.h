@@ -2,6 +2,7 @@
 #ifndef CPU_ACCEL_H
 #define CPU_ACCEL_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include <linux/cpu_accel.h>
@@ -9,7 +10,6 @@
 struct cpu_accel_handle {
 	int fd;
 	volatile struct cpu_accel_shared *shared;
-	struct cpu_accel_shared_region *shared_region;
 };
 
 int cpu_accel_open(struct cpu_accel_handle *handle);
@@ -23,10 +23,21 @@ int cpu_accel_stop(struct cpu_accel_handle *handle);
 int cpu_accel_exit(struct cpu_accel_handle *handle);
 int cpu_accel_user_escape(struct cpu_accel_handle *handle);
 int cpu_accel_reset(struct cpu_accel_handle *handle);
-int cpu_accel_shared_ready(struct cpu_accel_handle *handle,
-				   uint32_t entry, uint64_t bytes);
-int cpu_accel_shared_reclaim(struct cpu_accel_handle *handle,
-				     uint32_t entry);
+int cpu_accel_get_capabilities(struct cpu_accel_handle *handle,
+			       struct cpu_accel_capabilities *capabilities);
+int cpu_accel_region_create(struct cpu_accel_handle *handle,
+			    struct cpu_accel_region_create *create);
+int cpu_accel_region_attach(struct cpu_accel_handle *handle,
+			    struct cpu_accel_region_ref *ref);
+int cpu_accel_region_detach(struct cpu_accel_handle *handle,
+			    struct cpu_accel_region_ref *ref);
+int cpu_accel_region_destroy(struct cpu_accel_handle *handle,
+			     struct cpu_accel_region_ref *ref);
+int cpu_accel_region_get_info(struct cpu_accel_handle *handle,
+			      struct cpu_accel_region_info *info);
+void *cpu_accel_region_mmap(struct cpu_accel_handle *handle,
+			    const struct cpu_accel_region_create *create,
+			    bool manager);
 int cpu_accel_wait(struct cpu_accel_handle *handle, unsigned int timeout_ms);
 
 #endif

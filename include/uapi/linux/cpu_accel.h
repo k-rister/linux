@@ -5,17 +5,11 @@
 #include <linux/ioctl.h>
 #include <linux/types.h>
 
-/* The prototype uses separate fixed-size control and shared-data mappings. */
-#define CPU_ACCEL_ABI_VERSION		21
+/* ABI 22 separates fixed control/status data from workload-owned regions. */
+#define CPU_ACCEL_ABI_VERSION		22
 #define CPU_ACCEL_MAP_SIZE		(64U * 1024U)
-#define CPU_ACCEL_SHARED_MAP_SIZE	(64U * 1024U)
-#define CPU_ACCEL_SHARED_MAP_OFFSET	CPU_ACCEL_MAP_SIZE
-#define CPU_ACCEL_SHARED_ENTRY_COUNT	2U
-#define CPU_ACCEL_SHARED_ENTRY_BYTES	(8U * 1024U)
-#define CPU_ACCEL_MAX_SAMPLES		2048U
-#define CPU_ACCEL_MAX_WORK_BYTES	(64U * 1024U)
-#define CPU_ACCEL_LATENESS_HIST_BINS	64U
-#define CPU_ACCEL_LINEAR_NS_HIST_BINS	2048U
+#define CPU_ACCEL_MAX_WORK_BYTES	(1ULL * 1024ULL * 1024ULL * 1024ULL)
+#define CPU_ACCEL_MAX_MEMMOVE_WORK_BYTES	(64ULL * 1024ULL)
 
 #define CPU_ACCEL_DEFAULT_DURATION_NS	(100ULL * 1000ULL * 1000ULL)
 #define CPU_ACCEL_DEFAULT_PERIOD_NS	(1ULL * 1000ULL * 1000ULL)
@@ -75,7 +69,7 @@ enum cpu_accel_recovery_state {
 enum cpu_accel_workload {
 	CPU_ACCEL_WORKLOAD_TIMESTAMP = 0,
 	CPU_ACCEL_WORKLOAD_MEMMOVE,
-	CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE,
+	CPU_ACCEL_WORKLOAD_USER_REGION,
 	CPU_ACCEL_WORKLOAD_USER_CYCLICTEST,
 	/* Noncooperative ring-3 fault-injection workload; requires USER_ESCAPE. */
 	CPU_ACCEL_WORKLOAD_USER_HANG,
@@ -87,21 +81,11 @@ enum cpu_accel_workload {
 	CPU_ACCEL_WORKLOAD_USER_OSLAT,
 };
 
-enum cpu_accel_shared_owner {
-	CPU_ACCEL_SHARED_OWNER_LINUX = 0,
-	CPU_ACCEL_SHARED_OWNER_READY,
-	CPU_ACCEL_SHARED_OWNER_ACCELERATOR,
-	CPU_ACCEL_SHARED_OWNER_COMPLETE,
-	CPU_ACCEL_SHARED_OWNER_ERROR,
-};
-
 struct cpu_accel_config {
 	__u32 cpu;
 	__u32 flags;
 	__u32 workload;
-	__u32 shared_entry;
 	__u32 reserved;
-	__u32 reserved2;
 	__u64 work_bytes;
 	__u64 duration_ns;
 	__u64 period_ns;
@@ -117,20 +101,13 @@ struct cpu_accel_config {
 	__u64 user_reclaim_page;
 };
 
-struct cpu_accel_sample {
-	__u64 timestamp_ns;
-	__s64 lateness_ns;
-};
-
 struct cpu_accel_shared {
 	__u32 abi_version;
 	__u32 struct_size;
 	/*
-	 * Compile-time layout fingerprint (offsetof-based), present from ABI
-	 * 20. Populated by the module and verified by the tool at open();
-	 * rejects a tool/module layout mismatch that an abi_version +
-	 * struct_size check alone would miss (same size, reordered or
-	 * inserted fields).
+	 * Compile-time layout fingerprint (offsetof-based). The module and tool
+	 * verify it at open(), catching reordered or inserted fields even when
+	 * abi_version and struct_size agree.
 	 */
 	__u64 layout_fingerprint;
 	__u32 state;
@@ -145,7 +122,7 @@ struct cpu_accel_shared {
 	__u32 recovery_attempts;
 	__u32 reserved_recovery;
 	__u32 stop_requested;
-	__u32 samples_valid;
+	__u32 region_count;
 	__u32 mode;
 	__u64 sequence;
 	__u64 start_ns;
@@ -154,15 +131,7 @@ struct cpu_accel_shared {
 	__u64 period_ns;
 	__u32 workload;
 	__u32 reserved_workload;
-	__u64 work_bytes;
-	__u64 work_iterations;
-	__u32 shared_entry;
-	__u32 shared_owner;
-	__u64 shared_epoch;
-	__u64 samples_produced;
-	__u64 max_lateness_ns;
-	__u64 min_lateness_ns;
-	__u64 last_lateness_ns;
+	__u64 region_set_epoch;
 	__u64 lifecycle_entry_ns;
 	__u64 lifecycle_exit_ns;
 	/* User image interval: ring-3 entry through terminal USER_EXIT. */
@@ -199,86 +168,101 @@ struct cpu_accel_shared {
 	__u32 lifecycle_cpu_exit;
 	__u32 migration_detected;
 	__u32 reserved1;
-	struct cpu_accel_sample samples[CPU_ACCEL_MAX_SAMPLES];
-	/*
-	 * Log2 lateness histogram, present from ABI 18. Bin 0 counts
-	 * samples with exactly 0 ns lateness; bin i (1 <= i < BINS)
-	 * counts samples with lateness in [2^(i-1), 2^i) ns. A
-	 * percentile computed from this histogram is the upper edge of
-	 * the containing bin. 64-bit from ABI 21 so long runs (bin counts
-	 * exceeding 2^32) do not wrap and understate the total.
-	 */
-	__u64 lateness_hist[CPU_ACCEL_LATENESS_HIST_BINS];
-	/*
-	 * Sum of per-sample lateness in ns, present from ABI 19. The mean
-	 * latency is avg = sum_lateness_ns / samples_produced.
-	 */
-	__u64 sum_lateness_ns;
-	/*
-	 * Linear per-ns lateness histogram, present from ABI 19. Bin i counts
-	 * samples with exactly i ns of lateness for i <
-	 * CPU_ACCEL_LINEAR_NS_HIST_BINS; the final bin (index
-	 * CPU_ACCEL_LINEAR_NS_HIST_BINS) counts samples at or above that
-	 * boundary (the microsecond+ overflow), whose magnitude is still
-	 * resolved by the log2 lateness_hist above. 64-bit from ABI 21 so
-	 * long runs (bin counts exceeding 2^32) do not wrap and understate
-	 * the total used as the mean's divisor.
-	 */
-	__u64 linear_ns_hist[CPU_ACCEL_LINEAR_NS_HIST_BINS + 1];
 };
 
 /*
  * CPU_ACCEL_LAYOUT_FINGERPRINT() packs the offsetof() of four sentinel fields
- * (an early, a mid, a late, and the final field of struct cpu_accel_shared)
- * into one 64-bit value so a tool and a module that disagree on the layout --
- * even when both report the same abi_version and struct_size -- are rejected at
- * open(). Each offset occupies its own 16-bit lane (all offsets < 65536); any
- * reorder or insertion before linear_ns_hist moves a sentinel and changes the
- * value, and an append at the end changes struct_size (checked with ==). The
- * layout_fingerprint field itself is excluded to avoid a self-reference. The
- * macro requires offsetof to be visible to the includer (<stddef.h> userspace,
- * <linux/stddef.h> kernel).
+ * into one 64-bit value. Each offset occupies its own 16-bit lane.
  */
 #define CPU_ACCEL_LAYOUT_FINGERPRINT()					\
-	( ((__u64)offsetof(struct cpu_accel_shared, duration_ns)		& 0xFFFFULL)		\
-	  | (((__u64)offsetof(struct cpu_accel_shared, samples_produced)	& 0xFFFFULL) << 16)	\
-	  | (((__u64)offsetof(struct cpu_accel_shared, sum_lateness_ns)	& 0xFFFFULL) << 32)	\
-	  | (((__u64)offsetof(struct cpu_accel_shared, linear_ns_hist)	& 0xFFFFULL) << 48) )
+	(((__u64)offsetof(struct cpu_accel_shared, duration_ns) & 0xFFFFULL) | \
+	(((__u64)offsetof(struct cpu_accel_shared, region_set_epoch) & 0xFFFFULL) << 16) | \
+	(((__u64)offsetof(struct cpu_accel_shared, context_switches) & 0xFFFFULL) << 32) | \
+	(((__u64)offsetof(struct cpu_accel_shared, migration_detected) & 0xFFFFULL) << 48))
 
-struct cpu_accel_shared_entry {
-	__u32 owner;
+#define CPU_ACCEL_REGION_PERM_OWNER_READ	(1U << 0)
+#define CPU_ACCEL_REGION_PERM_OWNER_WRITE	(1U << 1)
+#define CPU_ACCEL_REGION_PERM_MANAGER_READ	(1U << 2)
+#define CPU_ACCEL_REGION_PERM_MANAGER_WRITE	(1U << 3)
+
+#define CPU_ACCEL_REGION_PERM_BIDIRECTIONAL \
+	(CPU_ACCEL_REGION_PERM_OWNER_READ | \
+	 CPU_ACCEL_REGION_PERM_OWNER_WRITE | \
+	 CPU_ACCEL_REGION_PERM_MANAGER_READ | \
+	 CPU_ACCEL_REGION_PERM_MANAGER_WRITE)
+#define CPU_ACCEL_REGION_PERM_MANAGER_TO_OWNER \
+	(CPU_ACCEL_REGION_PERM_OWNER_READ | \
+	 CPU_ACCEL_REGION_PERM_MANAGER_READ | \
+	 CPU_ACCEL_REGION_PERM_MANAGER_WRITE)
+#define CPU_ACCEL_REGION_PERM_OWNER_TO_MANAGER \
+	(CPU_ACCEL_REGION_PERM_OWNER_READ | \
+	 CPU_ACCEL_REGION_PERM_OWNER_WRITE | \
+	 CPU_ACCEL_REGION_PERM_MANAGER_READ)
+
+enum cpu_accel_region_state {
+	CPU_ACCEL_REGION_CREATED = 0,
+	CPU_ACCEL_REGION_ATTACHED,
+	CPU_ACCEL_REGION_ACTIVE,
+	CPU_ACCEL_REGION_COMPLETE,
+	CPU_ACCEL_REGION_ERROR,
+};
+
+struct cpu_accel_capabilities {
+	__u32 max_region_count;
+	__u32 reserved;
+	__u64 max_region_bytes;
+	__u64 max_total_region_bytes;
+	__u64 supported_region_permissions;
+};
+
+struct cpu_accel_region_create {
+	__u64 size_bytes;
+	__u32 permissions;
+	__s32 numa_node;
+	__u32 reserved;
+	__u32 region_id;
+	__u64 mmap_token;
+	__u64 epoch;
+};
+
+struct cpu_accel_region_ref {
+	__u32 region_id;
 	__u32 reserved;
 	__u64 epoch;
-	__u64 bytes;
-	__u8 data[CPU_ACCEL_SHARED_ENTRY_BYTES];
 };
 
-struct cpu_accel_shared_region {
-	__u32 abi_version;
-	__u32 struct_size;
-	__u32 entry_count;
-	__u32 entry_size;
-	struct cpu_accel_shared_entry entries[CPU_ACCEL_SHARED_ENTRY_COUNT];
-};
-
-struct cpu_accel_shared_handoff {
-	__u32 entry;
-	__u32 reserved;
-	__u64 bytes;
+struct cpu_accel_region_info {
+	__u32 region_id;
+	__u32 state;
+	__u32 permissions;
+	__s32 numa_node;
+	__u32 manager_mappings;
+	__u32 owner_mappings;
+	__u64 size_bytes;
+	__u64 mmap_token;
+	__u64 epoch;
 };
 
 #define CPU_ACCEL_IOC_MAGIC	'C'
 #define CPU_ACCEL_IOC_CONFIG	_IOW(CPU_ACCEL_IOC_MAGIC, 0x00, \
-					struct cpu_accel_config)
+						struct cpu_accel_config)
 #define CPU_ACCEL_IOC_START	_IO(CPU_ACCEL_IOC_MAGIC, 0x01)
 #define CPU_ACCEL_IOC_STOP	_IO(CPU_ACCEL_IOC_MAGIC, 0x02)
 #define CPU_ACCEL_IOC_RESET	_IO(CPU_ACCEL_IOC_MAGIC, 0x03)
 #define CPU_ACCEL_IOC_EXIT	_IO(CPU_ACCEL_IOC_MAGIC, 0x04)
-#define CPU_ACCEL_IOC_SHARED_READY	_IOW(CPU_ACCEL_IOC_MAGIC, 0x05, \
-					struct cpu_accel_shared_handoff)
-#define CPU_ACCEL_IOC_SHARED_RECLAIM	_IOW(CPU_ACCEL_IOC_MAGIC, 0x06, \
-					__u32)
-#define CPU_ACCEL_IOC_USER_EXIT	_IO(CPU_ACCEL_IOC_MAGIC, 0x07)
-#define CPU_ACCEL_IOC_USER_ESCAPE	_IO(CPU_ACCEL_IOC_MAGIC, 0x08)
+#define CPU_ACCEL_IOC_GET_CAPABILITIES	_IOR(CPU_ACCEL_IOC_MAGIC, 0x05, \
+						struct cpu_accel_capabilities)
+#define CPU_ACCEL_IOC_REGION_CREATE	_IOWR(CPU_ACCEL_IOC_MAGIC, 0x06, \
+						struct cpu_accel_region_create)
+#define CPU_ACCEL_IOC_REGION_ATTACH	_IOWR(CPU_ACCEL_IOC_MAGIC, 0x07, \
+						struct cpu_accel_region_ref)
+#define CPU_ACCEL_IOC_REGION_DETACH	_IOWR(CPU_ACCEL_IOC_MAGIC, 0x08, \
+						struct cpu_accel_region_ref)
+#define CPU_ACCEL_IOC_REGION_DESTROY	_IOW(CPU_ACCEL_IOC_MAGIC, 0x09, \
+						struct cpu_accel_region_ref)
+#define CPU_ACCEL_IOC_REGION_GET_INFO	_IOWR(CPU_ACCEL_IOC_MAGIC, 0x0a, \
+						struct cpu_accel_region_info)
+#define CPU_ACCEL_IOC_USER_EXIT	_IO(CPU_ACCEL_IOC_MAGIC, 0x0b)
+#define CPU_ACCEL_IOC_USER_ESCAPE	_IO(CPU_ACCEL_IOC_MAGIC, 0x0c)
 
 #endif /* _UAPI_LINUX_CPU_ACCEL_H */

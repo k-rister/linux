@@ -27,8 +27,8 @@ effects remain outside this prototype's control.
 Interface
 =========
 
-The driver creates ``/dev/cpu_accel`` with a fixed-size shared mapping and a
-small ioctl interface:
+The driver creates ``/dev/cpu_accel`` with a fixed-size control/status mapping
+and a small ioctl interface:
 
 * ``CONFIG`` selects an online CPU other than CPU 0 and supplies a duration
   and sample period.
@@ -39,10 +39,15 @@ small ioctl interface:
 * ``EXIT`` waits for the target CPU to return from the accelerator entry
   function and completes the transition back to Linux.
 * ``RESET`` returns the device to its initial state after a completed run.
+* ``GET_CAPABILITIES`` reports the runtime region count, per-region, and
+  total-size limits plus the supported permission combinations.
+* ``REGION_CREATE``, ``REGION_ATTACH``, ``REGION_DETACH``,
+  ``REGION_DESTROY``, and ``REGION_GET_INFO`` manage variable-size,
+  workload-owned shared regions.
 
 The control mapping contains the state, explicit Linux/accelerator transition
-mode, selected workload, run timestamps, aggregate lateness, and up to
-``CPU_ACCEL_MAX_SAMPLES`` timestamp samples.  ABI version 16 also
+mode, selected workload, run timestamps, region-set metadata, and kernel-owned
+isolation telemetry.  ABI version 16 also
 reports lifecycle entry/exit timestamps, interrupt and softirq deltas,
 timer, hrtimer, RCU, and scheduler softirq deltas, current-task
 context-switch deltas, CPU-entry/exit identity, migration detection, pending
@@ -105,7 +110,8 @@ callback completion remains governed by the native flush path. The target
 counter does not measure completion or provide an isolation or latency
 guarantee, and paravirtual TLB-flush paths may use different mechanisms.
 
-The initial workload selector supports ``timestamp`` and ``memmove``.  The
+The initial workload selector supports ``timestamp``, ``memmove``, and the
+ABI 22 ``user-region`` proof.  The
 memmove workload allocates and touches two bounded kernel buffers before the
 accelerator entry point, then copies between them once per timing period.  It
 is an oslat-like non-networked workload for measuring execution-source
@@ -113,7 +119,8 @@ isolation while avoiding page faults and system calls in the accelerator
 interval.  The buffers are kernel-owned; this workload does not yet provide a
 protected user address space or a user-supplied accelerator binary.
 
-ABI version 13 retains the x86-only ``user-oslat`` workload.  The companion forks
+ABI version 22 supports the x86-only ``user-oslat`` workload.  The companion
+forks
 a worker so the accelerator task has a distinct ``mm_struct``, pins that task
 to the target CPU, and supplies page-aligned executable-image and private-stack
 ranges.  The kernel validates the VMAs, prefaults and pins their pages, holds
@@ -121,8 +128,9 @@ the worker address space's write-side mapping lock for the active epoch, and
 returns the worker to ring 3 with the saved user register frame and IF clear.
 The driver retains the opener's ``mm_struct`` as the companion identity and
 rejects admission if the worker still shares that address space.
-The image polls the existing control mapping, records TSC-derived samples, and
-uses ``CPU_ACCEL_IOC_USER_EXIT`` as its only terminal system call.  The kernel
+The image polls the read-only control mapping for the stop request, records
+TSC-derived samples and histograms in an attached shared region, and uses
+``CPU_ACCEL_IOC_USER_EXIT`` as its only terminal system call.  The kernel
 restores the original ``START`` return frame, releases the address-space
 admission lock, and then restores Linux-owned IRQ/workqueue state.
 
@@ -166,18 +174,16 @@ not an application contract.  The debug-only module parameter
 companion's ``--escape-retries`` option exercises the retry contract after a
 reported timeout.
 
-ABI version 13 retains the fixed-size shared-region mapping at
-``CPU_ACCEL_SHARED_MAP_OFFSET``.  It contains two bounded entries, each with
-an owner, epoch, length, and data area.  The ``shared-memmove`` workload uses
-one selected entry and copies between its two halves.  The companion
-initializes the entry and issues ``CPU_ACCEL_IOC_SHARED_READY`` before
-``START``.  The kernel publishes ``ACCELERATOR`` while the workload owns the
-entry, then retains ``COMPLETE`` or ``ERROR`` ownership after the lifecycle
-returns.  The companion must issue ``CPU_ACCEL_IOC_SHARED_RECLAIM`` after
-observing the terminal result before reusing the entry.  The kernel rejects
-stale epochs, wrong lengths, active-entry reuse, and ownership races.
-This is a prefaulted, kernel-backed shared-memory proof of the ownership
-protocol; it is not yet an IOMMU-protected user mapping.
+ABI version 22 replaces that fixed workload-data mapping with explicit shared
+regions.  The companion creates a zeroed, page-aligned ``vmalloc_user`` region,
+maps it by opaque token, attaches it while the device is idle, and snapshots
+the attached set during ``CONFIG``.  Manager and owner mappings are exact-size,
+role-specific, non-executable ``MAP_SHARED`` mappings.  Region contents are
+opaque workload bytes; ``user-region``, ``user-cyclictest``, and
+``user-oslat`` use a private header and completion sequence in those bytes.
+Region epochs change on attach, detach, reset, and reuse so the workload can
+reject stale mappings or results.  See
+:doc:`cpu-accel-memory` for the permission, lifetime, and isolation model.
 
 The mode reports ``LINUX``, ``ENTERING``, ``ACCELERATOR``, ``EXITING``, or
 ``RECOVERY``.  It makes the lifecycle transition explicit for the control
@@ -230,7 +236,7 @@ The companion SDK in ``tools/cpu_accel`` wraps the device and
   sudo tools/cpu_accel/cpu-accelctl run --cpu 1 --duration-ms 100 \
     --period-us 1000 --workload memmove --work-bytes 4096
   sudo tools/cpu_accel/cpu-accelctl run --cpu 1 --duration-ms 100 \
-    --period-us 1000 --workload shared-memmove --work-bytes 4096
+    --period-us 1000 --workload user-region --work-bytes 4096
   sudo tools/cpu_accel/cpu-accelctl run --cpu 1 --duration-ms 100 \
     --period-us 1000 --workload user-oslat
   sudo tools/cpu_accel/cpu-accelctl run --cpu 1 --duration-ms 5000 \

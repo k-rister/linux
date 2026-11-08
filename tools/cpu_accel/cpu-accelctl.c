@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
 #include "cpu_accel.h"
+#include "cpu_accel_workload.h"
 #include "cpu_accel_user_image.h"
 
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <limits.h>
+#include <pthread.h>
 #include <signal.h>
 #include <sched.h>
 #include <stddef.h>
@@ -53,6 +55,7 @@ struct cpu_accel_user_context {
 	unsigned long reclaim_page;
 	unsigned long reclaim_bytes;
 	struct cpu_accel_shared *shared;
+	struct cpu_accel_workload_region *region;
 	int fd;
 	uint64_t cycles_per_ns;
 	struct cpu_accel_user_unmap_range *unmap_ranges;
@@ -181,7 +184,6 @@ static void cpu_accel_user_seal_and_start(
 		ret = cpu_accel_user_syscall2(SYS_munmap, range->start,
 					     range->length);
 		if (ret) {
-			context->shared->recovery_error = -ret;
 			cpu_accel_user_syscall1(SYS_exit_group, 125);
 			__builtin_unreachable();
 		}
@@ -228,8 +230,8 @@ static unsigned int cpu_accel_user_lateness_bin(uint64_t lateness_ns)
 {
 	if (!lateness_ns)
 		return 0;
-	return lateness_ns > (1ULL << (CPU_ACCEL_LATENESS_HIST_BINS - 1)) ?
-		CPU_ACCEL_LATENESS_HIST_BINS - 1 :
+	return lateness_ns > (1ULL << (CPU_ACCEL_WORKLOAD_LATENESS_BINS - 1)) ?
+		CPU_ACCEL_WORKLOAD_LATENESS_BINS - 1 :
 		64U - __builtin_clzll(lateness_ns);
 }
 
@@ -237,11 +239,11 @@ CPU_ACCEL_USER_IMAGE
 static void cpu_accel_user_cyclictest(void *argument)
 {
 	struct cpu_accel_user_context *context = argument;
-	struct cpu_accel_shared *shared = context->shared;
-	uint64_t cpm = context->cycles_per_ns;	/* A1: milli-cycles per ns */
+	struct cpu_accel_workload_region *region = context->region;
+	uint64_t cpm = context->cycles_per_ns;
 	uint64_t start_tsc = cpu_accel_read_tsc();
-	uint64_t period_ns = __atomic_load_n(&shared->period_ns,
-						    __ATOMIC_RELAXED);
+	uint64_t period_ns = __atomic_load_n(&context->shared->period_ns,
+					     __ATOMIC_RELAXED);
 	uint64_t period_cycles;
 	uint64_t deadline;
 	uint64_t samples = 0;
@@ -251,9 +253,12 @@ static void cpu_accel_user_cyclictest(void *argument)
 	uint64_t sum_lateness = 0;
 	uint32_t samples_valid = 0;
 
+	if (!region) {
+		cpu_accel_user_syscall1(SYS_exit_group, 124);
+		__builtin_unreachable();
+	}
 	if (!cpm)
 		cpm = CPU_ACCEL_CP_SCALE;
-	/* A1: sub-integer cadence from milli-cycles/ns (no truncation). */
 	period_cycles = (period_ns * cpm) / CPU_ACCEL_CP_SCALE;
 	if (!period_cycles)
 		period_cycles = 1;
@@ -272,14 +277,18 @@ static void cpu_accel_user_cyclictest(void *argument)
 			continue;
 		}
 		lateness_cycles = now - deadline;
-		/* A1: scale back to ns with milli-cycles precision. */
 		lateness_ns = (lateness_cycles * CPU_ACCEL_CP_SCALE) / cpm;
-		timestamp_ns = __atomic_load_n(&shared->start_ns,
+		timestamp_ns = __atomic_load_n(&context->shared->start_ns,
 					       __ATOMIC_RELAXED) +
 			((now - start_tsc) * CPU_ACCEL_CP_SCALE) / cpm;
-		if (samples_valid < CPU_ACCEL_MAX_SAMPLES) {
-			shared->samples[samples_valid].timestamp_ns = timestamp_ns;
-			shared->samples[samples_valid].lateness_ns = lateness_ns;
+		if (samples_valid < CPU_ACCEL_WORKLOAD_MAX_SAMPLES) {
+			((struct cpu_accel_workload_sample *)
+			 (region->payload + region->samples_offset))
+				[samples_valid].timestamp_ns = timestamp_ns;
+			((struct cpu_accel_workload_sample *)
+			 (region->payload + region->samples_offset))
+				[samples_valid].lateness_ns =
+				(int64_t)lateness_ns;
 			samples_valid++;
 		}
 		samples++;
@@ -288,33 +297,41 @@ static void cpu_accel_user_cyclictest(void *argument)
 		if (lateness_ns < min_lateness)
 			min_lateness = lateness_ns;
 		last_lateness = lateness_ns;
-		shared->lateness_hist[
-			cpu_accel_user_lateness_bin(lateness_ns)]++;
-		if (lateness_ns < CPU_ACCEL_LINEAR_NS_HIST_BINS)
-			shared->linear_ns_hist[lateness_ns]++;
+		((uint64_t *)(region->payload + region->lateness_hist_offset))
+			[cpu_accel_user_lateness_bin(lateness_ns)]++;
+		if (lateness_ns < CPU_ACCEL_WORKLOAD_LINEAR_BINS)
+			((uint64_t *)(region->payload +
+				      region->linear_hist_offset))
+				[lateness_ns]++;
 		else
-			shared->linear_ns_hist[CPU_ACCEL_LINEAR_NS_HIST_BINS]++;
+			((uint64_t *)(region->payload +
+				      region->linear_hist_offset))
+				[CPU_ACCEL_WORKLOAD_LINEAR_BINS]++;
 		sum_lateness += lateness_ns;
-		/* A2: open-ended -- only a manager STOP ends the run. */
-		if (__atomic_load_n(&shared->stop_requested, __ATOMIC_RELAXED))
+		if (__atomic_load_n(&context->shared->stop_requested,
+				    __ATOMIC_RELAXED))
 			break;
 		if (deadline > UINT64_MAX - period_cycles)
 			break;
 		deadline += period_cycles;
 	}
 
-	__atomic_store_n(&shared->samples_produced, samples, __ATOMIC_RELAXED);
-	__atomic_store_n(&shared->samples_valid, samples_valid, __ATOMIC_RELAXED);
-	__atomic_store_n(&shared->max_lateness_ns, max_lateness,
-				__ATOMIC_RELAXED);
-	__atomic_store_n(&shared->min_lateness_ns,
-				samples ? min_lateness : 0, __ATOMIC_RELAXED);
-	__atomic_store_n(&shared->last_lateness_ns, last_lateness,
-			__ATOMIC_RELAXED);
-	__atomic_store_n(&shared->sum_lateness_ns, sum_lateness,
-			__ATOMIC_RELAXED);
-	__atomic_store_n(&shared->work_iterations, samples, __ATOMIC_RELAXED);
+	__atomic_store_n(&region->samples_produced, samples,
+			 __ATOMIC_RELAXED);
+	__atomic_store_n(&region->samples_valid, samples_valid,
+			 __ATOMIC_RELAXED);
+	__atomic_store_n(&region->max_lateness_ns, max_lateness,
+			 __ATOMIC_RELAXED);
+	__atomic_store_n(&region->min_lateness_ns,
+			 samples ? min_lateness : 0, __ATOMIC_RELAXED);
+	__atomic_store_n(&region->last_lateness_ns, last_lateness,
+			 __ATOMIC_RELAXED);
+	__atomic_store_n(&region->sum_lateness_ns, sum_lateness,
+			 __ATOMIC_RELAXED);
+	__atomic_store_n(&region->work_iterations, samples,
+			 __ATOMIC_RELAXED);
 	__atomic_thread_fence(__ATOMIC_RELEASE);
+	__atomic_store_n(&region->completion_sequence, 1, __ATOMIC_RELEASE);
 	(void)cpu_accel_user_exit_syscall(context->fd);
 	__builtin_unreachable();
 }
@@ -330,8 +347,8 @@ CPU_ACCEL_USER_IMAGE
 static void cpu_accel_user_oslat(void *argument)
 {
 	struct cpu_accel_user_context *context = argument;
-	struct cpu_accel_shared *shared = context->shared;
-	uint64_t cpm = context->cycles_per_ns;	/* A1: milli-cycles per ns */
+	struct cpu_accel_workload_region *region = context->region;
+	uint64_t cpm = context->cycles_per_ns;
 	uint64_t start_tsc = cpu_accel_read_tsc_ordered();
 	uint64_t prev = start_tsc;
 	uint64_t samples = 0;
@@ -341,21 +358,28 @@ static void cpu_accel_user_oslat(void *argument)
 	uint64_t sum_delta = 0;
 	uint32_t samples_valid = 0;
 
+	if (!region) {
+		cpu_accel_user_syscall1(SYS_exit_group, 124);
+		__builtin_unreachable();
+	}
 	if (!cpm)
 		cpm = CPU_ACCEL_CP_SCALE;
 
 	for (;;) {
 		uint64_t now = cpu_accel_read_tsc_ordered();
-		uint64_t delta_ns;
+		uint64_t delta_ns = ((now - prev) * CPU_ACCEL_CP_SCALE) / cpm;
 
-		delta_ns = ((now - prev) * CPU_ACCEL_CP_SCALE) / cpm;
 		prev = now;
-		if (samples_valid < CPU_ACCEL_MAX_SAMPLES) {
-			shared->samples[samples_valid].timestamp_ns =
-				__atomic_load_n(&shared->start_ns,
-						 __ATOMIC_RELAXED) +
+		if (samples_valid < CPU_ACCEL_WORKLOAD_MAX_SAMPLES) {
+			struct cpu_accel_workload_sample *sample =
+				(void *)(region->payload +
+					 region->samples_offset);
+
+			sample[samples_valid].timestamp_ns =
+				__atomic_load_n(&context->shared->start_ns,
+						__ATOMIC_RELAXED) +
 				((now - start_tsc) * CPU_ACCEL_CP_SCALE) / cpm;
-			shared->samples[samples_valid].lateness_ns = delta_ns;
+			sample[samples_valid].lateness_ns = delta_ns;
 			samples_valid++;
 		}
 		samples++;
@@ -364,28 +388,102 @@ static void cpu_accel_user_oslat(void *argument)
 		if (delta_ns < min_delta)
 			min_delta = delta_ns;
 		last_delta = delta_ns;
-		shared->lateness_hist[
-			cpu_accel_user_lateness_bin(delta_ns)]++;
-		if (delta_ns < CPU_ACCEL_LINEAR_NS_HIST_BINS)
-			shared->linear_ns_hist[delta_ns]++;
+		((uint64_t *)(region->payload + region->lateness_hist_offset))
+			[cpu_accel_user_lateness_bin(delta_ns)]++;
+		if (delta_ns < CPU_ACCEL_WORKLOAD_LINEAR_BINS)
+			((uint64_t *)(region->payload +
+				      region->linear_hist_offset))
+				[delta_ns]++;
 		else
-			shared->linear_ns_hist[CPU_ACCEL_LINEAR_NS_HIST_BINS]++;
+			((uint64_t *)(region->payload +
+				      region->linear_hist_offset))
+				[CPU_ACCEL_WORKLOAD_LINEAR_BINS]++;
 		sum_delta += delta_ns;
-		if (__atomic_load_n(&shared->stop_requested, __ATOMIC_RELAXED))
+		if (__atomic_load_n(&context->shared->stop_requested,
+				    __ATOMIC_RELAXED))
 			break;
 	}
 
-	__atomic_store_n(&shared->samples_produced, samples, __ATOMIC_RELAXED);
-	__atomic_store_n(&shared->samples_valid, samples_valid, __ATOMIC_RELAXED);
-	__atomic_store_n(&shared->max_lateness_ns, max_delta, __ATOMIC_RELAXED);
-	__atomic_store_n(&shared->min_lateness_ns,
+	__atomic_store_n(&region->samples_produced, samples,
+			 __ATOMIC_RELAXED);
+	__atomic_store_n(&region->samples_valid, samples_valid,
+			 __ATOMIC_RELAXED);
+	__atomic_store_n(&region->max_lateness_ns, max_delta,
+			 __ATOMIC_RELAXED);
+	__atomic_store_n(&region->min_lateness_ns,
 			 samples ? min_delta : 0, __ATOMIC_RELAXED);
-	__atomic_store_n(&shared->last_lateness_ns, last_delta,
-			__ATOMIC_RELAXED);
-	__atomic_store_n(&shared->sum_lateness_ns, sum_delta,
-			__ATOMIC_RELAXED);
-	__atomic_store_n(&shared->work_iterations, samples, __ATOMIC_RELAXED);
+	__atomic_store_n(&region->last_lateness_ns, last_delta,
+			 __ATOMIC_RELAXED);
+	__atomic_store_n(&region->sum_lateness_ns, sum_delta,
+			 __ATOMIC_RELAXED);
+	__atomic_store_n(&region->work_iterations, samples,
+			 __ATOMIC_RELAXED);
 	__atomic_thread_fence(__ATOMIC_RELEASE);
+	__atomic_store_n(&region->completion_sequence, 1, __ATOMIC_RELEASE);
+	(void)cpu_accel_user_exit_syscall(context->fd);
+	__builtin_unreachable();
+}
+
+CPU_ACCEL_USER_IMAGE
+static void cpu_accel_user_region_workload(void *argument)
+{
+	struct cpu_accel_user_context *context = argument;
+	struct cpu_accel_workload_region *region = context->region;
+	uint64_t bytes;
+	uint64_t entries;
+	uint64_t block_bytes;
+	uint64_t input_offset;
+	uint64_t output_offset;
+	uint64_t manager_ready;
+
+	if (!region || region->region_role !=
+	    CPU_ACCEL_WORKLOAD_ROLE_BUFFER) {
+		cpu_accel_user_syscall1(SYS_exit_group, 124);
+		__builtin_unreachable();
+	}
+	bytes = region->work_bytes;
+	entries = __atomic_load_n(&region->ring_entries,
+				  __ATOMIC_RELAXED);
+	block_bytes = __atomic_load_n(&region->ring_block_bytes,
+				      __ATOMIC_RELAXED);
+	if (!bytes || !entries || !block_bytes ||
+	    entries > CPU_ACCEL_WORKLOAD_RING_MAX_ENTRIES ||
+	    block_bytes != (bytes + entries - 1) / entries) {
+		cpu_accel_user_syscall1(SYS_exit_group, 124);
+		__builtin_unreachable();
+	}
+	do {
+		manager_ready = __atomic_load_n(&region->manager_ready,
+						__ATOMIC_ACQUIRE);
+		if (manager_ready != 1)
+			__asm__ volatile("pause" ::: "memory");
+	} while (manager_ready == 0);
+	if (manager_ready != 1) {
+		cpu_accel_user_syscall1(SYS_exit_group, 127);
+		__builtin_unreachable();
+	}
+	input_offset = region->payload_offset;
+	output_offset = region->payload_offset + bytes;
+	for (uint64_t entry = 0; entry < entries; entry++) {
+		uint64_t base = entry * block_bytes;
+		uint64_t count = block_bytes;
+
+		if (count > bytes - base)
+			count = bytes - base;
+		while (__atomic_load_n(&region->command_sequence,
+				       __ATOMIC_ACQUIRE) <= entry)
+			__asm__ volatile("pause" ::: "memory");
+		for (uint64_t index = 0; index < count; index++)
+			region->payload[output_offset + base + index] =
+				(uint8_t)(region->payload[input_offset + base +
+							  index] ^ 0x5a);
+		__atomic_thread_fence(__ATOMIC_RELEASE);
+		__atomic_store_n(&region->result_sequence, entry + 1,
+				 __ATOMIC_RELEASE);
+	}
+	__atomic_store_n(&region->work_iterations, 1, __ATOMIC_RELAXED);
+	__atomic_thread_fence(__ATOMIC_RELEASE);
+	__atomic_store_n(&region->completion_sequence, 1, __ATOMIC_RELEASE);
 	(void)cpu_accel_user_exit_syscall(context->fd);
 	__builtin_unreachable();
 }
@@ -445,9 +543,6 @@ static void cpu_accel_user_death(void *argument)
 			__asm__ volatile("pause" ::: "memory");
 	}
 
-	__atomic_store_n(&shared->samples_produced, 1, __ATOMIC_RELAXED);
-	__atomic_store_n(&shared->work_iterations, 1, __ATOMIC_RELAXED);
-	__atomic_thread_fence(__ATOMIC_RELEASE);
 	(void)cpu_accel_user_exit_syscall(context->fd);
 	__builtin_unreachable();
 }
@@ -562,9 +657,10 @@ static int cpu_accel_collect_unmap_ranges(
 		{ .start = stack_start, .end = stack_end },
 		{ .start = (uintptr_t)handle->shared,
 		  .end = (uintptr_t)handle->shared + CPU_ACCEL_MAP_SIZE },
-		{ .start = (uintptr_t)handle->shared_region,
-		  .end = (uintptr_t)handle->shared_region +
-			CPU_ACCEL_SHARED_MAP_SIZE },
+		{ .start = (uintptr_t)context->region,
+		  .end = context->region ?
+			(uintptr_t)context->region +
+			context->region->region_size : 0 },
 		{ .start = rseq_start, .end = rseq_end },
 		{ .start = context->reclaim_page,
 		  .end = context->reclaim_page ?
@@ -636,18 +732,21 @@ static int parse_u64(const char *text, uint64_t *value)
 }
 
 static uint64_t cpu_accel_hist_total(
-		const volatile struct cpu_accel_shared *shared)
+		const struct cpu_accel_workload_region *region)
 {
 	uint64_t total = 0;
 
-	for (unsigned int i = 0; i < CPU_ACCEL_LATENESS_HIST_BINS; i++)
-		total += shared->lateness_hist[i];
+	if (!region)
+		return 0;
+	for (unsigned int i = 0; i < CPU_ACCEL_WORKLOAD_LATENESS_BINS; i++)
+		total += ((const uint64_t *)
+			  (region->payload + region->lateness_hist_offset))[i];
 	return total;
 }
 
 /* Upper edge of the log2 bin containing the given permille rank. */
 static uint64_t cpu_accel_hist_percentile(
-		const volatile struct cpu_accel_shared *shared,
+		const struct cpu_accel_workload_region *region,
 		uint64_t total, uint32_t permille)
 {
 	uint64_t target = (total * permille + 999) / 1000;
@@ -656,25 +755,33 @@ static uint64_t cpu_accel_hist_percentile(
 
 	if (!total || !target)
 		return 0;
-	for (i = 0; i < CPU_ACCEL_LATENESS_HIST_BINS; i++) {
-		cum += shared->lateness_hist[i];
+	for (i = 0; i < CPU_ACCEL_WORKLOAD_LATENESS_BINS; i++) {
+		cum += ((const uint64_t *)
+			(region->payload + region->lateness_hist_offset))[i];
 		if (cum >= target)
 			return i ? 1ULL << i : 0;
 	}
 	return 0;
 }
 
-static void print_status(const volatile struct cpu_accel_shared *shared)
+static void print_status(const struct cpu_accel_shared *shared,
+			 const struct cpu_accel_workload_region *region,
+			 uint64_t work_bytes)
 {
+	bool telemetry_region = region &&
+		region->region_role == CPU_ACCEL_WORKLOAD_ROLE_TELEMETRY;
 	uint64_t user_active_ns =
 		shared->user_active_end_ns > shared->user_active_start_ns ?
 		shared->user_active_end_ns - shared->user_active_start_ns : 0;
-	uint64_t hist_total = cpu_accel_hist_total(shared);
-	/* hist_total is the true per-sample count (the driver clamps
-	 * samples_produced to the detail-buffer size, so it cannot be used
-	 * as the mean's divisor). */
+	uint64_t hist_total = telemetry_region ?
+		cpu_accel_hist_total(region) : 0;
 	uint64_t avg_lateness_ns = hist_total ?
-		(uint64_t)shared->sum_lateness_ns / hist_total : 0;
+		(uint64_t)region->sum_lateness_ns / hist_total : 0;
+	uint64_t samples = region ? region->samples_produced : 0;
+	uint64_t max_lateness = region ? region->max_lateness_ns : 0;
+	uint64_t min_lateness = region ? region->min_lateness_ns : 0;
+	uint64_t last_lateness = region ? region->last_lateness_ns : 0;
+	uint64_t work_iterations = region ? region->work_iterations : 0;
 
 	printf("state=%u mode=%u sequence=%" PRIu64 " cpu=%u backend=%u backend_flags=%u"
 	       " recovery_state=%u recovery_error=%d recovery_attempts=%u"
@@ -682,8 +789,9 @@ static void print_status(const volatile struct cpu_accel_shared *shared)
 	       " recovery_completed_ns=%" PRIu64 " samples=%" PRIu64
 	       " max_lateness_ns=%" PRIu64 " min_lateness_ns=%" PRIu64
 	       " last_lateness_ns=%" PRIu64 " duration_ns=%" PRIu64
-	       " period_ns=%" PRIu64 " workload=%u work_bytes=%" PRIu64
-	       " work_iterations=%" PRIu64 " shared_entry=%u shared_owner=%u shared_epoch=%" PRIu64
+	       " period_ns=%" PRIu64 " region_count=%u region_set_epoch=%"
+	       PRIu64 " workload=%u work_bytes=%" PRIu64
+	       " work_iterations=%" PRIu64
 	       " lifecycle_entry_ns=%" PRIu64 " lifecycle_exit_ns=%" PRIu64
 	       " user_active_start_ns=%" PRIu64
 	       " user_active_end_ns=%" PRIu64 " user_active_ns=%" PRIu64
@@ -717,15 +825,15 @@ static void print_status(const volatile struct cpu_accel_shared *shared)
 	       shared->recovery_attempts,
 	       (uint64_t)shared->recovery_requested_ns,
 	       (uint64_t)shared->recovery_completed_ns,
-	       (uint64_t)shared->samples_produced,
-	       (uint64_t)shared->max_lateness_ns,
-	       (uint64_t)shared->min_lateness_ns,
-	       (uint64_t)shared->last_lateness_ns,
+		       samples,
+		       max_lateness,
+		       min_lateness,
+		       last_lateness,
 	       (uint64_t)shared->duration_ns, (uint64_t)shared->period_ns,
-	       shared->workload, (uint64_t)shared->work_bytes,
-	       (uint64_t)shared->work_iterations,
-	       shared->shared_entry, shared->shared_owner,
-	       (uint64_t)shared->shared_epoch,
+		       shared->region_count,
+		       (uint64_t)shared->region_set_epoch,
+		       shared->workload, work_bytes,
+		       work_iterations,
 	       (uint64_t)shared->lifecycle_entry_ns,
 	       (uint64_t)shared->lifecycle_exit_ns,
 	       (uint64_t)shared->user_active_start_ns,
@@ -755,33 +863,45 @@ static void print_status(const volatile struct cpu_accel_shared *shared)
 	       shared->arch_counters_valid,
 	       shared->lifecycle_cpu_entry, shared->lifecycle_cpu_exit,
 	       shared->migration_detected,
-	       hist_total,
-	       cpu_accel_hist_percentile(shared, hist_total, 500),
-	       cpu_accel_hist_percentile(shared, hist_total, 900),
-	       cpu_accel_hist_percentile(shared, hist_total, 990),
-	       cpu_accel_hist_percentile(shared, hist_total, 999),
+		       hist_total,
+		       region ? cpu_accel_hist_percentile(region, hist_total,
+							  500) : 0,
+		       region ? cpu_accel_hist_percentile(region, hist_total,
+							  900) : 0,
+		       region ? cpu_accel_hist_percentile(region, hist_total,
+							  990) : 0,
+		       region ? cpu_accel_hist_percentile(region, hist_total,
+							  999) : 0,
 	       (uint64_t)avg_lateness_ns);
 
-	for (unsigned int i = 0; i < CPU_ACCEL_LATENESS_HIST_BINS; i++) {
-		if (!shared->lateness_hist[i])
+	if (!telemetry_region)
+		return;
+	for (unsigned int i = 0; i < CPU_ACCEL_WORKLOAD_LATENESS_BINS; i++) {
+		uint64_t count = ((const uint64_t *)
+			(region->payload + region->lateness_hist_offset))[i];
+
+		if (!count)
 			continue;
 		printf("lateness_hist_bin=%u range_ns=[%" PRIu64 ",%" PRIu64
 		       ") count=%" PRIu64 "\n", i,
 		       (uint64_t)(i ? 1ULL << (i - 1) : 0),
 		       (uint64_t)(1ULL << i),
-		       (unsigned long)shared->lateness_hist[i]);
+		       count);
 	}
 
-	for (unsigned int i = 0; i <= CPU_ACCEL_LINEAR_NS_HIST_BINS; i++) {
-		if (!shared->linear_ns_hist[i])
+	for (unsigned int i = 0; i <= CPU_ACCEL_WORKLOAD_LINEAR_BINS; i++) {
+		uint64_t count = ((const uint64_t *)
+			(region->payload + region->linear_hist_offset))[i];
+
+		if (!count)
 			continue;
-		if (i < CPU_ACCEL_LINEAR_NS_HIST_BINS)
+		if (i < CPU_ACCEL_WORKLOAD_LINEAR_BINS)
 			printf("linear_ns_hist_ns=%u count=%" PRIu64 "\n", i,
-			       (unsigned long)shared->linear_ns_hist[i]);
+			       count);
 		else
 			printf("linear_ns_hist_ns>=%u count=%" PRIu64 "\n",
-			       (unsigned int)CPU_ACCEL_LINEAR_NS_HIST_BINS,
-			       (unsigned long)shared->linear_ns_hist[i]);
+			       (unsigned int)CPU_ACCEL_WORKLOAD_LINEAR_BINS,
+			       count);
 	}
 }
 
@@ -790,9 +910,9 @@ static void usage(FILE *stream, const char *program)
 	fprintf(stream,
 		"Usage:\n"
 		"  %s run [--cpu N] [--duration-ms N] [--period-us N]\n"
-		"      [--workload timestamp|memmove|shared-memmove|user-cyclictest|\n"
+		"      [--workload timestamp|memmove|user-region|user-cyclictest|\n"
 		"                   user-hang|user-reclaim|user-death|user-oslat]\n"
-		"      [--work-bytes N] [--shared-entry N]\n"
+		"      [--work-bytes N]\n"
 		"      [--test-reclaim-file PATH]\n"
 		"      [--escape-after-ms N] [--escape-retries N]\n"
 		"      [--worker-cgroup PATH]\n"
@@ -872,11 +992,100 @@ static int close_worker_fds(int keep_fd)
 	return syscall(SYS_close_range, (unsigned int)keep_fd + 1, UINT_MAX, 0U);
 }
 
+static bool cpu_accel_user_workload_needs_region(uint32_t workload)
+{
+	return workload == CPU_ACCEL_WORKLOAD_USER_REGION ||
+		workload == CPU_ACCEL_WORKLOAD_USER_CYCLICTEST ||
+		workload == CPU_ACCEL_WORKLOAD_USER_OSLAT;
+}
+
+static uint64_t cpu_accel_align_up_page(uint64_t value, uint64_t page_size)
+{
+	return (value + page_size - 1) & ~(page_size - 1);
+}
+
+static int cpu_accel_workload_region_size(uint32_t workload,
+					  uint64_t work_bytes,
+					  uint64_t page_size,
+					  uint64_t max_region_bytes,
+					  uint64_t *size_bytes)
+{
+	uint64_t payload_bytes;
+	uint64_t raw_size;
+
+	if (!page_size || (page_size & (page_size - 1)))
+		return -EINVAL;
+	if (workload == CPU_ACCEL_WORKLOAD_USER_REGION) {
+		if (!work_bytes || work_bytes > CPU_ACCEL_MAX_WORK_BYTES)
+			return -EINVAL;
+		payload_bytes = work_bytes * 2;
+	} else {
+		payload_bytes = (uint64_t)CPU_ACCEL_WORKLOAD_MAX_SAMPLES *
+			sizeof(struct cpu_accel_workload_sample) +
+			CPU_ACCEL_WORKLOAD_LATENESS_BINS * sizeof(uint64_t) +
+			(CPU_ACCEL_WORKLOAD_LINEAR_BINS + 1) *
+			sizeof(uint64_t);
+	}
+	if (payload_bytes > UINT64_MAX - CPU_ACCEL_WORKLOAD_HEADER_BYTES)
+		return -EINVAL;
+	raw_size = CPU_ACCEL_WORKLOAD_HEADER_BYTES + payload_bytes;
+	*size_bytes = cpu_accel_align_up_page(raw_size, page_size);
+	if (*size_bytes > max_region_bytes)
+		return -EINVAL;
+	return 0;
+}
+
+static void
+cpu_accel_workload_region_init(struct cpu_accel_workload_region *region,
+			       uint64_t size_bytes, uint64_t epoch,
+			       uint64_t token, uint32_t workload,
+			       uint64_t work_bytes)
+{
+	memset(region, 0, size_bytes);
+	region->magic = CPU_ACCEL_WORKLOAD_MAGIC;
+	region->abi_version = CPU_ACCEL_WORKLOAD_ABI_VERSION;
+	region->header_size = CPU_ACCEL_WORKLOAD_HEADER_BYTES;
+	region->region_role = workload == CPU_ACCEL_WORKLOAD_USER_REGION ?
+		CPU_ACCEL_WORKLOAD_ROLE_BUFFER :
+		CPU_ACCEL_WORKLOAD_ROLE_TELEMETRY;
+	region->region_size = size_bytes;
+	region->region_epoch = epoch;
+	region->mmap_token = token;
+	region->work_bytes = work_bytes;
+	if (workload == CPU_ACCEL_WORKLOAD_USER_REGION) {
+		uint64_t entries = work_bytes <
+			CPU_ACCEL_WORKLOAD_RING_MAX_ENTRIES ? work_bytes :
+			CPU_ACCEL_WORKLOAD_RING_MAX_ENTRIES;
+
+		region->payload_offset = 0;
+		region->ring_entries = entries;
+		region->ring_block_bytes = (work_bytes + entries - 1) / entries;
+		for (uint64_t index = 0; index < work_bytes; index++)
+			region->payload[index] = (uint8_t)index;
+	} else {
+		region->samples_offset = 0;
+		region->lateness_hist_offset =
+			(uint64_t)CPU_ACCEL_WORKLOAD_MAX_SAMPLES *
+			sizeof(struct cpu_accel_workload_sample);
+		region->linear_hist_offset =
+			region->lateness_hist_offset +
+			CPU_ACCEL_WORKLOAD_LATENESS_BINS * sizeof(uint64_t);
+		region->payload_offset =
+			region->linear_hist_offset +
+			(CPU_ACCEL_WORKLOAD_LINEAR_BINS + 1) *
+			sizeof(uint64_t);
+	}
+}
+
 static int run_user_worker_image(struct cpu_accel_handle *handle,
 				 struct cpu_accel_config *config,
-				 const char *reclaim_file)
+				 const char *reclaim_file,
+				 uint64_t region_token, uint64_t region_size,
+				 uint64_t region_epoch)
 {
 	struct cpu_accel_user_context *context;
+	struct cpu_accel_region_create region_create = {};
+	struct cpu_accel_workload_region *owner_region = MAP_FAILED;
 	uintptr_t entry_ip;
 	uintptr_t image_end;
 	uintptr_t image_start;
@@ -894,7 +1103,39 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 	int user_reclaim = config->workload == CPU_ACCEL_WORKLOAD_USER_RECLAIM;
 	int user_death = config->workload == CPU_ACCEL_WORKLOAD_USER_DEATH;
 	int user_oslat = config->workload == CPU_ACCEL_WORKLOAD_USER_OSLAT;
+	int user_region = config->workload == CPU_ACCEL_WORKLOAD_USER_REGION;
 	int ret = 1;
+
+	if (region_token) {
+		region_create.size_bytes = region_size;
+		region_create.permissions = CPU_ACCEL_REGION_PERM_BIDIRECTIONAL;
+		region_create.mmap_token = region_token;
+		owner_region = cpu_accel_region_mmap(handle, &region_create,
+						     false);
+		if (owner_region == MAP_FAILED) {
+			perror("map owner workload region");
+			goto out;
+		}
+
+		if (!cpu_accel_workload_header_valid(owner_region, region_size,
+						     region_epoch,
+						     region_token)) {
+			fprintf(stderr, "invalid inherited workload region\n");
+			goto out;
+		}
+		if (config->workload == CPU_ACCEL_WORKLOAD_USER_REGION) {
+			config->work_bytes = owner_region->work_bytes;
+			if (!config->work_bytes ||
+			    config->work_bytes > CPU_ACCEL_MAX_WORK_BYTES) {
+				fprintf(stderr,
+					"invalid inherited workload size\n");
+				goto out;
+			}
+		}
+	} else if (cpu_accel_user_workload_needs_region(config->workload)) {
+		fprintf(stderr, "missing workload region mapping\n");
+		goto out;
+	}
 
 	page_size = sysconf(_SC_PAGESIZE);
 	if (page_size <= 0 || (size_t)page_size > SIZE_MAX / 16 ||
@@ -976,6 +1217,7 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 	}
 
 	context = stack;
+	context->region = owner_region == MAP_FAILED ? NULL : owner_region;
 	context->shared = (struct cpu_accel_shared *)(uintptr_t)handle->shared;
 	context->reclaim_page = user_reclaim ?
 		(uintptr_t)reclaim_mapping : 0;
@@ -988,6 +1230,8 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 		entry_ip = (uintptr_t)cpu_accel_user_death;
 	else if (user_oslat)
 		entry_ip = (uintptr_t)cpu_accel_user_oslat;
+	else if (user_region)
+		entry_ip = (uintptr_t)cpu_accel_user_region_workload;
 	else
 		entry_ip = (uintptr_t)cpu_accel_user_cyclictest;
 	config->flags |= CPU_ACCEL_FLAG_PERSISTENT;
@@ -1045,13 +1289,15 @@ out:
 		close(reclaim_fd);
 	if (reclaim_mapping != MAP_FAILED)
 		munmap(reclaim_mapping, reclaim_bytes);
+	if (owner_region != MAP_FAILED)
+		munmap(owner_region, region_size);
 	cpu_accel_close(handle);
 	return ret;
 }
 
 static int run_user_worker(int argc, char **argv)
 {
-	enum { USER_WORKER_ARG_COUNT = 6 };
+	enum { USER_WORKER_ARG_COUNT = 9 };
 	struct cpu_accel_config config = {};
 	struct cpu_accel_handle handle;
 	uint64_t values[USER_WORKER_ARG_COUNT];
@@ -1071,12 +1317,19 @@ static int run_user_worker(int argc, char **argv)
 	if (values[0] > INT_MAX || values[1] > UINT_MAX ||
 	    values[2] > CPU_ACCEL_WORKLOAD_USER_OSLAT ||
 	    values[3] > UINT_MAX ||
+	    (values[6] && values[7] > SIZE_MAX) ||
 	    (values[2] != CPU_ACCEL_WORKLOAD_USER_CYCLICTEST &&
+	     values[2] != CPU_ACCEL_WORKLOAD_USER_REGION &&
 	     values[2] != CPU_ACCEL_WORKLOAD_USER_HANG &&
 	     values[2] != CPU_ACCEL_WORKLOAD_USER_RECLAIM &&
 	     values[2] != CPU_ACCEL_WORKLOAD_USER_DEATH &&
 	     values[2] != CPU_ACCEL_WORKLOAD_USER_OSLAT)) {
 		fprintf(stderr, "out-of-range internal user-worker argument\n");
+		return 2;
+	}
+	if ((!!values[6] || !!values[7] || !!values[8]) !=
+	    cpu_accel_user_workload_needs_region(values[2])) {
+		fprintf(stderr, "invalid internal user-worker region\n");
 		return 2;
 	}
 	if ((values[2] == CPU_ACCEL_WORKLOAD_USER_RECLAIM &&
@@ -1103,8 +1356,8 @@ static int run_user_worker(int argc, char **argv)
 		close(fd);
 		return 1;
 	}
-	return run_user_worker_image(&handle, &config,
-				     reclaim_file);
+	return run_user_worker_image(&handle, &config, reclaim_file,
+				     values[6], values[7], values[8]);
 }
 
 static bool user_escape_completed(
@@ -1258,6 +1511,92 @@ static int cpu_accel_run_until_stop(struct cpu_accel_handle *handle,
 	return 0;
 }
 
+struct cpu_accel_region_consumer {
+	struct cpu_accel_workload_region *region;
+	uint64_t work_bytes;
+	int status;
+	int stop;
+};
+
+static void *cpu_accel_consume_user_region(void *argument)
+{
+	struct cpu_accel_region_consumer *consumer = argument;
+	struct cpu_accel_workload_region *region = consumer->region;
+	const struct timespec poll = { 0, 100000 };
+	uint64_t entries;
+	uint64_t block_bytes;
+
+	entries = __atomic_load_n(&region->ring_entries, __ATOMIC_RELAXED);
+	block_bytes = __atomic_load_n(&region->ring_block_bytes,
+				      __ATOMIC_RELAXED);
+	if (!consumer->work_bytes || !entries || !block_bytes ||
+	    entries > CPU_ACCEL_WORKLOAD_RING_MAX_ENTRIES ||
+	    block_bytes !=
+		    (consumer->work_bytes + entries - 1) / entries) {
+		__atomic_store_n(&region->manager_ready, 2, __ATOMIC_RELEASE);
+		consumer->status = 1;
+		return NULL;
+	}
+	__atomic_store_n(&region->manager_ready, 1, __ATOMIC_RELEASE);
+
+	for (uint64_t entry = 0; entry < entries; entry++) {
+		uint64_t base = entry * block_bytes;
+		uint64_t count = block_bytes;
+		uint64_t sequence;
+
+		if (count > consumer->work_bytes - base)
+			count = consumer->work_bytes - base;
+		sequence = __atomic_load_n(&region->command_sequence,
+					   __ATOMIC_RELAXED);
+		if (sequence != entry) {
+			__atomic_store_n(&region->command_overflow, 1,
+					 __ATOMIC_RELAXED);
+			consumer->status = 1;
+			return NULL;
+		}
+		for (uint64_t index = 0; index < count; index++)
+			region->payload[base + index] = (uint8_t)(base + index);
+		__atomic_thread_fence(__ATOMIC_RELEASE);
+		__atomic_store_n(&region->command_sequence, entry + 1,
+				 __ATOMIC_RELEASE);
+
+		for (;;) {
+			sequence = __atomic_load_n(&region->result_sequence,
+						   __ATOMIC_ACQUIRE);
+			if (sequence > entry)
+				break;
+			if (consumer->stop ||
+			    __atomic_load_n(&region->completion_sequence,
+					    __ATOMIC_ACQUIRE)) {
+				consumer->status = 1;
+				return NULL;
+			}
+			nanosleep(&poll, NULL);
+		}
+		if (sequence != entry + 1) {
+			__atomic_store_n(&region->result_overflow, 1,
+					 __ATOMIC_RELAXED);
+			consumer->status = 1;
+			return NULL;
+		}
+		for (uint64_t index = 0; index < count; index++) {
+			uint8_t expected = (uint8_t)(base + index) ^ 0x5a;
+
+			if (region->payload[region->payload_offset +
+					    consumer->work_bytes + base +
+					    index] !=
+			    expected) {
+				consumer->status = 1;
+				return NULL;
+			}
+		}
+		__atomic_store_n(&region->result_consumed, entry + 1,
+				 __ATOMIC_RELEASE);
+	}
+	consumer->status = 0;
+	return NULL;
+}
+
 static int run_user_workload(const struct cpu_accel_config *requested,
 			     uint64_t escape_after_ms,
 			     uint64_t escape_attempts,
@@ -1266,26 +1605,45 @@ static int run_user_workload(const struct cpu_accel_config *requested,
 {
 	struct cpu_accel_config config = *requested;
 	struct cpu_accel_handle handle;
+	struct cpu_accel_capabilities capabilities = {};
+	struct cpu_accel_region_create region_create = {};
+	struct cpu_accel_workload_region *workload_region = MAP_FAILED;
+	uint64_t region_epoch = 0;
 	char fd_arg[24], cpu_arg[24], workload_arg[24];
 	char flags_arg[24], duration_arg[24], period_arg[24];
+	char region_token_arg[24], region_size_arg[24], region_epoch_arg[24];
 	const char *reclaim_file_arg = reclaim_file ? reclaim_file : "-";
 	char *const worker_argv[] = {
 		"/proc/self/exe", "--cpu-accel-user-worker", fd_arg,
 		cpu_arg, workload_arg, flags_arg, duration_arg, period_arg,
+		region_token_arg, region_size_arg, region_epoch_arg,
 		(char *)reclaim_file_arg, NULL,
 	};
 	char *const worker_env[] = { NULL };
 	pid_t child;
+	pthread_t consumer_thread;
+	struct cpu_accel_region_consumer consumer = {};
 	int status;
 	int user_hang = requested->workload == CPU_ACCEL_WORKLOAD_USER_HANG;
 	int user_reclaim = requested->workload ==
 		CPU_ACCEL_WORKLOAD_USER_RECLAIM;
+	bool needs_region =
+		cpu_accel_user_workload_needs_region(requested->workload);
+	bool region_created = false;
+	bool region_mapped = false;
+	bool consumer_started = false;
 	bool reclaim_owner_stopped;
+	uint64_t completion_sequence = 0;
 	int escape_ret = 0;
 	int ret;
 
 	if (cpu_accel_open(&handle) < 0) {
 		perror("open /dev/cpu_accel");
+		return 1;
+	}
+	if (cpu_accel_get_capabilities(&handle, &capabilities) < 0) {
+		perror("get workload region capabilities");
+		cpu_accel_close(&handle);
 		return 1;
 	}
 
@@ -1317,6 +1675,56 @@ static int run_user_workload(const struct cpu_accel_config *requested,
 	/* A2: no CPU_ACCEL_FLAG_PERSISTENT -- no kernel watchdog. The cyclictest
 	 * image is open-ended (run-forever); the manager owns the wall-clock
 	 * duration and sends the orderly STOP. */
+	if (needs_region) {
+		struct cpu_accel_region_ref region_ref = {};
+		uint64_t region_size;
+		long page_size = sysconf(_SC_PAGESIZE);
+
+		if (cpu_accel_workload_region_size(config.workload,
+						   config.work_bytes,
+						   page_size,
+						   capabilities.max_region_bytes,
+						   &region_size)) {
+			errno = EINVAL;
+			perror("size workload region");
+			cpu_accel_close(&handle);
+			return 1;
+		}
+		region_create.size_bytes = region_size;
+		region_create.permissions =
+			CPU_ACCEL_REGION_PERM_BIDIRECTIONAL;
+		region_create.numa_node = -1;
+		if (cpu_accel_region_create(&handle, &region_create) < 0) {
+			perror("create workload region");
+			cpu_accel_close(&handle);
+			return 1;
+		}
+		region_created = true;
+		workload_region = cpu_accel_region_mmap(&handle,
+							&region_create, true);
+		if (workload_region == MAP_FAILED) {
+			perror("map manager workload region");
+			goto out_close;
+		}
+		region_mapped = true;
+		cpu_accel_workload_region_init(workload_region, region_size,
+					       region_create.epoch,
+					       region_create.mmap_token,
+					       config.workload,
+					       config.work_bytes);
+		region_ref.region_id = region_create.region_id;
+		region_ref.epoch = region_create.epoch;
+		if (cpu_accel_region_attach(&handle, &region_ref) < 0) {
+			perror("attach workload region");
+			goto out_close;
+		}
+		region_epoch = region_ref.epoch;
+		workload_region->region_epoch = region_epoch;
+	} else {
+		region_create.mmap_token = 0;
+		region_create.size_bytes = 0;
+		region_create.epoch = 0;
+	}
 	snprintf(fd_arg, sizeof(fd_arg), "%d", handle.fd);
 	snprintf(cpu_arg, sizeof(cpu_arg), "%u", config.cpu);
 	snprintf(workload_arg, sizeof(workload_arg), "%u", config.workload);
@@ -1325,12 +1733,17 @@ static int run_user_workload(const struct cpu_accel_config *requested,
 		 (unsigned long long)config.duration_ns);
 	snprintf(period_arg, sizeof(period_arg), "%llu",
 		 (unsigned long long)config.period_ns);
+	snprintf(region_token_arg, sizeof(region_token_arg), "%llu",
+		 (unsigned long long)region_create.mmap_token);
+	snprintf(region_size_arg, sizeof(region_size_arg), "%llu",
+		 (unsigned long long)region_create.size_bytes);
+	snprintf(region_epoch_arg, sizeof(region_epoch_arg), "%llu",
+		 (unsigned long long)region_epoch);
 
 	child = fork();
 	if (child < 0) {
 		perror("fork user accelerator");
-		cpu_accel_close(&handle);
-		return 1;
+		goto out_close;
 	}
 	if (!child) {
 		int fd_flags = fcntl(handle.fd, F_GETFD);
@@ -1355,6 +1768,18 @@ static int run_user_workload(const struct cpu_accel_config *requested,
 		execve("/proc/self/exe", worker_argv, worker_env);
 		perror("exec isolated accelerator worker");
 		_exit(127);
+	}
+	if (config.workload == CPU_ACCEL_WORKLOAD_USER_REGION) {
+		consumer.region = workload_region;
+		consumer.work_bytes = config.work_bytes;
+		if (pthread_create(&consumer_thread, NULL,
+				   cpu_accel_consume_user_region,
+				   &consumer)) {
+			__atomic_store_n(&workload_region->manager_ready, 2,
+					 __ATOMIC_RELEASE);
+		} else {
+			consumer_started = true;
+		}
 	}
 
 	/* No escape: A2 -- this manager (pinned to CPU 0, a ticked CPU) owns the
@@ -1426,7 +1851,19 @@ static int run_user_workload(const struct cpu_accel_config *requested,
 	} else {
 		ret = 0;
 	}
-	print_status(handle.shared);
+	if (consumer_started) {
+		__atomic_store_n(&consumer.stop, 1, __ATOMIC_RELEASE);
+		if (pthread_join(consumer_thread, NULL) ||
+		    consumer.status)
+			ret = -1;
+	}
+	if (needs_region)
+		completion_sequence =
+			__atomic_load_n(&workload_region->completion_sequence,
+					__ATOMIC_ACQUIRE);
+	print_status((struct cpu_accel_shared *)handle.shared,
+		     region_mapped ? workload_region : NULL,
+		     config.work_bytes);
 	reclaim_owner_stopped = user_reclaim &&
 		user_reclaim_owner_stop_completed(handle.shared);
 	if ((escape_after_ms && handle.shared->state != CPU_ACCEL_STATE_ESCAPED &&
@@ -1441,17 +1878,73 @@ static int run_user_workload(const struct cpu_accel_config *requested,
 	     !reclaim_owner_stopped &&
 	     handle.shared->recovery_state !=
 	     CPU_ACCEL_RECOVERY_SUCCEEDED) ||
-	    (!escape_after_ms && !user_reclaim &&
-	     !handle.shared->samples_valid) ||
+	    (needs_region && completion_sequence != 1) ||
 	    ((escape_after_ms || user_reclaim) &&
 	     !reclaim_owner_stopped &&
 	     handle.shared->user_escape_count != 1)) {
 		fprintf(stderr, "user accelerator did not complete its ring-3 contract\n");
 		ret = -1;
 	}
+	if (config.workload == CPU_ACCEL_WORKLOAD_USER_REGION &&
+	    (workload_region->command_sequence !=
+		     workload_region->ring_entries ||
+	     workload_region->result_sequence !=
+		     workload_region->ring_entries ||
+	     workload_region->result_consumed !=
+		     workload_region->ring_entries ||
+	     workload_region->command_overflow ||
+	     workload_region->result_overflow)) {
+		fprintf(stderr, "user region ring validation failed\n");
+		ret = -1;
+	}
 	if (cpu_accel_exit(&handle) < 0) {
 		perror("exit user accelerator");
 		ret = -1;
+	}
+	if (needs_region && config.workload == CPU_ACCEL_WORKLOAD_USER_REGION &&
+	    __atomic_load_n(&workload_region->completion_sequence,
+			    __ATOMIC_ACQUIRE) == 1) {
+		const uint8_t *input = workload_region->payload;
+		const uint8_t *output = workload_region->payload +
+			workload_region->work_bytes;
+
+		for (uint64_t index = 0; index < workload_region->work_bytes;
+		     index++) {
+			if (output[index] !=
+			    (uint8_t)(input[index] ^ 0x5a)) {
+				fprintf(stderr,
+					"user region output validation failed\n");
+				ret = -1;
+				break;
+			}
+		}
+	}
+out_close:
+	if (region_mapped) {
+		if (needs_region && cpu_accel_reset(&handle) < 0) {
+			perror("reset workload region");
+			ret = -1;
+		}
+		if (munmap(workload_region, region_create.size_bytes) < 0) {
+			perror("unmap manager workload region");
+			ret = -1;
+		}
+		region_mapped = false;
+	}
+	if (region_created) {
+		struct cpu_accel_region_info region_info = {
+			.region_id = region_create.region_id,
+		};
+		struct cpu_accel_region_ref region_ref = {
+			.region_id = region_create.region_id,
+		};
+
+		if (cpu_accel_region_get_info(&handle, &region_info) == 0)
+			region_ref.epoch = region_info.epoch;
+		if (cpu_accel_region_destroy(&handle, &region_ref) < 0) {
+			perror("destroy workload region");
+			ret = -1;
+		}
 	}
 	cpu_accel_close(&handle);
 	return ret < 0 ? 1 : 0;
@@ -1463,7 +1956,6 @@ static int run_workload(const char *program, int argc, char **argv)
 		.cpu = 1,
 		.flags = CPU_ACCEL_FLAG_IRQS_OFF,
 		.workload = CPU_ACCEL_WORKLOAD_TIMESTAMP,
-		.shared_entry = 0,
 		.duration_ns = CPU_ACCEL_DEFAULT_DURATION_NS,
 		.period_ns = CPU_ACCEL_DEFAULT_PERIOD_NS,
 	};
@@ -1520,8 +2012,8 @@ static int run_workload(const char *program, int argc, char **argv)
 				config.workload = CPU_ACCEL_WORKLOAD_TIMESTAMP;
 			else if (!strcmp(workload, "memmove"))
 				config.workload = CPU_ACCEL_WORKLOAD_MEMMOVE;
-			else if (!strcmp(workload, "shared-memmove"))
-				config.workload = CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE;
+			else if (!strcmp(workload, "user-region"))
+				config.workload = CPU_ACCEL_WORKLOAD_USER_REGION;
 			else if (!strcmp(workload, "user-cyclictest"))
 				config.workload = CPU_ACCEL_WORKLOAD_USER_CYCLICTEST;
 			else if (!strcmp(workload, "user-hang"))
@@ -1544,13 +2036,6 @@ static int run_workload(const char *program, int argc, char **argv)
 				return 2;
 			}
 			config.work_bytes = value;
-		} else if (!strcmp(argv[index], "--shared-entry") &&
-			   index + 1 < argc) {
-			if (parse_u64(argv[++index], &value) || value > UINT_MAX) {
-				fprintf(stderr, "%s: invalid shared entry\n", program);
-				return 2;
-			}
-			config.shared_entry = value;
 		} else if (!strcmp(argv[index], "--test-reclaim-file") &&
 			   index + 1 < argc) {
 			reclaim_file = argv[++index];
@@ -1617,7 +2102,26 @@ static int run_workload(const char *program, int argc, char **argv)
 			"%s: --test-reclaim-file requires user-reclaim\n", program);
 		return 2;
 	}
-	if (config.workload == CPU_ACCEL_WORKLOAD_USER_CYCLICTEST ||
+	if (config.workload == CPU_ACCEL_WORKLOAD_USER_REGION &&
+	    !config.work_bytes) {
+		fprintf(stderr, "%s: user-region requires --work-bytes\n", program);
+		return 2;
+	}
+	if (config.workload != CPU_ACCEL_WORKLOAD_USER_REGION && config.work_bytes &&
+	    config.workload != CPU_ACCEL_WORKLOAD_MEMMOVE) {
+		fprintf(stderr, "%s: --work-bytes requires memmove or user-region\n",
+			program);
+		return 2;
+	}
+	if (config.workload == CPU_ACCEL_WORKLOAD_MEMMOVE &&
+	    config.work_bytes > CPU_ACCEL_MAX_MEMMOVE_WORK_BYTES) {
+		fprintf(stderr, "%s: memmove work size exceeds %llu bytes\n",
+			program,
+			(unsigned long long)CPU_ACCEL_MAX_MEMMOVE_WORK_BYTES);
+		return 2;
+	}
+	if (config.workload == CPU_ACCEL_WORKLOAD_USER_REGION ||
+	    config.workload == CPU_ACCEL_WORKLOAD_USER_CYCLICTEST ||
 	    config.workload == CPU_ACCEL_WORKLOAD_USER_HANG ||
 	    config.workload == CPU_ACCEL_WORKLOAD_USER_RECLAIM ||
 	    config.workload == CPU_ACCEL_WORKLOAD_USER_DEATH ||
@@ -1645,21 +2149,6 @@ static int run_workload(const char *program, int argc, char **argv)
 		cpu_accel_close(&handle);
 		return 1;
 	}
-	if (config.workload == CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE) {
-		struct cpu_accel_shared_entry *entry =
-			&handle.shared_region->entries[config.shared_entry];
-		void *data = (void *)entry->data;
-
-		memset(data, 0xa5, config.work_bytes);
-		memset((char *)data + config.work_bytes, 0x5a,
-		       config.work_bytes);
-		if (cpu_accel_shared_ready(&handle, config.shared_entry,
-					   config.work_bytes) < 0) {
-			perror("shared ready");
-			cpu_accel_close(&handle);
-			return 1;
-		}
-	}
 	ret = cpu_accel_start(&handle);
 	if (ret < 0) {
 		perror("start");
@@ -1680,20 +2169,8 @@ static int run_workload(const char *program, int argc, char **argv)
 	}
 	if (ret < 0 && !interrupted)
 		perror("wait");
-	print_status(handle.shared);
-	if (config.workload == CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE &&
-	    handle.shared->work_iterations &&
-	    memcmp(handle.shared_region->entries[config.shared_entry].data,
-		   handle.shared_region->entries[config.shared_entry].data +
-		   config.work_bytes, config.work_bytes)) {
-		fprintf(stderr, "shared memmove data validation failed\n");
-		ret = -1;
-	}
-	if (config.workload == CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE &&
-	    cpu_accel_shared_reclaim(&handle, config.shared_entry) < 0) {
-		perror("shared reclaim");
-		ret = -1;
-	}
+	print_status((struct cpu_accel_shared *)handle.shared, NULL,
+		     config.work_bytes);
 	cpu_accel_close(&handle);
 	return ret < 0 && !interrupted ? 1 : 0;
 }
@@ -1730,7 +2207,7 @@ int main(int argc, char **argv)
 		if (ret < 0)
 			perror("reset");
 	} else {
-		print_status(handle.shared);
+		print_status((struct cpu_accel_shared *)handle.shared, NULL, 0);
 	}
 	cpu_accel_close(&handle);
 	return ret < 0 ? 1 : 0;

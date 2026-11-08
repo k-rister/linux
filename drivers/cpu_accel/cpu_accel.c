@@ -81,7 +81,8 @@ static void cpu_accel_owner_exit_early(void *data, struct task_struct *task);
 
 static bool cpu_accel_user_workload(u32 workload)
 {
-	return workload == CPU_ACCEL_WORKLOAD_USER_CYCLICTEST ||
+	return workload == CPU_ACCEL_WORKLOAD_USER_REGION ||
+		workload == CPU_ACCEL_WORKLOAD_USER_CYCLICTEST ||
 		workload == CPU_ACCEL_WORKLOAD_USER_HANG ||
 		workload == CPU_ACCEL_WORKLOAD_USER_RECLAIM ||
 		workload == CPU_ACCEL_WORKLOAD_USER_DEATH ||
@@ -265,19 +266,26 @@ static u64 cpu_accel_counter_delta(u64 end, u64 start)
 	return end >= start ? end - start : 0;
 }
 
-enum cpu_accel_region_owner {
-	CPU_ACCEL_REGION_LINUX = CPU_ACCEL_SHARED_OWNER_LINUX,
-	CPU_ACCEL_REGION_READY = CPU_ACCEL_SHARED_OWNER_READY,
-	CPU_ACCEL_REGION_ACCELERATOR = CPU_ACCEL_SHARED_OWNER_ACCELERATOR,
-	CPU_ACCEL_REGION_COMPLETE = CPU_ACCEL_SHARED_OWNER_COMPLETE,
-	CPU_ACCEL_REGION_ERROR = CPU_ACCEL_SHARED_OWNER_ERROR,
+#define CPU_ACCEL_MAX_REGIONS		64U
+
+struct cpu_accel_region_vma {
+	struct cpu_accel_region *region;
+	bool manager;
 };
 
 struct cpu_accel_region {
 	void *address;
 	size_t bytes;
 	u64 epoch;
-	u32 owner;
+	u64 token;
+	struct cpu_accel_region_vma manager_vma;
+	struct cpu_accel_region_vma owner_vma;
+	u32 permissions;
+	atomic_t manager_mappings;
+	atomic_t owner_mappings;
+	int numa_node;
+	u8 state;
+	bool attached;
 };
 
 struct cpu_accel_user_image {
@@ -305,6 +313,8 @@ struct cpu_accel_device {
 	struct miscdevice misc;
 	/* Serializes control-plane state transitions. */
 	struct mutex lock;
+	/* Protects the region table independently of VMA mmap locks. */
+	struct mutex region_lock;
 	struct completion lifecycle_done;
 	struct task_struct *lifecycle_thread;
 	struct timer_list watchdog_timer;
@@ -312,10 +322,11 @@ struct cpu_accel_device {
 	struct work_struct owner_death_work;
 	struct irq_accel_quarantine *irq_quarantine;
 	struct cpu_accel_shared *shared;
-	struct cpu_accel_shared_region *shared_region;
 	/* mm of the process that opened the device as the control companion. */
 	struct mm_struct *companion_mm;
 	struct cpu_accel_config config;
+	struct cpu_accel_region *regions[CPU_ACCEL_MAX_REGIONS];
+	struct cpu_accel_region *attached_regions[CPU_ACCEL_MAX_REGIONS];
 	atomic_t opened;
 	atomic_t enter_requested;
 	atomic_t stop_requested;
@@ -334,16 +345,30 @@ struct cpu_accel_device {
 	unsigned int controller_cpu;
 	unsigned int irq_quarantined;
 	unsigned int irq_quarantine_blockers;
+	u64 region_total_bytes;
+	u64 region_set_epoch;
 	int lifecycle_ret;
 	bool configured;
 	bool workqueue_reserved;
 	bool work_region_allocated;
-	bool work_region_shared;
 	struct cpu_accel_user_image user_image;
 	struct cpu_accel_observation user_observation;
 };
 
 static struct cpu_accel_device cpu_accel;
+static atomic64_t cpu_accel_region_token_sequence = ATOMIC64_INIT(0);
+static u64 cpu_accel_max_region_bytes = 1ULL << 30;
+static u64 cpu_accel_max_total_region_bytes = 1ULL << 32;
+static unsigned int cpu_accel_max_region_count = CPU_ACCEL_MAX_REGIONS;
+
+module_param_named(max_region_bytes, cpu_accel_max_region_bytes, ullong, 0644);
+MODULE_PARM_DESC(max_region_bytes, "Maximum bytes per cpu-accel region");
+module_param_named(max_total_region_bytes, cpu_accel_max_total_region_bytes,
+		   ullong, 0644);
+MODULE_PARM_DESC(max_total_region_bytes,
+		 "Maximum total cpu-accel region bytes");
+module_param_named(max_region_count, cpu_accel_max_region_count, uint, 0644);
+MODULE_PARM_DESC(max_region_count, "Maximum cpu-accel regions");
 
 #ifdef CONFIG_X86_LOCAL_APIC
 static void cpu_accel_arch_stop_direct(void *data, unsigned int stop_flags)
@@ -636,173 +661,510 @@ static void cpu_accel_release_workqueue(struct cpu_accel_device *dev)
 	dev->workqueue_reserved = false;
 }
 
-static bool cpu_accel_shared_workload(struct cpu_accel_device *dev)
+static bool cpu_accel_region_permissions_valid(u32 permissions)
 {
-	return dev->work_region_shared;
+	return permissions == CPU_ACCEL_REGION_PERM_BIDIRECTIONAL ||
+		permissions == CPU_ACCEL_REGION_PERM_MANAGER_TO_OWNER ||
+		permissions == CPU_ACCEL_REGION_PERM_OWNER_TO_MANAGER;
 }
 
-static struct cpu_accel_shared_entry *
-cpu_accel_work_entry(struct cpu_accel_device *dev)
+static struct cpu_accel_region *
+cpu_accel_region_find(struct cpu_accel_device *dev, u32 region_id)
 {
-	if (!dev->shared_region ||
-	    dev->config.shared_entry >= CPU_ACCEL_SHARED_ENTRY_COUNT)
+	if (!region_id || region_id > CPU_ACCEL_MAX_REGIONS)
 		return NULL;
-	return &dev->shared_region->entries[dev->config.shared_entry];
+	return dev->regions[region_id - 1];
 }
 
-static void cpu_accel_publish_region_owner(struct cpu_accel_device *dev,
-						 u32 owner)
+static u64 cpu_accel_region_next_epoch(u64 epoch)
 {
-	struct cpu_accel_shared_entry *entry;
-
-	if (!cpu_accel_shared_workload(dev))
-		return;
-	entry = cpu_accel_work_entry(dev);
-	if (!entry)
-		return;
-	entry->epoch = dev->work_region.epoch;
-	entry->bytes = dev->config.work_bytes;
-	/* Publish data, epoch, and length before publishing ownership. */
-	smp_wmb();
-	WRITE_ONCE(entry->owner, owner);
-	WRITE_ONCE(dev->shared->shared_entry, dev->config.shared_entry);
-	WRITE_ONCE(dev->shared->shared_owner, owner);
-	WRITE_ONCE(dev->shared->shared_epoch, dev->work_region.epoch);
+	return epoch == U64_MAX ? 1 : epoch + 1;
 }
+
+static void cpu_accel_region_vm_open(struct vm_area_struct *vma)
+{
+	struct cpu_accel_region_vma *region_vma = vma->vm_private_data;
+
+	if (region_vma->manager)
+		atomic_inc(&region_vma->region->manager_mappings);
+	else
+		atomic_inc(&region_vma->region->owner_mappings);
+}
+
+static void cpu_accel_region_vm_close(struct vm_area_struct *vma)
+{
+	struct cpu_accel_region_vma *region_vma = vma->vm_private_data;
+
+	if (region_vma->manager)
+		atomic_dec(&region_vma->region->manager_mappings);
+	else
+		atomic_dec(&region_vma->region->owner_mappings);
+}
+
+static int cpu_accel_region_vm_may_split(struct vm_area_struct *vma,
+					 unsigned long start)
+{
+	(void)vma;
+	(void)start;
+	return -EINVAL;
+}
+
+static int cpu_accel_region_vm_mremap(struct vm_area_struct *vma)
+{
+	(void)vma;
+	return -EINVAL;
+}
+
+static int cpu_accel_region_vm_mprotect(struct vm_area_struct *vma,
+					unsigned long start, unsigned long end,
+					unsigned long newflags)
+{
+	vm_flags_t permission_mask = VM_READ | VM_WRITE | VM_EXEC | VM_SHARED;
+
+	(void)start;
+	(void)end;
+	if ((newflags & permission_mask) != (vma->vm_flags & permission_mask))
+		return -EINVAL;
+	return 0;
+}
+
+static const struct vm_operations_struct cpu_accel_region_vm_ops = {
+	.open = cpu_accel_region_vm_open,
+	.close = cpu_accel_region_vm_close,
+	.may_split = cpu_accel_region_vm_may_split,
+	.mremap = cpu_accel_region_vm_mremap,
+	.mprotect = cpu_accel_region_vm_mprotect,
+};
+
+static void cpu_accel_control_vm_open(struct vm_area_struct *vma)
+{
+	(void)vma;
+}
+
+static void cpu_accel_control_vm_close(struct vm_area_struct *vma)
+{
+	(void)vma;
+}
+
+static int cpu_accel_control_vm_may_split(struct vm_area_struct *vma,
+					  unsigned long start)
+{
+	(void)vma;
+	(void)start;
+	return -EINVAL;
+}
+
+static int cpu_accel_control_vm_mremap(struct vm_area_struct *vma)
+{
+	(void)vma;
+	return -EINVAL;
+}
+
+static int cpu_accel_control_vm_mprotect(struct vm_area_struct *vma,
+					 unsigned long start,
+					 unsigned long end,
+					 unsigned long newflags)
+{
+	vm_flags_t permission_mask = VM_READ | VM_WRITE | VM_EXEC | VM_SHARED;
+
+	(void)start;
+	(void)end;
+	if ((newflags & permission_mask) != (vma->vm_flags & permission_mask))
+		return -EINVAL;
+	return 0;
+}
+
+static const struct vm_operations_struct cpu_accel_control_vm_ops = {
+	.open = cpu_accel_control_vm_open,
+	.close = cpu_accel_control_vm_close,
+	.may_split = cpu_accel_control_vm_may_split,
+	.mremap = cpu_accel_control_vm_mremap,
+	.mprotect = cpu_accel_control_vm_mprotect,
+};
 
 static int cpu_accel_region_recover(struct cpu_accel_device *dev)
 {
-	u32 owner = READ_ONCE(dev->work_region.owner);
-
-	if (owner == CPU_ACCEL_REGION_LINUX)
+	if (!dev->work_region_allocated)
 		return 0;
-	if (owner == CPU_ACCEL_REGION_ACCELERATOR && dev->lifecycle_thread)
+	if (dev->lifecycle_thread)
 		return -EBUSY;
-	if (owner != CPU_ACCEL_REGION_ERROR &&
-	    owner != CPU_ACCEL_REGION_ACCELERATOR)
-		return -EBUSY;
-	/* Publish recovery writes before making the region reusable. */
-	smp_wmb();
-	WRITE_ONCE(dev->work_region.owner, CPU_ACCEL_REGION_LINUX);
-	cpu_accel_publish_region_owner(dev, CPU_ACCEL_REGION_LINUX);
+	kfree(dev->work_region.address);
+	dev->work_region.address = NULL;
+	dev->work_region.bytes = 0;
+	dev->work_region_allocated = false;
 	return 0;
 }
 
 static int cpu_accel_region_begin(struct cpu_accel_device *dev)
 {
-	u32 required_owner;
-
-	if (!dev->work_region.address)
+	if (!dev->work_region_allocated)
 		return 0;
-	required_owner = cpu_accel_shared_workload(dev) ?
-		CPU_ACCEL_REGION_READY : CPU_ACCEL_REGION_LINUX;
-	if (READ_ONCE(dev->work_region.owner) != required_owner)
-		return -EBUSY;
-	if (!cpu_accel_shared_workload(dev)) {
-		dev->work_region.epoch++;
-		if (!dev->work_region.epoch)
-			dev->work_region.epoch++;
-	}
-	/* Publish the epoch before the target can observe accelerator ownership. */
-	smp_wmb();
-	WRITE_ONCE(dev->work_region.owner, CPU_ACCEL_REGION_ACCELERATOR);
-	cpu_accel_publish_region_owner(dev, CPU_ACCEL_REGION_ACCELERATOR);
+	dev->work_region.epoch =
+		cpu_accel_region_next_epoch(dev->work_region.epoch);
 	return 0;
 }
 
 static void cpu_accel_region_end(struct cpu_accel_device *dev, u32 state)
 {
-	u32 owner;
-
-	if (!dev->work_region.address)
+	if (!dev->work_region_allocated)
 		return;
-	if (state == CPU_ACCEL_STATE_ERROR)
-		owner = CPU_ACCEL_REGION_ERROR;
-	else if (!cpu_accel_shared_workload(dev))
-		owner = CPU_ACCEL_REGION_LINUX;
-	else
-		owner = CPU_ACCEL_REGION_COMPLETE;
-	/* Publish workload writes before transferring region ownership. */
-	smp_wmb();
-	WRITE_ONCE(dev->work_region.owner, owner);
-	cpu_accel_publish_region_owner(dev, owner);
+	(void)state;
+	kfree(dev->work_region.address);
+	dev->work_region.address = NULL;
+	dev->work_region.bytes = 0;
+	dev->work_region_allocated = false;
 }
 
-static int cpu_accel_shared_reclaim(struct cpu_accel_device *dev,
-					   u32 entry_index)
+static bool cpu_accel_region_control_idle_locked(struct cpu_accel_device *dev)
 {
-	u32 owner;
+	if (current->mm != dev->companion_mm)
+		return false;
+	return READ_ONCE(dev->shared->state) != CPU_ACCEL_STATE_READY &&
+		READ_ONCE(dev->shared->state) != CPU_ACCEL_STATE_RUNNING &&
+		!dev->lifecycle_thread && !dev->user_image.active && !dev->configured;
+}
 
-	if (!dev->work_region_shared ||
-	    entry_index != dev->config.shared_entry ||
-	    entry_index >= CPU_ACCEL_SHARED_ENTRY_COUNT)
+static void cpu_accel_region_finish(struct cpu_accel_device *dev, bool error)
+{
+	unsigned int index;
+
+	for (index = 0; index < CPU_ACCEL_MAX_REGIONS; index++) {
+		struct cpu_accel_region *region = dev->attached_regions[index];
+
+		if (!region)
+			continue;
+		region->state = error ? CPU_ACCEL_REGION_ERROR :
+			CPU_ACCEL_REGION_COMPLETE;
+	}
+}
+
+static void cpu_accel_region_detach_all(struct cpu_accel_device *dev)
+{
+	unsigned int index;
+
+	mutex_lock(&dev->region_lock);
+	for (index = 0; index < CPU_ACCEL_MAX_REGIONS; index++) {
+		struct cpu_accel_region *region = dev->regions[index];
+
+		if (!region || !region->attached)
+			continue;
+		region->attached = false;
+		region->state = CPU_ACCEL_REGION_CREATED;
+		region->epoch = cpu_accel_region_next_epoch(region->epoch);
+	}
+	memset(dev->attached_regions, 0, sizeof(dev->attached_regions));
+	mutex_unlock(&dev->region_lock);
+}
+
+static unsigned int cpu_accel_region_snapshot(struct cpu_accel_device *dev)
+{
+	unsigned int count = 0;
+	unsigned int index;
+
+	memset(dev->attached_regions, 0, sizeof(dev->attached_regions));
+	for (index = 0; index < CPU_ACCEL_MAX_REGIONS; index++) {
+		struct cpu_accel_region *region = dev->regions[index];
+
+		if (!region || !region->attached)
+			continue;
+		if (region->state != CPU_ACCEL_REGION_ATTACHED)
+			goto fail;
+		if (atomic_read(&region->manager_mappings) != 1 ||
+		    atomic_read(&region->owner_mappings) != 1)
+			goto fail;
+		dev->attached_regions[count++] = region;
+	}
+	return count;
+
+fail:
+	memset(dev->attached_regions, 0, sizeof(dev->attached_regions));
+	return U32_MAX;
+}
+
+static void cpu_accel_region_clear_snapshot(struct cpu_accel_device *dev,
+					    bool active)
+{
+	unsigned int index;
+
+	for (index = 0; index < CPU_ACCEL_MAX_REGIONS; index++) {
+		struct cpu_accel_region *region = dev->attached_regions[index];
+
+		if (region && active)
+			region->state = CPU_ACCEL_REGION_ATTACHED;
+	}
+	memset(dev->attached_regions, 0, sizeof(dev->attached_regions));
+}
+
+static void cpu_accel_region_activate_snapshot(struct cpu_accel_device *dev)
+{
+	unsigned int index;
+
+	for (index = 0; index < CPU_ACCEL_MAX_REGIONS; index++) {
+		struct cpu_accel_region *region = dev->attached_regions[index];
+
+		if (region)
+			region->state = CPU_ACCEL_REGION_ACTIVE;
+	}
+}
+
+static int cpu_accel_region_mappings_complete(struct cpu_accel_device *dev)
+{
+	unsigned int index;
+	int ret = 0;
+
+	mutex_lock(&dev->region_lock);
+	for (index = 0; index < CPU_ACCEL_MAX_REGIONS; index++) {
+		struct cpu_accel_region *region = dev->attached_regions[index];
+
+		if (region && (atomic_read(&region->manager_mappings) != 1 ||
+			       atomic_read(&region->owner_mappings) != 1)) {
+			ret = -EACCES;
+			break;
+		}
+	}
+	mutex_unlock(&dev->region_lock);
+	return ret;
+}
+
+static void cpu_accel_regions_release(struct cpu_accel_device *dev)
+{
+	unsigned int index;
+
+	for (index = 0; index < CPU_ACCEL_MAX_REGIONS; index++) {
+		struct cpu_accel_region *region = dev->regions[index];
+
+		if (!region)
+			continue;
+		if (atomic_read(&region->manager_mappings) ||
+		    atomic_read(&region->owner_mappings)) {
+			pr_warn("cpu_accel: region %u still mapped at release\n",
+				index + 1);
+			continue;
+		}
+		account_locked_vm(dev->companion_mm,
+				  region->bytes >> PAGE_SHIFT, false);
+		vfree(region->address);
+		kfree(region);
+		dev->regions[index] = NULL;
+	}
+	memset(dev->attached_regions, 0, sizeof(dev->attached_regions));
+	dev->region_total_bytes = 0;
+}
+
+static unsigned int cpu_accel_region_count_limit(void)
+{
+	return min_t(unsigned int, cpu_accel_max_region_count,
+		     CPU_ACCEL_MAX_REGIONS);
+}
+
+static int cpu_accel_region_create_locked(struct cpu_accel_device *dev,
+					  struct cpu_accel_region_create *create)
+{
+	struct cpu_accel_region *region;
+	unsigned long pages;
+	u64 token_sequence;
+	unsigned int index;
+	int ret;
+
+	if (!cpu_accel_region_control_idle_locked(dev) || create->reserved ||
+	    create->size_bytes > ULONG_MAX ||
+	    !create->size_bytes || !PAGE_ALIGNED(create->size_bytes) ||
+	    create->size_bytes > cpu_accel_max_region_bytes ||
+	    !cpu_accel_region_permissions_valid(create->permissions))
 		return -EINVAL;
-	if (dev->lifecycle_thread)
-		return -EBUSY;
-	owner = READ_ONCE(dev->work_region.owner);
-	if (owner == CPU_ACCEL_REGION_LINUX)
-		return -EALREADY;
-	if (owner != CPU_ACCEL_REGION_READY &&
-	    owner != CPU_ACCEL_REGION_COMPLETE &&
-	    owner != CPU_ACCEL_REGION_ERROR)
-		return -EBUSY;
-	/* Publish completed or discarded data before returning ownership. */
-	smp_wmb();
-	WRITE_ONCE(dev->work_region.owner, CPU_ACCEL_REGION_LINUX);
-	cpu_accel_publish_region_owner(dev, CPU_ACCEL_REGION_LINUX);
-	dev->work_region.bytes = 0;
+	if (create->numa_node != NUMA_NO_NODE &&
+	    (create->numa_node < 0 || create->numa_node >= MAX_NUMNODES ||
+	     !node_state(create->numa_node, N_ONLINE)))
+		return -EINVAL;
+	if (dev->region_total_bytes > cpu_accel_max_total_region_bytes ||
+	    cpu_accel_max_total_region_bytes - dev->region_total_bytes <
+	    create->size_bytes)
+		return -ENOMEM;
+
+	/*
+	 * Do not hold region_lock across account_locked_vm(): it takes the
+	 * companion mmap write lock, while mmap takes that lock before
+	 * region_lock.
+	 */
+	mutex_lock(&dev->region_lock);
+	for (index = 0; index < cpu_accel_region_count_limit(); index++) {
+		if (!dev->regions[index])
+			break;
+	}
+	if (index == cpu_accel_region_count_limit()) {
+		mutex_unlock(&dev->region_lock);
+		return -ENOSPC;
+	}
+	mutex_unlock(&dev->region_lock);
+
+	pages = create->size_bytes >> PAGE_SHIFT;
+	ret = account_locked_vm(dev->companion_mm, pages, true);
+	if (ret)
+		return ret;
+
+	region = kzalloc_obj(*region, GFP_KERNEL);
+	if (!region) {
+		ret = -ENOMEM;
+		goto fail_account;
+	}
+	region->address = vmalloc_user_node(create->size_bytes,
+					    create->numa_node);
+	if (!region->address) {
+		ret = -ENOMEM;
+		goto fail_region;
+	}
+
+	token_sequence = atomic64_inc_return(&cpu_accel_region_token_sequence);
+	if (!token_sequence || token_sequence > (ULONG_MAX >> PAGE_SHIFT)) {
+		ret = -ENOSPC;
+		goto fail_vmalloc;
+	}
+
+	region->bytes = create->size_bytes;
+	region->epoch = 1;
+	region->token = token_sequence << PAGE_SHIFT;
+	region->permissions = create->permissions;
+	region->numa_node = create->numa_node;
+	region->state = CPU_ACCEL_REGION_CREATED;
+	region->manager_vma.region = region;
+	region->manager_vma.manager = true;
+	region->owner_vma.region = region;
+	atomic_set(&region->manager_mappings, 0);
+	atomic_set(&region->owner_mappings, 0);
+
+	/* The device lock serializes region-table mutation across this gap. */
+	mutex_lock(&dev->region_lock);
+	dev->regions[index] = region;
+	dev->region_total_bytes += create->size_bytes;
+	mutex_unlock(&dev->region_lock);
+
+	create->region_id = index + 1;
+	create->mmap_token = region->token;
+	create->epoch = region->epoch;
+	create->size_bytes = region->bytes;
+	return 0;
+
+fail_vmalloc:
+	vfree(region->address);
+fail_region:
+	kfree(region);
+fail_account:
+	account_locked_vm(dev->companion_mm, pages, false);
+	return ret;
+}
+
+static int cpu_accel_region_attach_locked(struct cpu_accel_device *dev,
+					  struct cpu_accel_region_ref *ref)
+{
+	struct cpu_accel_region *region;
+
+	if (!cpu_accel_region_control_idle_locked(dev) || ref->reserved)
+		return -EINVAL;
+	mutex_lock(&dev->region_lock);
+	region = cpu_accel_region_find(dev, ref->region_id);
+	if (!region || region->state != CPU_ACCEL_REGION_CREATED ||
+	    ref->epoch != region->epoch ||
+	    atomic_read(&region->manager_mappings) != 1 ||
+	    atomic_read(&region->owner_mappings)) {
+		mutex_unlock(&dev->region_lock);
+		return -EINVAL;
+	}
+	region->attached = true;
+	region->state = CPU_ACCEL_REGION_ATTACHED;
+	region->epoch = cpu_accel_region_next_epoch(region->epoch);
+	ref->epoch = region->epoch;
+	mutex_unlock(&dev->region_lock);
 	return 0;
 }
 
-static int cpu_accel_shared_ready(struct cpu_accel_device *dev,
-					 const struct cpu_accel_shared_handoff *handoff)
+static int cpu_accel_region_detach_locked(struct cpu_accel_device *dev,
+					  struct cpu_accel_region_ref *ref)
 {
-	struct cpu_accel_shared_entry *entry;
+	struct cpu_accel_region *region;
 
-	if (!dev->configured || !dev->work_region_shared ||
-	    dev->lifecycle_thread || handoff->reserved ||
-	    handoff->entry != dev->config.shared_entry ||
-	    handoff->entry >= CPU_ACCEL_SHARED_ENTRY_COUNT ||
-	    handoff->bytes != dev->config.work_bytes || handoff->bytes < 64 ||
-	    handoff->bytes > CPU_ACCEL_SHARED_ENTRY_BYTES / 2)
+	if (!cpu_accel_region_control_idle_locked(dev) || ref->reserved)
 		return -EINVAL;
-	if (READ_ONCE(dev->work_region.owner) != CPU_ACCEL_REGION_LINUX)
+	mutex_lock(&dev->region_lock);
+	region = cpu_accel_region_find(dev, ref->region_id);
+	if (!region || !region->attached || ref->epoch != region->epoch ||
+	    atomic_read(&region->owner_mappings)) {
+		mutex_unlock(&dev->region_lock);
+		return -EINVAL;
+	}
+	region->attached = false;
+	region->state = CPU_ACCEL_REGION_CREATED;
+	region->epoch = cpu_accel_region_next_epoch(region->epoch);
+	ref->epoch = region->epoch;
+	mutex_unlock(&dev->region_lock);
+	return 0;
+}
+
+static int cpu_accel_region_destroy_locked(struct cpu_accel_device *dev,
+					   const struct cpu_accel_region_ref *ref)
+{
+	struct cpu_accel_region *region;
+	unsigned long pages;
+
+	if (!cpu_accel_region_control_idle_locked(dev) || ref->reserved)
+		return -EINVAL;
+	mutex_lock(&dev->region_lock);
+	region = cpu_accel_region_find(dev, ref->region_id);
+	if (!region) {
+		mutex_unlock(&dev->region_lock);
+		return -EINVAL;
+	}
+	if (region->attached ||
+	    atomic_read(&region->manager_mappings) ||
+	    atomic_read(&region->owner_mappings)) {
+		mutex_unlock(&dev->region_lock);
 		return -EBUSY;
-	entry = cpu_accel_work_entry(dev);
-	if (!entry)
-		return -ENODEV;
-	dev->work_region.epoch++;
-	if (!dev->work_region.epoch)
-		dev->work_region.epoch++;
-	dev->work_region.address = entry->data;
-	dev->work_region.bytes = handoff->bytes * 2;
-	/* The caller initialized the data before this release handoff. */
-	smp_wmb();
-	WRITE_ONCE(dev->work_region.owner, CPU_ACCEL_REGION_READY);
-	cpu_accel_publish_region_owner(dev, CPU_ACCEL_REGION_READY);
+	}
+	if (ref->epoch != region->epoch) {
+		mutex_unlock(&dev->region_lock);
+		return -EINVAL;
+	}
+	pages = region->bytes >> PAGE_SHIFT;
+	vfree(region->address);
+	dev->regions[ref->region_id - 1] = NULL;
+	dev->region_total_bytes -= region->bytes;
+	kfree(region);
+	mutex_unlock(&dev->region_lock);
+	account_locked_vm(dev->companion_mm, pages, false);
+	return 0;
+}
+
+static int cpu_accel_region_info_locked(struct cpu_accel_device *dev,
+					struct cpu_accel_region_info *info)
+{
+	struct cpu_accel_region *region;
+
+	if (info->region_id > CPU_ACCEL_MAX_REGIONS)
+		return -EINVAL;
+	mutex_lock(&dev->region_lock);
+	region = cpu_accel_region_find(dev, info->region_id);
+	if (!region) {
+		mutex_unlock(&dev->region_lock);
+		return -ENOENT;
+	}
+	info->state = region->state;
+	info->permissions = region->permissions;
+	info->numa_node = region->numa_node;
+	info->manager_mappings = atomic_read(&region->manager_mappings);
+	info->owner_mappings = atomic_read(&region->owner_mappings);
+	info->size_bytes = region->bytes;
+	info->mmap_token = region->token;
+	info->epoch = region->epoch;
+	mutex_unlock(&dev->region_lock);
 	return 0;
 }
 
 static int cpu_accel_free_workload(struct cpu_accel_device *dev)
 {
-	int ret;
-
-	if (dev->work_region_shared &&
-	    READ_ONCE(dev->work_region.owner) != CPU_ACCEL_REGION_LINUX) {
-		ret = cpu_accel_shared_reclaim(dev, dev->config.shared_entry);
-		if (ret)
-			return ret;
-	}
-	ret = cpu_accel_region_recover(dev);
-	if (ret)
-		return ret;
 	if (dev->work_region_allocated)
 		kfree(dev->work_region.address);
 	dev->work_region.address = NULL;
 	dev->work_region.bytes = 0;
-	dev->work_region.owner = CPU_ACCEL_REGION_LINUX;
 	dev->work_region_allocated = false;
-	dev->work_region_shared = false;
 	return 0;
 }
 
@@ -810,7 +1172,6 @@ static int cpu_accel_prepare_workload(struct cpu_accel_device *dev,
 					      const struct cpu_accel_config *config)
 {
 	void *buffer;
-	struct cpu_accel_shared_entry *entry;
 	size_t bytes;
 	size_t size;
 
@@ -818,23 +1179,9 @@ static int cpu_accel_prepare_workload(struct cpu_accel_device *dev,
 		return cpu_accel_free_workload(dev);
 	if (cpu_accel_user_workload(config->workload))
 		return cpu_accel_free_workload(dev);
-	if (config->workload == CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE) {
-		if (config->shared_entry >= CPU_ACCEL_SHARED_ENTRY_COUNT ||
-		    config->work_bytes < 64 ||
-		    config->work_bytes > CPU_ACCEL_SHARED_ENTRY_BYTES / 2)
-			return -EINVAL;
-		if (cpu_accel_free_workload(dev))
-			return -EBUSY;
-		entry = &dev->shared_region->entries[config->shared_entry];
-		dev->work_region.address = entry->data;
-		dev->work_region.owner = CPU_ACCEL_REGION_LINUX;
-		dev->work_region_allocated = false;
-		dev->work_region_shared = true;
-		return 0;
-	}
 	if (config->workload != CPU_ACCEL_WORKLOAD_MEMMOVE ||
 	    config->work_bytes < 64 ||
-	    config->work_bytes > CPU_ACCEL_MAX_WORK_BYTES)
+	    config->work_bytes > CPU_ACCEL_MAX_MEMMOVE_WORK_BYTES)
 		return -EINVAL;
 
 	bytes = (size_t)config->work_bytes;
@@ -853,7 +1200,6 @@ static int cpu_accel_prepare_workload(struct cpu_accel_device *dev,
 	dev->work_region.address = buffer;
 	dev->work_region.bytes = size;
 	dev->work_region_allocated = true;
-	dev->work_region_shared = false;
 	return 0;
 }
 
@@ -963,7 +1309,6 @@ static void cpu_accel_reset_shared(struct cpu_accel_device *dev)
 	dev->shared->recovery_state = CPU_ACCEL_RECOVERY_NONE;
 	dev->shared->mode = CPU_ACCEL_MODE_LINUX;
 	dev->shared->workload = CPU_ACCEL_WORKLOAD_TIMESTAMP;
-	dev->shared->shared_owner = CPU_ACCEL_REGION_LINUX;
 	WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_IDLE);
 }
 
@@ -1122,6 +1467,91 @@ static bool cpu_accel_vma_has_permissions(struct vm_area_struct *vma,
 		!(vma->vm_flags & forbidden);
 }
 
+static bool cpu_accel_region_vma_permissions_match(
+		struct vm_area_struct *vma, struct cpu_accel_region *region,
+		bool manager)
+{
+	vm_flags_t permission_mask =
+		VM_READ | VM_WRITE | VM_EXEC | VM_SHARED;
+	vm_flags_t allowed = VM_SHARED;
+
+	if (vma->vm_end - vma->vm_start != region->bytes ||
+	    vma->vm_pgoff != (region->token >> PAGE_SHIFT))
+		return false;
+	allowed |= (manager && (region->permissions &
+			 CPU_ACCEL_REGION_PERM_MANAGER_READ)) ||
+	    (!manager && (region->permissions &
+			  CPU_ACCEL_REGION_PERM_OWNER_READ)) ? VM_READ : 0;
+	allowed |= (manager && (region->permissions &
+			 CPU_ACCEL_REGION_PERM_MANAGER_WRITE)) ||
+	    (!manager && (region->permissions &
+			  CPU_ACCEL_REGION_PERM_OWNER_WRITE)) ? VM_WRITE : 0;
+	return (vma->vm_flags & permission_mask) == allowed;
+}
+
+static bool cpu_accel_region_vma_matches(struct vm_area_struct *vma,
+					 struct cpu_accel_region *region,
+					 bool manager)
+{
+	struct cpu_accel_region_vma *region_vma = vma->vm_private_data;
+
+	if (!region_vma || region_vma->region != region ||
+	    region_vma->manager != manager)
+		return false;
+
+	return cpu_accel_region_vma_permissions_match(vma, region, manager);
+}
+
+static int cpu_accel_validate_control_and_regions(struct cpu_accel_device *dev,
+						  struct mm_struct *mm)
+{
+	struct vm_area_struct *vma;
+	bool control_found = false;
+	bool region_found[CPU_ACCEL_MAX_REGIONS] = {};
+	unsigned int index;
+
+	VMA_ITERATOR(vmi, mm, 0);
+	for_each_vma(vmi, vma) {
+		struct cpu_accel_region_vma *region_vma;
+
+		if (vma->vm_ops == &cpu_accel_control_vm_ops &&
+		    vma->vm_file && vma->vm_file->private_data == dev &&
+		    !vma->vm_pgoff &&
+		    vma->vm_end - vma->vm_start == CPU_ACCEL_MAP_SIZE &&
+		    cpu_accel_vma_has_permissions(vma, VM_READ | VM_SHARED,
+						  VM_WRITE | VM_EXEC)) {
+			if (control_found)
+				return -EACCES;
+			control_found = true;
+			continue;
+		}
+		if (vma->vm_ops != &cpu_accel_region_vm_ops ||
+		    !vma->vm_file || vma->vm_file->private_data != dev)
+			continue;
+		region_vma = vma->vm_private_data;
+		if (!region_vma || region_vma->manager)
+			return -EACCES;
+		for (index = 0; index < CPU_ACCEL_MAX_REGIONS; index++) {
+			if (dev->attached_regions[index] == region_vma->region)
+				break;
+		}
+		if (index == CPU_ACCEL_MAX_REGIONS ||
+		    region_found[index] ||
+		    !cpu_accel_region_vma_matches(vma, region_vma->region,
+						  false))
+			return -EACCES;
+		region_found[index] = true;
+	}
+
+	for (index = 0; index < CPU_ACCEL_MAX_REGIONS; index++) {
+		if (dev->attached_regions[index] && !region_found[index])
+			return -EACCES;
+	}
+	if (!control_found)
+		return -EACCES;
+	return 0;
+}
+
 static int cpu_accel_validate_user_vma_set(struct cpu_accel_device *dev,
 					  struct mm_struct *mm,
 					  unsigned long image_start,
@@ -1136,13 +1566,11 @@ static int cpu_accel_validate_user_vma_set(struct cpu_accel_device *dev,
 	VMA_ITERATOR(vmi, mm, 0);
 	bool image_found = false;
 	bool stack_found = false;
-	bool control_found = false;
-	bool shared_found = false;
+	int ret;
 	bool rseq_found = !rseq_start;
 	bool reclaim_found = !reclaim_page;
 
 	for_each_vma(vmi, vma) {
-		unsigned long size = vma->vm_end - vma->vm_start;
 		bool contains_rseq = rseq_start &&
 			vma->vm_start <= rseq_start && vma->vm_end >= rseq_end;
 
@@ -1188,28 +1616,9 @@ static int cpu_accel_validate_user_vma_set(struct cpu_accel_device *dev,
 			reclaim_found = true;
 			continue;
 		}
-		if (vma->vm_file && vma->vm_file->private_data == dev &&
-		    cpu_accel_vma_has_permissions(vma,
-						 VM_READ | VM_WRITE | VM_SHARED,
-						 VM_EXEC)) {
-			if (!vma->vm_pgoff &&
-			    size == CPU_ACCEL_MAP_SIZE + CPU_ACCEL_SHARED_MAP_SIZE &&
-			    !control_found && !shared_found) {
-				control_found = true;
-				shared_found = true;
-				continue;
-			}
-			if (!vma->vm_pgoff && size == CPU_ACCEL_MAP_SIZE &&
-			    !control_found) {
-				control_found = true;
-				continue;
-			}
-			if (vma->vm_pgoff ==
-			    (CPU_ACCEL_SHARED_MAP_OFFSET >> PAGE_SHIFT) &&
-			    size == CPU_ACCEL_SHARED_MAP_SIZE && !shared_found) {
-				shared_found = true;
-				continue;
-			}
+		if (vma->vm_ops == &cpu_accel_control_vm_ops ||
+		    vma->vm_ops == &cpu_accel_region_vm_ops) {
+			continue;
 		}
 		if (rseq_start && vma->vm_start == rseq_start &&
 		    vma->vm_end == rseq_end &&
@@ -1223,7 +1632,11 @@ static int cpu_accel_validate_user_vma_set(struct cpu_accel_device *dev,
 		return -EACCES;
 	}
 
-	return image_found && stack_found && control_found && shared_found &&
+	ret = cpu_accel_validate_control_and_regions(dev, mm);
+	if (ret)
+		return ret;
+
+	return image_found && stack_found &&
 		rseq_found && reclaim_found ? 0 : -EACCES;
 }
 
@@ -1408,6 +1821,9 @@ static int cpu_accel_user_image_prepare(struct cpu_accel_device *dev)
 	}
 	mmap_write_lock(image->mm);
 	image->mm_locked = true;
+	ret = cpu_accel_region_mappings_complete(dev);
+	if (ret)
+		goto fail;
 	ret = cpu_accel_validate_user_range(image->mm,
 					    dev->config.user_image_start,
 					    dev->config.user_image_bytes,
@@ -1556,8 +1972,6 @@ static int cpu_accel_user_exit_locked(struct cpu_accel_device *dev)
 	dev->shared->stop_requested = 0;
 	cpu_accel_observation_finish(dev, &dev->user_observation);
 	dev->shared->end_ns = dev->shared->lifecycle_exit_ns;
-	dev->shared->samples_produced = dev->shared->samples_valid;
-	dev->shared->work_iterations = dev->shared->samples_produced;
 	dev->shared->user_escape_count =
 		atomic64_read(&dev->user_escape_count);
 	if (escaped) {
@@ -1567,8 +1981,6 @@ static int cpu_accel_user_exit_locked(struct cpu_accel_device *dev)
 		WRITE_ONCE(dev->shared->recovery_completed_ns,
 			   READ_ONCE(dev->shared->user_active_end_ns));
 	}
-	dev->shared->min_lateness_ns = dev->shared->samples_produced ?
-		dev->shared->min_lateness_ns : 0;
 	dev->user_image.active = false;
 	atomic_set(&dev->enter_requested, 0);
 	atomic_set(&dev->stop_requested, 0);
@@ -1596,6 +2008,7 @@ static int cpu_accel_user_exit_locked(struct cpu_accel_device *dev)
 		WRITE_ONCE(dev->shared->state, escaped ?
 			CPU_ACCEL_STATE_ESCAPED : CPU_ACCEL_STATE_COMPLETE);
 	}
+	cpu_accel_region_finish(dev, escaped || irq_ret);
 	/* Publish terminal telemetry before restoring the saved user frame. */
 	smp_wmb();
 	local_irq_disable();
@@ -1731,20 +2144,12 @@ static void cpu_accel_owner_death_work(struct work_struct *work)
 	irq_ret = cpu_accel_restore_irq_quarantine(dev);
 	if (!irq_ret)
 		cpu_accel_release_workqueue(dev);
+	cpu_accel_region_finish(dev, true);
 	WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_LINUX);
 	WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_ERROR);
 	mutex_unlock(&dev->lock);
 }
 #endif
-
-/* Map a lateness value to its log2 histogram bin (see the uapi header). */
-static unsigned int cpu_accel_lateness_bin(u64 lateness_ns)
-{
-	if (!lateness_ns)
-		return 0;
-	return min_t(unsigned int, CPU_ACCEL_LATENESS_HIST_BINS - 1,
-		     64 - __builtin_clzll(lateness_ns));
-}
 
 /*
  * This is the first architecture-neutral accelerator workload.  The
@@ -1756,13 +2161,8 @@ static void cpu_accel_run(struct cpu_accel_device *dev,
 			  struct cpu_accel_observation *obs)
 {
 	struct cpu_accel_shared *shared = dev->shared;
-	u64 start = 0, deadline = 0, now, lateness;
-	u64 samples = 0;
-	u64 max_lateness = 0;
-	u64 min_lateness = U64_MAX;
+	u64 start = 0, deadline = 0, now;
 	u64 work_iterations = 0;
-	u64 work_epoch = READ_ONCE(dev->work_region.epoch);
-	u32 samples_valid = 0;
 	u32 final_state = CPU_ACCEL_STATE_COMPLETE;
 	bool persistent = dev->config.flags & CPU_ACCEL_FLAG_PERSISTENT;
 
@@ -1787,27 +2187,9 @@ static void cpu_accel_run(struct cpu_accel_device *dev,
 		if (need_resched())
 			obs->need_resched_samples++;
 
-		lateness = now - deadline;
-		if (samples_valid < CPU_ACCEL_MAX_SAMPLES) {
-			shared->samples[samples_valid].timestamp_ns = now;
-			shared->samples[samples_valid].lateness_ns = lateness;
-			samples_valid++;
-		}
-		samples++;
-		max_lateness = max(max_lateness, lateness);
-		min_lateness = min(min_lateness, lateness);
-		shared->lateness_hist[cpu_accel_lateness_bin(lateness)]++;
 		if (dev->work_region.address) {
 			char *buffer = dev->work_region.address;
 			size_t bytes = dev->work_region.bytes / 2;
-
-			if (READ_ONCE(dev->work_region.owner) !=
-				CPU_ACCEL_REGION_ACCELERATOR ||
-			    READ_ONCE(dev->work_region.epoch) != work_epoch ||
-			    bytes != (size_t)dev->config.work_bytes) {
-				final_state = CPU_ACCEL_STATE_ERROR;
-				break;
-			}
 
 			if (work_iterations & 1)
 				memcpy(buffer + bytes, buffer, bytes);
@@ -1839,13 +2221,6 @@ static void cpu_accel_run(struct cpu_accel_device *dev,
 finish:
 	now = ktime_get_mono_fast_ns();
 	shared->end_ns = now;
-	shared->samples_produced = samples;
-	shared->samples_valid = samples_valid;
-	shared->work_iterations = work_iterations;
-	shared->max_lateness_ns = max_lateness;
-	shared->min_lateness_ns = samples ? min_lateness : 0;
-	shared->last_lateness_ns = samples_valid ?
-		shared->samples[samples_valid - 1].lateness_ns : 0;
 	shared->stop_requested = 0;
 	cpu_accel_region_end(dev, final_state);
 	atomic_set(&dev->stop_requested, 0);
@@ -1980,8 +2355,7 @@ static int cpu_accel_lifecycle_exit(struct cpu_accel_device *dev)
 		timer_delete_sync(&dev->watchdog_timer);
 		cpu_accel_destroy_lifecycle_thread(dev);
 	}
-	if (!cpu_accel_shared_workload(dev))
-		cpu_accel_region_recover(dev);
+	cpu_accel_region_recover(dev);
 	return dev->lifecycle_ret;
 }
 
@@ -2028,6 +2402,8 @@ static int cpu_accel_release(struct inode *inode, struct file *file)
 			pr_err("unable to exit accelerator CPU %u after release: %d\n",
 			       dev->config.cpu, ret);
 	}
+	if (!dev->lifecycle_thread && !dev->user_image.active)
+		cpu_accel_regions_release(dev);
 	mutex_unlock(&dev->lock);
 	if (dev->companion_mm) {
 		mmput(dev->companion_mm);
@@ -2042,13 +2418,81 @@ static int cpu_accel_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct cpu_accel_device *dev = file->private_data;
 	size_t size = vma->vm_end - vma->vm_start;
+	struct cpu_accel_region *region;
+	bool manager;
+	unsigned int index;
+	int ret;
 
-	if (!vma->vm_pgoff && size == CPU_ACCEL_MAP_SIZE)
-		return remap_vmalloc_range(vma, dev->shared, 0);
-	if (vma->vm_pgoff == (CPU_ACCEL_SHARED_MAP_OFFSET >> PAGE_SHIFT) &&
-	    size == CPU_ACCEL_SHARED_MAP_SIZE)
-		return remap_vmalloc_range(vma, dev->shared_region, 0);
+	if (READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_READY ||
+	    READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_RUNNING)
+		return -EBUSY;
 
+	mutex_lock(&dev->region_lock);
+
+	if (!vma->vm_pgoff && size == CPU_ACCEL_MAP_SIZE) {
+		if (dev->configured) {
+			mutex_unlock(&dev->region_lock);
+			return -EBUSY;
+		}
+		if (!cpu_accel_vma_has_permissions(vma, VM_READ | VM_SHARED,
+						   VM_WRITE | VM_EXEC)) {
+			mutex_unlock(&dev->region_lock);
+			return -EACCES;
+		}
+		vma->vm_ops = &cpu_accel_control_vm_ops;
+		ret = remap_vmalloc_range(vma, dev->shared, 0);
+		mutex_unlock(&dev->region_lock);
+		return ret;
+	}
+
+	if (vma->vm_flags & VM_EXEC)
+		goto invalid_permissions;
+	if (!(vma->vm_flags & VM_SHARED))
+		goto not_shared;
+	manager = current->mm == dev->companion_mm;
+
+	region = NULL;
+	for (index = 0; index < CPU_ACCEL_MAX_REGIONS; index++) {
+		if (dev->regions[index] &&
+		    dev->regions[index]->token == (vma->vm_pgoff << PAGE_SHIFT)) {
+			region = dev->regions[index];
+			break;
+		}
+	}
+	if (!region || region->bytes != size ||
+	    (dev->configured && !region->attached) ||
+	    (manager ? atomic_read(&region->manager_mappings) :
+		       atomic_read(&region->owner_mappings)) ||
+	    (!manager && !region->attached)) {
+		mutex_unlock(&dev->region_lock);
+		return -EINVAL;
+	}
+	if (!cpu_accel_region_vma_permissions_match(vma, region, manager)) {
+		mutex_unlock(&dev->region_lock);
+		return -EACCES;
+	}
+	ret = remap_vmalloc_range(vma, region->address, 0);
+	if (ret) {
+		mutex_unlock(&dev->region_lock);
+		return ret;
+	}
+	vma->vm_ops = &cpu_accel_region_vm_ops;
+	vma->vm_private_data = manager ? &region->manager_vma :
+		&region->owner_vma;
+	if (manager)
+		atomic_inc(&region->manager_mappings);
+	else
+		atomic_inc(&region->owner_mappings);
+	mutex_unlock(&dev->region_lock);
+
+	return 0;
+
+invalid_permissions:
+	mutex_unlock(&dev->region_lock);
+	return -EACCES;
+
+not_shared:
+	mutex_unlock(&dev->region_lock);
 	return -EINVAL;
 }
 
@@ -2132,17 +2576,9 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 
 	dev->sequence++;
 	dev->shared->sequence = dev->sequence;
-	dev->shared->samples_produced = 0;
-	dev->shared->samples_valid = 0;
-	dev->shared->work_iterations = 0;
 	dev->shared->stop_requested = 0;
 	dev->shared->start_ns = 0;
 	dev->shared->end_ns = 0;
-	dev->shared->max_lateness_ns = 0;
-	dev->shared->min_lateness_ns = 0;
-	dev->shared->last_lateness_ns = 0;
-	memset(dev->shared->lateness_hist, 0,
-	       sizeof(dev->shared->lateness_hist));
 	dev->shared->lifecycle_entry_ns = 0;
 	dev->shared->lifecycle_exit_ns = 0;
 	dev->shared->user_active_start_ns = 0;
@@ -2237,6 +2673,7 @@ user_start_fail:
 		}
 		if (!dev->irq_quarantine)
 			cpu_accel_release_workqueue(dev);
+		cpu_accel_region_finish(dev, true);
 		atomic_set(&dev->running, 0);
 		atomic_set(&dev->enter_requested, 0);
 		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_RECOVERY);
@@ -2275,8 +2712,11 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 {
 	struct cpu_accel_device *dev = file->private_data;
 	struct cpu_accel_config config;
-	struct cpu_accel_shared_handoff handoff;
-	u32 shared_entry;
+	struct cpu_accel_capabilities capabilities;
+	struct cpu_accel_region_create region_create;
+	struct cpu_accel_region_ref region_ref;
+	struct cpu_accel_region_info region_info;
+	unsigned int attached_count;
 	int ret = 0;
 
 	if (_IOC_TYPE(command) != CPU_ACCEL_IOC_MAGIC)
@@ -2303,6 +2743,10 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 			ret = -EXDEV;
 			break;
 		}
+		if (dev->configured) {
+			ret = -EBUSY;
+			break;
+		}
 		if (!config.flags)
 			config.flags = CPU_ACCEL_FLAG_IRQS_OFF;
 		if (!(config.flags & CPU_ACCEL_FLAG_IRQS_OFF) ||
@@ -2310,24 +2754,24 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 				     CPU_ACCEL_FLAG_PERSISTENT |
 				     CPU_ACCEL_FLAG_REQUIRE_QUIESCENT |
 				     CPU_ACCEL_FLAG_IRQ_QUARANTINE) ||
-		    config.reserved || config.reserved2 ||
+			    config.reserved ||
 		    config.workload > CPU_ACCEL_WORKLOAD_USER_OSLAT ||
 		    config.work_bytes > CPU_ACCEL_MAX_WORK_BYTES ||
-		    (config.workload != CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE &&
-		     config.shared_entry) ||
 		    (config.workload == CPU_ACCEL_WORKLOAD_TIMESTAMP &&
 		     config.work_bytes) ||
 		    (config.workload == CPU_ACCEL_WORKLOAD_MEMMOVE &&
-		     config.work_bytes < 64) ||
-			(config.workload == CPU_ACCEL_WORKLOAD_SHARED_MEMMOVE &&
-			 (config.shared_entry >= CPU_ACCEL_SHARED_ENTRY_COUNT ||
-			  config.work_bytes < 64 ||
-			  config.work_bytes > CPU_ACCEL_SHARED_ENTRY_BYTES / 2)) ||
+		     (config.work_bytes < 64 ||
+		      config.work_bytes >
+		      CPU_ACCEL_MAX_MEMMOVE_WORK_BYTES)) ||
 			(config.workload == CPU_ACCEL_WORKLOAD_USER_HANG &&
 			 !(cpu_accel_backend_flags_for_workload(config.workload) &
 			   CPU_ACCEL_BACKEND_FLAG_USER_ESCAPE)) ||
 			(cpu_accel_user_workload(config.workload) &&
-			 (config.shared_entry || config.work_bytes ||
+				 ((config.workload != CPU_ACCEL_WORKLOAD_USER_REGION &&
+				   config.work_bytes) ||
+				  (config.workload == CPU_ACCEL_WORKLOAD_USER_REGION &&
+				   (!config.work_bytes ||
+				    config.work_bytes > CPU_ACCEL_MAX_WORK_BYTES)) ||
 			  config.user_entry_ip == 0 || config.user_stack_top == 0 ||
 			  config.user_stack_bytes == 0 || config.user_image_start == 0 ||
 			  config.user_image_bytes == 0 || config.user_arg == 0 ||
@@ -2353,12 +2797,43 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 		if (ret)
 			break;
 
-		ret = cpu_accel_prepare_workload(dev, &config);
-		if (ret)
-			break;
-
+		mutex_lock(&dev->region_lock);
+		attached_count = cpu_accel_region_snapshot(dev);
+		if (attached_count == U32_MAX) {
+			ret = -EINVAL;
+			goto config_unlock;
+		}
+		if (attached_count !=
+		    ((config.workload == CPU_ACCEL_WORKLOAD_USER_REGION ||
+		      config.workload == CPU_ACCEL_WORKLOAD_USER_CYCLICTEST ||
+		      config.workload == CPU_ACCEL_WORKLOAD_USER_OSLAT) ? 1 : 0)) {
+			ret = -EINVAL;
+			goto config_unlock;
+		}
 		dev->config = config;
 		dev->configured = true;
+		mutex_unlock(&dev->region_lock);
+
+#ifdef CONFIG_X86
+		if (cpu_accel_user_workload(config.workload)) {
+			struct mm_struct *mm = current->mm;
+
+			mmap_read_lock(current->mm);
+			ret = cpu_accel_validate_control_and_regions(dev, mm);
+			mmap_read_unlock(current->mm);
+			if (ret)
+				goto config_fail;
+		}
+#endif
+		ret = cpu_accel_prepare_workload(dev, &config);
+		if (ret)
+			goto config_fail;
+
+		mutex_lock(&dev->region_lock);
+		cpu_accel_region_activate_snapshot(dev);
+		mutex_unlock(&dev->region_lock);
+		dev->region_set_epoch =
+			cpu_accel_region_next_epoch(dev->region_set_epoch);
 		cpu_accel_reset_shared(dev);
 		dev->shared->cpu = config.cpu;
 		dev->shared->flags = config.flags;
@@ -2367,12 +2842,22 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 			cpu_accel_backend_id_for_workload(config.workload);
 		dev->shared->backend_flags =
 			cpu_accel_backend_flags_for_workload(config.workload);
-		dev->shared->shared_entry = config.shared_entry;
-		dev->shared->shared_owner = dev->work_region.owner;
-		dev->shared->shared_epoch = dev->work_region.epoch;
-		dev->shared->work_bytes = config.work_bytes;
+		dev->shared->region_count = attached_count;
+		dev->shared->region_set_epoch = dev->region_set_epoch;
 		dev->shared->duration_ns = config.duration_ns;
 		dev->shared->period_ns = config.period_ns;
+		break;
+
+config_unlock:
+		cpu_accel_region_clear_snapshot(dev, false);
+		mutex_unlock(&dev->region_lock);
+		break;
+
+config_fail:
+		mutex_lock(&dev->region_lock);
+		cpu_accel_region_clear_snapshot(dev, false);
+		mutex_unlock(&dev->region_lock);
+		dev->configured = false;
 		break;
 
 	case CPU_ACCEL_IOC_START:
@@ -2403,22 +2888,71 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 		ret = cpu_accel_user_exit_locked(dev);
 		break;
 
-	case CPU_ACCEL_IOC_SHARED_READY:
-		if (copy_from_user(&handoff, (void __user *)argument,
-				   sizeof(handoff))) {
+	case CPU_ACCEL_IOC_GET_CAPABILITIES:
+		capabilities = (struct cpu_accel_capabilities){
+			.max_region_count = cpu_accel_region_count_limit(),
+			.max_region_bytes = cpu_accel_max_region_bytes,
+			.max_total_region_bytes =
+				cpu_accel_max_total_region_bytes,
+			.supported_region_permissions =
+				CPU_ACCEL_REGION_PERM_BIDIRECTIONAL |
+				CPU_ACCEL_REGION_PERM_MANAGER_TO_OWNER |
+				CPU_ACCEL_REGION_PERM_OWNER_TO_MANAGER,
+		};
+		if (copy_to_user((void __user *)argument, &capabilities,
+				 sizeof(capabilities)))
 			ret = -EFAULT;
-			break;
-		}
-		ret = cpu_accel_shared_ready(dev, &handoff);
 		break;
 
-	case CPU_ACCEL_IOC_SHARED_RECLAIM:
-		if (copy_from_user(&shared_entry, (void __user *)argument,
-				   sizeof(shared_entry))) {
+	case CPU_ACCEL_IOC_REGION_CREATE:
+		if (copy_from_user(&region_create, (void __user *)argument,
+				   sizeof(region_create))) {
 			ret = -EFAULT;
 			break;
 		}
-		ret = cpu_accel_shared_reclaim(dev, shared_entry);
+		ret = cpu_accel_region_create_locked(dev, &region_create);
+		if (!ret && copy_to_user((void __user *)argument,
+					 &region_create,
+					 sizeof(region_create)))
+			ret = -EFAULT;
+		break;
+
+	case CPU_ACCEL_IOC_REGION_ATTACH:
+	case CPU_ACCEL_IOC_REGION_DETACH:
+		if (copy_from_user(&region_ref, (void __user *)argument,
+				   sizeof(region_ref))) {
+			ret = -EFAULT;
+			break;
+		}
+		if (command == CPU_ACCEL_IOC_REGION_ATTACH)
+			ret = cpu_accel_region_attach_locked(dev, &region_ref);
+		else
+			ret = cpu_accel_region_detach_locked(dev, &region_ref);
+		if (!ret && copy_to_user((void __user *)argument,
+					 &region_ref, sizeof(region_ref)))
+			ret = -EFAULT;
+		break;
+
+	case CPU_ACCEL_IOC_REGION_DESTROY:
+		if (copy_from_user(&region_ref, (void __user *)argument,
+				   sizeof(region_ref))) {
+			ret = -EFAULT;
+			break;
+		}
+		ret = cpu_accel_region_destroy_locked(dev, &region_ref);
+		break;
+
+	case CPU_ACCEL_IOC_REGION_GET_INFO:
+		if (copy_from_user(&region_info, (void __user *)argument,
+				   sizeof(region_info))) {
+			ret = -EFAULT;
+			break;
+		}
+		ret = cpu_accel_region_info_locked(dev, &region_info);
+		if (!ret && copy_to_user((void __user *)argument,
+					 &region_info,
+					 sizeof(region_info)))
+			ret = -EFAULT;
 		break;
 
 	case CPU_ACCEL_IOC_RESET:
@@ -2431,8 +2965,11 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 		ret = cpu_accel_free_workload(dev);
 		if (ret)
 			break;
+		cpu_accel_region_detach_all(dev);
 		dev->configured = false;
 		dev->sequence = 0;
+		dev->region_set_epoch =
+			cpu_accel_region_next_epoch(dev->region_set_epoch);
 		cpu_accel_reset_shared(dev);
 		break;
 
@@ -2466,10 +3003,9 @@ static int __init cpu_accel_init(void)
 #endif
 
 	BUILD_BUG_ON(sizeof(struct cpu_accel_shared) > CPU_ACCEL_MAP_SIZE);
-	BUILD_BUG_ON(sizeof(struct cpu_accel_shared_region) >
-		     CPU_ACCEL_SHARED_MAP_SIZE);
 
 	mutex_init(&cpu_accel.lock);
+	mutex_init(&cpu_accel.region_lock);
 	init_completion(&cpu_accel.lifecycle_done);
 	atomic_set(&cpu_accel.opened, 0);
 	atomic_set(&cpu_accel.enter_requested, 0);
@@ -2492,23 +3028,11 @@ static int __init cpu_accel_init(void)
 	cpu_accel.shared = vmalloc_user(CPU_ACCEL_MAP_SIZE);
 	if (!cpu_accel.shared)
 		return -ENOMEM;
-	cpu_accel.shared_region = vmalloc_user(CPU_ACCEL_SHARED_MAP_SIZE);
-	if (!cpu_accel.shared_region) {
-		vfree(cpu_accel.shared);
-		return -ENOMEM;
-	}
-	memset(cpu_accel.shared_region, 0, CPU_ACCEL_SHARED_MAP_SIZE);
-	cpu_accel.shared_region->abi_version = CPU_ACCEL_ABI_VERSION;
-	cpu_accel.shared_region->struct_size =
-		sizeof(*cpu_accel.shared_region);
-	cpu_accel.shared_region->entry_count = CPU_ACCEL_SHARED_ENTRY_COUNT;
-	cpu_accel.shared_region->entry_size = sizeof(struct cpu_accel_shared_entry);
 	cpu_accel_reset_shared(&cpu_accel);
 #ifdef CONFIG_X86_LOCAL_APIC
 	ret = register_nmi_handler(NMI_LOCAL, cpu_accel_user_nmi,
 				   NMI_FLAG_FIRST, "cpu_accel");
 	if (ret) {
-		vfree(cpu_accel.shared_region);
 		vfree(cpu_accel.shared);
 		return ret;
 	}
@@ -2519,7 +3043,6 @@ static int __init cpu_accel_init(void)
 		unregister_nmi_handler(NMI_LOCAL, "cpu_accel");
 		timer_delete(&cpu_accel.stop_escalation_timer);
 #endif
-		vfree(cpu_accel.shared_region);
 		vfree(cpu_accel.shared);
 		return ret;
 	}
@@ -2535,7 +3058,6 @@ static int __init cpu_accel_init(void)
 		unregister_nmi_handler(NMI_LOCAL, "cpu_accel");
 		timer_delete(&cpu_accel.stop_escalation_timer);
 #endif
-		vfree(cpu_accel.shared_region);
 		vfree(cpu_accel.shared);
 		return ret;
 	}
@@ -2566,18 +3088,15 @@ static void __exit cpu_accel_exit(void)
 #ifdef CONFIG_X86_LOCAL_APIC
 	timer_delete_sync(&cpu_accel.stop_escalation_timer);
 #endif
-	if (cpu_accel.work_region_shared)
-		cpu_accel_shared_reclaim(&cpu_accel,
-					cpu_accel.config.shared_entry);
 	cpu_accel_free_workload(&cpu_accel);
+	cpu_accel_region_detach_all(&cpu_accel);
+	cpu_accel_regions_release(&cpu_accel);
 	mutex_unlock(&cpu_accel.lock);
 
 	misc_deregister(&cpu_accel.misc);
 #ifdef CONFIG_X86_LOCAL_APIC
 	unregister_nmi_handler(NMI_LOCAL, "cpu_accel");
 #endif
-	vfree(cpu_accel.shared_region);
-	cpu_accel.shared_region = NULL;
 	vfree(cpu_accel.shared);
 	cpu_accel.shared = NULL;
 }

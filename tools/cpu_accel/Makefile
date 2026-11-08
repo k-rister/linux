@@ -8,7 +8,8 @@ KDIR ?= $(abspath ../..)
 
 all: cpu-accelctl
 
-test: cpu-accelctl test-tlb-generation test-tlb-cow-churn
+test: cpu-accelctl test-region-lifecycle test-tlb-generation test-tlb-cow-churn
+	./test-region-lifecycle
 	CPU_ACCELCTL=./cpu-accelctl sh ./test-cpu-accel.sh
 
 test-sync-work-owner-stop: cpu-accelctl test-sync-wait-prime
@@ -52,6 +53,9 @@ test-tlb-generation: test-tlb-generation.o
 test-tlb-cow-churn: test-tlb-cow-churn.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
+test-region-lifecycle: test-region-lifecycle.o libcpu_accel.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
 test-seccomp-jit-churn: test-seccomp-jit-churn.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
@@ -64,9 +68,11 @@ test-perf-event-open: test-perf-event-open.o
 test-user-escape-rescue: test-user-escape-rescue.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-cpu-accelctl.o: cpu_accel_user_image.h
+cpu-accelctl.o: cpu_accel_user_image.h cpu_accel_workload.h
 cpu-accelctl.o libcpu_accel.o: cpu_accel.h ../../include/uapi/linux/cpu_accel.h
 test-tlb-generation.o: ../../include/uapi/linux/cpu_accel.h
+test-region-lifecycle.o: cpu_accel.h cpu_accel_workload.h \
+	../../include/uapi/linux/cpu_accel.h
 test-seccomp-jit-churn.o: CPPFLAGS := -D_GNU_SOURCE
 test-sync-wait-prime.o: CPPFLAGS := -D_GNU_SOURCE
 test-perf-event-open.o: CPPFLAGS := -D_GNU_SOURCE
@@ -78,7 +84,8 @@ clean:
 		test-seccomp-jit-churn test-seccomp-jit-churn.o \
 		test-sync-wait-prime test-sync-wait-prime.o \
 		test-perf-event-open test-perf-event-open.o test-user-escape-rescue \
-		test-user-escape-rescue.o \
+		test-user-escape-rescue.o test-region-lifecycle \
+		test-region-lifecycle.o \
 		cpu-accelctl.o libcpu_accel.o
 	$(MAKE) -C $(KDIR) M=$(CURDIR)/rcu-probe clean
 

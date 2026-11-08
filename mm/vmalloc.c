@@ -4277,6 +4277,22 @@ void *vmalloc_user_noprof(unsigned long size)
 EXPORT_SYMBOL(vmalloc_user_noprof);
 
 /**
+ * vmalloc_user_node - allocate zeroed user-mappable memory on a NUMA node
+ * @size:	  size of allocation
+ * @node:	  numa node or NUMA_NO_NODE
+ *
+ * Return: pointer to virtual memory or %NULL.
+ */
+void *vmalloc_user_node_noprof(unsigned long size, int node)
+{
+	return __vmalloc_node_range_noprof(size, SHMLBA, VMALLOC_START,
+					   VMALLOC_END, GFP_KERNEL | __GFP_ZERO,
+					   PAGE_KERNEL, VM_USERMAP, node,
+					   __builtin_return_address(0));
+}
+EXPORT_SYMBOL(vmalloc_user_node_noprof);
+
+/**
  * vmalloc_node - allocate memory on a specific node
  * @size:	  allocation size
  * @node:	  numa node

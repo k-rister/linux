@@ -141,33 +141,33 @@ echo "$memmove_output" | grep -q 'context_switches=0' || \
 echo "$memmove_output" | grep -q 'migration_detected=0' || \
 	fail "memmove workload migrated CPUs"
 
-shared_output=$($tool run --cpu "$target_cpu" --duration-ms 20 \
-	--period-us 1000 --workload shared-memmove --work-bytes 4096 \
+region_output=$($tool run --cpu "$target_cpu" --duration-ms 20 \
+	--period-us 1000 --workload user-region --work-bytes 4096 \
 	$quiescent_arg $quarantine_arg)
-echo "$shared_output"
-assert_no_quarantined_irq_delivery "$shared_output"
-case "$shared_output" in
+echo "$region_output"
+assert_no_quarantined_irq_delivery "$region_output"
+case "$region_output" in
 	state=3\ *) ;;
-	*) fail "shared memmove run did not complete" ;;
+	*) fail "user-region run did not complete" ;;
 esac
-echo "$shared_output" | grep -q 'mode=0' || \
-	fail "shared memmove run did not return to Linux mode"
-echo "$shared_output" | grep -q 'workload=2' || \
-	fail "shared memmove workload was not selected"
-echo "$shared_output" | grep -q 'work_bytes=4096' || \
-	fail "shared memmove workload size was not reported"
-echo "$shared_output" | grep -q 'work_iterations=[1-9][0-9]*' || \
-	fail "shared memmove workload did not execute"
-echo "$shared_output" | grep -q 'shared_entry=0' || \
-	fail "shared memmove entry was not reported"
-echo "$shared_output" | grep -q 'shared_owner=3' || \
-	fail "shared memmove did not retain COMPLETE ownership"
-echo "$shared_output" | grep -q 'shared_epoch=[1-9][0-9]*' || \
-	fail "shared memmove epoch was not reported"
-echo "$shared_output" | grep -q 'context_switches=0' || \
-	fail "shared memmove workload performed a context switch"
-echo "$shared_output" | grep -q 'migration_detected=0' || \
-	fail "shared memmove workload migrated CPUs"
+echo "$region_output" | grep -q 'mode=0' || \
+	fail "user-region run did not return to Linux mode"
+echo "$region_output" | grep -q 'backend=2' || \
+	fail "user-region selected the wrong backend"
+echo "$region_output" | grep -q 'workload=2' || \
+	fail "user-region workload was not selected"
+echo "$region_output" | grep -q 'work_bytes=4096' || \
+	fail "user-region workload size was not reported"
+echo "$region_output" | grep -q 'work_iterations=1' || \
+	fail "user-region workload did not execute"
+echo "$region_output" | grep -q 'region_count=1' || \
+	fail "user-region region count was not reported"
+echo "$region_output" | grep -q 'region_set_epoch=[1-9][0-9]*' || \
+	fail "user-region epoch was not reported"
+echo "$region_output" | grep -q 'context_switches=0' || \
+	fail "user-region workload performed a context switch"
+echo "$region_output" | grep -q 'migration_detected=0' || \
+	fail "user-region workload migrated CPUs"
 
 case "$(uname -m)" in
 x86_64)
@@ -204,6 +204,33 @@ x86_64)
 			fail "user-cyclictest workload migrated CPUs"
 		user_run=$((user_run + 1))
 	done
+	oslat_output=$($tool run --cpu "$target_cpu" --duration-ms 20 \
+		--period-us 1000 --workload user-oslat \
+		$quiescent_arg $quarantine_arg)
+	echo "$oslat_output"
+	assert_no_quarantined_irq_delivery "$oslat_output"
+	case "$oslat_output" in
+		state=3\ *) ;;
+		*) fail "user-oslat run did not complete" ;;
+	esac
+	echo "$oslat_output" | grep -q 'mode=0' || \
+		fail "user-oslat run did not return to Linux mode"
+	echo "$oslat_output" | grep -q 'backend=2' || \
+		fail "user-oslat selected the wrong backend"
+	echo "$oslat_output" | grep -q 'workload=7' || \
+		fail "user-oslat workload was not selected"
+	echo "$oslat_output" | grep -q 'region_count=1' || \
+		fail "user-oslat region count was not reported"
+	echo "$oslat_output" | grep -q 'samples=[1-9][0-9]*' || \
+		fail "user-oslat workload did not produce samples"
+	echo "$oslat_output" | grep -q 'hist_total=[1-9][0-9]*' || \
+		fail "user-oslat workload did not produce histogram samples"
+	echo "$oslat_output" | grep -q 'max_lateness_ns=[1-9][0-9]*' || \
+		fail "user-oslat maximum latency was not reported"
+	echo "$oslat_output" | grep -q 'context_switches=0' || \
+		fail "user-oslat workload performed a context switch"
+	echo "$oslat_output" | grep -q 'migration_detected=0' || \
+		fail "user-oslat workload migrated CPUs"
 	deferred_user_output=$($tool run --cpu "$target_cpu" --duration-ms 500 \
 		--period-us 1000 --workload user-cyclictest)
 	echo "$deferred_user_output"

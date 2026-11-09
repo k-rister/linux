@@ -73,6 +73,8 @@ should_run_class()
 }
 
 busy_loop_pids=
+memory_pressure_pid=
+memory_pressure_file=
 
 start_load()
 {
@@ -95,7 +97,32 @@ stop_load()
 	busy_loop_pids=
 }
 
-trap 'stop_load; cleanup' EXIT
+trap 'stop_load; stop_memory_pressure; cleanup' EXIT
+
+start_memory_pressure()
+{
+	memory_pressure_file="/dev/shm/cpu-accel-wcl-memory-$$"
+	taskset -c "$work_cpu" sh -c '
+		while :; do
+			dd if=/dev/zero of="$1" bs=1M count=128 status=none
+			dd if="$1" of=/dev/null bs=1M status=none
+		done' \
+		sh "$memory_pressure_file" &
+	memory_pressure_pid=$!
+}
+
+stop_memory_pressure()
+{
+	if [ -n "$memory_pressure_pid" ]; then
+		kill -TERM "$memory_pressure_pid" 2>/dev/null || true
+		wait "$memory_pressure_pid" 2>/dev/null || true
+		memory_pressure_pid=
+	fi
+	if [ -n "$memory_pressure_file" ]; then
+		rm -f "$memory_pressure_file"
+		memory_pressure_file=
+	fi
+}
 
 # Extract one field from a status line by exact token name.
 field()
@@ -183,6 +210,15 @@ load_run()
 	return $wcl_rc
 }
 
+memory_pressure_run()
+{
+	start_memory_pressure
+	baseline_run
+	wcl_rc=$?
+	stop_memory_pressure
+	return $wcl_rc
+}
+
 sync_work_case()
 {
 	CPU_ACCEL_CPU="$target_cpu" CPU_ACCEL_WORK_CPU="$work_cpu" \
@@ -203,6 +239,10 @@ fi
 
 if should_run_class load; then
 	run_class load load_run
+fi
+
+if should_run_class memory_pressure; then
+	run_class memory_pressure memory_pressure_run
 fi
 
 if should_run_class vmstat; then

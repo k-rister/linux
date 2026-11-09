@@ -1261,7 +1261,12 @@ run-specific results must be recorded with the kernel build and test logs.
         deferred-work and IPI counters; and the timerlat baseline on CPU 2
         measured p99 of 7874 ns (irq) / 13000 ns (thread) with a 253 ms
         max-active timer IRQ during the owner interval, bounded by the
-        owner stop. The full report is
+        owner stop. On 2026-11-09, the new ``memory_pressure`` class on
+        simon.lab repeatedly wrote and read a 128 MiB tmpfs file from CPU 0
+        while CPU 3 ran a 5 s ``user-cyclictest`` owner.  It produced 5003
+        samples with p50=16 ns, p90/p99/p999=32 ns, max=19 ns, no IRQ,
+        softirq, workqueue, architecture-IPI, TLB, context-switch, or
+        migration event, and completed with ``state=3``.  The full report is
         ``Documentation/accel/phase8-wcl-report.md``.
       - No hard bound; log2-bin percentiles are factor-of-two ceilings.
         The ``net_backlog`` and ``timer_migration`` classes are deferred to

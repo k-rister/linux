@@ -49,6 +49,8 @@ Classes run on 2026-10-29:
   (the irq-work mode uses a CPU-cycles PMU event on the target CPU).
 - `timerlat`: `test-timerlat-owner.sh` (osnoise/timerlat baseline and
   owner interval on CPU 2).
+- `memory_pressure`: a repeated 128 MiB tmpfs write/read loop pinned to
+  the work CPU while the owner runs.
 
 Deferred classes, with the blocking requirement:
 
@@ -166,6 +168,24 @@ and `state=7`, `arch_ipi_count=2`, `workqueue_queued=1`.
 `call_function` passed (`state=7`, `arch_ipi_count=1`); `irq_work`
 passed (`state=7`, `arch_ipi_count=2`); `timerlat` passed
 (`state=7`, `arch_ipi_count=2`).
+
+### 2026-11-09 memory_pressure (simon.lab)
+
+Environment: `7.3.0-rc3-accel-tlbfix-gd16a5ac600cc-dirty`, ABI 22,
+owner CPU 3, work CPU 0, 5 s `user-cyclictest`, 1 ms sampling period.
+The class repeatedly wrote and read a 128 MiB tmpfs file from CPU 0
+while the owner ran. Transparent hugepages were already in `never` mode.
+
+memory_pressure (5003 samples):
+
+| range_ns  | [0,1) | [1,2) | [2,4) | [4,8) | [8,16) | [16,32) |
+|-----------|-------|-------|-------|-------|--------|---------|
+| count     | 339   | 328   | 575   | 1205  | 1814   | 742     |
+
+p50=16 ns, p90=32 ns, p99=32 ns, p999=32 ns, max=19 ns.
+`state=3`, `irq_count=0`, `softirq_count=0`,
+`workqueue_queued=0`, `arch_ipi_count=0`, `arch_tlb_count=0`,
+`context_switches=0`, and `migration_detected=0`.
 
 ## Known limitations and open items
 

@@ -36,6 +36,9 @@ test-rfs-owner-stop: cpu-accel-testctl test-rfs-flow
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl CPU_ACCEL_RFS_FLOW=./test-rfs-flow \
 		sh ./test-rfs-owner-stop.sh
 
+test-dirty-writeback-owner: cpu-accel-testctl
+	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-dirty-writeback-owner.sh
+
 test-user-escape-fault: cpu-accel-testctl test-user-escape-rescue
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl CPU_ACCEL_ESCAPE_RESCUE=./test-user-escape-rescue \
 		sh ./test-user-escape-fault.sh
@@ -101,5 +104,5 @@ clean:
 
 .PHONY: all clean test test-sync-work-owner-stop test-perf-owner-stop \
 	test-irq-storm test-timerlat-owner test-user-escape-fault \
-	test-watchdog-owner-admission test-rfs-owner-stop \
+	test-watchdog-owner-admission test-dirty-writeback-owner \
 	test-rcu-callback-routing rcu-probe

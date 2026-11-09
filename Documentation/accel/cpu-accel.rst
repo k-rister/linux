@@ -325,6 +325,14 @@ the global RFS flow-table count to zero afterward::
 
   sudo make -C tools/cpu_accel test-rfs-owner-stop
 
+The dirty-writeback owner test writes a bounded temporary file from a
+housekeeping CPU while a bounded ``user-oslat`` owner is active, flushes the
+containing filesystem, and requires inode-matched dirty-folio and
+writeback-completion traces before owner exit.  It requires the writeback
+tracepoints and a writable regular filesystem at ``/var/tmp``::
+
+  sudo make -C tools/cpu_accel test-dirty-writeback-owner
+
 The focused single-call probe covers synchronous IPI delivery, reuse of a CSD
 whose earlier asynchronous callback is still pending, and the remote
 ``smp_call_on_cpu()`` and ``work_on_cpu()`` workqueue waits. Build its module
@@ -1034,7 +1042,21 @@ run-specific results must be recorded with the kernel build and test logs.
         p99=8192 ns, max=169377 ns, ``arch_tlb_shootdown_targets=3``,
         ``user_escape_count=0``, and an empty kernel-error log. The three
         TLB shootdowns from reclaim were absorbed without an escape.
-      - No dirty/writeback/migration stress report.
+        On 2026-11-09, a traced ABI-22 run on simon.lab used one 256 MB
+        page-cache churn and ``drop_caches`` cycle while CPU 3 was owned.
+        ``__lru_add_drain_all()`` requested the owner stop after 439.6 ms;
+        owner exit followed 16 us later.  The owner completed cooperatively
+        with no escape, context switch, migration, or arch IPI, and the worst
+        observed sample was 290 ns.
+        On 2026-11-09, ``test-dirty-writeback-owner.sh`` passed on simon.lab:
+        a 64 MiB XFS temporary file was written and flushed from CPU 0 while
+        CPU 3 was owned.  Inode-matched ``writeback_dirty_folio`` and
+        ``writeback_single_inode`` traces recorded 16,384 written pages in
+        121 ms, before owner exit.  The 10 s owner run completed with
+        ``state=3``, ``stop_requested=0``, no escape, context switch, or
+        migration, and an empty kernel-error log.
+      - Migration stress remains unreported; simon.lab has only NUMA node 0,
+        so a same-node ``move_pages()`` no-op would not provide coverage.
     * - Device-management operations
       - **Caller-local management is safe by construction; device-specific
         steering is rejected or routed to housekeeping at configuration time;

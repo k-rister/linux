@@ -325,6 +325,14 @@ the global RFS flow-table count to zero afterward::
 
   sudo make -C tools/cpu_accel test-rfs-owner-stop
 
+The veth teardown owner test uses the same temporary RFS flow setup, queues
+packets while the selected CPU is owned, and deletes the temporary veth pair
+from the work CPU while the flow sockets remain open.  It requires the same
+helper and modules and verifies that network-device teardown completes without
+requesting owner stop::
+
+  sudo make -C tools/cpu_accel test-veth-teardown-owner
+
 The dirty-writeback owner test writes a bounded temporary file from a
 housekeeping CPU while a bounded ``user-oslat`` owner is active, flushes the
 containing filesystem, and requires inode-matched dirty-folio and
@@ -1115,6 +1123,15 @@ run-specific results must be recorded with the kernel build and test logs.
          no context switch, and no migration. The trace ordered the veth
          transmit and receive events before an owner exit with
          ``stop_requested=0``, and the kernel-error log was empty.
+         On 2026-11-09, ``test-veth-teardown-owner.sh`` passed on simon.lab:
+         after 32 queued packets remained undelivered for 500 ms during
+         ownership, deleting the temporary veth pair from CPU 0 while the
+         flow sockets remained open completed in 24 ms. The owner finished
+         normally with ``state=3``,
+         ``stop_requested=0``, no owner-stop request, no escape, no context
+         switch, no migration, and an empty kernel-error log. This covers one
+         bounded caller-local veth unregister/teardown case; the broader
+         device-reset and teardown fault matrix remains open.
    * - Exceptions, NMIs, and machine checks
       - **NMI escape is owner-terminating recovery for the tested ring-3
         workload, and a hardware ``#MC`` is source-classified as

@@ -315,6 +315,16 @@ with resctrl CPU-domain updates::
 
   sudo make -C tools/cpu_accel test-resctrl-owner-stop
 
+The RFS owner-stop test creates a temporary veth pair across a network
+namespace, enables a non-threaded backlog path, primes one UDP flow on the
+target CPU, and then sends packets on that same flow while a bounded
+``user-oslat`` owner is active.  It requires ``iproute2``, the built-in RFS
+flow helper, and the ``veth`` module; the helper binds its sender to the veth
+device so local-address routing cannot silently use loopback.  It restores
+the global RFS flow-table count to zero afterward::
+
+  sudo make -C tools/cpu_accel test-rfs-owner-stop
+
 The focused single-call probe covers synchronous IPI delivery, reuse of a CSD
 whose earlier asynchronous callback is still pending, and the remote
 ``smp_call_on_cpu()`` and ``work_on_cpu()`` workqueue waits. Build its module
@@ -1058,10 +1068,15 @@ run-specific results must be recorded with the kernel build and test logs.
          samples before the escape, and an empty kernel-error log. The NIC
          stop path requested an owner stop through the generic
          call-function mechanism; the operation completed and the owner
-         recovered. The RFS-to-owned-CPU case is source-classified only; no
-         runtime run holds
-        an RFS flow on the owned CPU during ownership to observe the deferred
-        backlog drain.
+         recovered. On 2026-11-09, ``test-rfs-owner-stop.sh`` passed on
+         simon.lab with the same ABI-22 kernel: one UDP flow was primed on
+         owned CPU 3, and 32 packets on that flow were sent while a 5 s
+         ``user-oslat`` owner was active. None arrived during a 500 ms
+         observation window; all 32 arrived after owner exit. The owner
+         reported ``state=3``, one deferred call-function IPI, no escape,
+         no context switch, and no migration. The trace ordered the veth
+         transmit and receive events before an owner exit with
+         ``stop_requested=0``, and the kernel-error log was empty.
    * - Exceptions, NMIs, and machine checks
       - **NMI escape is owner-terminating recovery for the tested ring-3
         workload, and a hardware ``#MC`` is source-classified as

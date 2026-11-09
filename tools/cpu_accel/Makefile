@@ -32,6 +32,10 @@ test-watchdog-owner-admission: cpu-accel-testctl
 test-resctrl-owner-stop: cpu-accel-testctl
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-resctrl-owner-stop.sh
 
+test-rfs-owner-stop: cpu-accel-testctl test-rfs-flow
+	CPU_ACCEL_TESTCTL=./cpu-accel-testctl CPU_ACCEL_RFS_FLOW=./test-rfs-flow \
+		sh ./test-rfs-owner-stop.sh
+
 test-user-escape-fault: cpu-accel-testctl test-user-escape-rescue
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl CPU_ACCEL_ESCAPE_RESCUE=./test-user-escape-rescue \
 		sh ./test-user-escape-fault.sh
@@ -70,6 +74,9 @@ test-perf-event-open: test-perf-event-open.o
 
 test-user-escape-rescue: test-user-escape-rescue.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+test-rfs-flow: test-rfs-flow.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
 
 cpu-accel-testctl.o: cpu_accel_user_image.h cpu_accel_workload.h
 cpu-accel-testctl.o libcpu_accel.o: cpu_accel.h ../../include/uapi/linux/cpu_accel.h
@@ -88,11 +95,11 @@ clean:
 		test-sync-wait-prime test-sync-wait-prime.o \
 		test-perf-event-open test-perf-event-open.o test-user-escape-rescue \
 		test-user-escape-rescue.o test-region-lifecycle \
-		test-region-lifecycle.o \
+		test-region-lifecycle.o test-rfs-flow test-rfs-flow.o \
 		cpu-accel-testctl.o libcpu_accel.o
 	$(MAKE) -C $(KDIR) M=$(CURDIR)/rcu-probe clean
 
 .PHONY: all clean test test-sync-work-owner-stop test-perf-owner-stop \
 	test-irq-storm test-timerlat-owner test-user-escape-fault \
-	test-watchdog-owner-admission test-rcu-nocb-admission \
+	test-watchdog-owner-admission test-rfs-owner-stop \
 	test-rcu-callback-routing rcu-probe

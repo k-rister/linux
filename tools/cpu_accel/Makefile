@@ -77,9 +77,9 @@ test-perf-event-open: test-perf-event-open.o
 
 test-user-escape-rescue: test-user-escape-rescue.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
 test-rfs-flow: test-rfs-flow.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
-
 
 cpu-accel-testctl.o: cpu_accel_user_image.h cpu_accel_workload.h
 cpu-accel-testctl.o libcpu_accel.o: cpu_accel.h ../../include/uapi/linux/cpu_accel.h
@@ -104,5 +104,8 @@ clean:
 
 .PHONY: all clean test test-sync-work-owner-stop test-perf-owner-stop \
 	test-irq-storm test-timerlat-owner test-user-escape-fault \
-	test-watchdog-owner-admission test-dirty-writeback-owner \
+	test-watchdog-owner-admission test-resctrl-owner-stop \
+	test-rfs-owner-stop \
+	test-dirty-writeback-owner \
+	test-rcu-nocb-admission \
 	test-rcu-callback-routing rcu-probe

@@ -88,7 +88,7 @@ Fault-injection coverage (open):
   `/boot/vmlinuz-7.3.0-rc3-accel-phase8-20261030` but needs a matching
   initramfs before it can boot. The current kernel (build #80) includes
   all Option C code and works for testing.
-- VM staging `/tmp/cpu-accel-irq-work-test-20261028/`: `cpu-accelctl`,
+- VM staging `/tmp/cpu-accel-irq-work-test-20261028/`: `cpu-accel-testctl`,
   `cpu_accel.ko`, probe modules (all rebuilt with matching vermagic),
   test scripts.
 - Module vermagic workaround: `include/generated/utsrelease.h` was

@@ -4,7 +4,7 @@
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-tool=${CPU_ACCELCTL:-$script_dir/cpu-accelctl}
+tool=${CPU_ACCEL_TESTCTL:-$script_dir/cpu-accel-testctl}
 probe=${CPU_ACCEL_SINGLE_PROBE:-$script_dir/tlb-flush-probe/cpu_accel_call_function_single_probe.ko}
 target_cpu=${CPU_ACCEL_CPU:-2}
 work_cpu=${CPU_ACCEL_SINGLE_WORK_CPU:-3}
@@ -89,7 +89,7 @@ trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 
 [ "$(id -u)" -eq 0 ] || fail "run as root"
-[ -x "$tool" ] || fail "cpu-accelctl is not executable: $tool"
+[ -x "$tool" ] || fail "cpu-accel-testctl is not executable: $tool"
 [ -f "$probe" ] || fail "single-call probe is missing: $probe"
 [ -c /dev/cpu_accel ] || fail "/dev/cpu_accel is unavailable"
 [ -d "$trace_root/events/cpu_accel" ] || fail "cpu_accel tracepoints are unavailable"

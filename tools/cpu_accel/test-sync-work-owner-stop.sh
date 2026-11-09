@@ -4,7 +4,7 @@
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-tool=${CPU_ACCELCTL:-$script_dir/cpu-accelctl}
+tool=${CPU_ACCEL_TESTCTL:-$script_dir/cpu-accel-testctl}
 prime_tool=${CPU_ACCEL_SYNC_WAIT_PRIME:-$script_dir/test-sync-wait-prime}
 target_cpu=${CPU_ACCEL_CPU:-2}
 work_cpu=${CPU_ACCEL_WORK_CPU:-3}
@@ -159,7 +159,7 @@ rcu_sheaf|srcu_cleanup|vmalloc_purge|vmalloc_purge_wait|sync_work_flush|\
 sync_workqueue_flush) ;;
 *) fail "unknown test case: $selected_case" ;;
 esac
-[ -x "$tool" ] || fail "cpu-accelctl is not executable: $tool"
+[ -x "$tool" ] || fail "cpu-accel-testctl is not executable: $tool"
 [ -x "$prime_tool" ] || fail "page-prime helper is not executable: $prime_tool"
 [ -c /dev/cpu_accel ] || modprobe cpu_accel || \
 	fail "could not load the cpu_accel module"

@@ -1,4 +1,4 @@
-cpu-accelctl
+cpu-accel-testctl
 test-tlb-generation
 test-tlb-cow-churn
 test-seccomp-jit-churn

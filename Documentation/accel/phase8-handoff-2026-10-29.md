@@ -125,10 +125,10 @@ Verified properties (details in the design doc):
   `isolcpus=managed_irq,2 irqaffinity=0-1,3-7 nohz_full=2 rcu_nocbs=2`.
 - VM staging `/tmp/cpu-accel-irq-work-test-20261028/`: probe `.ko` (vermagic
   matches the booted kernel), `test-call-function-single-owner-stop.sh`, and
-  the ABI-17 `cpu-accelctl`. The old `/usr/local/bin/cpu-accelctl` is
+  the ABI-17 `cpu-accel-testctl`. The old `/usr/local/bin/cpu-accel-testctl` is
   ABI-stale (fails open with EPROTO/"Protocol error") — do not use it.
 - Working probe invocation (root on the VM):
-  `cd /tmp/cpu-accel-irq-work-test-20261028 && mkdir -p /tmp/cpu-accel-irq-work-runN && CPU_ACCELCTL=$PWD/cpu-accelctl CPU_ACCEL_SINGLE_PROBE=$PWD/cpu_accel_call_function_single_probe.ko CPU_ACCEL_CPU=2 CPU_ACCEL_SINGLE_WORK_CPU=3 CPU_ACCEL_TRACE_DIR=/tmp/cpu-accel-irq-work-runN sh test-call-function-single-owner-stop.sh irq-work`
+  `cd /tmp/cpu-accel-irq-work-test-20261028 && mkdir -p /tmp/cpu-accel-irq-work-runN && CPU_ACCEL_TESTCTL=$PWD/cpu-accel-testctl CPU_ACCEL_SINGLE_PROBE=$PWD/cpu_accel_call_function_single_probe.ko CPU_ACCEL_CPU=2 CPU_ACCEL_SINGLE_WORK_CPU=3 CPU_ACCEL_TRACE_DIR=/tmp/cpu-accel-irq-work-runN sh test-call-function-single-owner-stop.sh irq-work`
   — `CPU_ACCEL_TRACE_DIR` must pre-exist; the harness does not create it and
   a missing dir silently kills the trace capture.
 - Build-host logs from the confirming run: `/tmp/accel-phase8-logs/`

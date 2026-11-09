@@ -44,7 +44,7 @@ CPUs 1–11 are nohz_full + RCU-offloaded; CPU 0 is housekeeping.
 **Invocation**
 
 ```
-taskset -c 0-11 /root/accel-measure/cpu-accelctl run --cpu 3 --workload user-oslat --duration-ms 600000
+taskset -c 0-11 /root/accel-measure/cpu-accel-testctl run --cpu 3 --workload user-oslat --duration-ms 600000
 ```
 
 **Live class:** CFS owner (ring-3 user image), non-RT (ps cls `TS`).

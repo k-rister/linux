@@ -6,45 +6,45 @@ CFLAGS += -Wall -Wextra -std=c11 -fno-stack-protector -pthread
 CPPFLAGS += -D_GNU_SOURCE -Wno-cpp -I../../include/uapi -I../../usr/include
 KDIR ?= $(abspath ../..)
 
-all: cpu-accelctl
+all: cpu-accel-testctl
 
-test: cpu-accelctl test-region-lifecycle test-tlb-generation test-tlb-cow-churn
+test: cpu-accel-testctl test-region-lifecycle test-tlb-generation test-tlb-cow-churn
 	./test-region-lifecycle
-	CPU_ACCELCTL=./cpu-accelctl sh ./test-cpu-accel.sh
+	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-cpu-accel.sh
 
-test-sync-work-owner-stop: cpu-accelctl test-sync-wait-prime
-	CPU_ACCELCTL=./cpu-accelctl CPU_ACCEL_SYNC_WAIT_PRIME=./test-sync-wait-prime \
+test-sync-work-owner-stop: cpu-accel-testctl test-sync-wait-prime
+	CPU_ACCEL_TESTCTL=./cpu-accel-testctl CPU_ACCEL_SYNC_WAIT_PRIME=./test-sync-wait-prime \
 		sh ./test-sync-work-owner-stop.sh
 
-test-perf-owner-stop: cpu-accelctl test-perf-event-open
-	CPU_ACCELCTL=./cpu-accelctl CPU_ACCEL_PERF_EVENT_HELPER=./test-perf-event-open \
+test-perf-owner-stop: cpu-accel-testctl test-perf-event-open
+	CPU_ACCEL_TESTCTL=./cpu-accel-testctl CPU_ACCEL_PERF_EVENT_HELPER=./test-perf-event-open \
 		sh ./test-perf-owner-stop.sh
 
-test-irq-storm: cpu-accelctl
-	CPU_ACCELCTL=./cpu-accelctl sh ./test-irq-storm.sh
+test-irq-storm: cpu-accel-testctl
+	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-irq-storm.sh
 
-test-timerlat-owner: cpu-accelctl
-	CPU_ACCELCTL=./cpu-accelctl sh ./test-timerlat-owner.sh
+test-timerlat-owner: cpu-accel-testctl
+	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-timerlat-owner.sh
 
-test-watchdog-owner-admission: cpu-accelctl
-	CPU_ACCELCTL=./cpu-accelctl sh ./test-watchdog-owner-admission.sh
+test-watchdog-owner-admission: cpu-accel-testctl
+	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-watchdog-owner-admission.sh
 
-test-user-escape-fault: cpu-accelctl test-user-escape-rescue
-	CPU_ACCELCTL=./cpu-accelctl CPU_ACCEL_ESCAPE_RESCUE=./test-user-escape-rescue \
+test-user-escape-fault: cpu-accel-testctl test-user-escape-rescue
+	CPU_ACCEL_TESTCTL=./cpu-accel-testctl CPU_ACCEL_ESCAPE_RESCUE=./test-user-escape-rescue \
 		sh ./test-user-escape-fault.sh
 
-test-rcu-nocb-admission: cpu-accelctl
-	CPU_ACCELCTL=./cpu-accelctl sh ./test-rcu-nocb-admission.sh
+test-rcu-nocb-admission: cpu-accel-testctl
+	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-rcu-nocb-admission.sh
 
-test-rcu-callback-routing: cpu-accelctl rcu-probe
-	CPU_ACCELCTL=./cpu-accelctl \
+test-rcu-callback-routing: cpu-accel-testctl rcu-probe
+	CPU_ACCEL_TESTCTL=./cpu-accel-testctl \
 		CPU_ACCEL_RCU_PROBE=$(CURDIR)/rcu-probe/cpu_accel_rcu_callback_probe.ko \
 		sh ./test-rcu-callback-routing.sh
 
 rcu-probe:
 	$(MAKE) -C $(KDIR) M=$(CURDIR)/rcu-probe modules
 
-cpu-accelctl: cpu-accelctl.o libcpu_accel.o
+cpu-accel-testctl: cpu-accel-testctl.o libcpu_accel.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 test-tlb-generation: test-tlb-generation.o
@@ -68,8 +68,8 @@ test-perf-event-open: test-perf-event-open.o
 test-user-escape-rescue: test-user-escape-rescue.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-cpu-accelctl.o: cpu_accel_user_image.h cpu_accel_workload.h
-cpu-accelctl.o libcpu_accel.o: cpu_accel.h ../../include/uapi/linux/cpu_accel.h
+cpu-accel-testctl.o: cpu_accel_user_image.h cpu_accel_workload.h
+cpu-accel-testctl.o libcpu_accel.o: cpu_accel.h ../../include/uapi/linux/cpu_accel.h
 test-tlb-generation.o: ../../include/uapi/linux/cpu_accel.h
 test-region-lifecycle.o: cpu_accel.h cpu_accel_workload.h \
 	../../include/uapi/linux/cpu_accel.h
@@ -79,14 +79,14 @@ test-perf-event-open.o: CPPFLAGS := -D_GNU_SOURCE
 test-user-escape-rescue.o: CPPFLAGS := -D_GNU_SOURCE -Wno-cpp -I../../include/uapi
 
 clean:
-	rm -f cpu-accelctl test-tlb-generation test-tlb-generation.o \
+	rm -f cpu-accel-testctl test-tlb-generation test-tlb-generation.o \
 		test-tlb-cow-churn test-tlb-cow-churn.o \
 		test-seccomp-jit-churn test-seccomp-jit-churn.o \
 		test-sync-wait-prime test-sync-wait-prime.o \
 		test-perf-event-open test-perf-event-open.o test-user-escape-rescue \
 		test-user-escape-rescue.o test-region-lifecycle \
 		test-region-lifecycle.o \
-		cpu-accelctl.o libcpu_accel.o
+		cpu-accel-testctl.o libcpu_accel.o
 	$(MAKE) -C $(KDIR) M=$(CURDIR)/rcu-probe clean
 
 .PHONY: all clean test test-sync-work-owner-stop test-perf-owner-stop \

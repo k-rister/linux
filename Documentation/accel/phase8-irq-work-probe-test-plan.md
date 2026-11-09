@@ -44,7 +44,7 @@ probe may be repeated within the bounded retry limit.
    rebuild the probe against the booted build's source tree before running.
 3. No other accelerator owner is active anywhere on the VM (single-owner
    attribution precondition for the global `x86_cpu_accel_any_active()`
-   predicate): no running `cpu-accelctl` process, no leftover probe module.
+   predicate): no running `cpu-accel-testctl` process, no leftover probe module.
 4. CPUs 2 and 3 are online; CPU 2 is RCU callback-offloaded (as used by the
    recorded RCU admission runs); `/dev/cpu_accel` exists; the `cpu_accel`
    tracepoints and `function_graph` are available (harness preflight).
@@ -56,11 +56,11 @@ probe may be repeated within the bounded retry limit.
 1. Record `uname -r`, `date`, and the dmesg baseline on the VM.
 2. Stage the reviewed probe module and
    `test-call-function-single-owner-stop.sh` (and a matching
-   `cpu-accelctl` if the VM copy is stale) on the VM.
+   `cpu-accel-testctl` if the VM copy is stale) on the VM.
 3. Run, as root on the VM:
 
    ```sh
-   CPU_ACCELCTL=/path/to/cpu-accelctl \
+   CPU_ACCEL_TESTCTL=/path/to/cpu-accel-testctl \
    CPU_ACCEL_SINGLE_PROBE=/path/to/cpu_accel_call_function_single_probe.ko \
    CPU_ACCEL_CPU=2 CPU_ACCEL_SINGLE_WORK_CPU=3 \
    sh /path/to/test-call-function-single-owner-stop.sh irq-work

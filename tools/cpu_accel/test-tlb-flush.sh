@@ -4,7 +4,7 @@
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-tool=${CPU_ACCELCTL:-$script_dir/cpu-accelctl}
+tool=${CPU_ACCEL_TESTCTL:-$script_dir/cpu-accel-testctl}
 probe=${CPU_ACCEL_TLB_FLUSH_PROBE:-$script_dir/tlb-flush-probe/cpu_accel_tlb_flush_probe.ko}
 load_mode=insmod
 module_spec=
@@ -86,7 +86,7 @@ trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 
 [ "$(id -u)" -eq 0 ] || fail "run as root"
-[ -x "$tool" ] || fail "cpu-accelctl is not executable: $tool"
+[ -x "$tool" ] || fail "cpu-accel-testctl is not executable: $tool"
 [ -c /dev/cpu_accel ] || fail "/dev/cpu_accel is unavailable"
 if [ "$load_mode" = insmod ]; then
 	[ -f "$probe" ] || fail "flush probe module is missing: $probe"

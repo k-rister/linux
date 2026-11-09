@@ -3,7 +3,7 @@
 
 set -eu
 
-tool=${CPU_ACCELCTL:-./cpu-accelctl}
+tool=${CPU_ACCEL_TESTCTL:-./cpu-accel-testctl}
 target_cpu=${CPU_ACCEL_CPU:-2}
 watchdog_file=/proc/sys/kernel/watchdog
 watchdog_mask_file=/proc/sys/kernel/watchdog_cpumask

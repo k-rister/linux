@@ -15,7 +15,7 @@ every ordinary Linux or unbounded kernel path.
 with exactly 0 ns lateness; bin `i >= 1` counts samples with lateness in
 `[2^(i-1), 2^i)` ns. Both owner-side writer paths fill it per sample: the
 kernel workload loop (`cpu_accel_run()`) and the user image
-(`cpu_accel_user_oslat()`). `cpu-accelctl` prints the non-zero bins and the
+(`cpu_accel_user_oslat()`). `cpu-accel-testctl` prints the non-zero bins and the
 upper edge of the bin containing each of the 50th, 90th, 99th, and 99.9th
 permille ranks (`hist_p50_ns`, `hist_p90_ns`, `hist_p99_ns`,
 `hist_p999_ns`), plus `hist_total`, the histogram's own sample count.
@@ -199,8 +199,8 @@ passed (`state=7`, `arch_ipi_count=2`); `timerlat` passed
 ## Reproduction
 
 ```
-make -C tools/cpu_accel cpu-accelctl test-sync-wait-prime
-env CPU_ACCELCTL=... CPU_ACCEL_SYNC_WAIT_PRIME=... \
+make -C tools/cpu_accel cpu-accel-testctl test-sync-wait-prime
+env CPU_ACCEL_TESTCTL=... CPU_ACCEL_SYNC_WAIT_PRIME=... \
     CPU_ACCEL_SINGLE_PROBE=.../cpu_accel_call_function_single_probe.ko \
     sh tools/cpu_accel/test-wcl-report.sh
 ```

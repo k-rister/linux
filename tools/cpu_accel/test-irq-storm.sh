@@ -3,7 +3,7 @@
 
 set -eu
 
-tool=${CPU_ACCELCTL:-./cpu-accelctl}
+tool=${CPU_ACCEL_TESTCTL:-./cpu-accel-testctl}
 target_cpu=${CPU_ACCEL_CPU:-2}
 interface=${CPU_ACCEL_IRQ_INTERFACE:-}
 storm_host=${CPU_ACCEL_IRQ_STORM_HOST:-}

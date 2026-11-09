@@ -8,7 +8,7 @@ Concurrent 600 s comparison run, in the standard side-by-side format, performed 
 - **cmdline (full `/proc/cmdline`):** `BOOT_IMAGE=(hd0,gpt2)/vmlinuz-7.3.0-rc3-accel-phase8-84 earlycon=ttyS0,115200 console=ttyS0,115200 root=/dev/mapper/almalinux-root ro crashkernel=2G-64G:256M,64G-:512M resume=UUID=1a4b3557-9483-455f-be24-1ad6a1fb957c rd.lvm.lv=almalinux/root rd.lvm.lv=almalinux/swap nosmt iommu=pt default_hugepagesz=1G hugepagesz=1G hugepages=16 amd_iommu=on skew_tick=1 tsc=reliable rcupdate.rcu_normal_after_boot=1 rcutree.nohz_full_patience_delay=1000 nohz=on nohz_full=1-11 rcu_nocbs=1-11 tuned.non_isolcpus=00000001 systemd.cpu_affinity=0 intel_pstate=disable nosoftlockup`
 - **Kernel note:** `BOOT_IMAGE` names `…accel-phase8-84`, but the running kernel (`uname -r`, authoritative, and the ABI-21 module's vermagic) is `…accel-tlbfix-g635d5b061dd8`; the `BOOT_IMAGE` filename is a stale/mismatched label, not the kernel that ran.
 - **Module:** `cpu_accel`, ABI 21, `srcversion 54621BD98AB74849843B188`
-- **Tool:** `cpu-accelctl-abi21` (ABI-21)
+- **Tool:** `cpu-accel-testctl-abi21` (ABI-21)
 - **Run:** both scenarios **concurrent**, 600 s each, wall 02:24:19Z → 02:34:21Z UTC
 - **Isolation:** CPUs 1-11 `nohz_full` + `rcu_nocbs` + `skew_tick=1`; CPU 0 housekeeping; SMT off
 
@@ -16,7 +16,7 @@ Concurrent 600 s comparison run, in the standard side-by-side format, performed 
 
 ## Scenario A — cpu-accel `user-oslat` (CPU 3, owned, CFS)
 
-- **Invocation:** `taskset -c 0-11 cpu-accelctl-abi21 run --cpu 3 --workload user-oslat --duration-ms 600000`
+- **Invocation:** `taskset -c 0-11 cpu-accel-testctl-abi21 run --cpu 3 --workload user-oslat --duration-ms 600000`
 - **Live class:** CFS owner (ring-3 user image); manager CFS.
 
 | min | mean (1-ns hist) | avg (module) | max | p50 | p90 | p99 | p999 |

@@ -5,9 +5,9 @@ Branch: `codex/accelerator-oslat`
 Status: implemented. Continues `owner-allcpu-stop-immunity-design.md`.
 
 **Final outcome (supersedes the plan below):** the probe was not shipped as a standalone
-`cpu-accel-cyclictest`. `cpu-accelctl` absorbed it: the `user-cyclictest` + `user-oslat` workloads,
+`cpu-accel-cyclictest`. `cpu-accel-testctl` absorbed it: the `user-cyclictest` + `user-oslat` workloads,
 the A2 manager-owned-duration model (`cpu_accel_run_until_stop`), and the ABI-19 latency metrics
-were merged into `cpu-accelctl`, now the single general tool for all 8 workloads;
+were merged into `cpu-accel-testctl`, now the single general tool for all 8 workloads;
 `cpu-accel-cyclictest` was retired. The A1/A2 reasoning below still applies.
 
 ## Where this picks up
@@ -53,17 +53,17 @@ RTC); only the run loop's clock ran ~24% fast.
 ### Root cause (corrected)
 
 For `user-oslat` the run does **not** use the kernel `cpu_accel_run()` loop. The workload runs
-in ring-3 as the user image `cpu_accel_user_oslat()` (tools/cpu_accel/cpu-accelctl.c:220), and
+in ring-3 as the user image `cpu_accel_user_oslat()` (tools/cpu_accel/cpu-accel-testctl.c:220), and
 both the per-sample deadline and the total-duration gate are driven by the **raw TSC** plus a
 one-time `cycles_per_ns` calibration:
 
-- `period_cycles = period_ns * cycles_per_ns` sets the sample cadence (cpu-accelctl.c:230, 281).
+- `period_cycles = period_ns * cycles_per_ns` sets the sample cadence (cpu-accel-testctl.c:230, 281).
 - `duration_cycles = duration_ns * cycles_per_ns` sets the end condition
-  `now - start_tsc >= duration_cycles` (cpu-accelctl.c:231, 276-277).
-- `cycles_per_ns` comes from `cpu_accel_calibrate_cycles_per_ns()` (cpu-accelctl.c:360), which
+  `now - start_tsc >= duration_cycles` (cpu-accel-testctl.c:231, 276-277).
+- `cycles_per_ns` comes from `cpu_accel_calibrate_cycles_per_ns()` (cpu-accel-testctl.c:360), which
   sleeps 10 ms against `CLOCK_MONOTONIC` and returns `cycles / elapsed_ns`.
 
-The bug: that return is **integer division** (`cycles / elapsed_ns`, cpu-accelctl.c:386), so
+The bug: that return is **integer division** (`cycles / elapsed_ns`, cpu-accel-testctl.c:386), so
 `cycles_per_ns` is truncated to a whole integer. On a non-integer-GHz TSC (this box ~3.7 GHz)
 the true value is ~3.7 but the code stores 3 -- ~19% low. Every downstream quantity built from
 it is ~19% small: the sample cadence runs ~19% fast (12h of samples in ~9.7h wall) and the
@@ -79,7 +79,7 @@ workload -- the TSC itself is stable; the calibration integer-truncation is the 
 ### Design: a dedicated cyclictest probe owns the run (A1 + A2)
 
 The generic control plane is the **driver** (`/dev/cpu_accel` ioctls + the shared mmap).
-`cpu-accelctl` is a workload-agnostic CLI wrapper over it. The cyclictest-style latency probe -- the ring-3
+`cpu-accel-testctl` is a workload-agnostic CLI wrapper over it. The cyclictest-style latency probe -- the ring-3
 user image plus its timing/control -- does **not** belong in that generic tool, so it moves out
 into a dedicated program:
 
@@ -92,10 +92,10 @@ into a dedicated program:
   - **A1 -- correct the clock.** Compute `cycles_per_ns` at sub-integer (fixed-point) precision
     so the ring-3 sample cadence, the absolute lateness scale, and the TSC-based durations are
     all accurate (the integer-truncation bug, Root cause above).
-  - **A2 -- own the wall-clock duration.** `cpu-accelctl` **already** does the manager/owner
+  - **A2 -- own the wall-clock duration.** `cpu-accel-testctl` **already** does the manager/owner
     split for user workloads: the manager (`run_user_workload`) pins itself to CPU 0 (ticked),
     opens the device, `fork()`s + re-execs the owner (`--cpu-accel-user-worker`) pinned to the
-    target CPU (cpu-accelctl.c:1111, 1140-1166); the manager keeps its own handle on the shared
+    target CPU (cpu-accel-testctl.c:1111, 1140-1166); the manager keeps its own handle on the shared
     fd. `cpu-accel-cyclictest` follows that same pattern, specialized to the probe. The change: today the
     manager passes `duration_ns` to the owner and the owner's image self-terminates on its TSC
     (the bug); instead the **manager owns the wall-clock duration** -- the owner's probe image
@@ -108,9 +108,9 @@ into a dedicated program:
   `cpu_accel_handle`. No extraction is needed; `cpu-accel-cyclictest` links it directly. The
   `attach_fd` entry is what lets the manager hold its own handle on the shared fd to send the
   STOP.
-- **`cpu-accelctl`** keeps the generic CLI. (Original plan: remove its built-in `user-oslat` once the
+- **`cpu-accel-testctl`** keeps the generic CLI. (Original plan: remove its built-in `user-oslat` once the
   standalone probe worked, to avoid two drifting copies. **Reversed in practice:** the standalone
-  `cpu-accel-cyclictest` was merged *into* `cpu-accelctl` instead, which now hosts the generic CLI
+  `cpu-accel-cyclictest` was merged *into* `cpu-accel-testctl` instead, which now hosts the generic CLI
   **and** `user-cyclictest` + `user-oslat`.)
 
 Why the manager owns duration (rather than the worker's TSC clock):
@@ -279,7 +279,7 @@ with the accurate clock, only when it happens.
    sub-integer (fixed-point) `cycles_per_ns` + the `* cpn` / `/ cpn` sites in the image.
    **A2**: `fork()` parent=manager (ticked CPU) / child=owner (open-ended image); the manager
    owns the wall-clock duration + sends the duration-quit `STOP`.
-4. (Superseded: the standalone `cpu-accel-cyclictest` was merged *into* `cpu-accelctl`, which keeps
+4. (Superseded: the standalone `cpu-accel-cyclictest` was merged *into* `cpu-accel-testctl`, which keeps
    `user-oslat` **and** gains `user-cyclictest`.)
 5. Validate: a 12h run on CPU 6 completes at ~12h **wall** (RTC-confirmed), ~43.2M samples at a
    true ~1 ms cadence, correct absolute lateness scale, zero escapes.
@@ -303,7 +303,7 @@ with the accurate clock, only when it happens.
   stop callback, or bypass it and take the owned CPU by another means?).
 - Whether MTRR/microcode resume needs an explicit TLB flush of the owner's address space on
   re-entry, and how the remembered targets reconcile.
-- Manager pinning policy: hard-require a ticked CPU, or detect + refuse if `cpu-accelctl` lands
+- Manager pinning policy: hard-require a ticked CPU, or detect + refuse if `cpu-accel-testctl` lands
   on the isolated CPU.
 
 ## Out of scope

@@ -4,7 +4,7 @@
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-tool=${CPU_ACCELCTL:-$script_dir/cpu-accelctl}
+tool=${CPU_ACCEL_TESTCTL:-$script_dir/cpu-accel-testctl}
 probe_module=${CPU_ACCEL_RCU_PROBE:-$script_dir/rcu-probe/cpu_accel_rcu_callback_probe.ko}
 target_cpu=${CPU_ACCEL_RCU_CPU:-2}
 reader_cpu=${CPU_ACCEL_RCU_READER_CPU:-0}
@@ -114,7 +114,7 @@ field()
 }
 
 [ "$(id -u)" -eq 0 ] || fail "run as root"
-[ -x "$tool" ] || fail "cpu-accelctl is not executable: $tool"
+[ -x "$tool" ] || fail "cpu-accel-testctl is not executable: $tool"
 [ -c /dev/cpu_accel ] || fail "/dev/cpu_accel is unavailable"
 [ -f "$probe_module" ] || fail "RCU probe module is missing: $probe_module"
 [ -d /sys/kernel/debug ] || fail "debugfs is unavailable"

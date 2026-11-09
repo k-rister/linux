@@ -4,7 +4,7 @@
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-tool=${CPU_ACCELCTL:-$script_dir/cpu-accelctl}
+tool=${CPU_ACCEL_TESTCTL:-$script_dir/cpu-accel-testctl}
 offloaded_cpu=${CPU_ACCEL_RCU_OFFLOADED_CPU:-2}
 other_cpu=${CPU_ACCEL_RCU_OTHER_CPU:-1}
 other_offloaded=${CPU_ACCEL_RCU_OTHER_OFFLOADED:-0}
@@ -35,7 +35,7 @@ cpulist_contains()
 }
 
 [ "$(id -u)" -eq 0 ] || fail "run as root"
-[ -x "$tool" ] || fail "cpu-accelctl is not executable: $tool"
+[ -x "$tool" ] || fail "cpu-accel-testctl is not executable: $tool"
 [ -c /dev/cpu_accel ] || fail "/dev/cpu_accel is unavailable"
 case "$offloaded_cpu:$other_cpu" in
 *[!0-9:]*|0:*|*:0) fail "CPU IDs must be positive integers" ;;

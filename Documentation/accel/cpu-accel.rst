@@ -224,24 +224,24 @@ Successful forced ring-3 recovery is reported as
 completion.
 
 The companion SDK in ``tools/cpu_accel`` wraps the device and
-``cpu-accelctl`` provides a minimal command-line exerciser::
+``cpu-accel-testctl`` provides a minimal command-line exerciser::
 
   make -C tools/cpu_accel
   sudo make -C tools/cpu_accel test
   CPU_ACCEL_REPEATS=5 CPU_ACCEL_LOAD_CPUS=2-7 \
     sudo make -C tools/cpu_accel test
   sudo insmod drivers/cpu_accel/cpu_accel.ko
-  sudo tools/cpu_accel/cpu-accelctl run --cpu 1 --duration-ms 100 \
+  sudo tools/cpu_accel/cpu-accel-testctl run --cpu 1 --duration-ms 100 \
     --period-us 1000 --persistent
-  sudo tools/cpu_accel/cpu-accelctl run --cpu 1 --duration-ms 100 \
+  sudo tools/cpu_accel/cpu-accel-testctl run --cpu 1 --duration-ms 100 \
     --period-us 1000 --workload memmove --work-bytes 4096
-  sudo tools/cpu_accel/cpu-accelctl run --cpu 1 --duration-ms 100 \
+  sudo tools/cpu_accel/cpu-accel-testctl run --cpu 1 --duration-ms 100 \
     --period-us 1000 --workload user-region --work-bytes 4096
-  sudo tools/cpu_accel/cpu-accelctl run --cpu 1 --duration-ms 100 \
+  sudo tools/cpu_accel/cpu-accel-testctl run --cpu 1 --duration-ms 100 \
     --period-us 1000 --workload user-oslat
-  sudo tools/cpu_accel/cpu-accelctl run --cpu 1 --duration-ms 5000 \
+  sudo tools/cpu_accel/cpu-accel-testctl run --cpu 1 --duration-ms 5000 \
     --period-us 1000 --workload user-hang --escape-after-ms 20
-  sudo tools/cpu_accel/cpu-accelctl run --cpu 1 --duration-ms 100 \
+  sudo tools/cpu_accel/cpu-accel-testctl run --cpu 1 --duration-ms 100 \
     --period-us 1000 --quarantine-irqs
 
 The focused function-graph teardown test can also overlap BPF JIT/seccomp
@@ -257,7 +257,7 @@ kernel. This is useful when a matching probe module cannot be built locally.
 Choose a module that is safe to load and unload; module parameters are passed
 after the module name::
 
-  sudo env CPU_ACCELCTL=/tmp/cpu-accelctl \
+  sudo env CPU_ACCEL_TESTCTL=/tmp/cpu-accel-testctl \
     sh tools/cpu_accel/test-tlb-flush.sh --modprobe dummy numdummies=0
 
 Without ``--modprobe``, the test continues to load its matching no-op probe
@@ -266,7 +266,7 @@ module with ``insmod``.
 To validate synchronous call-function IPIs during ring-3 ownership, run the
 prewarmed seccomp/JIT overlap test with a small two-CPU worker set::
 
-  sudo env CPU_ACCELCTL=/tmp/cpu-accelctl \
+  sudo env CPU_ACCEL_TESTCTL=/tmp/cpu-accel-testctl \
     CPU_ACCEL_SECCOMP_CHURN=/tmp/test-seccomp-jit-churn \
     sh tools/cpu_accel/test-call-function-owner-stop.sh
 
@@ -1103,7 +1103,7 @@ run-specific results must be recorded with the kernel build and test logs.
         Existing counters do not prove absence of every ordinary Linux or
         unbounded kernel path.
       - ABI 18 adds a 64-bin log2 lateness histogram to the shared struct;
-        both owner-side sampling paths fill it and ``cpu-accelctl`` reports
+        both owner-side sampling paths fill it and ``cpu-accel-testctl`` reports
         the non-zero bins plus p50/p90/p99/p999 upper-edge estimates.
         ``test-wcl-report.sh`` runs one bounded stress class at a time
         (transparent hugepages disabled for the matrix to keep

@@ -607,7 +607,7 @@ static unsigned long long cli_reschedule_requests(void)
 }
 
 static int test_reclaim_completion(int target_cpu, int control_cpu,
-				   const char *cpu_accelctl,
+				   const char *cpu_accel_testctl,
 				   unsigned long page_size,
 				   int argc, char **argv,
 				   bool mmu_gather_intermediate_only,
@@ -716,7 +716,7 @@ static int test_reclaim_completion(int target_cpu, int control_cpu,
 		goto out;
 	}
 	snprintf(cpu_arg, sizeof(cpu_arg), "%d", target_cpu);
-	cli_argv[cli_argc++] = (char *)cpu_accelctl;
+	cli_argv[cli_argc++] = (char *)cpu_accel_testctl;
 	cli_argv[cli_argc++] = "run";
 	cli_argv[cli_argc++] = "--cpu";
 	cli_argv[cli_argc++] = cpu_arg;
@@ -757,7 +757,7 @@ static int test_reclaim_completion(int target_cpu, int control_cpu,
 			_exit(127);
 		close(pipe_fd[1]);
 		execvp(cli_argv[0], cli_argv);
-		perror("exec cpu-accelctl reclaim probe");
+		perror("exec cpu-accel-testctl reclaim probe");
 		_exit(127);
 	}
 	close(pipe_fd[1]);
@@ -785,7 +785,7 @@ static int test_reclaim_completion(int target_cpu, int control_cpu,
 		if (wait_for_cli()) {
 			collect_cli_output();
 			fprintf(stderr,
-				"cpu-accelctl mmu_gather workload failed to exit\n");
+				"cpu-accel-testctl mmu_gather workload failed to exit\n");
 			goto out;
 		}
 		collect_cli_output();
@@ -818,7 +818,7 @@ static int test_reclaim_completion(int target_cpu, int control_cpu,
 	if (wait_for_cli()) {
 		collect_cli_output();
 		fprintf(stderr,
-			"cpu-accelctl reclaim workload did not report owner exit\n");
+			"cpu-accel-testctl reclaim workload did not report owner exit\n");
 		goto out;
 	}
 	collect_cli_output();
@@ -867,13 +867,13 @@ wait_cli:
 		if (waited == cli_pid)
 			cli_pid = -1;
 		else if (waited == 0 && wait_for_cli())
-			fprintf(stderr, "reclaim-test cpu-accelctl failed during cleanup\n");
+			fprintf(stderr, "reclaim-test cpu-accel-testctl failed during cleanup\n");
 		collect_cli_output();
 	}
 out:
 	if (cli_pid > 0) {
 		if (wait_for_cli())
-			fprintf(stderr, "reclaim-test cpu-accelctl failed during cleanup\n");
+			fprintf(stderr, "reclaim-test cpu-accel-testctl failed during cleanup\n");
 	}
 	collect_cli_output();
 	if (ret && cli_output_size)
@@ -952,7 +952,7 @@ int main(int argc, char **argv)
 	struct reschedule_worker_arg reschedule_arg;
 
 	if (argc < 3 || argc > 5) {
-		fprintf(stderr, "usage: %s TARGET_CPU CPU_ACCELCTL [OPTIONS]\n",
+		fprintf(stderr, "usage: %s TARGET_CPU CPU_ACCEL_TESTCTL [OPTIONS]\n",
 			argv[0]);
 		return EXIT_FAILURE;
 	}
@@ -1221,7 +1221,7 @@ int main(int argc, char **argv)
 			_exit(127);
 		close(output_pipe[1]);
 		execvp(cli_argv[0], cli_argv);
-		perror("exec cpu-accelctl");
+		perror("exec cpu-accel-testctl");
 		_exit(127);
 	}
 	cli_pid = pid;
@@ -1504,7 +1504,7 @@ int main(int argc, char **argv)
 	if (wait_for_cli()) {
 		collect_cli_output();
 		fputs(cli_output, stderr);
-		fprintf(stderr, "cpu-accelctl did not complete successfully\n");
+		fprintf(stderr, "cpu-accel-testctl did not complete successfully\n");
 		goto out_mapping;
 	}
 	collect_cli_output();
@@ -1576,7 +1576,7 @@ int main(int argc, char **argv)
 
 out_cli:
 	if (cli_pid > 0 && wait_for_cli())
-		fprintf(stderr, "cpu-accelctl exited unsuccessfully during cleanup\n");
+		fprintf(stderr, "cpu-accel-testctl exited unsuccessfully during cleanup\n");
 	collect_cli_output();
 	if (cli_output_size)
 		fputs(cli_output, stderr);

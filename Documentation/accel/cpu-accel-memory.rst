@@ -1407,7 +1407,7 @@ The implementation checkpoints are:
     reported soft lockups during a module load. CPU0's ``modprobe`` was
     waiting in ``smp_call_function_many_cond()`` from the CPA
     ``flush_tlb_all()`` in ``__split_large_page()``; an NMI backtrace still
-    found CPU2 in the ring-3 ``cpu-accelctl`` TSC loop. CPUs 4 and 7 were also
+    found CPU2 in the ring-3 ``cpu-accel-testctl`` TSC loop. CPUs 4 and 7 were also
     spinning in ``pgd_alloc()`` and ``pgd_free()``. This shows that the
     synchronous kernel-wide flush did not complete while the ring-3 owner was
     still executing, but the supplied log does not show whether the stop
@@ -1420,7 +1420,7 @@ The implementation checkpoints are:
     before changing the stop/ack protocol.
 
     A follow-up run on the same 00604 kernel used the checkout-matched
-    ``cpu-accelctl`` and ``test-tlb-generation`` tools. The COW and reclaim
+    ``cpu-accel-testctl`` and ``test-tlb-generation`` tools. The COW and reclaim
     regression passed, including ``wp_page_copy()`` and ``MADV_PAGEOUT``
     while the other-mm ring-3 owner was active. Tracing recorded six
     ``tlb_flush_wait`` begin/complete pairs with two targets and one owner;
@@ -1438,7 +1438,7 @@ The implementation checkpoints are:
     trigger without unloading a live system module. The standalone
     ``tools/cpu_accel/test-tlb-flush.sh`` captures the flush, stop, and exit
     events in a separate tracefs instance and gives the ring-3 owner a bounded
-    escape fallback. The installed ``/usr/local/bin/cpu-accelctl`` rejects the
+    escape fallback. The installed ``/usr/local/bin/cpu-accel-testctl`` rejects the
     kernel's shared ABI; use the checkout-matched binary staged under
     ``/tmp``.
 
@@ -1450,7 +1450,7 @@ The implementation checkpoints are:
     succeeded and the probe was unloaded after the owner exited. Neither
     direct run reported a soft-lockup, RCU-stall, BUG, Oops, or panic. The first
     run's CLI returned an error because its timed escape ioctl raced with the
-    completed owner stop and got ``EINVAL``; ``cpu-accelctl`` now accepts that
+    completed owner stop and got ``EINVAL``; ``cpu-accel-testctl`` now accepts that
     result only when the shared state confirms successful escape. The second direct
     run passed, as did the standalone harness with a three-second bounded
     escape. Its trace had the same stop/exit/flush ordering and the CLI exited

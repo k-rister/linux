@@ -4,7 +4,7 @@
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-tool=${CPU_ACCELCTL:-$script_dir/cpu-accelctl}
+tool=${CPU_ACCEL_TESTCTL:-$script_dir/cpu-accel-testctl}
 event_helper=${CPU_ACCEL_PERF_EVENT_HELPER:-$script_dir/test-perf-event-open}
 target_cpu=${CPU_ACCEL_CPU:-2}
 escape_ms=${CPU_ACCEL_ESCAPE_AFTER_MS:-3000}
@@ -51,7 +51,7 @@ trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 
 [ "$(id -u)" -eq 0 ] || fail "run as root"
-[ -x "$tool" ] || fail "cpu-accelctl is not executable: $tool"
+[ -x "$tool" ] || fail "cpu-accel-testctl is not executable: $tool"
 [ -c /dev/cpu_accel ] || fail "/dev/cpu_accel is unavailable"
 [ -x "$event_helper" ] || fail "perf event helper is not executable: $event_helper"
 command -v timeout >/dev/null 2>&1 || fail "timeout is required"

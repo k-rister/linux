@@ -67,13 +67,13 @@ The device appears at `/dev/cpu_accel`.
 Build the tool:
 
 ```
-make -C tools/cpu_accel cpu-accelctl
+make -C tools/cpu_accel cpu-accel-testctl
 ```
 
 Run a 5-second measurement at a 1 ms sample period:
 
 ```
-./cpu-accelctl run --workload user-oslat --cpu 2 \
+./cpu-accel-testctl run --workload user-oslat --cpu 2 \
     --period-us 1000 --duration-ms 5000
 ```
 
@@ -96,7 +96,7 @@ SLUB, ring resize, call-function, IRQ work, timerlat), use the WCL
 report script:
 
 ```
-CPU_ACCELCTL=$PWD/cpu-accelctl CPU_ACCEL_WCL_CPU=2 \
+CPU_ACCEL_TESTCTL=$PWD/cpu-accel-testctl CPU_ACCEL_WCL_CPU=2 \
 sh tools/cpu_accel/test-wcl-report.sh
 ```
 
@@ -125,7 +125,7 @@ correlate with the tail samples.
   `/sys/kernel/mm/transparent_hugepage/enabled` before measuring.
 - **Watchdog**: without `--persistent`, the default watchdog fires at
   the configured duration. Use `--persistent` for longer runs and
-  `cpu-accelctl stop` to end them.
+  `cpu-accel-testctl stop` to end them.
 - **Single-CPU**: only one CPU can be owned at a time. The device
   serializes access through a single `mutex`.
 
@@ -141,7 +141,7 @@ cat /sys/devices/system/cpu/cpu2/rcu_nocbs   # should print "2"
 grep "^2:" /proc/interrupts | wc -l          # should be 0
 
 # 3. Run a short measurement
-./cpu-accelctl run --workload user-oslat --cpu 2 \
+./cpu-accel-testctl run --workload user-oslat --cpu 2 \
     --period-us 1000 --duration-ms 1000
 ```
 

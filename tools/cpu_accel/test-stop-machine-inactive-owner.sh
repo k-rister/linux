@@ -3,7 +3,7 @@
 
 set -eu
 
-tool=${CPU_ACCELCTL:-./cpu-accelctl}
+tool=${CPU_ACCEL_TESTCTL:-./cpu-accel-testctl}
 target_cpu=${CPU_ACCEL_CPU:-2}
 hotplug_cpu=${CPU_ACCEL_HOTPLUG_CPU:-}
 duration_ms=${CPU_ACCEL_DURATION_MS:-5000}
@@ -74,7 +74,7 @@ trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 
 [ "$(id -u)" -eq 0 ] || fail "run as root"
-[ -x "$tool" ] || fail "cpu-accelctl is not executable: $tool"
+[ -x "$tool" ] || fail "cpu-accel-testctl is not executable: $tool"
 [ -c /dev/cpu_accel ] || fail "/dev/cpu_accel is unavailable"
 command -v timeout >/dev/null 2>&1 || fail "timeout is required"
 

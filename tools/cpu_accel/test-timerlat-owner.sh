@@ -4,7 +4,7 @@
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-tool=${CPU_ACCELCTL:-$script_dir/cpu-accelctl}
+tool=${CPU_ACCEL_TESTCTL:-$script_dir/cpu-accel-testctl}
 trace_root=${TRACEFS:-/sys/kernel/tracing}
 target_cpu=${CPU_ACCEL_TIMERLAT_CPU:-2}
 period_us=${CPU_ACCEL_TIMERLAT_PERIOD_US:-1000}
@@ -61,7 +61,7 @@ trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 
 [ "$(id -u)" -eq 0 ] || fail "run as root"
-[ -x "$tool" ] || fail "cpu-accelctl is not executable: $tool"
+[ -x "$tool" ] || fail "cpu-accel-testctl is not executable: $tool"
 [ -c /dev/cpu_accel ] || fail "/dev/cpu_accel is unavailable"
 [ -d "$trace_root/instances" ] || fail "tracefs instances are unavailable"
 [ -d "$trace_root/osnoise" ] || fail "timerlat/osnoise tracing is unavailable"
@@ -135,8 +135,8 @@ done
 [ "$ready" -eq 1 ] || fail "owner did not publish the active marker"
 
 # Keep the timerlat tracer running across owner entry and correlate its
-# monotonic timestamps with the owner interval reported by cpu-accelctl.
-wait "$run_pid" || fail "cpu-accelctl run failed"
+# monotonic timestamps with the owner interval reported by cpu-accel-testctl.
+wait "$run_pid" || fail "cpu-accel-testctl run failed"
 run_pid=
 sleep 0.05
 echo 0 >"$instance/tracing_on"

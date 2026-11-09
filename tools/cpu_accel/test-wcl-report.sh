@@ -12,7 +12,7 @@
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-tool=${CPU_ACCELCTL:-$script_dir/cpu-accelctl}
+tool=${CPU_ACCEL_TESTCTL:-$script_dir/cpu-accel-testctl}
 outdir=${CPU_ACCEL_TRACE_DIR:-$(mktemp -d /tmp/cpu-accel-wcl.XXXXXX)}
 target_cpu=${CPU_ACCEL_WCL_CPU:-2}
 duration_ms=${CPU_ACCEL_WCL_DURATION_MS:-5000}
@@ -30,7 +30,7 @@ fail()
 }
 
 [ "$(id -u)" -eq 0 ] || fail "run as root"
-[ -x "$tool" ] || fail "cpu-accelctl not found or not executable: $tool"
+[ -x "$tool" ] || fail "cpu-accel-testctl not found or not executable: $tool"
 mkdir -p "$outdir"
 printf 'class\texit\tstate\tsamples\tmin_ns\tp50_ns\tp90_ns\tp99_ns\tp999_ns\tmax_ns\thist_total\tirq_count\tsoftirq_count\tworkqueue_queued\tarch_ipi_count\tarch_tlb_count\tcontext_switches\n' \
 	>"$summary"
@@ -184,13 +184,13 @@ load_run()
 
 sync_work_case()
 {
-	CPU_ACCEL_TEST_CASE="$1" CPU_ACCELCTL="$tool" \
+	CPU_ACCEL_TEST_CASE="$1" CPU_ACCEL_TESTCTL="$tool" \
 		sh "$script_dir/test-sync-work-owner-stop.sh"
 }
 
 single_probe_case()
 {
-	CPU_ACCELCTL="$tool" \
+	CPU_ACCEL_TESTCTL="$tool" \
 		sh "$script_dir/test-call-function-single-owner-stop.sh" "$@"
 }
 
@@ -227,7 +227,7 @@ if should_run_class irq_work; then
 fi
 
 if should_run_class timerlat; then
-	run_class timerlat env CPU_ACCELCTL="$tool" \
+	run_class timerlat env CPU_ACCEL_TESTCTL="$tool" \
 		sh "$script_dir/test-timerlat-owner.sh"
 fi
 

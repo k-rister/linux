@@ -4,7 +4,7 @@
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-tool=${CPU_ACCELCTL:-$script_dir/cpu-accelctl}
+tool=${CPU_ACCEL_TESTCTL:-$script_dir/cpu-accel-testctl}
 rescue=${CPU_ACCEL_ESCAPE_RESCUE:-$script_dir/test-user-escape-rescue}
 target_cpu=${CPU_ACCEL_ESCAPE_CPU:-2}
 escape_ms=${CPU_ACCEL_ESCAPE_AFTER_MS:-250}
@@ -68,7 +68,7 @@ trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 
 [ "$(id -u)" -eq 0 ] || fail "run as root"
-[ -x "$tool" ] || fail "cpu-accelctl is not executable: $tool"
+[ -x "$tool" ] || fail "cpu-accel-testctl is not executable: $tool"
 [ -x "$rescue" ] || fail "NMI rescue helper is not executable: $rescue"
 [ -c /dev/cpu_accel ] || fail "/dev/cpu_accel is unavailable"
 [ -r "$drop_parameter" ] && [ -w "$drop_parameter" ] || \

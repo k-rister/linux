@@ -1005,6 +1005,19 @@ run-specific results must be recorded with the kernel build and test logs.
        no migration, and an empty kernel-error log.  This validates only the
        shared-memory CPPC path on that host; the x86 per-CPU MSR policy
        writers above remain source-classified.
+       On 2026-11-09, ``test-thermal-cooling-owner.sh`` passed on simon.lab:
+       changing CPU 3's Processor cooling state from 0 to 2 while CPU 3 was
+       owned completed in 15 ms and lowered ``scaling_max_freq`` from
+       4,954,565 Hz to 2,972,739 Hz.  Function-graph tracing showed
+       ``cpufreq_set_cur_state()`` and ``freq_qos_update_request()`` on the
+       work CPU.  The frequency-QoS update requested the owner stop through
+       ``smp_call_function_many_cond()``; owner exit followed 21 us later.
+       The 5 s owner completed cooperatively with ``state=3``, 846451
+       samples, a 140 ns maximum, no escape, context switch, migration, or
+       architecture IPI, and an empty kernel-error log.  The cooling state
+       and frequency ceiling were restored after the run.  This validates
+       the thermal cpufreq-policy path; the x86 per-CPU MSR policy writers
+       above remain source-classified.
       - ``test-watchdog-owner-admission.sh`` changes the watchdog mask to the
         selected CPU and expects owner entry to fail with ``-EBUSY``; it restores
         the prior mask on exit. The x86 object builds, and one bounded run passed
@@ -1014,8 +1027,8 @@ run-specific results must be recorded with the kernel build and test logs.
         ``7.3.0-rc3-accel-tlbfix-02150-gde9255a04ef7``. The power-policy MSR
         review is source-only, and the bounded irq-work runs above are
         observations, not a stress envelope or a latency bound.
-       Runtime frequency, idle, thermal, and power-policy tests, event
-       counters, fault injection, and observed latency remain open.
+       Runtime frequency and idle tests, broader event counters, fault
+       injection, and stress-envelope latency remain open.
     * - Microcode updates
       - **The complete update transaction is gated: runtime reload drains
         owners before the stop-machine rendezvous; early and hotplug paths are

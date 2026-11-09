@@ -50,6 +50,9 @@ test-dirty-writeback-owner: cpu-accel-testctl
 test-amd-pstate-shmem-owner: cpu-accel-testctl
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-amd-pstate-shmem-owner.sh
 
+test-thermal-cooling-owner: cpu-accel-testctl
+	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-thermal-cooling-owner.sh
+
 test-user-escape-fault: cpu-accel-testctl test-user-escape-rescue
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl CPU_ACCEL_ESCAPE_RESCUE=./test-user-escape-rescue \
 		sh ./test-user-escape-fault.sh
@@ -121,5 +124,6 @@ clean:
 	test-veth-newlink-fault-owner \
 	test-dirty-writeback-owner \
 	test-amd-pstate-shmem-owner \
+	test-thermal-cooling-owner \
 	test-rcu-nocb-admission \
 	test-rcu-callback-routing rcu-probe

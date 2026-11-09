@@ -333,6 +333,14 @@ tracepoints and a writable regular filesystem at ``/var/tmp``::
 
   sudo make -C tools/cpu_accel test-dirty-writeback-owner
 
+The amd-pstate shared-memory owner test switches a per-CPU EPP policy while
+that CPU is owned and verifies that the policy write completes immediately,
+does not request owner stop, and leaves the owner running.  It is specific to
+platforms whose ``amd-pstate-epp`` driver uses shared-memory CPPC rather than
+the x86 per-CPU MSR path::
+
+  sudo make -C tools/cpu_accel test-amd-pstate-shmem-owner
+
 The focused single-call probe covers synchronous IPI delivery, reuse of a CSD
 whose earlier asynchronous callback is still pending, and the remote
 ``smp_call_on_cpu()`` and ``work_on_cpu()`` workqueue waits. Build its module
@@ -972,6 +980,14 @@ run-specific results must be recorded with the kernel build and test logs.
        task after its reschedule check; this does not classify idle
        policy changes or autonomous hardware frequency and thermal changes,
        which do not pass through these kernel callbacks.
+       On 2026-11-09, ``test-amd-pstate-shmem-owner.sh`` passed on simon.lab:
+       writing CPU 3's ``amd-pstate-epp`` governor from ``performance`` to
+       ``powersave`` while CPU 3 was owned completed in 3 ms, produced an
+       ``amd_pstate_epp_perf`` trace, and did not request owner stop.  The
+       5 s owner completed with ``state=3``, no escape, no context switch,
+       no migration, and an empty kernel-error log.  This validates only the
+       shared-memory CPPC path on that host; the x86 per-CPU MSR policy
+       writers above remain source-classified.
       - ``test-watchdog-owner-admission.sh`` changes the watchdog mask to the
         selected CPU and expects owner entry to fail with ``-EBUSY``; it restores
         the prior mask on exit. The x86 object builds, and one bounded run passed

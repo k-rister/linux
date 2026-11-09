@@ -53,6 +53,9 @@ test-amd-pstate-shmem-owner: cpu-accel-testctl
 test-thermal-cooling-owner: cpu-accel-testctl
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-thermal-cooling-owner.sh
 
+test-cpuidle-state-owner: cpu-accel-testctl
+	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-cpuidle-state-owner.sh
+
 test-user-escape-fault: cpu-accel-testctl test-user-escape-rescue
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl CPU_ACCEL_ESCAPE_RESCUE=./test-user-escape-rescue \
 		sh ./test-user-escape-fault.sh
@@ -125,5 +128,6 @@ clean:
 	test-dirty-writeback-owner \
 	test-amd-pstate-shmem-owner \
 	test-thermal-cooling-owner \
+	test-cpuidle-state-owner \
 	test-rcu-nocb-admission \
 	test-rcu-callback-routing rcu-probe

@@ -1018,6 +1018,17 @@ run-specific results must be recorded with the kernel build and test logs.
        and frequency ceiling were restored after the run.  This validates
        the thermal cpufreq-policy path; the x86 per-CPU MSR policy writers
        above remain source-classified.
+       On 2026-11-09, ``test-cpuidle-state-owner.sh`` passed on simon.lab:
+       disabling CPU 3's ``C1`` state while CPU 3 was owned completed in
+       1 ms.  Function-graph tracing showed ``store_state_disable()`` on
+       the work CPU.  The state change used the waited
+       ``smp_call_function_many_cond()`` path: it requested the owner stop,
+       and owner exit followed 21 us later.  The state was restored after
+       the run.  The owner completed with ``state=3``, 953279 samples, a
+       140 ns maximum, no escape, context switch, migration, or
+       architecture IPI, and an empty kernel-error log.  This covers the
+       runtime idle state-disable path; driver register/unregister and
+       coupled-idle pokes remain source-classified.
       - ``test-watchdog-owner-admission.sh`` changes the watchdog mask to the
         selected CPU and expects owner entry to fail with ``-EBUSY``; it restores
         the prior mask on exit. The x86 object builds, and one bounded run passed
@@ -1027,8 +1038,9 @@ run-specific results must be recorded with the kernel build and test logs.
         ``7.3.0-rc3-accel-tlbfix-02150-gde9255a04ef7``. The power-policy MSR
         review is source-only, and the bounded irq-work runs above are
         observations, not a stress envelope or a latency bound.
-       Runtime frequency and idle tests, broader event counters, fault
-       injection, and stress-envelope latency remain open.
+       Runtime frequency tests, idle driver register/unregister, broader
+       event counters, fault injection, and stress-envelope latency remain
+       open.
     * - Microcode updates
       - **The complete update transaction is gated: runtime reload drains
         owners before the stop-machine rendezvous; early and hotplug paths are

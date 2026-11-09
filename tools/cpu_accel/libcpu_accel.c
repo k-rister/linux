@@ -43,6 +43,19 @@ int cpu_accel_open(struct cpu_accel_handle *handle)
 	return -1;
 }
 
+int cpu_accel_open_control(struct cpu_accel_handle *handle)
+{
+	int fd;
+
+	fd = open(CPU_ACCEL_DEVICE, O_RDWR | O_CLOEXEC);
+	if (fd < 0)
+		return -1;
+	memset(handle, 0, sizeof(*handle));
+	handle->fd = fd;
+	handle->shared = NULL;
+	return 0;
+}
+
 int cpu_accel_attach_fd(struct cpu_accel_handle *handle, int fd)
 {
 	void *mapping;

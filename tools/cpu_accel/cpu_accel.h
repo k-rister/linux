@@ -13,6 +13,7 @@ struct cpu_accel_handle {
 };
 
 int cpu_accel_open(struct cpu_accel_handle *handle);
+int cpu_accel_open_control(struct cpu_accel_handle *handle);
 /* On success, handle owns fd; on failure, the caller still owns fd. */
 int cpu_accel_attach_fd(struct cpu_accel_handle *handle, int fd);
 void cpu_accel_close(struct cpu_accel_handle *handle);

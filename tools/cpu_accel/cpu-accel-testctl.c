@@ -918,9 +918,10 @@ static void usage(FILE *stream, const char *program)
 		"      [--worker-cgroup PATH]\n"
 		"      [--persistent] [--require-quiescent] [--quarantine-irqs]\n"
 		"  %s exit\n"
+		"  %s stop\n"
 		"  %s status\n"
 		"  %s reset\n",
-		program, program, program, program);
+		program, program, program, program, program);
 }
 
 static int pin_control_cpu(void)
@@ -2193,20 +2194,32 @@ int main(int argc, char **argv)
 		return run_user_worker(argc, argv);
 	if (!strcmp(argv[1], "run"))
 		return run_workload(argv[0], argc - 2, argv + 2);
-	if (strcmp(argv[1], "exit") && strcmp(argv[1], "status") &&
+	if (strcmp(argv[1], "exit") && strcmp(argv[1], "stop") &&
+	    strcmp(argv[1], "status") &&
 	    strcmp(argv[1], "reset")) {
 		usage(stderr, argv[0]);
 		return 2;
 	}
 
-	if (cpu_accel_open(&handle) < 0) {
-		perror("open /dev/cpu_accel");
-		return 1;
+	if (!strcmp(argv[1], "status")) {
+		if (cpu_accel_open(&handle) < 0) {
+			perror("open /dev/cpu_accel");
+			return 1;
+		}
+	} else {
+		if (cpu_accel_open_control(&handle) < 0) {
+			perror("open /dev/cpu_accel");
+			return 1;
+		}
 	}
 	if (!strcmp(argv[1], "exit")) {
 		ret = cpu_accel_exit(&handle);
 		if (ret < 0)
 			perror("exit");
+	} else if (!strcmp(argv[1], "stop")) {
+		ret = cpu_accel_stop(&handle);
+		if (ret < 0)
+			perror("stop");
 	} else if (!strcmp(argv[1], "reset")) {
 		ret = cpu_accel_reset(&handle);
 		if (ret < 0)

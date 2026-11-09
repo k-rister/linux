@@ -8,7 +8,8 @@ tool=${CPU_ACCEL_TESTCTL:-$script_dir/cpu-accel-testctl}
 prime_tool=${CPU_ACCEL_SYNC_WAIT_PRIME:-$script_dir/test-sync-wait-prime}
 target_cpu=${CPU_ACCEL_CPU:-2}
 work_cpu=${CPU_ACCEL_WORK_CPU:-3}
-escape_ms=${CPU_ACCEL_ESCAPE_AFTER_MS:-4900}
+duration_ms=${CPU_ACCEL_DURATION_MS:-5000}
+escape_ms=${CPU_ACCEL_ESCAPE_AFTER_MS:-$((duration_ms - 100))}
 trace_root=${TRACEFS:-/sys/kernel/tracing}
 instance="$trace_root/instances/cpu_accel_sync_wait_$$"
 resize_instance="$trace_root/instances/cpu_accel_resize_$$"
@@ -129,6 +130,9 @@ cleanup()
 		wait "$trace_pid" 2>/dev/null || true
 		trace_pid=
 	fi
+	"$tool" stop >"$outdir/cleanup-stop.log" 2>&1 || true
+	"$tool" exit >"$outdir/cleanup-exit.log" 2>&1 || true
+	"$tool" reset >"$outdir/cleanup-reset.log" 2>&1 || true
 	if [ -n "$dmesg_pid" ]; then
 		kill -TERM "$dmesg_pid" 2>/dev/null || true
 		wait "$dmesg_pid" 2>/dev/null || true
@@ -296,6 +300,12 @@ printf '%s\n' x86_cpu_accel_user_enter cpuset_partition_write \
 	arch_smp_sync_wait_begin arch_smp_sync_wait_stop arch_smp_sync_wait_end \
 	x86_cpu_accel_request_stop_owner_gen \
 	>"$instance/set_ftrace_filter"
+if should_run_case lru; then
+	grep -qw lru_add_drain_all \
+		"$trace_root/available_filter_functions" || \
+		fail "LRU drain caller is not traceable"
+	printf '%s\n' lru_add_drain_all >>"$instance/set_ftrace_filter"
+fi
 if should_run_case vmalloc_purge_wait; then
 	printf '%s\n' __purge_vmap_area_lazy purge_vmap_node flush_work \
 		>>"$instance/set_ftrace_filter"
@@ -360,19 +370,19 @@ run_case()
 	if [ "$name" = timer_migration ]; then
 		rm -f "$active_marker"
 		CPU_ACCEL_ACTIVE_MARKER="$active_marker" "$tool" run \
-			--cpu "$case_cpu" --duration-ms 5000 --period-us 1000 \
+			--cpu "$case_cpu" --duration-ms "$duration_ms" --period-us 1000 \
 			--workload user-hang --escape-after-ms "$case_escape_ms" \
 			--escape-retries 1 --worker-cgroup "$owner_cgroup" \
 			>"$outdir/$name-ctl.log" 2>&1 &
 	elif [ -n "$owner_cgroup" ]; then
 		taskset -c "$work_cpu" "$tool" run --cpu "$case_cpu" \
-			--duration-ms 5000 --period-us 1000 --workload user-hang \
+			--duration-ms "$duration_ms" --period-us 1000 --workload user-hang \
 			--escape-after-ms "$case_escape_ms" --escape-retries 1 \
 			--worker-cgroup "$owner_cgroup" \
 			>"$outdir/$name-ctl.log" 2>&1 &
 	else
 		"$tool" run --cpu "$case_cpu" \
-			--duration-ms 5000 --period-us 1000 \
+			--duration-ms "$duration_ms" --period-us 1000 \
 			--workload user-hang --escape-after-ms "$case_escape_ms" \
 			--escape-retries 1 >"$outdir/$name-ctl.log" 2>&1 &
 	fi
@@ -502,9 +512,13 @@ run_case()
 	if [ "$name" = timer_migration ]; then
 		stack_caller=housekeeping_update
 	fi
+	if [ "$name" = lru ]; then
+		stack_caller=lru_add_drain_all
+	fi
 	# Function-graph tracing can expose its return trampoline as the event
-	# caller. For timer migration, accept that only when the trigger stack
-	# proves the request came through housekeeping_update().
+	# caller. Accept it when the expected caller was traced before the stop
+	# or, for timer migration, when the trigger stack proves the request came
+	# through housekeeping_update().
 	if ! awk -v target="$case_cpu" -v caller="$expected_caller" \
 		-v stack_caller="$stack_caller" '
 function field(line, name, value, pos)
@@ -526,6 +540,10 @@ function caller_matches(line, expected, actual, parts, count, i)
 	}
 	return 0
 }
+function trace_seen(line, expected)
+{
+	return index(line, expected "()")
+}
 /owner_stop_request:/ {
 	pending = 0
 	stack_active = 0
@@ -535,6 +553,11 @@ function caller_matches(line, expected, actual, parts, count, i)
 		if (field($0, "stop_cb") == "1" && field($0, "sent") == "1") {
 			this_owner = field($0, "owner")
 			if (caller_matches($0, caller)) {
+				owner = this_owner
+				stop_line = NR
+			} else if (stack_caller != "" &&
+				   field($0, "caller") == "return_to_handler" &&
+				   caller_seen) {
 				owner = this_owner
 				stop_line = NR
 			} else if (stack_caller != "" &&
@@ -552,6 +575,8 @@ function caller_matches(line, expected, actual, parts, count, i)
 	next
 }
 {
+	if (stack_caller != "" && trace_seen($0, stack_caller))
+		caller_seen = 1
 	if (pending && stack_active) {
 		if (index($0, "=> " stack_caller)) {
 			owner = pending_owner

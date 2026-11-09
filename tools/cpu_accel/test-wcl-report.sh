@@ -17,6 +17,7 @@ outdir=${CPU_ACCEL_TRACE_DIR:-$(mktemp -d /tmp/cpu-accel-wcl.XXXXXX)}
 target_cpu=${CPU_ACCEL_WCL_CPU:-2}
 duration_ms=${CPU_ACCEL_WCL_DURATION_MS:-5000}
 load_cpus=${CPU_ACCEL_WCL_LOAD_CPUS:-3,4,5,6,7}
+work_cpu=${CPU_ACCEL_WCL_WORK_CPU:-0}
 selected=${CPU_ACCEL_WCL_CLASSES:-all}
 summary="$outdir/summary.tsv"
 thp_enabled_path=/sys/kernel/mm/transparent_hugepage/enabled
@@ -184,6 +185,8 @@ load_run()
 
 sync_work_case()
 {
+	CPU_ACCEL_CPU="$target_cpu" CPU_ACCEL_WORK_CPU="$work_cpu" \
+	CPU_ACCEL_DURATION_MS="$duration_ms" \
 	CPU_ACCEL_TEST_CASE="$1" CPU_ACCEL_TESTCTL="$tool" \
 		sh "$script_dir/test-sync-work-owner-stop.sh"
 }

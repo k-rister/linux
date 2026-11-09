@@ -808,8 +808,8 @@ run-specific results must be recorded with the kernel build and test logs.
        programming paths use ``smp_call_function_any(..., 1)`` and
        ``on_each_cpu_mask(..., 1)``; the generic synchronous-call hooks reserve
        each remote CPU and request owner exit before waiting for its callback.
-       Task-group changes and other resctrl activity have no subsystem-specific
-       policy established here.
+       Task-group changes use ``smp_call_function_single()`` on the moved
+       task's current CPU and follow the same generic owner-stop policy.
      - Source review covers the resctrl callback sites and their path through
        ``arch_smp_sync_wait_begin/stop/end``. The call-function owner-stop
        tests cover that generic callback machinery. On 2026-11-09,
@@ -820,8 +820,17 @@ run-specific results must be recorded with the kernel build and test logs.
        ``smp_call_function_many_cond()`` with owner exit 24 us later; the
        owner reported ``state=3``, no escape, no context switch, no migration,
        one deferred call-function IPI, and no matched kernel error.
-     - The test covers the CPU-assignment/domain-update path. Task-group
-       changes, monitoring, and other resctrl operations remain untested, and
+       On 2026-11-09, ``test-resctrl-task-owner-stop.sh`` passed on
+       simon.lab: moving the isolated owner task into a temporary resctrl
+       control group from CPU 0 completed in 14 ms while CPU 3 was owned.
+       Function-graph tracing recorded ``_update_task_closid_rmid()`` on
+       CPU 3.  The task-group write used
+       ``__smp_call_function_single()``, requested owner stop, and owner
+       exit followed 22 us later.  The owner completed with ``state=3``,
+       777288 samples, a 140 ns maximum, no escape, context switch,
+       migration, or architecture IPI, and an empty kernel-error log.
+     - The tests cover the CPU-assignment/domain-update and task-group move
+       paths. Monitoring and other resctrl operations remain untested, and
        there is no resctrl-specific counter for those paths.
    * - CPU hotplug attempts
      - **Owner-stop before online or offline transitions.** The current source

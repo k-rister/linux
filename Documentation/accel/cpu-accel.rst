@@ -1287,10 +1287,20 @@ run-specific results must be recorded with the kernel build and test logs.
         owner in 17 ms, the stack proved the request came through
         ``__lru_add_drain_all()``, and the stop and owner-exit tracepoints were
         9 us apart with the same clean owner telemetry.
+        The SLUB-shrink and trace-ring-resize cases passed with 4 ms and 9 ms
+        helpers; their stacks proved ``flush_all_cpus_locked()`` and
+        ``ring_buffer_resize()``, respectively, and each stop-to-exit interval
+        was 9 us.  The timer-migration case also passed on this
+        ``rcu_nocbs``-covered boot: isolating CPU 1 stopped its owner in 11 ms,
+        the stack proved ``housekeeping_update()``, the stop-to-exit interval
+        was 9 us, and the cgroup and transparent-hugepage state were restored.
       - No hard bound; log2-bin percentiles are factor-of-two ceilings.
-        The ``net_backlog`` and ``timer_migration`` classes are deferred to
-        a boot whose ``rcu_nocbs`` covers their owner CPU, and ``irq_storm``
-        needs a test NIC.
+        The ``net_backlog`` class is deferred to a boot with an RPS-eligible
+        owner CPU covered by ``rcu_nocbs`` and a separate trigger CPU; on
+        simon.lab, ``nohz_full=1-11`` leaves CPU 0 as the only RPS-eligible
+        housekeeping CPU, and the test reserves it for the trigger.  The
+        attempted temporary-veth run therefore failed before an owner run and
+        cleaned up.  ``irq_storm`` needs a test NIC.
 
 The plan's disposition vocabulary is safe, routed to housekeeping, deferred,
 rejected, or domain-terminating. Several rows remain unclassified or have only

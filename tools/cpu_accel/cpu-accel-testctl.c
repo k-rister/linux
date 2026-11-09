@@ -1503,8 +1503,13 @@ static int cpu_accel_run_until_stop(struct cpu_accel_handle *handle,
 	    errno != EINTR)
 		return -1;
 
-	if (cpu_accel_stop(handle) < 0)
-		return -1;
+	if (cpu_accel_stop(handle) < 0) {
+		if (errno != EALREADY)
+			return -1;
+		if (waitpid(child, status, WNOHANG) != child)
+			return -1;
+		return 0;
+	}
 
 	if (waitpid(child, status, 0) < 0)
 		return -1;

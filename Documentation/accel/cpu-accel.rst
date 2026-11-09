@@ -134,6 +134,11 @@ TSC-derived samples and histograms in an attached shared region, and uses
 restores the original ``START`` return frame, releases the address-space
 admission lock, and then restores Linux-owned IRQ/workqueue state.
 
+A kernel-initiated maintenance stop can make the image reach ``USER_EXIT``
+before the companion's deadline ``STOP``.  The companion accepts that stop's
+``EALREADY`` result only after confirming that the worker has already exited,
+so a cooperative maintenance stop is not misreported as a controller failure.
+
 The shared result now reports ``user_active_start_ns``,
 ``user_active_end_ns``, and ``user_escape_count``.  On x86, the companion may
 issue ``CPU_ACCEL_IOC_USER_ESCAPE`` while this image is active.  The kernel

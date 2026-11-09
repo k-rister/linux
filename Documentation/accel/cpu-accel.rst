@@ -829,8 +829,16 @@ run-specific results must be recorded with the kernel build and test logs.
        exit followed 22 us later.  The owner completed with ``state=3``,
        777288 samples, a 140 ns maximum, no escape, context switch,
        migration, or architecture IPI, and an empty kernel-error log.
+       On 2026-11-09, ``test-resctrl-monitor-owner-stop.sh`` passed on
+       simon.lab: reading ``llc_occupancy`` for a CPU-3-scoped monitor group
+       from CPU 0 completed in 2 ms while CPU 3 was owned.  Function-graph
+       tracing recorded ``mon_event_count()`` on CPU 0.  The monitor read used
+       ``smp_call_function_many_cond()``, requested owner stop, and owner exit
+       followed 22 us later.  The owner completed with ``state=3``,
+       49075687 samples, a 200 ns maximum, no escape, context switch,
+       migration, or architecture IPI, and an empty kernel-error log.
      - The tests cover the CPU-assignment/domain-update and task-group move
-       paths. Monitoring and other resctrl operations remain untested, and
+       and monitor-read paths. Other resctrl operations remain untested, and
        there is no resctrl-specific counter for those paths.
    * - CPU hotplug attempts
      - **Owner-stop before online or offline transitions.** The current source

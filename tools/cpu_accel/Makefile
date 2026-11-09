@@ -35,6 +35,9 @@ test-resctrl-owner-stop: cpu-accel-testctl
 test-resctrl-task-owner-stop: cpu-accel-testctl
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-resctrl-task-owner-stop.sh
 
+test-resctrl-monitor-owner-stop: cpu-accel-testctl
+	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-resctrl-monitor-owner-stop.sh
+
 test-rfs-owner-stop: cpu-accel-testctl test-rfs-flow
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl CPU_ACCEL_RFS_FLOW=./test-rfs-flow \
 		sh ./test-rfs-owner-stop.sh
@@ -126,6 +129,7 @@ clean:
 	test-irq-storm test-timerlat-owner test-user-escape-fault \
 	test-watchdog-owner-admission test-resctrl-owner-stop \
 	test-resctrl-task-owner-stop \
+	test-resctrl-monitor-owner-stop \
 	test-rfs-owner-stop \
 	test-veth-teardown-owner \
 	test-veth-newlink-fault-owner \

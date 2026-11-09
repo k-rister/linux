@@ -333,6 +333,15 @@ requesting owner stop::
 
   sudo make -C tools/cpu_accel test-veth-teardown-owner
 
+The veth newlink fault test starts an owner and attempts to create a temporary
+veth whose peer name collides with loopback.  Function-graph tracing is
+filtered to ``veth_newlink`` and ``register_netdevice`` to prove that the
+caller's ``-EEXIST`` unwind path runs on the work CPU; the failed creation must
+leave no partial device and must pair the generic owner-stop request with a
+cooperative owner exit::
+
+  sudo make -C tools/cpu_accel test-veth-newlink-fault-owner
+
 The dirty-writeback owner test writes a bounded temporary file from a
 housekeeping CPU while a bounded ``user-oslat`` owner is active, flushes the
 containing filesystem, and requires inode-matched dirty-folio and
@@ -1132,6 +1141,17 @@ run-specific results must be recorded with the kernel build and test logs.
          switch, no migration, and an empty kernel-error log. This covers one
          bounded caller-local veth unregister/teardown case; the broader
          device-reset and teardown fault matrix remains open.
+         On 2026-11-09, ``test-veth-newlink-fault-owner.sh`` passed on
+         simon.lab: creating a veth whose peer name collided with loopback
+         failed on CPU 0 in 15 ms with ``-EEXIST``, left no partial device, and
+         traced both ``veth_newlink`` and ``register_netdevice`` on CPU 0.
+         The ``register_netdevice`` path reached a waited
+         ``smp_call_function_many_cond()`` owner-stop request.  The CPU 3 owner
+         exited cooperatively 22 us after the stop request with ``state=3``,
+         ``stop_requested=1``, no escape, no context switch, no migration, and
+         an empty kernel-error log. This covers one bounded device-creation
+         failure unwind; other device reset and teardown fault classes remain
+         open.
    * - Exceptions, NMIs, and machine checks
       - **NMI escape is owner-terminating recovery for the tested ring-3
         workload, and a hardware ``#MC`` is source-classified as

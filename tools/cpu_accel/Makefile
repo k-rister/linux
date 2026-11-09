@@ -40,6 +40,10 @@ test-veth-teardown-owner: cpu-accel-testctl test-rfs-flow
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl CPU_ACCEL_RFS_FLOW=./test-rfs-flow \
 		sh ./test-veth-teardown-owner.sh
 
+test-veth-newlink-fault-owner: cpu-accel-testctl
+	CPU_ACCEL_TESTCTL=./cpu-accel-testctl \
+		sh ./test-veth-newlink-fault-owner.sh
+
 test-dirty-writeback-owner: cpu-accel-testctl
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-dirty-writeback-owner.sh
 
@@ -114,6 +118,7 @@ clean:
 	test-watchdog-owner-admission test-resctrl-owner-stop \
 	test-rfs-owner-stop \
 	test-veth-teardown-owner \
+	test-veth-newlink-fault-owner \
 	test-dirty-writeback-owner \
 	test-amd-pstate-shmem-owner \
 	test-rcu-nocb-admission \

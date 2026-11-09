@@ -29,6 +29,9 @@ test-timerlat-owner: cpu-accel-testctl
 test-watchdog-owner-admission: cpu-accel-testctl
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-watchdog-owner-admission.sh
 
+test-resctrl-owner-stop: cpu-accel-testctl
+	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-resctrl-owner-stop.sh
+
 test-user-escape-fault: cpu-accel-testctl test-user-escape-rescue
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl CPU_ACCEL_ESCAPE_RESCUE=./test-user-escape-rescue \
 		sh ./test-user-escape-fault.sh

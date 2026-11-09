@@ -308,6 +308,13 @@ requires multiple NUMA purge nodes and enough lazy areas to select a helper;
 the single-node test VM does not meet that condition, so this path has only
 been build- and source-validated there.
 
+The resctrl owner-stop test mounts resctrl if necessary, creates a temporary
+control group, assigns the target CPU while a bounded ``user-oslat`` owner is
+active, and removes the group afterward.  It requires a kernel and platform
+with resctrl CPU-domain updates::
+
+  sudo make -C tools/cpu_accel test-resctrl-owner-stop
+
 The focused single-call probe covers synchronous IPI delivery, reuse of a CSD
 whose earlier asynchronous callback is still pending, and the remote
 ``smp_call_on_cpu()`` and ``work_on_cpu()`` workqueue waits. Build its module
@@ -762,10 +769,17 @@ run-specific results must be recorded with the kernel build and test logs.
        policy established here.
      - Source review covers the resctrl callback sites and their path through
        ``arch_smp_sync_wait_begin/stop/end``. The call-function owner-stop
-       tests cover that generic callback machinery.
-     - No resctrl operation has been fault-injected while an owner is active,
-       and there is no resctrl-specific counter or policy for the remaining
-       task-group and monitoring paths.
+       tests cover that generic callback machinery. On 2026-11-09,
+       ``test-resctrl-owner-stop.sh`` passed on simon.lab
+       (``7.3.0-rc3-accel-tlbfix-gd16a5ac600cc-dirty``, ABI 22): assigning
+       CPU 3 to a temporary resctrl group completed in 14 ms while the owner
+       was active.  The trace paired an owner-stop request from
+       ``smp_call_function_many_cond()`` with owner exit 24 us later; the
+       owner reported ``state=3``, no escape, no context switch, no migration,
+       one deferred call-function IPI, and no matched kernel error.
+     - The test covers the CPU-assignment/domain-update path. Task-group
+       changes, monitoring, and other resctrl operations remain untested, and
+       there is no resctrl-specific counter for those paths.
    * - CPU hotplug attempts
      - **Owner-stop before online or offline transitions.** The current source
        closes owner admission and drains active owners before taking the

@@ -11,7 +11,8 @@ work_cpu=${CPU_ACCEL_WORK_CPU:-3}
 duration_ms=${CPU_ACCEL_DURATION_MS:-5000}
 escape_ms=${CPU_ACCEL_ESCAPE_AFTER_MS:-$((duration_ms - 100))}
 trace_root=${TRACEFS:-/sys/kernel/tracing}
-instance="$trace_root/instances/cpu_accel_sync_wait_$$"
+event_instance="$trace_root/instances/cpu_accel_sync_wait_events_$$"
+graph_instance="$trace_root/instances/cpu_accel_sync_wait_graph_$$"
 resize_instance="$trace_root/instances/cpu_accel_resize_$$"
 slab_shrink=${CPU_ACCEL_SLAB_SHRINK:-/sys/kernel/slab/kmalloc-64/shrink}
 cpuset_root=${CPU_ACCEL_CGROUP_ROOT:-/sys/fs/cgroup}
@@ -37,7 +38,8 @@ sync_work_flush_loaded=0
 debugfs_root=${DEBUGFS:-/sys/kernel/debug}
 outdir=${CPU_ACCEL_TRACE_DIR:-$(mktemp -d /tmp/cpu-accel-sync-wait.XXXXXX)}
 selected_case=${CPU_ACCEL_TEST_CASE:-all}
-trace_pid=
+event_trace_pid=
+graph_trace_pid=
 dmesg_pid=
 prime_pid=
 run_pid=
@@ -51,6 +53,8 @@ timer_cgroup="$cpuset_root/cpu-accel-timer-$$"
 timer_partition="$timer_cgroup/cpuset.cpus.partition"
 timer_cgroup_created=0
 cpuset_enabled_by_test=0
+event_instance_created=0
+graph_instance_created=0
 thp_enabled_path=/sys/kernel/mm/transparent_hugepage/enabled
 thp_enabled_saved=
 thp_enabled_changed=0
@@ -63,8 +67,8 @@ should_run_case()
 fail()
 {
 	echo "cpu_accel synchronous-work owner-stop test: $* (logs: $outdir)" >&2
-	if [ -f "$outdir/trace.log" ]; then
-		grep -E 'owner_stop_request:|owner_exit_complete:' "$outdir/trace.log" \
+	if [ -f "$outdir/owner-trace.log" ]; then
+		grep -E 'owner_stop_request:|owner_exit_complete:' "$outdir/owner-trace.log" \
 			| tail -n 20 >&2 || true
 	fi
 	if [ -f "$outdir/kernel-errors.log" ]; then
@@ -125,10 +129,19 @@ cleanup()
 		wait "$prime_pid" 2>/dev/null || true
 		prime_pid=
 	fi
-	if [ -n "$trace_pid" ]; then
-		kill -TERM "$trace_pid" 2>/dev/null || true
-		wait "$trace_pid" 2>/dev/null || true
-		trace_pid=
+	if [ -n "$graph_trace_pid" ]; then
+		echo 0 >"$graph_instance/tracing_on" 2>/dev/null || true
+		kill -TERM "$graph_trace_pid" 2>/dev/null || true
+		wait "$graph_trace_pid" 2>/dev/null || true
+		graph_trace_pid=
+		echo >"$graph_instance/set_ftrace_filter" 2>/dev/null || true
+		echo nop >"$graph_instance/current_tracer" 2>/dev/null || true
+	fi
+	if [ -n "$event_trace_pid" ]; then
+		echo 0 >"$event_instance/tracing_on" 2>/dev/null || true
+		kill -TERM "$event_trace_pid" 2>/dev/null || true
+		wait "$event_trace_pid" 2>/dev/null || true
+		event_trace_pid=
 	fi
 	"$tool" stop >"$outdir/cleanup-stop.log" 2>&1 || true
 	"$tool" exit >"$outdir/cleanup-exit.log" 2>&1 || true
@@ -138,9 +151,13 @@ cleanup()
 		wait "$dmesg_pid" 2>/dev/null || true
 		dmesg_pid=
 	fi
-	if [ -d "$instance" ]; then
-		echo 0 >"$instance/tracing_on" 2>/dev/null || true
-		rmdir "$instance" 2>/dev/null || true
+	if [ "$graph_instance_created" -eq 1 ]; then
+		rmdir "$graph_instance" 2>/dev/null || true
+		graph_instance_created=0
+	fi
+	if [ "$event_instance_created" -eq 1 ]; then
+		rmdir "$event_instance" 2>/dev/null || true
+		event_instance_created=0
 	fi
 	if [ -d "$resize_instance" ]; then
 		echo 0 >"$resize_instance/tracing_on" 2>/dev/null || true
@@ -245,8 +262,14 @@ for function in cpuset_partition_write wait_attach_done_lock update_prstate \
 		fail "timer migration trace function is unavailable: $function"
 done
 
-mkdir "$instance"
-echo 4096 >"$instance/buffer_size_kb"
+mkdir "$event_instance"
+event_instance_created=1
+echo 4096 >"$event_instance/buffer_size_kb"
+echo nop >"$event_instance/current_tracer"
+mkdir "$graph_instance"
+graph_instance_created=1
+echo 4096 >"$graph_instance/buffer_size_kb"
+
 mkdir "$resize_instance"
 resize_path="$resize_instance/per_cpu/cpu$target_cpu/buffer_size_kb"
 [ -w "$resize_path" ] || fail "target CPU ring buffer size is unavailable"
@@ -255,17 +278,21 @@ case "$(cat "$resize_path")" in
 *) resize_size=128 ;;
 esac
 for event in owner_stop_request owner_exit_complete; do
-	echo 1 >"$instance/events/cpu_accel/$event/enable"
+	echo 1 >"$event_instance/events/cpu_accel/$event/enable"
 done
+owner_stop_trigger="$event_instance/events/cpu_accel/owner_stop_request/trigger"
+[ -w "$owner_stop_trigger" ] || \
+	fail "owner-stop trace trigger is unavailable"
+echo stacktrace:1 >"$owner_stop_trigger"
 if should_run_case srcu_cleanup || should_run_case vmalloc_purge || \
 	should_run_case vmalloc_purge_wait || should_run_case sync_work_flush || \
 	should_run_case sync_workqueue_flush; then
-	echo 1 >"$instance/events/workqueue/workqueue_queue_work/enable"
-	echo 1 >"$instance/events/workqueue/workqueue_execute_start/enable"
+	echo 1 >"$event_instance/events/workqueue/workqueue_queue_work/enable"
+	echo 1 >"$event_instance/events/workqueue/workqueue_execute_start/enable"
 fi
 if should_run_case vmalloc_purge || should_run_case vmalloc_purge_wait; then
-	echo 1 >"$instance/events/vmalloc/free_vmap_area_noflush/enable"
-	echo 1 >"$instance/events/vmalloc/purge_vmap_area_lazy/enable"
+	echo 1 >"$event_instance/events/vmalloc/free_vmap_area_noflush/enable"
+	echo 1 >"$event_instance/events/vmalloc/purge_vmap_area_lazy/enable"
 fi
 if should_run_case sync_work_flush || should_run_case sync_workqueue_flush; then
 	insmod "$sync_work_flush_probe" target_cpu="$target_cpu" || \
@@ -299,33 +326,39 @@ printf '%s\n' x86_cpu_accel_user_enter cpuset_partition_write \
 	tmigr_isolated_exclude_cpumask tmigr_cpu_isolate tmigr_cpu_unisolate \
 	arch_smp_sync_wait_begin arch_smp_sync_wait_stop arch_smp_sync_wait_end \
 	x86_cpu_accel_request_stop_owner_gen \
-	>"$instance/set_ftrace_filter"
+	>"$graph_instance/set_ftrace_filter"
 if should_run_case lru; then
 	grep -qw lru_add_drain_all \
 		"$trace_root/available_filter_functions" || \
 		fail "LRU drain caller is not traceable"
-	printf '%s\n' lru_add_drain_all >>"$instance/set_ftrace_filter"
+	printf '%s\n' lru_add_drain_all >>"$graph_instance/set_ftrace_filter"
 fi
 if should_run_case vmalloc_purge_wait; then
 	printf '%s\n' __purge_vmap_area_lazy purge_vmap_node flush_work \
-		>>"$instance/set_ftrace_filter"
+		>>"$graph_instance/set_ftrace_filter"
 fi
 if should_run_case sync_work_flush; then
 	printf '%s\n' flush_work_with_sync_wait \
-		>>"$instance/set_ftrace_filter"
+		>>"$graph_instance/set_ftrace_filter"
 fi
 if should_run_case sync_workqueue_flush; then
 	printf '%s\n' __flush_workqueue_with_sync_wait \
-		>>"$instance/set_ftrace_filter"
+		>>"$graph_instance/set_ftrace_filter"
 fi
 if should_run_case sync_work_flush || should_run_case sync_workqueue_flush; then
 	printf '%s\n' cpu_accel_sync_work_flush_probe_fn \
-		>>"$instance/set_ftrace_filter"
+		>>"$graph_instance/set_ftrace_filter"
 fi
-echo function_graph >"$instance/current_tracer"
-cat "$instance/trace_pipe" >"$outdir/trace.log" &
-trace_pid=$!
-echo 1 >"$instance/tracing_on"
+
+echo function_graph >"$graph_instance/current_tracer"
+echo 0 >"$event_instance/tracing_on"
+echo 0 >"$graph_instance/tracing_on"
+cat "$event_instance/trace_pipe" >"$outdir/owner-trace.log" &
+event_trace_pid=$!
+cat "$graph_instance/trace_pipe" >"$outdir/function-graph.log" &
+graph_trace_pid=$!
+echo 1 >"$event_instance/tracing_on"
+echo 1 >"$graph_instance/tracing_on"
 dmesg --follow-new >"$outdir/dmesg-new.log" 2>&1 &
 dmesg_pid=$!
 
@@ -365,7 +398,8 @@ run_case()
 	if [ "$name" = vmalloc_purge_wait ]; then
 		case_escape_ms=100
 	fi
-	entry_count=$(grep -Fc 'x86_cpu_accel_user_enter();' "$outdir/trace.log" || true)
+	entry_count=$(grep -Fc 'x86_cpu_accel_user_enter();' \
+		"$outdir/function-graph.log" || true)
 
 	if [ "$name" = timer_migration ]; then
 		rm -f "$active_marker"
@@ -396,7 +430,8 @@ run_case()
 				ready=1
 			fi
 		else
-			count=$(grep -Fc 'x86_cpu_accel_user_enter();' "$outdir/trace.log" || true)
+			count=$(grep -Fc 'x86_cpu_accel_user_enter();' \
+				"$outdir/function-graph.log" || true)
 			[ "$count" -gt "$entry_count" ] && ready=1 || ready=0
 		fi
 		if [ "$ready" -eq 1 ]; then
@@ -508,19 +543,10 @@ run_case()
 	[ "$helper_elapsed_ms" -lt "$max_helper_elapsed_ms" ] || \
 		fail "$name trigger waited ${helper_elapsed_ms} ms (limit ${max_helper_elapsed_ms} ms) for timed owner escape"
 
-	stack_caller=
-	if [ "$name" = timer_migration ]; then
-		stack_caller=housekeeping_update
-	fi
-	if [ "$name" = lru ]; then
-		stack_caller=lru_add_drain_all
-	fi
-	# Function-graph tracing can expose its return trampoline as the event
-	# caller. Accept it when the expected caller was traced before the stop
-	# or, for timer migration, when the trigger stack proves the request came
-	# through housekeeping_update().
+	# Keep trace events in an instance using the nop tracer. Mixing them with
+	# function_graph rewrites the event caller as return_to_handler.
 	if ! awk -v target="$case_cpu" -v caller="$expected_caller" \
-		-v stack_caller="$stack_caller" '
+		'
 function field(line, name, value, pos)
 {
 	pos = index(line, name "=")
@@ -540,9 +566,14 @@ function caller_matches(line, expected, actual, parts, count, i)
 	}
 	return 0
 }
-function trace_seen(line, expected)
+function stack_matches(line, expected, parts, count, i)
 {
-	return index(line, expected "()")
+	count = split(expected, parts, "|")
+	for (i = 1; i <= count; i++) {
+		if (index(line, "=> " parts[i]))
+			return 1
+	}
+	return 0
 }
 /owner_stop_request:/ {
 	pending = 0
@@ -555,19 +586,16 @@ function trace_seen(line, expected)
 			if (caller_matches($0, caller)) {
 				owner = this_owner
 				stop_line = NR
-			} else if (stack_caller != "" &&
-				   field($0, "caller") == "return_to_handler" &&
-				   caller_seen) {
-				owner = this_owner
-				stop_line = NR
-			} else if (stack_caller != "" &&
-				   field($0, "caller") == "return_to_handler") {
+			} else if (field($0, "caller") == "return_to_handler") {
 				pending = 1
 				pending_owner = this_owner
 				pending_line = NR
 			}
+		}
+	} else {
+		owner = ""
+		stop_line = 0
 	}
-}
 }
 /<stack trace>/ {
 	if (pending)
@@ -575,10 +603,8 @@ function trace_seen(line, expected)
 	next
 }
 {
-	if (stack_caller != "" && trace_seen($0, stack_caller))
-		caller_seen = 1
 	if (pending && stack_active) {
-		if (index($0, "=> " stack_caller)) {
+		if (stack_matches($0, caller)) {
 			owner = pending_owner
 			stop_line = pending_line
 			pending = 0
@@ -596,15 +622,15 @@ function trace_seen(line, expected)
 }
 END {
 	exit !(owner != "" && stop_line && exit_line > stop_line)
-}' "$outdir/trace.log"; then
+}' "$outdir/owner-trace.log"; then
 		fail "$name trace did not pair owner stop with owner exit"
 	fi
 	if [ "$name" = vmalloc_purge ]; then
 		grep -Eq 'workqueue_queue_work:.*function=purge_vmap_node .*req_cpu=' \
-			"$outdir/trace.log" || \
+			"$outdir/owner-trace.log" || \
 			fail "vmalloc purge did not queue a purge_vmap_node worker"
 		grep -Eq 'workqueue_execute_start:.*function purge_vmap_node' \
-			"$outdir/trace.log" || \
+			"$outdir/owner-trace.log" || \
 			fail "vmalloc purge did not execute a purge_vmap_node worker"
 	fi
 	if [ "$name" = vmalloc_purge_wait ]; then
@@ -635,7 +661,7 @@ function field(line, name, pos, value)
 	exit_line = NR
 }
 END { exit !(owner != "" && stop_line && exit_line > stop_line) }
-' "$outdir/trace.log"; then
+' "$outdir/owner-trace.log"; then
 			fail "vmalloc wait did not stop and exit the rearmed owner"
 		fi
 		if ! awk -v target="$case_cpu" '
@@ -658,7 +684,7 @@ function field(line, name, pos, value)
 	index($0, "work struct " work ":") &&
 	index($0, "function purge_vmap_node") { executed = 1 }
 END { exit !(work != "" && executed) }
-' "$outdir/trace.log"; then
+' "$outdir/owner-trace.log"; then
 			fail "vmalloc wait did not execute the target CPU purge worker"
 		fi
 	fi
@@ -687,7 +713,7 @@ function field(line, name, pos, value)
 }
 END {
 	exit !(work != "" && executed)
-}' "$outdir/trace.log"; then
+}' "$outdir/owner-trace.log"; then
 			fail "SRCU cleanup did not execute its queued per-CPU callback worker"
 		fi
 	fi
@@ -716,7 +742,7 @@ function field(line, name, pos, value)
 	executed = 1
 }
 END { exit !(work != "" && executed) }
-' "$outdir/trace.log"; then
+' "$outdir/owner-trace.log"; then
 			fail "sync-work flush probe did not execute on CPU $case_cpu"
 		fi
 	fi
@@ -780,11 +806,8 @@ if should_run_case timer_migration; then
 	echo "$timer_cpu" >"$timer_cgroup/cpuset.cpus"
 	timer_mems=$(cat "$cpuset_root/cpuset.mems.effective")
 	echo "$timer_mems" >"$timer_cgroup/cpuset.mems"
-	timer_stop_trigger="$instance/events/cpu_accel/owner_stop_request/trigger"
-	echo stacktrace:1 >"$timer_stop_trigger"
 	run_case timer_migration "$timer_partition" \
 		housekeeping_update isolated sysfs "$timer_cpu" "$timer_cgroup"
-	echo '!stacktrace:1' >"$timer_stop_trigger"
 	echo member >"$timer_partition"
 	rmdir "$timer_cgroup"
 	timer_cgroup_created=0
@@ -888,10 +911,17 @@ if should_run_case vmalloc_purge_wait; then
 	vmalloc_purge_loaded=0
 fi
 
-echo 0 >"$instance/tracing_on"
-kill -TERM "$trace_pid" "$dmesg_pid" 2>/dev/null || true
-wait "$trace_pid" 2>/dev/null || true
-trace_pid=
+echo 0 >"$event_instance/tracing_on"
+echo 0 >"$graph_instance/tracing_on"
+echo '!stacktrace:1' >"$owner_stop_trigger"
+kill -TERM "$event_trace_pid" "$graph_trace_pid" "$dmesg_pid" \
+	2>/dev/null || true
+wait "$event_trace_pid" 2>/dev/null || true
+event_trace_pid=
+wait "$graph_trace_pid" 2>/dev/null || true
+graph_trace_pid=
+echo >"$graph_instance/set_ftrace_filter"
+echo nop >"$graph_instance/current_tracer"
 wait "$dmesg_pid" 2>/dev/null || true
 dmesg_pid=
 

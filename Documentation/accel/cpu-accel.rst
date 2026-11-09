@@ -1276,12 +1276,21 @@ run-specific results must be recorded with the kernel build and test logs.
         softirq, workqueue, architecture-IPI, TLB, context-switch, or
         migration event, and completed with ``state=3``.  The full report is
         ``Documentation/accel/phase8-wcl-report.md``.
+        On 2026-11-09, the sync-work harness was fixed to keep trace events and
+        ``function_graph`` in separate instances and to enable an owner-stop
+        stack trace.  The vmstat case passed on simon.lab: writing
+        ``vm.stat_refresh`` from CPU 0 stopped the CPU 3 owner in 3 ms, and the
+        stack proved the request came through ``schedule_on_each_cpu()``.  The
+        stop and owner-exit tracepoints were 10 us apart; the owner escaped and
+        recovered with no context switch, migration, or matched kernel error.
+        The LRU case also passed: ``drop_caches`` from CPU 0 stopped the CPU 3
+        owner in 17 ms, the stack proved the request came through
+        ``__lru_add_drain_all()``, and the stop and owner-exit tracepoints were
+        9 us apart with the same clean owner telemetry.
       - No hard bound; log2-bin percentiles are factor-of-two ceilings.
         The ``net_backlog`` and ``timer_migration`` classes are deferred to
-        a boot whose ``rcu_nocbs`` covers their owner CPU, ``irq_storm``
-        needs a test NIC, and the sync-work script's function-graph
-        stop/exit pairing assertion fails on this image (verified
-        pre-existing with the unmodified module and ABI-17 controller).
+        a boot whose ``rcu_nocbs`` covers their owner CPU, and ``irq_storm``
+        needs a test NIC.
 
 The plan's disposition vocabulary is safe, routed to housekeeping, deferred,
 rejected, or domain-terminating. Several rows remain unclassified or have only

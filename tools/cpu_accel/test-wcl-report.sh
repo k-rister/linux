@@ -6,9 +6,9 @@
 # and emit a per-class log plus a summary TSV.
 #
 # The default matrix is the common portable set.  Select the device
-# lifecycle, power-policy, resctrl, migration, net_backlog, timer_migration,
-# or irq_storm classes individually when the required topology or test NIC is
-# available; selecting all attempts every class.
+# lifecycle, power-policy, resctrl, perf, ftrace, TLB, migration, net_backlog,
+# timer_migration, or irq_storm classes individually when the required
+# topology or test NIC is available; selecting all attempts every class.
 
 set -eu
 
@@ -81,6 +81,7 @@ should_run_class()
 		device_reload|device_teardown|device_rebind|device_sriov|\
 		amd_pstate|thermal_cooling|cpuidle_state|dirty_writeback|\
 		resctrl_owner|resctrl_task|resctrl_monitor|\
+		perf_event|ftrace_maintenance|tlb_flush|\
 		migration|net_backlog|timer_migration|irq_storm)
 			return 1
 			;;
@@ -331,6 +332,39 @@ resctrl_monitor_case()
 		sh "$script_dir/test-resctrl-monitor-owner-stop.sh"
 }
 
+perf_event_case()
+{
+	CPU_ACCEL_CPU="$target_cpu" \
+	CPU_ACCEL_ESCAPE_AFTER_MS=3000 \
+	CPU_ACCEL_TESTCTL="$tool" \
+	CPU_ACCEL_PERF_EVENT_HELPER="$script_dir/test-perf-event-open" \
+		sh "$script_dir/test-perf-owner-stop.sh"
+}
+
+ftrace_maintenance_case()
+{
+	CPU_ACCEL_CPU="$target_cpu" \
+	CPU_ACCEL_ESCAPE_AFTER_MS=3000 \
+	CPU_ACCEL_TESTCTL="$tool" \
+		sh "$script_dir/test-ftrace-maintenance.sh"
+}
+
+tlb_flush_case()
+{
+	tlb_stress_cpu=${CPU_ACCEL_WCL_TLB_STRESS_CPU:-$work_cpu}
+	if [ "$tlb_stress_cpu" -eq "$target_cpu" ]; then
+		fail "TLB stress CPU must differ from the owner CPU"
+	fi
+	CPU_ACCEL_CPU="$target_cpu" \
+	CPU_ACCEL_ESCAPE_AFTER_MS=3000 \
+	CPU_ACCEL_TESTCTL="$tool" \
+	CPU_ACCEL_TLB_FLUSH_PROBE="$script_dir/tlb-flush-probe/cpu_accel_tlb_flush_probe.ko" \
+	CPU_ACCEL_TLB_COW_CHURN="$script_dir/test-tlb-cow-churn" \
+	CPU_ACCEL_TLB_COW_CHURN_MS=3000 \
+	CPU_ACCEL_STRESS_CPU="$tlb_stress_cpu" \
+		sh "$script_dir/test-tlb-flush.sh"
+}
+
 if should_run_class baseline; then
 	run_class baseline baseline_run
 fi
@@ -414,6 +448,18 @@ fi
 
 if should_run_class resctrl_monitor; then
 	run_class resctrl_monitor resctrl_monitor_case
+fi
+
+if should_run_class perf_event; then
+	run_class perf_event perf_event_case
+fi
+
+if should_run_class ftrace_maintenance; then
+	run_class ftrace_maintenance ftrace_maintenance_case
+fi
+
+if should_run_class tlb_flush; then
+	run_class tlb_flush tlb_flush_case
 fi
 
 if should_run_class migration; then

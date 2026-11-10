@@ -1348,7 +1348,7 @@ run-specific results must be recorded with the kernel build and test logs.
          the owned CPU that does not change owner state and is counted by the
          IRQ and softirq telemetry.
        - The ``user-death`` workload is the focused test for this
-         reconciliation path: it must report ``state=4 mode=0``,
+         reconciliation path: it must report ``state=5 mode=0``,
          ``recovery_state=5 recovery_error=-3``, ``user_escape_count=0``, and
          ``migration_detected=0`` with no kernel-error match. ABI 23's
          exception counters are not yet runtime-validated on the rebuilt

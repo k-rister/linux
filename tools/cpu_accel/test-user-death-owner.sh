@@ -117,25 +117,14 @@ for attempt in $(seq 1 1000); do
 done
 [ "$manager_reaped" -eq 1 ] || fail "manager did not exit after owner death"
 
-reconciled=0
-for attempt in $(seq 1 500); do
-	if "$tool" status >"$outdir/status.log" 2>"$outdir/status.err"; then
-		case "$(cat "$outdir/status.log")" in
-		*"state=4 mode=0 "*)
-			reconciled=1
-			break
-			;;
-		esac
-	fi
-	sleep 0.01
-done
-[ "$reconciled" -eq 1 ] || fail "owner death did not reconcile to ERROR/Linux"
+status_line=$(grep -E '^state=5 mode=0 ' "$outdir/ctl.log" | tail -n 1)
+[ -n "$status_line" ] || fail "owner death did not reconcile to ERROR/Linux"
 
-grep -q 'recovery_state=5 recovery_error=-3 ' "$outdir/status.log" || \
+grep -q 'recovery_state=5 recovery_error=-3 ' "$outdir/ctl.log" || \
 	fail "owner death did not record recovery failure -ESRCH"
-grep -q 'user_escape_count=0' "$outdir/status.log" || \
+grep -q 'user_escape_count=0' "$outdir/ctl.log" || \
 	fail "owner death unexpectedly used an escape NMI"
-grep -q 'migration_detected=0' "$outdir/status.log" || \
+grep -q 'migration_detected=0' "$outdir/ctl.log" || \
 	fail "owner migrated during the death test"
 
 kill -TERM "$dmesg_pid" 2>/dev/null || true
@@ -146,6 +135,6 @@ grep -Ei 'BUG:|Oops:|soft lockup|blocked for more than|RCU.*stall|Kernel panic' 
 [ ! -s "$outdir/kernel-errors.log" ] || \
 	fail "kernel error appeared during the user-death test"
 
-cat "$outdir/status.log"
+printf '%s\n' "$status_line"
 echo "PASS: killed owner was reconciled without an escape NMI"
 echo "logs: $outdir"

@@ -13,6 +13,7 @@ duration_ms=${CPU_ACCEL_DURATION_MS:-3000}
 load_cpus=${CPU_ACCEL_LOAD_CPUS:-}
 outdir=${CPU_ACCEL_TRACE_DIR:-$(mktemp -d /tmp/cpu-accel-hotplug-race.XXXXXX)}
 summary="$outdir/summary.tsv"
+tail_report="$outdir/latency-tail.tsv"
 load_pids=
 
 fail()
@@ -52,8 +53,8 @@ esac
 case "$repeat_count" in
 	''|*[!0-9]*) fail "repeat count must be a positive integer" ;;
 esac
-[ "$repeat_count" -ge 1 ] && [ "$repeat_count" -le 32 ] || \
-	fail "repeat count must be between 1 and 32"
+[ "$repeat_count" -ge 1 ] && [ "$repeat_count" -le 64 ] || \
+	fail "repeat count must be between 1 and 64"
 case "$duration_ms" in
 	''|*[!0-9]*) fail "duration must be an integer number of milliseconds" ;;
 esac
@@ -152,6 +153,42 @@ stop_load
 status_line=$(grep -E '^state=[3-7] ' "$run_log" | tail -n 1)
 [ -n "$status_line" ] || fail "CPU-$hotplug_mode race did not report owner status"
 printf '%s\n' "$status_line"
+
+percentile()
+{
+	values_file=$1
+	rank=$2
+	value_count=$(wc -l <"$values_file")
+	if [ "$value_count" -eq 0 ]; then
+		printf '%s\n' -
+		return
+	fi
+	index=$((((value_count - 1) * rank) / 100 + 1))
+	[ "$index" -ge 1 ] || index=1
+	[ "$index" -le "$value_count" ] || index=$value_count
+	sed -n "${index}p" "$values_file"
+}
+
+active_values=$outdir/user-active-ns.values
+hotplug_values=$outdir/hotplug-wait-ms.values
+awk -F '\t' 'NR > 1 && $3 != "-" { print $3 }' "$summary" |
+	sort -n >"$active_values"
+awk -F '\t' 'NR > 1 && $4 != "-" { print $4 }' "$summary" |
+	sort -n >"$hotplug_values"
+printf 'metric\tcount\tp50\tp90\tp99\tmax\n' >"$tail_report"
+printf 'user_active_ns\t%s\t%s\t%s\t%s\t%s\n' \
+	"$(wc -l <"$active_values")" \
+	"$(percentile "$active_values" 50)" \
+	"$(percentile "$active_values" 90)" \
+	"$(percentile "$active_values" 99)" \
+	"$(tail -n 1 "$active_values")" >>"$tail_report"
+printf 'hotplug_wait_ms\t%s\t%s\t%s\t%s\t%s\n' \
+	"$(wc -l <"$hotplug_values")" \
+	"$(percentile "$hotplug_values" 50)" \
+	"$(percentile "$hotplug_values" 90)" \
+	"$(percentile "$hotplug_values" 99)" \
+	"$(tail -n 1 "$hotplug_values")" >>"$tail_report"
+
 max_active_ns=$(awk -F '\t' '
 	NR > 1 && $3 != "-" {
 		if ($3 > max)
@@ -159,6 +196,8 @@ max_active_ns=$(awk -F '\t' '
 	}
 	END { print max + 0 }' "$summary")
 cat "$summary"
+cat "$tail_report"
 echo "PASS: $repeat_count CPU-$hotplug_mode races completed with optional concurrent load"
 echo "max_user_active_ns=$max_active_ns"
+echo "tail report: $tail_report"
 echo "logs: $outdir"

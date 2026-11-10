@@ -7,9 +7,9 @@
 #
 # The default matrix is the common portable set.  Select the device
 # lifecycle, power-policy, resctrl, perf, ftrace, TLB, hotplug, stop-machine,
-# exception, RCU, migration, net_backlog, timer_migration, or irq_storm classes
-# individually when the required topology or test NIC is available; selecting
-# all attempts every class.
+# fault-injection, exception, RCU, migration, net_backlog, timer_migration, or
+# irq_storm classes individually when the required topology or test NIC is
+# available; selecting all attempts every class.
 
 set -eu
 
@@ -86,7 +86,8 @@ should_run_class()
 		amd_pstate|thermal_cooling|cpuidle_state|dirty_writeback|\
 		resctrl_owner|resctrl_task|resctrl_monitor|\
 		perf_event|ftrace_maintenance|tlb_flush|\
-		hotplug_up|hotplug_down|stop_machine|user_escape_fault|\
+		hotplug_up|hotplug_down|stop_machine|stop_machine_fault|\
+		user_escape_fault|\
 		user_death|rcu_callback_routing|\
 		migration|net_backlog|timer_migration|irq_storm)
 			return 1
@@ -389,6 +390,16 @@ stop_machine_case()
 		sh "$script_dir/test-stop-machine-inactive-owner.sh"
 }
 
+stop_machine_fault_case()
+{
+	CPU_ACCEL_CPU="$target_cpu" \
+	CPU_ACCEL_DURATION_MS="$duration_ms" \
+	CPU_ACCEL_TESTCTL="$tool" \
+	CPU_ACCEL_STOP_MACHINE_PROBE=\
+		"$script_dir/stop-machine-probe/cpu_accel_stop_machine_probe.ko" \
+		sh "$script_dir/test-stop-machine-owner-stop.sh"
+}
+
 user_escape_fault_case()
 {
 	CPU_ACCEL_ESCAPE_CPU="$target_cpu" \
@@ -521,6 +532,10 @@ fi
 
 if should_run_class stop_machine; then
 	run_class stop_machine stop_machine_case
+fi
+
+if should_run_class stop_machine_fault; then
+	run_class stop_machine_fault stop_machine_fault_case
 fi
 
 if should_run_class user_escape_fault; then

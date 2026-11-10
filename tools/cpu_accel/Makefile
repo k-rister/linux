@@ -93,6 +93,11 @@ test-hotplug-down-race: cpu-accel-testctl
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl CPU_ACCEL_HOTPLUG_MODE=down \
 		sh ./test-hotplug-race.sh
 
+test-stop-machine-owner-stop: cpu-accel-testctl stop-machine-probe
+	CPU_ACCEL_TESTCTL=./cpu-accel-testctl \
+	CPU_ACCEL_STOP_MACHINE_PROBE=$(CURDIR)/stop-machine-probe/cpu_accel_stop_machine_probe.ko \
+		sh ./test-stop-machine-owner-stop.sh
+
 test-rcu-nocb-admission: cpu-accel-testctl
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-rcu-nocb-admission.sh
 
@@ -103,6 +108,9 @@ test-rcu-callback-routing: cpu-accel-testctl rcu-probe
 
 rcu-probe:
 	$(MAKE) -C $(KDIR) M=$(CURDIR)/rcu-probe modules
+
+stop-machine-probe:
+	$(MAKE) -C $(KDIR) M=$(CURDIR)/stop-machine-probe modules
 
 cpu-accel-testctl: cpu-accel-testctl.o libcpu_accel.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
@@ -155,12 +163,14 @@ clean:
 		test-migration-owner-helper test-migration-owner-helper.o \
 		cpu-accel-testctl.o libcpu_accel.o
 	$(MAKE) -C $(KDIR) M=$(CURDIR)/rcu-probe clean
+	$(MAKE) -C $(KDIR) M=$(CURDIR)/stop-machine-probe clean
 
 .PHONY: all clean test test-sync-work-owner-stop test-perf-owner-stop \
 	test-irq-storm test-timerlat-owner test-user-escape-fault \
 	test-user-death-owner \
 	test-hotplug-race \
 	test-hotplug-down-race \
+	test-stop-machine-owner-stop \
 	test-watchdog-owner-admission test-resctrl-owner-stop \
 	test-resctrl-task-owner-stop \
 	test-resctrl-monitor-owner-stop \
@@ -175,4 +185,4 @@ clean:
 	test-thermal-cooling-owner \
 	test-cpuidle-state-owner \
 	test-rcu-nocb-admission \
-	test-rcu-callback-routing rcu-probe
+	test-rcu-callback-routing rcu-probe stop-machine-probe

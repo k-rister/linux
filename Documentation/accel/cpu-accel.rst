@@ -261,7 +261,8 @@ helper and set ``CPU_ACCEL_SECCOMP_CHURN`` to enable this additional workload::
 The repeated hotplug race harness supports CPU-up and CPU-down modes. It runs
 the matching focused owner test multiple times and can add one busy-loop worker
 per comma-separated load CPU. It records each run's result, owner-active
-interval, and CPU-down wait in a summary TSV::
+interval, and CPU-down wait in a summary TSV, and emits a run-specific
+latency-tail report with p50, p90, p99, and maximum values::
 
   sudo make -C tools/cpu_accel test-hotplug-race
   sudo make -C tools/cpu_accel test-hotplug-down-race
@@ -952,8 +953,15 @@ run-specific results must be recorded with the kernel build and test logs.
        the test observed an active marker; it never launched CPU-up and is not
        included in this count.
      - ``test-hotplug-race.sh`` provides bounded repeated CPU-up and CPU-down
-       harnesses with optional concurrent load. Runtime reports for both modes
-       and a run-specific latency-tail report remain open.
+       harnesses with optional concurrent load and emits a run-specific
+       latency-tail report. On 2026-11-10, Simon passed 16 loaded CPU-up and
+       16 loaded CPU-down iterations with owner CPU 5, hotplug CPU 6, and load
+       CPUs 7-9. The CPU-up maximum owner-active interval was 38,812,957 ns;
+       CPU-down completed normally with a maximum owner-active interval of
+       3,001,202,150 ns and a maximum hotplug wait of 3,012 ms. Evidence is in
+       ``/root/accel-measure/phase8-stop-machine-fault-20261110T233220Z/evidence-hotplug-up-loaded``
+       and
+       ``/root/accel-measure/phase8-stop-machine-fault-20261110T233220Z/evidence-hotplug-down-loaded``.
    * - ``stop_machine()`` requests
      - **Owner-stop on sleepable paths; reject unscoped inactive rendezvous.**
        The public ``stop_machine()`` wrapper drains owners before taking
@@ -980,8 +988,20 @@ run-specific results must be recorded with the kernel build and test logs.
        value zero. Kernel build ``#02114`` passed four additional loaded runs
        with that trace order and successful inactive-CPU rendezvous; the
        maximum observed owner-stop-request-to-exit interval was 16 us.
-     - Higher-volume hotplug, caller lock-order fault injection, a general
-       ``stop_machine()`` fault injector, and disposition of out-of-tree direct
+     - ``test-stop-machine-owner-stop.sh`` provides a general
+       ``stop_machine()`` fault injector. It invokes the public wrapper while a
+       ring-3 owner is active, proves owner drain before callback execution,
+       and exercises both success and ``-EIO`` propagation. On 2026-11-10,
+       Simon passed both cases with owner CPU 5 and 10-second bounded runs. The
+       callback ran on all 12 online CPUs; the success case returned zero, the
+       injected fault case returned ``-EIO``, and the target and any-owner
+       active checks were false after each call. Evidence is in
+       ``/root/accel-measure/phase8-stop-machine-fault-20261110T233220Z/evidence-stop-machine-owner-stop``.
+       The standard worst-case-latency runner integrates the same fault
+       injector as ``stop_machine_fault`` and passed it on Simon with owner
+       CPU 5, work CPU 0, and a 10-second bounded window. Evidence is in
+       ``/root/accel-measure/phase8-stop-machine-fault-wcl-20261110T1747Z/evidence-stop-machine-fault/summary.tsv``.
+     - Caller lock-order fault injection and disposition of out-of-tree direct
        ``stop_machine_cpuslocked()`` callers remain open.
    * - Frequency, idle, thermal, power-policy, and watchdog changes
      - **Watchdog admission is rejected when an enabled lockup detector

@@ -63,9 +63,9 @@ Optional classes, selected explicitly with `CPU_ACCEL_WCL_CLASSES`:
   fault-injection paths, each run separately.
 - `perf_event`, `ftrace_maintenance`, `tlb_flush`: the perf, ftrace, and
   page-table/TLB source-audit rows.
-- `hotplug_up`, `hotplug_down`, `stop_machine`, `user_escape_fault`,
-  `user_death`, `rcu_callback_routing`: the remaining hotplug, stop-machine,
-  exception, and RCU stress rows.
+- `hotplug_up`, `hotplug_down`, `stop_machine`, `stop_machine_fault`,
+  `user_escape_fault`, `user_death`, `rcu_callback_routing`: the remaining
+  hotplug, stop-machine, fault-injection, exception, and RCU stress rows.
 - `migration`: two NUMA memory nodes, three distinct online CPUs, and a
   reader CPU supplied through `CPU_ACCEL_WCL_MIGRATION_READER_CPU`.
 - `net_backlog`, `timer_migration`: the owner CPU must be RCU-offloaded and
@@ -112,6 +112,7 @@ topology-specific rows.
 | `hotplug_up` | `test-hotplug-race.sh` |
 | `hotplug_down` | `test-hotplug-race.sh` |
 | `stop_machine` | `test-stop-machine-inactive-owner.sh` |
+| `stop_machine_fault` | `test-stop-machine-owner-stop.sh` |
 | `user_escape_fault` | `test-user-escape-fault.sh` |
 | `user_death` | `test-user-death-owner.sh` |
 | `rcu_callback_routing` | `test-rcu-callback-routing.sh` |
@@ -342,6 +343,30 @@ The evidence is in
 and
 `/root/accel-measure/phase8-bff69f4-wcl-net-backlog-rfs22-20261110T2241Z`.
 
+### 2026-11-10 focused fault-injection and hotplug-race evidence (simon.lab)
+
+The focused runs used the same kernel and ABI 23, owner CPU 5, hotplug CPU 6,
+and load CPUs 7-9. `test-stop-machine-owner-stop.sh` passed two 10-second
+bounded cases. The success case returned zero, and the injected fault case
+returned ``-EIO``. Both executed the callback on all 12 online CPUs, observed
+the target owner active before ``stop_machine()``, and observed neither the
+target owner nor any accelerator owner active afterward. Evidence is in
+`/root/accel-measure/phase8-stop-machine-fault-20261110T233220Z/evidence-stop-machine-owner-stop`.
+
+The loaded hotplug-race harness passed 16 CPU-up and 16 CPU-down iterations.
+CPU-up used 3-second bounded runs and a maximum owner-active interval of
+38,812,957 ns. CPU-down completed normally with a maximum owner-active interval
+of 3,001,202,150 ns and a maximum hotplug wait of 3,012 ms. Both reports include
+p50, p90, p99, and maximum latency tails. Evidence is in
+`/root/accel-measure/phase8-stop-machine-fault-20261110T233220Z/evidence-hotplug-up-loaded/summary.tsv`
+and
+`/root/accel-measure/phase8-stop-machine-fault-20261110T233220Z/evidence-hotplug-down-loaded/summary.tsv`.
+
+The standard WCL runner now integrates the general fault injector as
+`stop_machine_fault`. On 2026-11-10 it passed on Simon with owner CPU 5,
+work CPU 0, and a 10-second bounded window. Evidence is in
+`/root/accel-measure/phase8-stop-machine-fault-wcl-20261110T1747Z/evidence-stop-machine-fault/summary.tsv`.
+
 The remaining optional classes are unsupported or not applicable on this boot:
 
 - `device_reload`, `device_teardown`, and `device_rebind` fail before creating
@@ -360,6 +385,8 @@ The remaining optional classes are unsupported or not applicable on this boot:
 | Optional portable WCL classes | Passed individually on the same kernel | `/root/accel-measure/phase8-bff69f4-wcl-optional-20261110/<class>/summary.tsv` |
 | `timer_migration` | Passed with the corrected active-marker harness | `/root/accel-measure/phase8-bff69f4-wcl-timer-20261110T1310/summary.tsv` |
 | `net_backlog` | Passed with RFS and a cork-held TCP flow under the active tuned `cpu-partitioning` profile | `/root/accel-measure/phase8-bff69f4-wcl-net-backlog-rfs23-20261110T2243Z/summary.tsv` |
+| `stop_machine_fault` | Passed success and injected `-EIO` cases with owner drain on all online CPUs, both directly and through the standard WCL runner | `/root/accel-measure/phase8-stop-machine-fault-20261110T233220Z/evidence-stop-machine-owner-stop`; `/root/accel-measure/phase8-stop-machine-fault-wcl-20261110T1747Z/evidence-stop-machine-fault/summary.tsv` |
+| Higher-volume hotplug races | Passed 16 loaded CPU-up and 16 loaded CPU-down iterations | `/root/accel-measure/phase8-stop-machine-fault-20261110T233220Z/evidence-hotplug-{up,down}-loaded/summary.tsv` |
 | Netdevsim lifecycle classes | Unsupported on this kernel because required symbols are absent | `/root/accel-measure/phase8-bff69f4-wcl-optional-20261110/device_*/summary.tsv` |
 | `migration` | Not applicable on this one-NUMA-node host | No runtime run |
 | `irq_storm` | Not applicable without an isolated test NIC | No runtime run |
@@ -391,6 +418,8 @@ The remaining optional classes are unsupported or not applicable on this boot:
 - `timer_migration` passed on the earlier `rcu_nocbs=1-11` boot. After the
   later repartition, `net_backlog` passed through RFS steering of a cork-held
   TCP flow; `irq_storm` remains deferred to a test NIC.
+- Caller lock-order fault injection and disposition of out-of-tree direct
+  `stop_machine_cpuslocked()` callers remain open.
 - Machine-check injection remains out of scope (see the exceptions/NMI
   row).
 

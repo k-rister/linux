@@ -6,9 +6,9 @@
 # and emit a per-class log plus a summary TSV.
 #
 # The default matrix is the common portable set.  Select the device
-# lifecycle, migration, net_backlog, timer_migration, or irq_storm classes
-# individually when the required topology or test NIC is available; selecting
-# all attempts every class.
+# lifecycle, power-policy, migration, net_backlog, timer_migration, or
+# irq_storm classes individually when the required topology or test NIC is
+# available; selecting all attempts every class.
 
 set -eu
 
@@ -79,6 +79,7 @@ should_run_class()
 	common)
 		case "$1" in
 		device_reload|device_teardown|device_rebind|device_sriov|\
+		amd_pstate|thermal_cooling|cpuidle_state|dirty_writeback|\
 		migration|net_backlog|timer_migration|irq_storm)
 			return 1
 			;;
@@ -265,6 +266,44 @@ netdevsim_case()
 		sh "$script_dir/test-netdevsim-$1-owner.sh"
 }
 
+amd_pstate_case()
+{
+	CPU_ACCEL_CPU="$target_cpu" \
+	CPU_ACCEL_AMD_PSTATE_WORK_CPU="$work_cpu" \
+	CPU_ACCEL_AMD_PSTATE_DURATION_MS="$duration_ms" \
+	CPU_ACCEL_TESTCTL="$tool" \
+		sh "$script_dir/test-amd-pstate-shmem-owner.sh"
+}
+
+thermal_cooling_case()
+{
+	CPU_ACCEL_CPU="$target_cpu" \
+	CPU_ACCEL_THERMAL_WORK_CPU="$work_cpu" \
+	CPU_ACCEL_THERMAL_DURATION_MS="$duration_ms" \
+	CPU_ACCEL_TESTCTL="$tool" \
+		sh "$script_dir/test-thermal-cooling-owner.sh"
+}
+
+cpuidle_state_case()
+{
+	CPU_ACCEL_CPU="$target_cpu" \
+	CPU_ACCEL_CPUIDLE_WORK_CPU="$work_cpu" \
+	CPU_ACCEL_CPUIDLE_DURATION_MS="$duration_ms" \
+	CPU_ACCEL_TESTCTL="$tool" \
+		sh "$script_dir/test-cpuidle-state-owner.sh"
+}
+
+dirty_writeback_case()
+{
+	writeback_duration_ms=$duration_ms
+	[ "$writeback_duration_ms" -ge 10000 ] || writeback_duration_ms=10000
+	CPU_ACCEL_CPU="$target_cpu" \
+	CPU_ACCEL_WRITEBACK_WORK_CPU="$work_cpu" \
+	CPU_ACCEL_WRITEBACK_DURATION_MS="$writeback_duration_ms" \
+	CPU_ACCEL_TESTCTL="$tool" \
+		sh "$script_dir/test-dirty-writeback-owner.sh"
+}
+
 if should_run_class baseline; then
 	run_class baseline baseline_run
 fi
@@ -320,6 +359,22 @@ fi
 
 if should_run_class device_sriov; then
 	run_class device_sriov netdevsim_case sriov
+fi
+
+if should_run_class amd_pstate; then
+	run_class amd_pstate amd_pstate_case
+fi
+
+if should_run_class thermal_cooling; then
+	run_class thermal_cooling thermal_cooling_case
+fi
+
+if should_run_class cpuidle_state; then
+	run_class cpuidle_state cpuidle_state_case
+fi
+
+if should_run_class dirty_writeback; then
+	run_class dirty_writeback dirty_writeback_case
 fi
 
 if should_run_class migration; then

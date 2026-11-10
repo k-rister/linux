@@ -1372,7 +1372,7 @@ run-specific results must be recorded with the kernel build and test logs.
 	counter correlation per class, including the ABI 23 NMI and MCE deltas.
         The default set is portable; selecting ``all`` or an individual class
         through ``CPU_ACCEL_WCL_CLASSES`` also permits the topology-specific
-        device-lifecycle, ``migration``, ``net_backlog``,
+        device-lifecycle, power-policy, ``migration``, ``net_backlog``,
         ``timer_migration``, and ``irq_storm`` rows.
 	On 2026-10-29 on
         ``7.3.0-rc3-accel-tlbfix-02150-gde9255a04ef7``, the 5 s

@@ -72,6 +72,10 @@ test-user-death-owner: cpu-accel-testctl
 test-hotplug-race: cpu-accel-testctl
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-hotplug-race.sh
 
+test-hotplug-down-race: cpu-accel-testctl
+	CPU_ACCEL_TESTCTL=./cpu-accel-testctl CPU_ACCEL_HOTPLUG_MODE=down \
+		sh ./test-hotplug-race.sh
+
 test-rcu-nocb-admission: cpu-accel-testctl
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-rcu-nocb-admission.sh
 
@@ -135,6 +139,7 @@ clean:
 	test-irq-storm test-timerlat-owner test-user-escape-fault \
 	test-user-death-owner \
 	test-hotplug-race \
+	test-hotplug-down-race \
 	test-watchdog-owner-admission test-resctrl-owner-stop \
 	test-resctrl-task-owner-stop \
 	test-resctrl-monitor-owner-stop \

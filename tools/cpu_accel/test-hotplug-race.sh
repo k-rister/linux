@@ -7,6 +7,7 @@ script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 tool=${CPU_ACCEL_TESTCTL:-$script_dir/cpu-accel-testctl}
 target_cpu=${CPU_ACCEL_CPU:-2}
 hotplug_cpu=${CPU_ACCEL_HOTPLUG_CPU:-}
+hotplug_mode=${CPU_ACCEL_HOTPLUG_MODE:-up}
 repeat_count=${CPU_ACCEL_REPEAT_COUNT:-4}
 duration_ms=${CPU_ACCEL_DURATION_MS:-3000}
 load_cpus=${CPU_ACCEL_LOAD_CPUS:-}
@@ -40,6 +41,10 @@ trap 'exit 1' HUP INT TERM
 [ "$(id -u)" -eq 0 ] || fail "run as root"
 [ -x "$tool" ] || fail "cpu-accel-testctl is not executable: $tool"
 [ -c /dev/cpu_accel ] || fail "/dev/cpu_accel is unavailable"
+case "$hotplug_mode" in
+	up|down) ;;
+	*) fail "hotplug mode must be 'up' or 'down'" ;;
+esac
 case "$target_cpu" in
 	''|*[!0-9]*) fail "target CPU must be a nonnegative integer" ;;
 esac
@@ -59,26 +64,31 @@ target_online="/sys/devices/system/cpu/cpu$target_cpu/online"
 [ -e "$target_online" ] || fail "target CPU $target_cpu has no online control"
 [ "$(cat "$target_online")" = 1 ] || fail "target CPU $target_cpu is offline"
 
-if [ -z "$hotplug_cpu" ]; then
-	for online in /sys/devices/system/cpu/cpu[1-9]*/online; do
-		[ -e "$online" ] || continue
-		candidate=${online%/online}
-		candidate=${candidate##*/cpu}
-		if [ "$candidate" != "$target_cpu" ] &&
-		   [ "$(cat "$online")" = 1 ]; then
-			hotplug_cpu=$candidate
-			break
-		fi
-	done
+if [ "$hotplug_mode" = down ]; then
+	hotplug_cpu=$target_cpu
+	hotplug_online="$target_online"
+else
+	if [ -z "$hotplug_cpu" ]; then
+		for online in /sys/devices/system/cpu/cpu[1-9]*/online; do
+			[ -e "$online" ] || continue
+			candidate=${online%/online}
+			candidate=${candidate##*/cpu}
+			if [ "$candidate" != "$target_cpu" ] &&
+			   [ "$(cat "$online")" = 1 ]; then
+				hotplug_cpu=$candidate
+				break
+			fi
+		done
+	fi
+	case "$hotplug_cpu" in
+		''|*[!0-9]*) fail "no online non-boot hotplug CPU is available" ;;
+	esac
+	[ "$hotplug_cpu" != "$target_cpu" ] || \
+		fail "hotplug CPU must differ from target CPU"
+	hotplug_online="/sys/devices/system/cpu/cpu$hotplug_cpu/online"
+	[ -e "$hotplug_online" ] || fail "hotplug CPU $hotplug_cpu has no online control"
+	[ "$(cat "$hotplug_online")" = 1 ] || fail "hotplug CPU $hotplug_cpu is offline"
 fi
-case "$hotplug_cpu" in
-	''|*[!0-9]*) fail "no online non-boot hotplug CPU is available" ;;
-esac
-[ "$hotplug_cpu" != "$target_cpu" ] || \
-	fail "hotplug CPU must differ from target CPU"
-hotplug_online="/sys/devices/system/cpu/cpu$hotplug_cpu/online"
-[ -e "$hotplug_online" ] || fail "hotplug CPU $hotplug_cpu has no online control"
-[ "$(cat "$hotplug_online")" = 1 ] || fail "hotplug CPU $hotplug_cpu is offline"
 
 if [ -n "$load_cpus" ]; then
 	for load_cpu in $(printf '%s' "$load_cpus" | tr ',' ' '); do
@@ -100,24 +110,34 @@ if [ -n "$load_cpus" ]; then
 	done
 fi
 
+if [ "$hotplug_mode" = down ]; then
+	child_script=test-hotplug-down-owner.sh
+else
+	child_script=test-stop-machine-inactive-owner.sh
+fi
+
 mkdir -p "$outdir"
-printf 'run\texit\tuser_active_ns\n' >"$summary"
+printf 'run\texit\tuser_active_ns\thotplug_wait_ms\n' >"$summary"
 iteration=1
 while [ "$iteration" -le "$repeat_count" ]; do
 	run_log="$outdir/run-$iteration.log"
-	echo "== CPU-up race $iteration/$repeat_count (log: $run_log)"
+	echo "== CPU-$hotplug_mode race $iteration/$repeat_count (log: $run_log)"
 	set +e
 	CPU_ACCEL_TESTCTL="$tool" CPU_ACCEL_CPU="$target_cpu" \
 	CPU_ACCEL_HOTPLUG_CPU="$hotplug_cpu" \
 	CPU_ACCEL_DURATION_MS="$duration_ms" \
-		sh "$script_dir/test-stop-machine-inactive-owner.sh" \
+		sh "$script_dir/$child_script" \
 		>"$run_log" 2>&1
 	run_rc=$?
 	set -e
 	active_ns=$(sed -n 's/.*user_active_ns=\([0-9][0-9]*\).*/\1/p' \
 		"$run_log" | tail -n 1)
 	[ -n "$active_ns" ] || active_ns=-
-	printf '%s\t%s\t%s\n' "$iteration" "$run_rc" "$active_ns" >>"$summary"
+	hotplug_wait_ms=$(sed -n 's/.*hotplug_wait_ms=\([0-9][0-9]*\).*/\1/p' \
+		"$run_log" | tail -n 1)
+	[ -n "$hotplug_wait_ms" ] || hotplug_wait_ms=-
+	printf '%s\t%s\t%s\t%s\n' "$iteration" "$run_rc" "$active_ns" \
+		"$hotplug_wait_ms" >>"$summary"
 	if [ "$run_rc" -ne 0 ]; then
 		tail -n 40 "$run_log" || true
 		fail "CPU-up race iteration $iteration failed"
@@ -136,6 +156,6 @@ max_active_ns=$(awk -F '\t' '
 	}
 	END { print max + 0 }' "$summary")
 cat "$summary"
-echo "PASS: $repeat_count CPU-up races completed with optional concurrent load"
+echo "PASS: $repeat_count CPU-$hotplug_mode races completed with optional concurrent load"
 echo "max_user_active_ns=$max_active_ns"
 echo "logs: $outdir"

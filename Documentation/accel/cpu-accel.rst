@@ -383,6 +383,15 @@ error::
 
   sudo make -C tools/cpu_accel test-netdevsim-rebind-owner
 
+The netdevsim SR-IOV owner test switches the temporary device to switchdev
+mode, creates and removes one VF, and returns to legacy mode while the owner
+is active. It traces the e-switch mode changes, VF port add/remove paths, and
+netdevice registration/unregistration on the work CPU, then verifies that the
+device and its PF port remain intact and the bounded owner completes without
+an escape, context switch, migration, or kernel error::
+
+  sudo make -C tools/cpu_accel test-netdevsim-sriov-owner
+
 The dirty-writeback owner test writes a bounded temporary file from a
 housekeeping CPU while a bounded ``user-oslat`` owner is active, flushes the
 containing filesystem, and requires inode-matched dirty-folio and
@@ -1278,6 +1287,16 @@ run-specific results must be recorded with the kernel build and test logs.
          ``device_driver_attach()``, ``nsim_drv_remove()``,
          ``nsim_drv_probe()``, ``unregister_netdevice()``, and
          ``register_netdevice()`` on the work CPU. Its runtime report also
+         remains pending.
+         ``test-netdevsim-sriov-owner.sh`` adds an SR-IOV configuration
+         path: it switches the temporary netdevsim device to switchdev mode,
+         creates and removes one VF, and returns to legacy mode while the
+         owner is active. It traces
+         ``nsim_devlink_eswitch_mode_set()``,
+         ``nsim_esw_switchdev_enable()``, ``nsim_esw_legacy_enable()``,
+         ``nsim_drv_configure_vfs()``, ``__nsim_dev_port_add()``,
+         ``__nsim_dev_port_del()``, ``register_netdevice()``, and
+         ``unregister_netdevice()`` on the work CPU. Its runtime report also
          remains pending.
    * - Exceptions, NMIs, and machine checks
       - **NMI escape is owner-terminating recovery for the tested ring-3

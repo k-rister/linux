@@ -2061,6 +2061,9 @@ static int cpu_accel_user_exit_locked(struct cpu_accel_device *dev)
 			   READ_ONCE(dev->shared->user_active_end_ns));
 	}
 	dev->user_image.active = false;
+#ifdef CONFIG_X86_LOCAL_APIC
+	timer_delete(&dev->stop_escalation_timer);
+#endif
 	atomic_set(&dev->enter_requested, 0);
 	atomic_set(&dev->stop_requested, 0);
 	atomic_set(&dev->watchdog_fired, 0);

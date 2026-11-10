@@ -366,6 +366,14 @@ error::
 
   sudo make -C tools/cpu_accel test-netdevsim-reload-owner
 
+The netdevsim teardown owner test creates a temporary one-port ``netdevsim``
+device and deletes its bus device while the owner is active. It traces
+``device_unregister()``, ``nsim_drv_remove()``, and ``unregister_netdevice()``
+on the work CPU and verifies that the bounded owner completes without an
+escape, context switch, task migration, or kernel error::
+
+  sudo make -C tools/cpu_accel test-netdevsim-teardown-owner
+
 The dirty-writeback owner test writes a bounded temporary file from a
 housekeeping CPU while a bounded ``user-oslat`` owner is active, flushes the
 containing filesystem, and requires inode-matched dirty-folio and
@@ -1250,6 +1258,11 @@ run-specific results must be recorded with the kernel build and test logs.
          ``unregister_netdevice()``, and ``register_netdevice()`` on the work
          CPU; the owner must complete without an escape, context switch,
          migration, or kernel error. Its runtime report remains pending.
+         ``test-netdevsim-teardown-owner.sh`` adds a distinct device-removal
+         path: it deletes the temporary netdevsim bus device while the owner
+         is active and traces ``device_unregister()``,
+         ``nsim_drv_remove()``, and ``unregister_netdevice()`` on the work
+         CPU. Its runtime report also remains pending.
    * - Exceptions, NMIs, and machine checks
       - **NMI escape is owner-terminating recovery for the tested ring-3
         workload; user-mode ``#MC`` death is reconciled through task exit;

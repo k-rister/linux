@@ -1890,7 +1890,8 @@ static int run_user_workload(const struct cpu_accel_config *requested,
 	     !reclaim_owner_stopped &&
 	     handle.shared->recovery_state !=
 	     CPU_ACCEL_RECOVERY_SUCCEEDED) ||
-	    (needs_region && completion_sequence != 1) ||
+	    (config.workload == CPU_ACCEL_WORKLOAD_USER_REGION &&
+	     completion_sequence != 1) ||
 	    ((escape_after_ms || user_reclaim) &&
 	     !reclaim_owner_stopped &&
 	     handle.shared->user_escape_count != 1)) {

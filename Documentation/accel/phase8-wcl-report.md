@@ -54,6 +54,8 @@ Classes run on 2026-10-29:
 
 Optional classes, selected explicitly with `CPU_ACCEL_WCL_CLASSES`:
 
+- `migration`: two NUMA memory nodes, three distinct online CPUs, and a
+  reader CPU supplied through `CPU_ACCEL_WCL_MIGRATION_READER_CPU`.
 - `net_backlog`, `timer_migration`: their owner CPU (1) must be in
   `rcu_nocbs`; user entry returns `-EOPNOTSUPP` when the CPU is not RCU
   offloaded (arch/x86/kernel/accel.c, `x86_cpu_accel_user_enter`). This VM

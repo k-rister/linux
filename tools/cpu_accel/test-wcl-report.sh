@@ -5,9 +5,9 @@
 # capture the lateness distribution and counter correlation for each,
 # and emit a per-class log plus a summary TSV.
 #
-# The default matrix is the common portable set.  Select net_backlog,
-# timer_migration, or irq_storm individually when the boot topology or
-# test NIC is available; selecting all attempts every class.
+# The default matrix is the common portable set.  Select migration,
+# net_backlog, timer_migration, or irq_storm individually when the boot
+# topology or test NIC is available; selecting all attempts every class.
 
 set -eu
 
@@ -77,7 +77,7 @@ should_run_class()
 		;;
 	common)
 		case "$1" in
-		net_backlog|timer_migration|irq_storm)
+		migration|net_backlog|timer_migration|irq_storm)
 			return 1
 			;;
 		esac
@@ -293,6 +293,23 @@ fi
 if should_run_class timerlat; then
 	run_class timerlat env CPU_ACCEL_TESTCTL="$tool" \
 		sh "$script_dir/test-timerlat-owner.sh"
+fi
+
+if should_run_class migration; then
+	[ "$duration_ms" -ge 3000 ] || \
+		fail "migration class requires at least 3000 ms duration"
+	migration_reader_cpu=${CPU_ACCEL_WCL_MIGRATION_READER_CPU:-1}
+	if [ "$migration_reader_cpu" -eq "$target_cpu" ] ||
+	   [ "$migration_reader_cpu" -eq "$work_cpu" ]; then
+		fail "migration reader CPU must differ from owner and work CPUs"
+	fi
+	run_class migration env CPU_ACCEL_TESTCTL="$tool" \
+		CPU_ACCEL_CPU="$target_cpu" \
+		CPU_ACCEL_MIGRATION_WORK_CPU="$work_cpu" \
+		CPU_ACCEL_MIGRATION_READER_CPU="$migration_reader_cpu" \
+		CPU_ACCEL_MIGRATION_OWNER_DURATION_MS="$duration_ms" \
+		CPU_ACCEL_MIGRATION_DURATION_MS="$((duration_ms - 2000))" \
+		sh "$script_dir/test-migration-owner.sh"
 fi
 
 if should_run_class net_backlog; then

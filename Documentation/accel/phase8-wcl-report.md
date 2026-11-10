@@ -54,6 +54,8 @@ Classes run on 2026-10-29:
 
 Optional classes, selected explicitly with `CPU_ACCEL_WCL_CLASSES`:
 
+- `device_reload`, `device_teardown`, `device_rebind`, `device_sriov`:
+  the four netdevsim device-management lifecycle cases, each run separately.
 - `migration`: two NUMA memory nodes, three distinct online CPUs, and a
   reader CPU supplied through `CPU_ACCEL_WCL_MIGRATION_READER_CPU`.
 - `net_backlog`, `timer_migration`: their owner CPU (1) must be in

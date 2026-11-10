@@ -5,9 +5,10 @@
 # capture the lateness distribution and counter correlation for each,
 # and emit a per-class log plus a summary TSV.
 #
-# The default matrix is the common portable set.  Select migration,
-# net_backlog, timer_migration, or irq_storm individually when the boot
-# topology or test NIC is available; selecting all attempts every class.
+# The default matrix is the common portable set.  Select the device
+# lifecycle, migration, net_backlog, timer_migration, or irq_storm classes
+# individually when the required topology or test NIC is available; selecting
+# all attempts every class.
 
 set -eu
 
@@ -77,6 +78,7 @@ should_run_class()
 		;;
 	common)
 		case "$1" in
+		device_reload|device_teardown|device_rebind|device_sriov|\
 		migration|net_backlog|timer_migration|irq_storm)
 			return 1
 			;;
@@ -254,6 +256,15 @@ single_probe_case()
 		sh "$script_dir/test-call-function-single-owner-stop.sh" "$@"
 }
 
+netdevsim_case()
+{
+	CPU_ACCEL_CPU="$target_cpu" \
+	CPU_ACCEL_NETDEVSIM_WORK_CPU="$work_cpu" \
+	CPU_ACCEL_NETDEVSIM_DURATION_MS="$duration_ms" \
+	CPU_ACCEL_TESTCTL="$tool" \
+		sh "$script_dir/test-netdevsim-$1-owner.sh"
+}
+
 if should_run_class baseline; then
 	run_class baseline baseline_run
 fi
@@ -293,6 +304,22 @@ fi
 if should_run_class timerlat; then
 	run_class timerlat env CPU_ACCEL_TESTCTL="$tool" \
 		sh "$script_dir/test-timerlat-owner.sh"
+fi
+
+if should_run_class device_reload; then
+	run_class device_reload netdevsim_case reload
+fi
+
+if should_run_class device_teardown; then
+	run_class device_teardown netdevsim_case teardown
+fi
+
+if should_run_class device_rebind; then
+	run_class device_rebind netdevsim_case rebind
+fi
+
+if should_run_class device_sriov; then
+	run_class device_sriov netdevsim_case sriov
 fi
 
 if should_run_class migration; then

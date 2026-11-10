@@ -78,6 +78,45 @@ Optional classes, selected explicitly with `CPU_ACCEL_WCL_CLASSES`:
 `CPU_ACCEL_WCL_CLASSES=all` to attempt every class, including the optional
 topology-specific rows.
 
+### Class inventory
+
+| Class | Harness |
+|-------|---------|
+| `baseline` | `test-wcl-report.sh` |
+| `load` | `test-wcl-report.sh` |
+| `memory_pressure` | `test-wcl-report.sh` |
+| `vmstat` | `test-sync-work-owner-stop.sh` |
+| `lru` | `test-sync-work-owner-stop.sh` |
+| `slub_shrink` | `test-sync-work-owner-stop.sh` |
+| `ring_resize` | `test-sync-work-owner-stop.sh` |
+| `call_function` | `test-call-function-single-owner-stop.sh` |
+| `irq_work` | `test-call-function-single-owner-stop.sh` |
+| `timerlat` | `test-timerlat-owner.sh` |
+| `device_reload` | `test-netdevsim-reload-owner.sh` |
+| `device_teardown` | `test-netdevsim-teardown-owner.sh` |
+| `device_rebind` | `test-netdevsim-rebind-owner.sh` |
+| `device_sriov` | `test-netdevsim-sriov-owner.sh` |
+| `amd_pstate` | `test-amd-pstate-shmem-owner.sh` |
+| `thermal_cooling` | `test-thermal-cooling-owner.sh` |
+| `cpuidle_state` | `test-cpuidle-state-owner.sh` |
+| `dirty_writeback` | `test-dirty-writeback-owner.sh` |
+| `resctrl_owner` | `test-resctrl-owner-stop.sh` |
+| `resctrl_task` | `test-resctrl-task-owner-stop.sh` |
+| `resctrl_monitor` | `test-resctrl-monitor-owner-stop.sh` |
+| `perf_event` | `test-perf-owner-stop.sh` |
+| `ftrace_maintenance` | `test-ftrace-maintenance.sh` |
+| `tlb_flush` | `test-tlb-flush.sh` |
+| `hotplug_up` | `test-hotplug-race.sh` |
+| `hotplug_down` | `test-hotplug-race.sh` |
+| `stop_machine` | `test-stop-machine-inactive-owner.sh` |
+| `user_escape_fault` | `test-user-escape-fault.sh` |
+| `user_death` | `test-user-death-owner.sh` |
+| `rcu_callback_routing` | `test-rcu-callback-routing.sh` |
+| `migration` | `test-migration-owner.sh` |
+| `net_backlog` | `test-sync-work-owner-stop.sh` |
+| `timer_migration` | `test-sync-work-owner-stop.sh` |
+| `irq_storm` | `test-irq-storm.sh` |
+
 ## Results
 
 Environment: `7.3.0-rc3-accel-tlbfix-02150-gde9255a04ef7`,

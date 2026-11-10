@@ -353,6 +353,15 @@ cooperative owner exit::
 
   sudo make -C tools/cpu_accel test-veth-newlink-fault-owner
 
+The netdevsim reload owner test creates a temporary one-port ``netdevsim``
+device, fails a ``devlink`` driver reload while the owner is active, and then
+reloads successfully after ownership ends. It traces the netdevsim reload and
+netdevice registration/unregistration paths on the work CPU and verifies that
+the owner completes without an escape, context switch, migration, or kernel
+error::
+
+  sudo make -C tools/cpu_accel test-netdevsim-reload-owner
+
 The dirty-writeback owner test writes a bounded temporary file from a
 housekeeping CPU while a bounded ``user-oslat`` owner is active, flushes the
 containing filesystem, and requires inode-matched dirty-folio and
@@ -1213,8 +1222,16 @@ run-specific results must be recorded with the kernel build and test logs.
          exited cooperatively 22 us after the stop request with ``state=3``,
          ``stop_requested=1``, no escape, no context switch, no migration, and
          an empty kernel-error log. This covers one bounded device-creation
-         failure unwind; other device reset and teardown fault classes remain
-         open.
+         failure unwind; the netdevsim runtime report and broader device
+         reset/teardown fault matrix remain open.
+         ``test-netdevsim-reload-owner.sh`` provides the next focused reset
+         path: it creates a temporary one-port netdevsim device, fails a
+         ``devlink`` driver reload while an owner is active, and reloads
+         successfully after ownership ends. Function-graph tracing records
+         ``nsim_dev_reload_down()``, ``nsim_dev_reload_up()``,
+         ``unregister_netdevice()``, and ``register_netdevice()`` on the work
+         CPU; the owner must complete without an escape, context switch,
+         migration, or kernel error. Its runtime report remains pending.
    * - Exceptions, NMIs, and machine checks
       - **NMI escape is owner-terminating recovery for the tested ring-3
         workload; user-mode ``#MC`` death is reconciled through task exit;

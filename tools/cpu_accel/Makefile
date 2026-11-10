@@ -50,6 +50,9 @@ test-veth-newlink-fault-owner: cpu-accel-testctl
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl \
 		sh ./test-veth-newlink-fault-owner.sh
 
+test-netdevsim-reload-owner: cpu-accel-testctl
+	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-netdevsim-reload-owner.sh
+
 test-dirty-writeback-owner: cpu-accel-testctl
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-dirty-writeback-owner.sh
 
@@ -146,6 +149,7 @@ clean:
 	test-rfs-owner-stop \
 	test-veth-teardown-owner \
 	test-veth-newlink-fault-owner \
+	test-netdevsim-reload-owner \
 	test-dirty-writeback-owner \
 	test-amd-pstate-shmem-owner \
 	test-thermal-cooling-owner \

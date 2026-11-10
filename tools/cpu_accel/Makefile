@@ -69,6 +69,9 @@ test-user-escape-fault: cpu-accel-testctl test-user-escape-rescue
 test-user-death-owner: cpu-accel-testctl
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-user-death-owner.sh
 
+test-hotplug-race: cpu-accel-testctl
+	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-hotplug-race.sh
+
 test-rcu-nocb-admission: cpu-accel-testctl
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-rcu-nocb-admission.sh
 
@@ -131,6 +134,7 @@ clean:
 .PHONY: all clean test test-sync-work-owner-stop test-perf-owner-stop \
 	test-irq-storm test-timerlat-owner test-user-escape-fault \
 	test-user-death-owner \
+	test-hotplug-race \
 	test-watchdog-owner-admission test-resctrl-owner-stop \
 	test-resctrl-task-owner-stop \
 	test-resctrl-monitor-owner-stop \

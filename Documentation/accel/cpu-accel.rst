@@ -258,6 +258,14 @@ helper and set ``CPU_ACCEL_SECCOMP_CHURN`` to enable this additional workload::
   sudo env CPU_ACCEL_SECCOMP_CHURN=tools/cpu_accel/test-seccomp-jit-churn \
     CPU_ACCEL_SECCOMP_CPUS=3-7 sh tools/cpu_accel/test-ftrace-maintenance.sh
 
+The repeated CPU-up hotplug race harness runs the focused inactive-owner test
+multiple times and can add one busy-loop worker per comma-separated load CPU.
+It records each run's result and owner-active interval in a summary TSV::
+
+  sudo make -C tools/cpu_accel test-hotplug-race
+  sudo env CPU_ACCEL_REPEAT_COUNT=8 CPU_ACCEL_LOAD_CPUS=3,4,5 \
+    make -C tools/cpu_accel test-hotplug-race
+
 The global TLB-flush test can load a module already installed for the running
 kernel. This is useful when a matching probe module cannot be built locally.
 Choose a module that is safe to load and unload; module parameters are passed
@@ -888,7 +896,8 @@ run-specific results must be recorded with the kernel build and test logs.
        A prior attempt with a stale controller reached its timed escape before
        the test observed an active marker; it never launched CPU-up and is not
        included in this count.
-     - Broader concurrent load, higher-volume repeated CPU-up and CPU-down
+     - ``test-hotplug-race.sh`` provides a bounded repeated CPU-up harness
+       with optional concurrent load. Its runtime report, repeated CPU-down
        races, and a run-specific latency-tail report remain open.
    * - ``stop_machine()`` requests
      - **Owner-stop on sleepable paths; reject unscoped inactive rendezvous.**

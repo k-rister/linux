@@ -6,9 +6,10 @@
 # and emit a per-class log plus a summary TSV.
 #
 # The default matrix is the common portable set.  Select the device
-# lifecycle, power-policy, resctrl, perf, ftrace, TLB, migration, net_backlog,
-# timer_migration, or irq_storm classes individually when the required
-# topology or test NIC is available; selecting all attempts every class.
+# lifecycle, power-policy, resctrl, perf, ftrace, TLB, hotplug, stop-machine,
+# exception, RCU, migration, net_backlog, timer_migration, or irq_storm classes
+# individually when the required topology or test NIC is available; selecting
+# all attempts every class.
 
 set -eu
 
@@ -82,6 +83,8 @@ should_run_class()
 		amd_pstate|thermal_cooling|cpuidle_state|dirty_writeback|\
 		resctrl_owner|resctrl_task|resctrl_monitor|\
 		perf_event|ftrace_maintenance|tlb_flush|\
+		hotplug_up|hotplug_down|stop_machine|user_escape_fault|\
+		user_death|rcu_callback_routing|\
 		migration|net_backlog|timer_migration|irq_storm)
 			return 1
 			;;
@@ -365,6 +368,47 @@ tlb_flush_case()
 		sh "$script_dir/test-tlb-flush.sh"
 }
 
+hotplug_case()
+{
+	CPU_ACCEL_CPU="$target_cpu" \
+	CPU_ACCEL_DURATION_MS="$duration_ms" \
+	CPU_ACCEL_TESTCTL="$tool" \
+	CPU_ACCEL_HOTPLUG_MODE="$1" \
+		sh "$script_dir/test-hotplug-race.sh"
+}
+
+stop_machine_case()
+{
+	CPU_ACCEL_CPU="$target_cpu" \
+	CPU_ACCEL_DURATION_MS="$duration_ms" \
+	CPU_ACCEL_TESTCTL="$tool" \
+		sh "$script_dir/test-stop-machine-inactive-owner.sh"
+}
+
+user_escape_fault_case()
+{
+	CPU_ACCEL_ESCAPE_CPU="$target_cpu" \
+	CPU_ACCEL_TESTCTL="$tool" \
+	CPU_ACCEL_ESCAPE_RESCUE="$script_dir/test-user-escape-rescue" \
+		sh "$script_dir/test-user-escape-fault.sh"
+}
+
+user_death_case()
+{
+	CPU_ACCEL_USER_DEATH_CPU="$target_cpu" \
+	CPU_ACCEL_TESTCTL="$tool" \
+		sh "$script_dir/test-user-death-owner.sh"
+}
+
+rcu_callback_routing_case()
+{
+	CPU_ACCEL_RCU_CPU="$target_cpu" \
+	CPU_ACCEL_RCU_READER_CPU="$work_cpu" \
+	CPU_ACCEL_RCU_PROBE="$script_dir/rcu-probe/cpu_accel_rcu_callback_probe.ko" \
+	CPU_ACCEL_TESTCTL="$tool" \
+		sh "$script_dir/test-rcu-callback-routing.sh"
+}
+
 if should_run_class baseline; then
 	run_class baseline baseline_run
 fi
@@ -460,6 +504,30 @@ fi
 
 if should_run_class tlb_flush; then
 	run_class tlb_flush tlb_flush_case
+fi
+
+if should_run_class hotplug_up; then
+	run_class hotplug_up hotplug_case up
+fi
+
+if should_run_class hotplug_down; then
+	run_class hotplug_down hotplug_case down
+fi
+
+if should_run_class stop_machine; then
+	run_class stop_machine stop_machine_case
+fi
+
+if should_run_class user_escape_fault; then
+	run_class user_escape_fault user_escape_fault_case
+fi
+
+if should_run_class user_death; then
+	run_class user_death user_death_case
+fi
+
+if should_run_class rcu_callback_routing; then
+	run_class rcu_callback_routing rcu_callback_routing_case
 fi
 
 if should_run_class migration; then

@@ -63,6 +63,9 @@ Optional classes, selected explicitly with `CPU_ACCEL_WCL_CLASSES`:
   fault-injection paths, each run separately.
 - `perf_event`, `ftrace_maintenance`, `tlb_flush`: the perf, ftrace, and
   page-table/TLB source-audit rows.
+- `hotplug_up`, `hotplug_down`, `stop_machine`, `user_escape_fault`,
+  `user_death`, `rcu_callback_routing`: the remaining hotplug, stop-machine,
+  exception, and RCU stress rows.
 - `migration`: two NUMA memory nodes, three distinct online CPUs, and a
   reader CPU supplied through `CPU_ACCEL_WCL_MIGRATION_READER_CPU`.
 - `net_backlog`, `timer_migration`: their owner CPU (1) must be in

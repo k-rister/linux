@@ -292,6 +292,10 @@ The network case creates a temporary veth pair, directs receive-side scaling
 to an online housekeeping CPU accepted by the kernel's RPS filter, floods it
 while the owner is active, and unregisters the device. This can be a different
 CPU from the one used by the other cases because RPS excludes isolated CPUs.
+Set ``CPU_ACCEL_NET_CPU`` to the RPS housekeeping CPU and
+``CPU_ACCEL_WORK_CPU`` to a different online CPU when the owner CPU is
+isolated; on a host where only CPU 0 is RPS-eligible, keep CPU 0 as
+``CPU_ACCEL_NET_CPU`` and choose another online CPU for the work CPU.
 The timer migration case temporarily creates an isolated cpuset partition and
 requires the cgroup v2 cpuset controller; the script enables it only when
 needed and restores the prior controller state after the case. The worker

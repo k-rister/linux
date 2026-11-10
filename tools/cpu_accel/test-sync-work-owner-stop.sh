@@ -174,6 +174,7 @@ trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 
 [ "$(id -u)" -eq 0 ] || fail "run as root"
+[ "$target_cpu" -ne "$work_cpu" ] || fail "target and work CPUs must differ"
 case "$selected_case" in
 all|vmstat|lru|slub_shrink|ring_resize|timer_migration|net_backlog|\
 rcu_sheaf|srcu_cleanup|vmalloc_purge|vmalloc_purge_wait|sync_work_flush|\

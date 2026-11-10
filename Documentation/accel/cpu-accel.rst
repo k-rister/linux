@@ -288,14 +288,17 @@ prewarmed seccomp/JIT overlap test with a small two-CPU worker set::
 
 The synchronous per-CPU work test also covers SLUB cache shrink, the RCU
 sheaf drain used when a cache is destroyed, and network backlog flushing.
-The network case creates a temporary veth pair, directs receive-side scaling
-to an online housekeeping CPU accepted by the kernel's RPS filter, floods it
-while the owner is active, and unregisters the device. This can be a different
-CPU from the one used by the other cases because RPS excludes isolated CPUs.
-Set ``CPU_ACCEL_NET_CPU`` to the RPS housekeeping CPU and
-``CPU_ACCEL_WORK_CPU`` to a different online CPU when the owner CPU is
-isolated; on a host where only CPU 0 is RPS-eligible, keep CPU 0 as
-``CPU_ACCEL_NET_CPU`` and choose another online CPU for the work CPU.
+The network case creates a temporary veth pair across a network namespace and
+uses RFS to place a backlog on the owner CPU.  A TCP receiver is pinned to the
+owner CPU and establishes the flow.  The sender starts on the owner CPU, sends
+one byte, enables ``TCP_CORK``, queues a second byte, and then migrates to the
+work CPU.  A signal clears the cork without another ``sendmsg()``, preserving
+the RFS flow mapping and steering the held byte to the owner CPU.  This is
+necessary when the active tuned ``cpu-partitioning`` profile leaves the owner
+isolated and RCU-offloaded while plain RPS can target only a housekeeping CPU.
+The RPS fallback CPU, selected with ``CPU_ACCEL_NET_CPU``, must be
+RPS-eligible; set ``CPU_ACCEL_CPU`` to the owner and
+``CPU_ACCEL_WORK_CPU`` to a distinct trigger CPU.
 The timer migration case temporarily creates an isolated cpuset partition and
 requires the cgroup v2 cpuset controller; the script enables it only when
 needed and restores the prior controller state after the case. The worker
@@ -309,8 +312,9 @@ owner's fallback escape defaults to 4.9 seconds, leaving margin after the
 trace-entry poll, while the timer migration operation must still finish in
 under 2 seconds.
 Build the matching probe module with the other CPU accelerator probes before
-running the test; the VM also needs ``iproute2``, ``iputils``, and the ``veth``
-module::
+running the test; the VM also needs ``iproute2``, Perl, network-namespace
+support, the ``veth`` module, and, when firewalld is active,
+``firewall-cmd``::
 
   make -C /lib/modules/$(uname -r)/build \
     M="$PWD/tools/cpu_accel/tlb-flush-probe" modules
@@ -1410,17 +1414,41 @@ run-specific results must be recorded with the kernel build and test logs.
         ``rcu_nocbs``-covered boot: isolating CPU 1 stopped its owner in 11 ms,
         the stack proved ``housekeeping_update()``, the stop-to-exit interval
         was 9 us, and the cgroup and transparent-hugepage state were restored.
+        On 2026-11-10, the full common portable set passed on simon.lab with
+        ABI 23 on ``7.3.0-rc3-accel-tlbfix-gbff69f41a61b``.  With owner CPU 6,
+        work CPU 0, and load CPUs 3/4/5/7, baseline, load, and
+        ``memory_pressure`` each recorded 5003 samples with p50=16 ns,
+        p90/p99/p999=32 ns, and max=19 ns.  The terminal classes exited through
+        owner stop with ``state=7`` and the expected workqueue, architecture
+        IPI, and NMI correlations; every row reported zero IRQ, softirq, TLB,
+        MCE, and context-switch deltas.  The first full attempt exposed an LRU
+        readiness race: the harness treated ``x86_cpu_accel_user_enter()`` in
+        function graph as completed ownership.  It now waits for the controller
+        active marker before triggering work, and the corrected harness passed
+        both the isolated LRU case and a new full common-set run.  The report
+        also propagates class failures instead of returning success after
+        printing the summary.  Per-class results are in
+        ``Documentation/accel/phase8-wcl-report.md``.
+        The topology-specific optional set was then run individually on the
+        same kernel.  The power-policy, storage, resctrl, perf, ftrace, TLB,
+        hotplug, stop-machine, exception, RCU, timer-migration, and
+        ``net_backlog`` classes passed; the per-class table and evidence are in
+        ``Documentation/accel/phase8-wcl-report.md``.  The four netdevsim
+        lifecycle classes are unsupported on this kernel because the required
+        netdevsim symbols are absent.
+        ``migration`` is not applicable on this one-NUMA-node host, and
+        ``irq_storm`` is not applicable without an isolated test NIC.
       - No hard bound; log2-bin percentiles are factor-of-two ceilings.
-        The ``net_backlog`` class is deferred to a boot with an RPS-eligible
-        owner CPU covered by ``rcu_nocbs`` and a separate trigger CPU; on
-        simon.lab, ``nohz_full=1-11`` leaves CPU 0 as the only RPS-eligible
-        housekeeping CPU, and the test reserves it for the trigger.  The
-        attempted temporary-veth run therefore failed before an owner run and
-        cleaned up.  ``irq_storm`` needs a test NIC.
+        ``timer_migration`` passed on the earlier ``rcu_nocbs=1-11`` boot.
+        ``net_backlog`` passed on CPU 5 under the later tuned
+        ``cpu-partitioning`` layout by using RFS from a cork-held TCP flow,
+        with CPU 0 as the RPS fallback and trigger CPU.  ``irq_storm`` needs a
+        test NIC.
 
 The plan's disposition vocabulary is safe, routed to housekeeping, deferred,
 rejected, or domain-terminating. Several rows remain unclassified or have only
 selective policies; those are open audit findings, not implied rejections.
-Phase 8 remains open until each activity has an enforced disposition, the
-fault-injection suite and counters cover the required events, and a
-run-specific worst-case latency report is recorded.
+The run-specific worst-case latency report is recorded in
+``Documentation/accel/phase8-wcl-report.md``.  Phase 8 remains open until each
+activity has an enforced disposition and the fault-injection suite and counters
+cover the required events.

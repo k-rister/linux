@@ -21,8 +21,12 @@ rearm_cpu=${CPU_ACCEL_REARM_CPU:-5}
 vmalloc_trigger_cpu=${CPU_ACCEL_VMALLOC_TRIGGER_CPU:-4}
 netdev_a="ca$$_a"
 netdev_b="ca$$_b"
+netns="ca$$_ns"
 netdev_ip_a=198.18.0.1
 netdev_ip_b=198.18.0.2
+netdev_port=19000
+net_recv_tool=${CPU_ACCEL_NET_RECV_TOOL:-$script_dir/net-backlog-rfs-receiver.pl}
+net_send_tool=${CPU_ACCEL_NET_SEND_TOOL:-$script_dir/net-backlog-rfs-sender.pl}
 rcu_sheaf_probe=${CPU_ACCEL_RCU_SHEAF_PROBE:-$script_dir/tlb-flush-probe/cpu_accel_slub_rcu_sheaf_probe.ko}
 rcu_sheaf_module=cpu_accel_slub_rcu_sheaf_probe
 srcu_cleanup_probe=${CPU_ACCEL_SRCU_CLEANUP_PROBE:-$script_dir/tlb-flush-probe/cpu_accel_srcu_cleanup_probe.ko}
@@ -44,8 +48,14 @@ dmesg_pid=
 prime_pid=
 run_pid=
 rearm_pid=
-ping_pid=
+net_recv_pid=
+net_send_pid=
+rps_sock_flow_entries_saved=
+net_kprobe_suffix=$$
+net_kprobes_created=0
 netdev_created=0
+netns_created=0
+net_firewalld_added=0
 rcu_sheaf_loaded=0
 srcu_cleanup_loaded=0
 vmalloc_purge_loaded=0
@@ -89,10 +99,30 @@ cleanup()
 		wait "$run_pid" 2>/dev/null || true
 		run_pid=
 	fi
-	if [ -n "$ping_pid" ]; then
-		kill -TERM "$ping_pid" 2>/dev/null || true
-		wait "$ping_pid" 2>/dev/null || true
-		ping_pid=
+	if [ -n "$net_send_pid" ]; then
+		kill -CONT "$net_send_pid" 2>/dev/null || true
+		kill -TERM "$net_send_pid" 2>/dev/null || true
+		wait "$net_send_pid" 2>/dev/null || true
+		net_send_pid=
+	fi
+	if [ -n "$net_recv_pid" ]; then
+		kill -TERM "$net_recv_pid" 2>/dev/null || true
+		wait "$net_recv_pid" 2>/dev/null || true
+		net_recv_pid=
+	fi
+	if [ -n "$rps_sock_flow_entries_saved" ]; then
+		echo "$rps_sock_flow_entries_saved" \
+			>/proc/sys/net/core/rps_sock_flow_entries 2>/dev/null || true
+		rps_sock_flow_entries_saved=
+	fi
+	if [ "$net_firewalld_added" -eq 1 ]; then
+		firewall-cmd --zone=trusted --remove-interface="$netdev_a" \
+			>/dev/null 2>&1 || true
+		net_firewalld_added=0
+	fi
+	if [ "$netns_created" -eq 1 ]; then
+		ip netns del "$netns" 2>/dev/null || true
+		netns_created=0
 	fi
 	if [ "$netdev_created" -eq 1 ]; then
 		ip link del "$netdev_a" 2>/dev/null || true
@@ -158,6 +188,15 @@ cleanup()
 	if [ "$event_instance_created" -eq 1 ]; then
 		rmdir "$event_instance" 2>/dev/null || true
 		event_instance_created=0
+	fi
+	if [ "$net_kprobes_created" -eq 1 ]; then
+		for event in "net_enqueue_$net_kprobe_suffix" \
+			"net_get_rps_cpu_$net_kprobe_suffix" \
+			"net_queue_work_$net_kprobe_suffix" \
+			"net_flush_backlog_$net_kprobe_suffix"; do
+			echo "-:$event" >>"$trace_root/kprobe_events" 2>/dev/null || true
+		done
+		net_kprobes_created=0
 	fi
 	if [ -d "$resize_instance" ]; then
 		echo 0 >"$resize_instance/tracing_on" 2>/dev/null || true
@@ -281,6 +320,27 @@ esac
 for event in owner_stop_request owner_exit_complete; do
 	echo 1 >"$event_instance/events/cpu_accel/$event/enable"
 done
+if should_run_case net_backlog; then
+	for function in enqueue_to_backlog get_rps_cpu queue_work_on flush_backlog; do
+		grep -qw "$function" "$trace_root/available_filter_functions" || \
+			fail "net_backlog trace function is unavailable: $function"
+	done
+	echo "p:net_enqueue_$net_kprobe_suffix enqueue_to_backlog cpu=\$arg2" \
+		>>"$trace_root/kprobe_events"
+	net_kprobes_created=1
+	echo "r:net_get_rps_cpu_$net_kprobe_suffix get_rps_cpu cpu=\$retval" \
+		>>"$trace_root/kprobe_events"
+	echo "p:net_queue_work_$net_kprobe_suffix queue_work_on cpu=\$arg1 work=\$arg3" \
+		>>"$trace_root/kprobe_events"
+	echo "p:net_flush_backlog_$net_kprobe_suffix flush_backlog" \
+		>>"$trace_root/kprobe_events"
+	for event in "net_enqueue_$net_kprobe_suffix" \
+		"net_get_rps_cpu_$net_kprobe_suffix" \
+		"net_queue_work_$net_kprobe_suffix" \
+		"net_flush_backlog_$net_kprobe_suffix"; do
+		echo 1 >"$event_instance/events/kprobes/$event/enable"
+	done
+fi
 owner_stop_trigger="$event_instance/events/cpu_accel/owner_stop_request/trigger"
 [ -w "$owner_stop_trigger" ] || \
 	fail "owner-stop trace trigger is unavailable"
@@ -350,6 +410,12 @@ if should_run_case sync_work_flush || should_run_case sync_workqueue_flush; then
 	printf '%s\n' cpu_accel_sync_work_flush_probe_fn \
 		>>"$graph_instance/set_ftrace_filter"
 fi
+if should_run_case net_backlog; then
+	grep -qw flush_all_backlogs \
+		"$trace_root/available_filter_functions" || \
+		fail "flush_all_backlogs is not traceable"
+	printf '%s\n' flush_all_backlogs >>"$graph_instance/set_ftrace_filter"
+fi
 
 echo function_graph >"$graph_instance/current_tracer"
 echo 0 >"$event_instance/tracing_on"
@@ -399,24 +465,24 @@ run_case()
 	if [ "$name" = vmalloc_purge_wait ]; then
 		case_escape_ms=100
 	fi
-	entry_count=$(grep -Fc 'x86_cpu_accel_user_enter();' \
-		"$outdir/function-graph.log" || true)
+	rm -f "$active_marker"
 
 	if [ "$name" = timer_migration ]; then
-		rm -f "$active_marker"
 		CPU_ACCEL_ACTIVE_MARKER="$active_marker" "$tool" run \
 			--cpu "$case_cpu" --duration-ms "$duration_ms" --period-us 1000 \
 			--workload user-hang --escape-after-ms "$case_escape_ms" \
 			--escape-retries 1 --worker-cgroup "$owner_cgroup" \
 			>"$outdir/$name-ctl.log" 2>&1 &
 	elif [ -n "$owner_cgroup" ]; then
-		taskset -c "$work_cpu" "$tool" run --cpu "$case_cpu" \
+		CPU_ACCEL_ACTIVE_MARKER="$active_marker" \
+			taskset -c "$work_cpu" "$tool" run --cpu "$case_cpu" \
 			--duration-ms "$duration_ms" --period-us 1000 --workload user-hang \
 			--escape-after-ms "$case_escape_ms" --escape-retries 1 \
 			--worker-cgroup "$owner_cgroup" \
 			>"$outdir/$name-ctl.log" 2>&1 &
 	else
-		"$tool" run --cpu "$case_cpu" \
+		CPU_ACCEL_ACTIVE_MARKER="$active_marker" "$tool" run \
+			--cpu "$case_cpu" \
 			--duration-ms "$duration_ms" --period-us 1000 \
 			--workload user-hang --escape-after-ms "$case_escape_ms" \
 			--escape-retries 1 >"$outdir/$name-ctl.log" 2>&1 &
@@ -424,16 +490,9 @@ run_case()
 	run_pid=$!
 	ready=0
 	for n in $(seq 1 300); do
-		if [ "$name" = timer_migration ]; then
-			ready=0
-			if [ -s "$active_marker" ] &&
-			   [ "$(cat "$active_marker")" = active ]; then
-				ready=1
-			fi
-		else
-			count=$(grep -Fc 'x86_cpu_accel_user_enter();' \
-				"$outdir/function-graph.log" || true)
-			[ "$count" -gt "$entry_count" ] && ready=1 || ready=0
+		if [ -s "$active_marker" ] &&
+		   [ "$(cat "$active_marker")" = active ]; then
+			ready=1
 		fi
 		if [ "$ready" -eq 1 ]; then
 			ready=1
@@ -441,7 +500,7 @@ run_case()
 		fi
 		sleep 0.01
 	done
-	[ "$ready" -eq 1 ] || fail "$name owner-entry trace timed out"
+	[ "$ready" -eq 1 ] || fail "$name owner activation timed out"
 	if [ "$name" = vmalloc_purge_wait ]; then
 		(
 			for attempt in $(seq 1 400); do
@@ -480,9 +539,8 @@ run_case()
 			helper_rc=$?
 		fi
 	elif [ "$trigger_type" = netdev ]; then
-		taskset -c "$work_cpu" ping -n -q -f -w 8 -I "$netdev_b" \
-			"$netdev_ip_a" >"$outdir/$name-ping.log" 2>&1 &
-		ping_pid=$!
+		kill -USR1 "$net_send_pid" || \
+			fail "$name could not uncork the network sender"
 		sleep 0.1
 		if timeout --kill-after=2s 8s taskset -c "$work_cpu" \
 			ip link del "$trigger_target" >"$outdir/$name-trigger.log" 2>&1; then
@@ -491,9 +549,6 @@ run_case()
 		else
 			helper_rc=$?
 		fi
-		kill -TERM "$ping_pid" 2>/dev/null || true
-		wait "$ping_pid" 2>/dev/null || true
-		ping_pid=
 	else
 		if timeout --kill-after=2s 8s taskset -c "$work_cpu" \
 			sh -c "echo '$write_value' > '$trigger_target'" >"$outdir/$name-trigger.log" 2>&1; then
@@ -625,6 +680,27 @@ END {
 	exit !(owner != "" && stop_line && exit_line > stop_line)
 }' "$outdir/owner-trace.log"; then
 		fail "$name trace did not pair owner stop with owner exit"
+	fi
+	if [ "$name" = net_backlog ]; then
+		target_hex=$(printf '%x' "$case_cpu")
+		flush_cpu="[$(printf '%03d' "$case_cpu")]"
+		sender_task="perl-$net_send_pid"
+		grep -q '^received 1 bytes$' "$outdir/net_backlog-recv.log" || \
+			fail "net_backlog receiver did not establish the TCP flow"
+		grep -q '^uncorked$' "$outdir/net_backlog-send.log" || \
+			fail "net_backlog sender did not uncork the held packet"
+		grep -Eq "$sender_task.*net_get_rps_cpu_$net_kprobe_suffix:.*cpu=0x$target_hex$" \
+			"$outdir/owner-trace.log" || \
+			fail "net_backlog RFS did not select CPU $case_cpu"
+		grep -Eq "$sender_task.*net_enqueue_$net_kprobe_suffix:.*cpu=0x$target_hex$" \
+			"$outdir/owner-trace.log" || \
+			fail "net_backlog did not enqueue the held packet on CPU $case_cpu"
+		grep -Eq "net_queue_work_$net_kprobe_suffix:.*cpu=0x$target_hex " \
+			"$outdir/owner-trace.log" || \
+			fail "net_backlog did not queue a flush worker on CPU $case_cpu"
+		grep "net_flush_backlog_$net_kprobe_suffix:" "$outdir/owner-trace.log" |
+			grep -F "$flush_cpu" >/dev/null || \
+			fail "net_backlog did not execute a flush worker on CPU $case_cpu"
 	fi
 	if [ "$name" = vmalloc_purge ]; then
 		grep -Eq 'workqueue_queue_work:.*function=purge_vmap_node .*req_cpu=' \
@@ -821,17 +897,36 @@ fi
 if should_run_case net_backlog; then
 	[ "$target_cpu" -lt 31 ] || fail "RPS test requires target CPU below 31"
 	command -v ip >/dev/null 2>&1 || fail "iproute2 is required for backlog test"
-	command -v ping >/dev/null 2>&1 || fail "iputils ping is required for backlog test"
+	command -v perl >/dev/null 2>&1 || fail "perl is required for backlog test"
+	[ -r "$net_recv_tool" ] || \
+		fail "net_backlog receiver helper is unavailable: $net_recv_tool"
+	[ -r "$net_send_tool" ] || \
+		fail "net_backlog sender helper is unavailable: $net_send_tool"
 	modprobe veth || fail "veth module is unavailable for backlog test"
+	ip netns add "$netns" || \
+		fail "could not create network namespace for backlog test"
+	netns_created=1
 	ip link add "$netdev_a" type veth peer name "$netdev_b" || \
 		fail "could not create veth pair for backlog test"
 	netdev_created=1
+	netdev_mac_b=$(cat "/sys/class/net/$netdev_b/address")
+	ip link set "$netdev_b" netns "$netns" || \
+		fail "could not move sender veth to its network namespace"
 	ip addr add "$netdev_ip_a/30" dev "$netdev_a"
-	ip addr add "$netdev_ip_b/30" dev "$netdev_b"
 	ip link set "$netdev_a" up
-	ip link set "$netdev_b" up
+	ip netns exec "$netns" ip addr add "$netdev_ip_b/30" dev "$netdev_b"
+	ip netns exec "$netns" ip link set "$netdev_b" up
 	netdev_mac_a=$(cat "/sys/class/net/$netdev_a/address")
-	ip neigh replace "$netdev_ip_a" lladdr "$netdev_mac_a" nud permanent dev "$netdev_b"
+	ip netns exec "$netns" ip neigh replace "$netdev_ip_a" \
+		lladdr "$netdev_mac_a" nud permanent dev "$netdev_b"
+	ip neigh replace "$netdev_ip_b" lladdr "$netdev_mac_b" \
+		nud permanent dev "$netdev_a"
+	if command -v firewall-cmd >/dev/null 2>&1 &&
+	   firewall-cmd --state >/dev/null 2>&1; then
+		firewall-cmd --zone=trusted --add-interface="$netdev_a" >/dev/null || \
+			fail "could not trust temporary net_backlog veth"
+		net_firewalld_added=1
+	fi
 	rps_path="/sys/class/net/$netdev_a/queues/rx-0/rps_cpus"
 	set_rps_cpu()
 	{
@@ -843,24 +938,29 @@ if should_run_case net_backlog; then
 		return 1
 	}
 
-	net_cpu=${CPU_ACCEL_NET_CPU:-$target_cpu}
-	if [ "$net_cpu" -eq "$work_cpu" ] || ! set_rps_cpu "$net_cpu"; then
-		net_cpu=
-		for online_path in /sys/devices/system/cpu/cpu[1-9]*/online \
-			/sys/devices/system/cpu/cpu0/online; do
-			[ -r "$online_path" ] || continue
-			[ "$(cat "$online_path")" = 1 ] || continue
-			candidate_cpu=${online_path#/sys/devices/system/cpu/cpu}
-			candidate_cpu=${candidate_cpu%/online}
-			[ "$candidate_cpu" -eq "$work_cpu" ] && continue
-			if set_rps_cpu "$candidate_cpu"; then
-				net_cpu=$candidate_cpu
-				break
-			fi
-		done
-	fi
-	[ -n "$net_cpu" ] || fail "no online housekeeping CPU is available for RPS backlog test"
-	run_case net_backlog "$netdev_a" flush_all_backlogs 1 netdev "$net_cpu"
+	net_cpu=${CPU_ACCEL_NET_CPU:-$work_cpu}
+	set_rps_cpu "$net_cpu" || \
+		fail "net_backlog fallback CPU $net_cpu is not RPS-eligible"
+	rps_sock_flow_entries_saved=$(cat /proc/sys/net/core/rps_sock_flow_entries)
+	echo 4096 >/proc/sys/net/core/rps_sock_flow_entries
+	echo 4096 >"/sys/class/net/$netdev_a/queues/rx-0/rps_flow_cnt"
+	taskset -c "$target_cpu" perl "$net_recv_tool" \
+		"$netdev_ip_a" "$netdev_port" \
+		>/dev/null 2>"$outdir/net_backlog-recv.log" &
+	net_recv_pid=$!
+	sleep 0.1
+	ip netns exec "$netns" taskset -c "$target_cpu" perl "$net_send_tool" \
+		"$netdev_ip_a" "$netdev_port" "$netdev_ip_b" "$netdev_b" \
+		>"$outdir/net_backlog-send.log" 2>&1 &
+	net_send_pid=$!
+	sleep 0.2
+	taskset -pc "$work_cpu" "$net_send_pid" \
+		>"$outdir/net_backlog-send-affinity.log" 2>&1
+	kill -0 "$net_recv_pid" 2>/dev/null || \
+		fail "net_backlog receiver exited before the owner run"
+	kill -0 "$net_send_pid" 2>/dev/null || \
+		fail "net_backlog sender exited before the owner run"
+	run_case net_backlog "$netdev_a" flush_all_backlogs 1 netdev "$target_cpu"
 fi
 
 if should_run_case rcu_sheaf; then

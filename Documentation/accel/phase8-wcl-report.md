@@ -68,10 +68,13 @@ Optional classes, selected explicitly with `CPU_ACCEL_WCL_CLASSES`:
   exception, and RCU stress rows.
 - `migration`: two NUMA memory nodes, three distinct online CPUs, and a
   reader CPU supplied through `CPU_ACCEL_WCL_MIGRATION_READER_CPU`.
-- `net_backlog`, `timer_migration`: their owner CPU (1) must be in
-  `rcu_nocbs`; user entry returns `-EOPNOTSUPP` when the CPU is not RCU
-  offloaded (arch/x86/kernel/accel.c, `x86_cpu_accel_user_enter`). This VM
-  is booted with `rcu_nocbs=2`.
+- `net_backlog`, `timer_migration`: the owner CPU must be RCU-offloaded and
+  distinct from the trigger/work CPU. `timer_migration` also needs a cgroup-v2
+  cpuset partition transition. `net_backlog` requires RFS, a veth device,
+  network namespaces, Perl, and an RPS-eligible trigger/fallback CPU; the
+  owner itself need not be RPS-eligible because a cork-held TCP flow preserves
+  the RFS mapping after the sender migrates. `firewall-cmd` is required only
+  when firewalld is active.
 - `irq_storm`: requires a test NIC via `CPU_ACCEL_IRQ_INTERFACE`.
 
 `test-wcl-report.sh` now defaults to the common portable set and accepts
@@ -244,19 +247,137 @@ p50=16 ns, p90=32 ns, p99=32 ns, p999=32 ns, max=19 ns.
 `workqueue_queued=0`, `arch_ipi_count=0`, `arch_tlb_count=0`,
 `context_switches=0`, and `migration_detected=0`.
 
+### 2026-11-10 common portable set (simon.lab)
+
+Environment: `7.3.0-rc3-accel-tlbfix-gbff69f41a61b`, ABI 23, owner CPU 6,
+work CPU 0, load CPUs 3/4/5/7, 5 s bounded runs, 1 ms sampling period.
+Transparent hugepages were already in `never` mode. The first full attempt
+failed only in the `lru` class because the harness treated a
+`x86_cpu_accel_user_enter()` function-graph entry as proof that ownership was
+complete; the LRU drain could therefore run before the architecture owner was
+active, and the owner later exited at its timeout with `stop_requested=0`.
+The harness now waits for the controller's active marker, which requires the
+running accelerator mode and a non-zero `user_active_start_ns` with no end
+timestamp. The isolated LRU case and a new full common-set run both pass.
+
+Passing-run evidence:
+`/root/accel-measure/phase8-bff69f4-wcl-common-20261110b/summary.tsv`
+(SHA-256 `f3db69cb2fc5d96cf840a7e57245896604d560679eaddade5d1645f7a331ba0c`;
+69 files, 215373 bytes). The failed diagnostic run is preserved in
+`/root/accel-measure/phase8-bff69f4-wcl-common-20261110`. The existing serial
+logger recorded a 638-byte delta for the passing run containing only the
+expected `drop_caches` and call-function probe load/unload messages.
+
+| class            | exit | state | samples | p50_ns | p90_ns | p99_ns | p999_ns | max_ns | workqueue_queued | arch_ipi_count | arch_nmi_count |
+|------------------|------|-------|---------|--------|--------|--------|---------|--------|------------------|----------------|----------------|
+| baseline         | 0    | 3     | 5003    | 16     | 32     | 32     | 32      | 19     | 0                | 0              | 0              |
+| load             | 0    | 3     | 5003    | 16     | 32     | 32     | 32      | 19     | 1                | 0              | 0              |
+| memory_pressure  | 0    | 3     | 5003    | 16     | 32     | 32     | 32      | 19     | 0                | 0              | 0              |
+| vmstat           | 0    | 7     | 0       | 0      | 0      | 0      | 0       | 0      | 1                | 1              | 1              |
+| lru              | 0    | 7     | 0       | 0      | 0      | 0      | 0       | 0      | 1                | 1              | 1              |
+| slub_shrink      | 0    | 7     | 0       | 0      | 0      | 0      | 0       | 0      | 1                | 1              | 1              |
+| ring_resize      | 0    | 7     | 0       | 0      | 0      | 0      | 0       | 0      | 1                | 1              | 1              |
+| call_function    | 0    | 7     | 0       | 0      | 0      | 0      | 0       | 0      | 0                | 1              | 1              |
+| irq_work         | 0    | 7     | 0       | 0      | 0      | 0      | 0       | 0      | 0                | 2              | 51             |
+| timerlat         | 0    | 7     | 0       | 0      | 0      | 0      | 0       | 0      | 0                | 1              | 1              |
+
+All rows reported zero IRQ, softirq, TLB, machine-check-exception,
+machine-check-poll, and context-switch deltas. The report exited zero after
+recording every class, so a class failure can no longer be hidden by the
+final summary.
+
+### 2026-11-10 optional and topology-specific set (simon.lab)
+
+Environment: the same `7.3.0-rc3-accel-tlbfix-gbff69f41a61b` boot, ABI 23,
+owner CPU 6, work CPU 0, and 5 s bounded runs. The topology-specific classes
+were run individually because several need their own CPU or hardware mapping.
+The passing evidence is under
+`/root/accel-measure/phase8-bff69f4-wcl-optional-20261110/<class>/summary.tsv`
+(123 files; combined summary SHA-256
+`277e050e2f058440a877f1a56d2b51b992d0ad5f1b68ec9e05c460e34a9782d8`).
+The isolated `timer_migration` rerun used the corrected active-marker harness
+and is preserved in
+`/root/accel-measure/phase8-bff69f4-wcl-timer-20261110T1310`
+(summary SHA-256
+`82c734b280fa794d1291c6df05002fd38563776ec63d4e50b6fe12c5e8713963`).
+
+| class                | exit | state | samples    | p50_ns | p90_ns | p99_ns | p999_ns | max_ns | workqueue_queued | arch_ipi_count | arch_nmi_count |
+|----------------------|------|-------|------------|--------|--------|--------|---------|--------|------------------|----------------|----------------|
+| amd_pstate           | 0    | 3     | 250592606  | 32     | 32     | 32     | 32      | 240    | 1                | 0              | 0              |
+| thermal_cooling      | 0    | 3     | 837008     | 32     | 32     | 32     | 32      | 280    | 0                | 0              | 1              |
+| cpuidle_state        | 0    | 3     | 1114598    | 32     | 32     | 32     | 32      | 230    | 0                | 0              | 1              |
+| dirty_writeback      | 0    | 3     | 496229602  | 32     | 32     | 32     | 32      | 250    | 1                | 0              | 0              |
+| resctrl_owner        | 0    | 3     | 723985     | 32     | 32     | 32     | 32      | 250    | 0                | 0              | 1              |
+| resctrl_task         | 0    | 3     | 788172     | 32     | 32     | 32     | 32      | 230    | 0                | 0              | 1              |
+| resctrl_monitor      | 0    | 3     | 48754070   | 32     | 32     | 32     | 32      | 240    | 2                | 0              | 1              |
+| perf_event           | 0    | 7     | 0          | 0      | 0      | 0      | 0       | 0      | 0                | 1              | 1              |
+| ftrace_maintenance   | 0    | 7     | 0          | 0      | 0      | 0      | 0       | 0      | 1                | 2              | 1              |
+| tlb_flush            | 0    | 7     | 0          | 0      | 0      | 0      | 0       | 0      | 0                | 2              | 1              |
+| user_escape_fault    | 0    | 7     | 0          | 0      | 0      | 0      | 0       | 0      | 2                | 2              | 1              |
+| user_death           | 0    | 5     | 0          | 0      | 0      | 0      | 0       | 0      | 0                | 0              | 0              |
+| rcu_callback_routing | 0    | 3     | 5003       | 16     | 32     | 32     | 32      | 19     | 2                | 0              | 0              |
+| stop_machine         | 0    | 7     | 0          | 8      | 32     | 32     | 32      | 0      | 0                | 0              | 1              |
+| hotplug_up           | 0    | 7     | 0          | 8      | 32     | 32     | 32      | 0      | 0                | 0              | 1              |
+| hotplug_down         | 0    | 3     | 5002       | 16     | 32     | 32     | 32      | 19     | 0                | 0              | 0              |
+| timer_migration      | 0    | 7     | 0          | 0      | 0      | 0      | 0       | 0      | 0                | 0              | 1              |
+| net_backlog          | 0    | 7     | 0          | 0      | 0      | 0      | 0       | 0      | 1                | 0              | 0              |
+
+All passing rows reported zero IRQ, softirq, TLB, machine-check-exception,
+machine-check-poll, and context-switch deltas. The terminal classes exited
+through owner stop with the expected workqueue, architecture-IPI, and NMI
+correlations; `user_death` reached its expected state 5. `timer_migration`
+stopped the CPU 1 owner in 9 ms through the cgroup-v2 partition transition.
+
+`net_backlog` passed under Simon's active tuned `cpu-partitioning`
+configuration with owner CPU 5 and work/trigger CPU 0. Plain RPS cannot target
+CPU 5, so the harness uses a veth pair across a temporary network namespace
+and RFS. The receiver is pinned to CPU 5 and establishes the TCP flow. The
+sender starts on CPU 5, sends one byte, enables `TCP_CORK`, queues a second
+byte, and then migrates to CPU 0. `SIGUSR1` clears the cork without another
+`sendmsg()`, preserving the RFS mapping and steering the held byte to CPU 5;
+CPU 0 remains the RPS fallback. The WCL wrapper stopped the owner in 126 ms
+with state 7, and the direct trimmed-harness validation stopped in 122 ms.
+The evidence is in
+`/root/accel-measure/phase8-bff69f4-wcl-net-backlog-rfs23-20261110T2243Z`
+and
+`/root/accel-measure/phase8-bff69f4-wcl-net-backlog-rfs22-20261110T2241Z`.
+
+The remaining optional classes are unsupported or not applicable on this boot:
+
+- `device_reload`, `device_teardown`, and `device_rebind` fail before creating
+  the temporary netdevsim device because this kernel does not export
+  `unregister_netdevice`; `device_sriov` additionally lacks
+  `nsim_esw_legacy_enable`. Their evidence and per-class logs are preserved in
+  `/root/accel-measure/phase8-bff69f4-wcl-optional-20261110/device_*`.
+- `migration` is not applicable because Simon has one NUMA node.
+- `irq_storm` is not applicable because no isolated test NIC is available.
+
+### Phase 8 disposition inventory
+
+| Area | Current disposition | Evidence |
+|------|----------------------|----------|
+| Common portable WCL set | Passed on `7.3.0-rc3-accel-tlbfix-gbff69f41a61b` | `/root/accel-measure/phase8-bff69f4-wcl-common-20261110b/summary.tsv` |
+| Optional portable WCL classes | Passed individually on the same kernel | `/root/accel-measure/phase8-bff69f4-wcl-optional-20261110/<class>/summary.tsv` |
+| `timer_migration` | Passed with the corrected active-marker harness | `/root/accel-measure/phase8-bff69f4-wcl-timer-20261110T1310/summary.tsv` |
+| `net_backlog` | Passed with RFS and a cork-held TCP flow under the active tuned `cpu-partitioning` profile | `/root/accel-measure/phase8-bff69f4-wcl-net-backlog-rfs23-20261110T2243Z/summary.tsv` |
+| Netdevsim lifecycle classes | Unsupported on this kernel because required symbols are absent | `/root/accel-measure/phase8-bff69f4-wcl-optional-20261110/device_*/summary.tsv` |
+| `migration` | Not applicable on this one-NUMA-node host | No runtime run |
+| `irq_storm` | Not applicable without an isolated test NIC | No runtime run |
+| Broader lifecycle rows | Source-classified in `Documentation/accel/cpu-accel.rst`; runtime runs remain outside this WCL report | `Documentation/accel/cpu-accel.rst` Phase 8 matrix |
+
 ## Known limitations and open items
 
 - No hard bound is claimed. The measured maxima are envelopes for the
   listed bounded classes on one VM image; the row's disposition remains
   "selected invariants measured; no hard bound".
 - Percentiles are log2-bin upper-edge estimates (factor-of-two ceiling).
-- The `test-sync-work-owner-stop.sh` function-graph assertion "trace did
-  not pair owner stop with owner exit" fails on this image for the
-  `lru`/`slub_shrink` (and observed) cases even with the pre-change
-  module and ABI-17 controller (A/B verified on 2026-10-29): the runs
-  themselves complete with the stop/exit pair present in the trace, so
-  the WCL data above stands, but the assertion's `=> caller` matching
-  needs separate investigation.
+- The historical `test-sync-work-owner-stop.sh` assertion failure "trace did
+  not pair owner stop with owner exit" was root-caused on 2026-11-10 as a
+  harness readiness race: `x86_cpu_accel_user_enter()` was visible to
+  function graph before architecture ownership was complete. Waiting for the
+  active marker fixes the observed LRU failure; the earlier VM-image runs
+  should be rerun with the updated harness before relying on their assertion
+  status.
 - The `test-cpu-accel.sh` CPU-hotplug-gate case fails on this image:
   offlining the owned CPU terminates the `user-oslat` owner through the
   stop path's escape NMI (`state=7`, `user_escape_count=1`, active
@@ -267,9 +388,9 @@ p50=16 ns, p90=32 ns, p99=32 ns, p999=32 ns, max=19 ns.
   the "CPU hotplug attempts" matrix row: a cooperative user owner could
   drain within one polling period from a stop-only request, while the
   current `cpu_accel_arch_stop_user()` also raises the escape NMI.
-- `net_backlog` and `timer_migration` remain deferred to a boot with
-  `rcu_nocbs` covering their owner CPU; `irq_storm` remains deferred to a
-  test NIC.
+- `timer_migration` passed on the earlier `rcu_nocbs=1-11` boot. After the
+  later repartition, `net_backlog` passed through RFS steering of a cork-held
+  TCP flow; `irq_storm` remains deferred to a test NIC.
 - Machine-check injection remains out of scope (see the exceptions/NMI
   row).
 

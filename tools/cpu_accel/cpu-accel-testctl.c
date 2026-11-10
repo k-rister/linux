@@ -191,8 +191,6 @@ static void cpu_accel_user_seal_and_start(
 
 	ret = cpu_accel_user_syscall3(SYS_ioctl, context->fd,
 				      CPU_ACCEL_IOC_START, 0);
-	if (ret < 0)
-		context->shared->recovery_error = -ret;
 	cpu_accel_user_syscall1(SYS_exit_group, ret < 0 ? 126 : 0);
 	__builtin_unreachable();
 }
@@ -1913,6 +1911,9 @@ static int run_user_workload(const struct cpu_accel_config *requested,
 	if (cpu_accel_exit(&handle) < 0) {
 		perror("exit user accelerator");
 		ret = -1;
+	} else if (cpu_accel_reset(&handle) < 0) {
+		perror("reset user accelerator");
+		ret = -1;
 	}
 	if (needs_region && config.workload == CPU_ACCEL_WORKLOAD_USER_REGION &&
 	    __atomic_load_n(&workload_region->completion_sequence,
@@ -1934,10 +1935,6 @@ static int run_user_workload(const struct cpu_accel_config *requested,
 	}
 out_close:
 	if (region_mapped) {
-		if (needs_region && cpu_accel_reset(&handle) < 0) {
-			perror("reset workload region");
-			ret = -1;
-		}
 		if (munmap(workload_region, region_create.size_bytes) < 0) {
 			perror("unmap manager workload region");
 			ret = -1;

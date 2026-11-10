@@ -25,6 +25,7 @@ summary="$outdir/summary.tsv"
 thp_enabled_path=/sys/kernel/mm/transparent_hugepage/enabled
 thp_enabled_saved=
 thp_enabled_changed=0
+wcl_failed=0
 
 fail()
 {
@@ -35,9 +36,11 @@ fail()
 [ "$(id -u)" -eq 0 ] || fail "run as root"
 [ -x "$tool" ] || fail "cpu-accel-testctl not found or not executable: $tool"
 mkdir -p "$outdir"
-printf 'class\texit\tstate\tsamples\tmin_ns\tp50_ns\tp90_ns\tp99_ns\tp999_ns\tmax_ns\thist_total\t'\
-       'irq_count\tsoftirq_count\tworkqueue_queued\tarch_ipi_count\tarch_tlb_count\t'\
-       'arch_nmi_count\tarch_mce_exception_count\tarch_mce_poll_count\tcontext_switches\n' \
+	printf 'class\texit\tstate\tsamples\tmin_ns\tp50_ns\tp90_ns\tp99_ns\t' \
+	       'p999_ns\tmax_ns\thist_total\tirq_count\tsoftirq_count\t' \
+	       'workqueue_queued\tarch_ipi_count\tarch_tlb_count\t' \
+	       'arch_nmi_count\tarch_mce_exception_count\t' \
+	       'arch_mce_poll_count\tcontext_switches\n' \
 	>"$summary"
 
 # khugepaged's lru_add_drain_all() stops every owned CPU on its scan
@@ -183,8 +186,7 @@ record_class()
 			"$wcl_class" "$wcl_exit" >>"$summary"
 		return
 	fi
-	printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t'\
-	       '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+	printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
 		"$wcl_class" "$wcl_exit" \
 		"$(field state "$status_line")" \
 		"$(field samples "$status_line")" \
@@ -220,6 +222,7 @@ run_class()
 	if [ $wcl_rc -ne 0 ]; then
 		echo "WCL class $wcl_class exited $wcl_rc; tail:"
 		tail -n 15 "$wcl_log" || true
+		wcl_failed=1
 	fi
 	record_class "$wcl_class" "$wcl_log" "$wcl_rc"
 }
@@ -258,6 +261,7 @@ sync_work_case()
 
 single_probe_case()
 {
+	CPU_ACCEL_CPU="$target_cpu" \
 	CPU_ACCEL_TESTCTL="$tool" \
 		sh "$script_dir/test-call-function-single-owner-stop.sh" "$@"
 }
@@ -446,7 +450,8 @@ if should_run_class irq_work; then
 fi
 
 if should_run_class timerlat; then
-	run_class timerlat env CPU_ACCEL_TESTCTL="$tool" \
+	run_class timerlat env CPU_ACCEL_TIMERLAT_CPU="$target_cpu" \
+		CPU_ACCEL_TESTCTL="$tool" \
 		sh "$script_dir/test-timerlat-owner.sh"
 fi
 
@@ -553,7 +558,6 @@ if should_run_class net_backlog; then
 		CPU_ACCEL_DURATION_MS="$duration_ms" \
 		CPU_ACCEL_TEST_CASE=net_backlog \
 		CPU_ACCEL_TESTCTL="$tool" \
-		CPU_ACCEL_NET_CPU="$target_cpu" \
 		sh "$script_dir/test-sync-work-owner-stop.sh"
 fi
 
@@ -569,3 +573,4 @@ fi
 
 echo "== WCL summary: $summary"
 column -t -s "$(printf '\t')" "$summary" 2>/dev/null || cat "$summary"
+exit "$wcl_failed"

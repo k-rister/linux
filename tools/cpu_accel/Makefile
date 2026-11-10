@@ -56,6 +56,9 @@ test-netdevsim-reload-owner: cpu-accel-testctl
 test-netdevsim-teardown-owner: cpu-accel-testctl
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-netdevsim-teardown-owner.sh
 
+test-netdevsim-rebind-owner: cpu-accel-testctl
+	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-netdevsim-rebind-owner.sh
+
 test-dirty-writeback-owner: cpu-accel-testctl
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-dirty-writeback-owner.sh
 

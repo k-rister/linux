@@ -374,6 +374,15 @@ escape, context switch, task migration, or kernel error::
 
   sudo make -C tools/cpu_accel test-netdevsim-teardown-owner
 
+The netdevsim rebind owner test unbinds and rebinds the temporary device's
+driver while the owner is active. It traces the driver-core attach/detach
+entry points and the netdevsim probe/remove and netdevice registration paths
+on the work CPU, then verifies that the device is restored and the bounded
+owner completes without an escape, context switch, migration, or kernel
+error::
+
+  sudo make -C tools/cpu_accel test-netdevsim-rebind-owner
+
 The dirty-writeback owner test writes a bounded temporary file from a
 housekeeping CPU while a bounded ``user-oslat`` owner is active, flushes the
 containing filesystem, and requires inode-matched dirty-folio and
@@ -1263,6 +1272,13 @@ run-specific results must be recorded with the kernel build and test logs.
          is active and traces ``device_unregister()``,
          ``nsim_drv_remove()``, and ``unregister_netdevice()`` on the work
          CPU. Its runtime report also remains pending.
+         ``test-netdevsim-rebind-owner.sh`` adds a driver-bind lifecycle
+         path: it unbinds and rebinds the temporary netdevsim driver while
+         the owner is active and traces ``device_driver_detach()``,
+         ``device_driver_attach()``, ``nsim_drv_remove()``,
+         ``nsim_drv_probe()``, ``unregister_netdevice()``, and
+         ``register_netdevice()`` on the work CPU. Its runtime report also
+         remains pending.
    * - Exceptions, NMIs, and machine checks
       - **NMI escape is owner-terminating recovery for the tested ring-3
         workload; user-mode ``#MC`` death is reconciled through task exit;

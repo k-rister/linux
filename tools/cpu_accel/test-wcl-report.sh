@@ -33,7 +33,9 @@ fail()
 [ "$(id -u)" -eq 0 ] || fail "run as root"
 [ -x "$tool" ] || fail "cpu-accel-testctl not found or not executable: $tool"
 mkdir -p "$outdir"
-printf 'class\texit\tstate\tsamples\tmin_ns\tp50_ns\tp90_ns\tp99_ns\tp999_ns\tmax_ns\thist_total\tirq_count\tsoftirq_count\tworkqueue_queued\tarch_ipi_count\tarch_tlb_count\tcontext_switches\n' \
+printf 'class\texit\tstate\tsamples\tmin_ns\tp50_ns\tp90_ns\tp99_ns\tp999_ns\tmax_ns\thist_total\t'\
+       'irq_count\tsoftirq_count\tworkqueue_queued\tarch_ipi_count\tarch_tlb_count\t'\
+       'arch_nmi_count\tarch_mce_exception_count\tarch_mce_poll_count\tcontext_switches\n' \
 	>"$summary"
 
 # khugepaged's lru_add_drain_all() stops every owned CPU on its scan
@@ -154,11 +156,12 @@ record_class()
 		status_line=$(grep -E '^state=[3-7] ' "$wcl_log" | tail -n 1 || true)
 	fi
 	if [ -z "$status_line" ]; then
-		printf '%s\t%s\tmissing\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\n' \
+		printf '%s\t%s\tmissing\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\n' \
 			"$wcl_class" "$wcl_exit" >>"$summary"
 		return
 	fi
-	printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+	printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t'\
+	       '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
 		"$wcl_class" "$wcl_exit" \
 		"$(field state "$status_line")" \
 		"$(field samples "$status_line")" \
@@ -174,6 +177,9 @@ record_class()
 		"$(field workqueue_queued "$status_line")" \
 		"$(field arch_ipi_count "$status_line")" \
 		"$(field arch_tlb_count "$status_line")" \
+		"$(field arch_nmi_count "$status_line")" \
+		"$(field arch_mce_exception_count "$status_line")" \
+		"$(field arch_mce_poll_count "$status_line")" \
 		"$(field context_switches "$status_line")" >>"$summary"
 }
 

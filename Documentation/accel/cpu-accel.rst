@@ -1274,8 +1274,9 @@ run-specific results must be recorded with the kernel build and test logs.
         the non-zero bins plus p50/p90/p99/p999 upper-edge estimates.
         ``test-wcl-report.sh`` runs one bounded stress class at a time
         (transparent hugepages disabled for the matrix to keep
-        ``khugepaged`` out of the window) and records the distribution and
-        counter correlation per class. On 2026-10-29 on
+	``khugepaged`` out of the window) and records the distribution and
+	counter correlation per class, including the ABI 23 NMI and MCE deltas.
+	On 2026-10-29 on
         ``7.3.0-rc3-accel-tlbfix-02150-gde9255a04ef7``, the 5 s
         ``user-oslat`` baseline and five-busy-CPU load runs each produced
         5000 samples with p50=8 ns, p90=16 ns, p999=16384 ns, and maxima

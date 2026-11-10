@@ -149,6 +149,9 @@ while [ "$iteration" -le "$repeat_count" ]; do
 done
 
 stop_load
+status_line=$(grep -E '^state=[3-7] ' "$run_log" | tail -n 1)
+[ -n "$status_line" ] || fail "CPU-$hotplug_mode race did not report owner status"
+printf '%s\n' "$status_line"
 max_active_ns=$(awk -F '\t' '
 	NR > 1 && $3 != "-" {
 		if ($3 > max)

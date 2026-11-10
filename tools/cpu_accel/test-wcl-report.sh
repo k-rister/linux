@@ -6,8 +6,8 @@
 # and emit a per-class log plus a summary TSV.
 #
 # The default matrix is the common portable set.  Select the device
-# lifecycle, power-policy, migration, net_backlog, timer_migration, or
-# irq_storm classes individually when the required topology or test NIC is
+# lifecycle, power-policy, resctrl, migration, net_backlog, timer_migration,
+# or irq_storm classes individually when the required topology or test NIC is
 # available; selecting all attempts every class.
 
 set -eu
@@ -80,6 +80,7 @@ should_run_class()
 		case "$1" in
 		device_reload|device_teardown|device_rebind|device_sriov|\
 		amd_pstate|thermal_cooling|cpuidle_state|dirty_writeback|\
+		resctrl_owner|resctrl_task|resctrl_monitor|\
 		migration|net_backlog|timer_migration|irq_storm)
 			return 1
 			;;
@@ -304,6 +305,32 @@ dirty_writeback_case()
 		sh "$script_dir/test-dirty-writeback-owner.sh"
 }
 
+resctrl_owner_case()
+{
+	CPU_ACCEL_CPU="$target_cpu" \
+	CPU_ACCEL_RESCTRL_DURATION_MS="$duration_ms" \
+	CPU_ACCEL_TESTCTL="$tool" \
+		sh "$script_dir/test-resctrl-owner-stop.sh"
+}
+
+resctrl_task_case()
+{
+	CPU_ACCEL_CPU="$target_cpu" \
+	CPU_ACCEL_RESCTRL_TASK_WORK_CPU="$work_cpu" \
+	CPU_ACCEL_RESCTRL_TASK_DURATION_MS="$duration_ms" \
+	CPU_ACCEL_TESTCTL="$tool" \
+		sh "$script_dir/test-resctrl-task-owner-stop.sh"
+}
+
+resctrl_monitor_case()
+{
+	CPU_ACCEL_CPU="$target_cpu" \
+	CPU_ACCEL_RESCTRL_MONITOR_WORK_CPU="$work_cpu" \
+	CPU_ACCEL_RESCTRL_MONITOR_DURATION_MS="$duration_ms" \
+	CPU_ACCEL_TESTCTL="$tool" \
+		sh "$script_dir/test-resctrl-monitor-owner-stop.sh"
+}
+
 if should_run_class baseline; then
 	run_class baseline baseline_run
 fi
@@ -375,6 +402,18 @@ fi
 
 if should_run_class dirty_writeback; then
 	run_class dirty_writeback dirty_writeback_case
+fi
+
+if should_run_class resctrl_owner; then
+	run_class resctrl_owner resctrl_owner_case
+fi
+
+if should_run_class resctrl_task; then
+	run_class resctrl_task resctrl_task_case
+fi
+
+if should_run_class resctrl_monitor; then
+	run_class resctrl_monitor resctrl_monitor_case
 fi
 
 if should_run_class migration; then

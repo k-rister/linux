@@ -59,6 +59,8 @@ Optional classes, selected explicitly with `CPU_ACCEL_WCL_CLASSES`:
 - `amd_pstate`, `thermal_cooling`, `cpuidle_state`, `dirty_writeback`:
   the four remaining power-policy and storage lifecycle cases. The dirty
   writeback class uses at least a 10 s owner window.
+- `resctrl_owner`, `resctrl_task`, `resctrl_monitor`: the three resctrl
+  fault-injection paths, each run separately.
 - `migration`: two NUMA memory nodes, three distinct online CPUs, and a
   reader CPU supplied through `CPU_ACCEL_WCL_MIGRATION_READER_CPU`.
 - `net_backlog`, `timer_migration`: their owner CPU (1) must be in

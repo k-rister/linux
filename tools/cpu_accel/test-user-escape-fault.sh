@@ -142,6 +142,8 @@ grep -q "recovery_state=2 recovery_error=0 recovery_attempts=$((drop_count + 1))
 	"$outdir/ctl.log" || fail "escape retry result was not reported exactly"
 grep -q 'user_escape_count=1 ' "$outdir/ctl.log" || \
 	fail "successful escape NMI was not counted exactly once"
+grep -Eq 'arch_nmi_count=[1-9][0-9]* ' "$outdir/ctl.log" || \
+	fail "successful escape was not correlated with an x86 NMI entry counter"
 grep -Eq 'user_active_ns=[1-9][0-9]* ' "$outdir/ctl.log" || \
 	fail "owner active interval was not reported"
 [ "$(cat "$drop_parameter")" = 0 ] || \

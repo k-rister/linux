@@ -52,10 +52,11 @@ reports lifecycle entry/exit timestamps, interrupt and softirq deltas,
 timer, hrtimer, RCU, and scheduler softirq deltas, current-task
 context-switch deltas, CPU-entry/exit identity, migration detection, pending
 scheduler and softirq state, and preemption state.  On x86 it additionally
-reports architecture interrupt, IPI, TLB, deferred-reschedule, and
-deferred-call-function counter deltas, plus native x86 TLB flush target
-batches directed at the CPU during accelerator ownership, including the
-ring-3 process-mm window;
+reports architecture interrupt, IPI, TLB, deferred-reschedule,
+deferred-call-function, NMI, machine-check exception, and machine-check
+poll counter deltas, plus native x86 TLB flush target batches directed at
+the CPU during accelerator ownership, including the ring-3 process-mm
+window;
 ``arch_counters_valid`` identifies whether those counters are available.
 The x86 direct backend is reported as
 ``CPU_ACCEL_BACKEND_X86_DIRECT_APIC``; it uses one dedicated APIC vector for
@@ -1213,8 +1214,10 @@ run-specific results must be recorded with the kernel build and test logs.
         the in-tree injector's software mode only decodes a synthetic record,
         while hardware mode invokes ``#MC`` and may panic.
       - ``user_escape_count`` and recovery fields report the owner-termination
-        experiment; the aggregate x86 IRQ counter includes NMI and MCE
-        statistics. On 2026-10-29,
+        experiment. ABI 23 adds separate x86 NMI, MCE-exception, and MCE-poll
+        counter deltas, and ``test-user-escape-fault.sh`` now requires the
+        successful escape to correlate with at least one NMI entry. On
+        2026-10-29,
         ``test-user-escape-fault.sh`` passed on
         ``7.3.0-rc3-accel-tlbfix-02150-gde9255a04ef7`` with the sender-side
         drop parameter for counts 0, 1, and 2, including a ten-run drop-2
@@ -1253,9 +1256,10 @@ run-specific results must be recorded with the kernel build and test logs.
        - The ``user-death`` workload is the focused test for this
          reconciliation path: it must report ``state=4 mode=0``,
          ``recovery_state=5 recovery_error=-3``, ``user_escape_count=0``, and
-         ``migration_detected=0`` with no kernel-error match. No
-         exception-specific counter, general NMI containment evidence, or
-         actual MCE injection is covered. Hardware MCE injection requires a
+         ``migration_detected=0`` with no kernel-error match. ABI 23's
+         exception counters are not yet runtime-validated on the rebuilt
+         kernel; general NMI containment evidence and actual MCE injection
+         remain uncovered. Hardware MCE injection requires a
          disposable recovery-capable test system. A kernel-initiated stop
         (for example ``khugepaged``'s ``lru_add_drain_all()``) outranks an
         injected drop window and ends the run early; the focused test

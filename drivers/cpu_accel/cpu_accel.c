@@ -61,6 +61,9 @@ struct cpu_accel_observation {
 	u64 arch_tlb_shootdown_targets_entry;
 	u64 arch_reschedule_deferred_entry;
 	u64 arch_call_function_deferred_entry;
+	u64 arch_nmi_entry;
+	u64 arch_mce_exception_entry;
+	u64 arch_mce_poll_entry;
 	u64 need_resched_samples;
 	u32 need_resched_entry;
 	u32 softirq_pending_entry;
@@ -199,6 +202,41 @@ static u64 cpu_accel_arch_tlb_count(unsigned int cpu)
 	return READ_ONCE(stats->counts[IRQ_COUNT_TLB]);
 }
 
+static u64 cpu_accel_arch_nmi_count(unsigned int cpu)
+{
+	const irq_cpustat_t *stats = per_cpu_ptr(&irq_stat, cpu);
+
+	return READ_ONCE(stats->counts[IRQ_COUNT_NMI]);
+}
+
+#ifdef CONFIG_X86_MCE
+static u64 cpu_accel_arch_mce_exception_count(unsigned int cpu)
+{
+	const irq_cpustat_t *stats = per_cpu_ptr(&irq_stat, cpu);
+
+	return READ_ONCE(stats->counts[IRQ_COUNT_MCE_EXCEPTION]);
+}
+
+static u64 cpu_accel_arch_mce_poll_count(unsigned int cpu)
+{
+	const irq_cpustat_t *stats = per_cpu_ptr(&irq_stat, cpu);
+
+	return READ_ONCE(stats->counts[IRQ_COUNT_MCE_POLL]);
+}
+#else
+static u64 cpu_accel_arch_mce_exception_count(unsigned int cpu)
+{
+	(void)cpu;
+	return U64_MAX;
+}
+
+static u64 cpu_accel_arch_mce_poll_count(unsigned int cpu)
+{
+	(void)cpu;
+	return U64_MAX;
+}
+#endif
+
 static u64 cpu_accel_arch_tlb_shootdown_targets(unsigned int cpu)
 {
 	return x86_cpu_accel_tlb_shootdown_targets(cpu);
@@ -216,7 +254,11 @@ static u64 cpu_accel_arch_call_function_deferred(unsigned int cpu)
 
 static bool cpu_accel_arch_counters_valid(void)
 {
+#ifdef CONFIG_X86_MCE
 	return true;
+#else
+	return false;
+#endif
 }
 #else
 static u64 cpu_accel_arch_irq_count(unsigned int cpu)
@@ -232,6 +274,24 @@ static u64 cpu_accel_arch_ipi_count(unsigned int cpu)
 }
 
 static u64 cpu_accel_arch_tlb_count(unsigned int cpu)
+{
+	(void)cpu;
+	return U64_MAX;
+}
+
+static u64 cpu_accel_arch_nmi_count(unsigned int cpu)
+{
+	(void)cpu;
+	return U64_MAX;
+}
+
+static u64 cpu_accel_arch_mce_exception_count(unsigned int cpu)
+{
+	(void)cpu;
+	return U64_MAX;
+}
+
+static u64 cpu_accel_arch_mce_poll_count(unsigned int cpu)
 {
 	(void)cpu;
 	return U64_MAX;
@@ -1333,6 +1393,10 @@ static void cpu_accel_observation_begin(struct cpu_accel_observation *obs)
 		cpu_accel_arch_reschedule_deferred(obs->cpu);
 	obs->arch_call_function_deferred_entry =
 		cpu_accel_arch_call_function_deferred(obs->cpu);
+	obs->arch_nmi_entry = cpu_accel_arch_nmi_count(obs->cpu);
+	obs->arch_mce_exception_entry =
+		cpu_accel_arch_mce_exception_count(obs->cpu);
+	obs->arch_mce_poll_entry = cpu_accel_arch_mce_poll_count(obs->cpu);
 	obs->need_resched_entry = need_resched();
 	obs->softirq_pending_entry = local_softirq_pending();
 	obs->preempt_count_entry = preempt_count();
@@ -1364,6 +1428,10 @@ static void cpu_accel_observation_finish(struct cpu_accel_device *dev,
 		cpu_accel_arch_reschedule_deferred(obs->cpu);
 	u64 arch_call_function_deferred =
 		cpu_accel_arch_call_function_deferred(obs->cpu);
+	u64 arch_nmi_count = cpu_accel_arch_nmi_count(obs->cpu);
+	u64 arch_mce_exception_count =
+		cpu_accel_arch_mce_exception_count(obs->cpu);
+	u64 arch_mce_poll_count = cpu_accel_arch_mce_poll_count(obs->cpu);
 	u64 irq_delta = cpu_accel_counter_delta(irq_count, obs->irq_entry);
 	u64 softirq_delta = cpu_accel_counter_delta(softirq_count,
 		obs->softirq_entry);
@@ -1384,6 +1452,14 @@ static void cpu_accel_observation_finish(struct cpu_accel_device *dev,
 	u64 arch_call_function_deferred_delta =
 		cpu_accel_counter_delta(arch_call_function_deferred,
 					obs->arch_call_function_deferred_entry);
+	u64 arch_nmi_delta = cpu_accel_counter_delta(arch_nmi_count,
+						     obs->arch_nmi_entry);
+	u64 arch_mce_exception_delta =
+		cpu_accel_counter_delta(arch_mce_exception_count,
+					obs->arch_mce_exception_entry);
+	u64 arch_mce_poll_delta =
+		cpu_accel_counter_delta(arch_mce_poll_count,
+					obs->arch_mce_poll_entry);
 	u64 timer_softirq_delta = cpu_accel_counter_delta(timer_softirq_count,
 		obs->timer_softirq_entry);
 	u64 hrtimer_softirq_delta = cpu_accel_counter_delta(hrtimer_softirq_count,
@@ -1415,6 +1491,9 @@ static void cpu_accel_observation_finish(struct cpu_accel_device *dev,
 		arch_tlb_shootdown_targets_delta;
 	shared->arch_reschedule_deferred = arch_reschedule_deferred_delta;
 	shared->arch_call_function_deferred = arch_call_function_deferred_delta;
+	shared->arch_nmi_count = arch_nmi_delta;
+	shared->arch_mce_exception_count = arch_mce_exception_delta;
+	shared->arch_mce_poll_count = arch_mce_poll_delta;
 	shared->need_resched_entry = obs->need_resched_entry;
 	shared->need_resched_exit = need_resched();
 	shared->softirq_pending_entry = obs->softirq_pending_entry;

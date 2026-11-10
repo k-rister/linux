@@ -5,8 +5,8 @@
 #include <linux/ioctl.h>
 #include <linux/types.h>
 
-/* ABI 22 separates fixed control/status data from workload-owned regions. */
-#define CPU_ACCEL_ABI_VERSION		22
+/* ABI 23 separates control/status data from regions and adds exception counters. */
+#define CPU_ACCEL_ABI_VERSION		23
 #define CPU_ACCEL_MAP_SIZE		(64U * 1024U)
 #define CPU_ACCEL_MAX_WORK_BYTES	(1ULL * 1024ULL * 1024ULL * 1024ULL)
 #define CPU_ACCEL_MAX_MEMMOVE_WORK_BYTES	(64ULL * 1024ULL)
@@ -157,6 +157,9 @@ struct cpu_accel_shared {
 	__u64 arch_tlb_shootdown_targets;
 	__u64 arch_reschedule_deferred;
 	__u64 arch_call_function_deferred;
+	__u64 arch_nmi_count;
+	__u64 arch_mce_exception_count;
+	__u64 arch_mce_poll_count;
 	__u32 need_resched_entry;
 	__u32 need_resched_exit;
 	__u32 softirq_pending_entry;

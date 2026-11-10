@@ -807,6 +807,9 @@ static void print_status(const struct cpu_accel_shared *shared,
 	       " arch_tlb_shootdown_targets=%" PRIu64
 	       " arch_reschedule_deferred=%" PRIu64
 	       " arch_call_function_deferred=%" PRIu64
+	       " arch_nmi_count=%" PRIu64
+	       " arch_mce_exception_count=%" PRIu64
+	       " arch_mce_poll_count=%" PRIu64
 	       " need_resched_entry=%u need_resched_exit=%u"
 	       " softirq_pending_entry=%u softirq_pending_exit=%u"
 	       " preempt_count_entry=%u preempt_count_exit=%u"
@@ -857,6 +860,9 @@ static void print_status(const struct cpu_accel_shared *shared,
 	       (uint64_t)shared->arch_tlb_shootdown_targets,
 	       (uint64_t)shared->arch_reschedule_deferred,
 	       (uint64_t)shared->arch_call_function_deferred,
+	       (uint64_t)shared->arch_nmi_count,
+	       (uint64_t)shared->arch_mce_exception_count,
+	       (uint64_t)shared->arch_mce_poll_count,
 	       shared->need_resched_entry, shared->need_resched_exit,
 	       shared->softirq_pending_entry, shared->softirq_pending_exit,
 	       shared->preempt_count_entry, shared->preempt_count_exit,

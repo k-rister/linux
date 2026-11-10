@@ -5,9 +5,9 @@
 # capture the lateness distribution and counter correlation for each,
 # and emit a per-class log plus a summary TSV.
 #
-# Deferred classes (not run here): net_backlog and timer_migration need
-# their owner CPU in rcu_nocbs (admission is -EOPNOTSUPP otherwise), and
-# irq_storm needs a test NIC via CPU_ACCEL_IRQ_INTERFACE.
+# The default matrix is the common portable set.  Select net_backlog,
+# timer_migration, or irq_storm individually when the boot topology or
+# test NIC is available; selecting all attempts every class.
 
 set -eu
 
@@ -18,7 +18,7 @@ target_cpu=${CPU_ACCEL_WCL_CPU:-2}
 duration_ms=${CPU_ACCEL_WCL_DURATION_MS:-5000}
 load_cpus=${CPU_ACCEL_WCL_LOAD_CPUS:-3,4,5,6,7}
 work_cpu=${CPU_ACCEL_WCL_WORK_CPU:-0}
-selected=${CPU_ACCEL_WCL_CLASSES:-all}
+selected=${CPU_ACCEL_WCL_CLASSES:-common}
 summary="$outdir/summary.tsv"
 thp_enabled_path=/sys/kernel/mm/transparent_hugepage/enabled
 thp_enabled_saved=
@@ -71,7 +71,22 @@ trap cleanup EXIT
 
 should_run_class()
 {
-	[ "$selected" = all ] || [ "$selected" = "$1" ]
+	case "$selected" in
+	all)
+		return 0
+		;;
+	common)
+		case "$1" in
+		net_backlog|timer_migration|irq_storm)
+			return 1
+			;;
+		esac
+		return 0
+		;;
+	*)
+		[ "$selected" = "$1" ]
+		;;
+	esac
 }
 
 busy_loop_pids=
@@ -278,6 +293,26 @@ fi
 if should_run_class timerlat; then
 	run_class timerlat env CPU_ACCEL_TESTCTL="$tool" \
 		sh "$script_dir/test-timerlat-owner.sh"
+fi
+
+if should_run_class net_backlog; then
+	run_class net_backlog env CPU_ACCEL_CPU="$target_cpu" \
+		CPU_ACCEL_WORK_CPU="$work_cpu" \
+		CPU_ACCEL_DURATION_MS="$duration_ms" \
+		CPU_ACCEL_TEST_CASE=net_backlog \
+		CPU_ACCEL_TESTCTL="$tool" \
+		CPU_ACCEL_NET_CPU="$target_cpu" \
+		sh "$script_dir/test-sync-work-owner-stop.sh"
+fi
+
+if should_run_class timer_migration; then
+	run_class timer_migration sync_work_case timer_migration
+fi
+
+if should_run_class irq_storm; then
+	run_class irq_storm env CPU_ACCEL_TESTCTL="$tool" \
+		CPU_ACCEL_CPU="$target_cpu" \
+		sh "$script_dir/test-irq-storm.sh"
 fi
 
 echo "== WCL summary: $summary"

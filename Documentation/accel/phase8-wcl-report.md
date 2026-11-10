@@ -52,13 +52,17 @@ Classes run on 2026-10-29:
 - `memory_pressure`: a repeated 128 MiB tmpfs write/read loop pinned to
   the work CPU while the owner runs.
 
-Deferred classes, with the blocking requirement:
+Optional classes, selected explicitly with `CPU_ACCEL_WCL_CLASSES`:
 
 - `net_backlog`, `timer_migration`: their owner CPU (1) must be in
   `rcu_nocbs`; user entry returns `-EOPNOTSUPP` when the CPU is not RCU
   offloaded (arch/x86/kernel/accel.c, `x86_cpu_accel_user_enter`). This VM
   is booted with `rcu_nocbs=2`.
 - `irq_storm`: requires a test NIC via `CPU_ACCEL_IRQ_INTERFACE`.
+
+`test-wcl-report.sh` now defaults to the common portable set and accepts
+`CPU_ACCEL_WCL_CLASSES=all` to attempt every class, including the optional
+topology-specific rows.
 
 ## Results
 
@@ -210,9 +214,9 @@ p50=16 ns, p90=32 ns, p99=32 ns, p999=32 ns, max=19 ns.
   the "CPU hotplug attempts" matrix row: a cooperative user owner could
   drain within one polling period from a stop-only request, while the
   current `cpu_accel_arch_stop_user()` also raises the escape NMI.
-- `net_backlog` and `timer_migration` are deferred to a boot with
-  `rcu_nocbs` covering their owner CPU; `irq_storm` is deferred to a test
-  NIC.
+- `net_backlog` and `timer_migration` remain deferred to a boot with
+  `rcu_nocbs` covering their owner CPU; `irq_storm` remains deferred to a
+  test NIC.
 - Machine-check injection remains out of scope (see the exceptions/NMI
   row).
 

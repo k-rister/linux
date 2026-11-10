@@ -374,6 +374,16 @@ tracepoints and a writable regular filesystem at ``/var/tmp``::
 
   sudo make -C tools/cpu_accel test-dirty-writeback-owner
 
+The migration stress owner test moves one private anonymous page back and
+forth between two NUMA memory nodes while a reader on a third online CPU
+keeps touching it and a bounded ``user-oslat`` owner remains active.  It
+requires two NUMA nodes with memory, the migration tracepoints, and distinct
+owner, work, and reader CPUs; set ``CPU_ACCEL_MIGRATION_WORK_CPU`` and
+``CPU_ACCEL_MIGRATION_READER_CPU`` to override the defaults.  The owner must
+complete without an escape, context switch, task migration, or kernel error::
+
+  sudo make -C tools/cpu_accel test-migration-owner
+
 The amd-pstate shared-memory owner test switches a per-CPU EPP policy while
 that CPU is owned and verifies that the policy write completes immediately,
 does not request owner stop, and leaves the owner running.  It is specific to
@@ -1164,8 +1174,12 @@ run-specific results must be recorded with the kernel build and test logs.
         121 ms, before owner exit.  The 10 s owner run completed with
         ``state=3``, ``stop_requested=0``, no escape, context switch, or
         migration, and an empty kernel-error log.
-      - Migration stress remains unreported; simon.lab has only NUMA node 0,
-        so a same-node ``move_pages()`` no-op would not provide coverage.
+      - ``test-migration-owner.sh`` now provides the focused migration-stress
+        harness. Modeled on the upstream selftest's ``move_pages()`` loop, it
+        moves one private anonymous page between two NUMA nodes while a pinned
+        reader touches it and a bounded owner remains active. The harness
+        requires two memory NUMA nodes and a third online CPU; its runtime
+        report remains pending because simon.lab has only NUMA node 0.
     * - Device-management operations
       - **Caller-local management is safe by construction; device-specific
         steering is rejected or routed to housekeeping at configuration time;

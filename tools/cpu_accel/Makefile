@@ -56,6 +56,11 @@ test-netdevsim-reload-owner: cpu-accel-testctl
 test-dirty-writeback-owner: cpu-accel-testctl
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-dirty-writeback-owner.sh
 
+test-migration-owner: cpu-accel-testctl test-migration-owner-helper
+	CPU_ACCEL_TESTCTL=./cpu-accel-testctl \
+		CPU_ACCEL_MIGRATION_HELPER=./test-migration-owner-helper \
+		sh ./test-migration-owner.sh
+
 test-amd-pstate-shmem-owner: cpu-accel-testctl
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-amd-pstate-shmem-owner.sh
 
@@ -117,6 +122,9 @@ test-user-escape-rescue: test-user-escape-rescue.o
 test-rfs-flow: test-rfs-flow.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
+test-migration-owner-helper: test-migration-owner-helper.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
 cpu-accel-testctl.o: cpu_accel_user_image.h cpu_accel_workload.h
 cpu-accel-testctl.o libcpu_accel.o: cpu_accel.h ../../include/uapi/linux/cpu_accel.h
 test-tlb-generation.o: ../../include/uapi/linux/cpu_accel.h
@@ -135,6 +143,7 @@ clean:
 		test-perf-event-open test-perf-event-open.o test-user-escape-rescue \
 		test-user-escape-rescue.o test-region-lifecycle \
 		test-region-lifecycle.o test-rfs-flow test-rfs-flow.o \
+		test-migration-owner-helper test-migration-owner-helper.o \
 		cpu-accel-testctl.o libcpu_accel.o
 	$(MAKE) -C $(KDIR) M=$(CURDIR)/rcu-probe clean
 
@@ -151,6 +160,7 @@ clean:
 	test-veth-newlink-fault-owner \
 	test-netdevsim-reload-owner \
 	test-dirty-writeback-owner \
+	test-migration-owner \
 	test-amd-pstate-shmem-owner \
 	test-thermal-cooling-owner \
 	test-cpuidle-state-owner \

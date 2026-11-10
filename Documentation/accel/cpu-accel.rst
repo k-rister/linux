@@ -404,6 +404,14 @@ drop counts 0, 1, and 2 each passed on
 ``7.3.0-rc3-accel-tlbfix-02150-gde9255a04ef7`` with the rebuilt driver,
 including a ten-run drop-2 stability loop with no kernel-error match.
 
+The owner-death test uses the test-only ``user-death`` workload as a safe
+stand-in for a fatal user-mode machine check. It waits for the ring-3 owner
+to become active, kills the worker, and requires the
+``sched_process_exit`` death work to clear the image, restore Linux mode,
+record ``-ESRCH``, and leave the device in ``ERROR`` without an escape NMI::
+
+  sudo make -C tools/cpu_accel test-user-death-owner
+
 The fault-injection coverage by required event is: a lost or suppressed
 escape NMI (this test, drop counts 0 through 3); the timed escape fallback
 (every bounded owner-stop test reaches its timed escape); admission
@@ -417,8 +425,9 @@ treats such a run as failed rather than passing it. General exception and
 NMI containment beyond the escape path, and machine-check injection, remain
 open: the in-tree MCE injector's software mode only decodes a synthetic
 record, while hardware mode requires a disposable recovery-capable system.
-The source-level classification in the matrix additionally identifies a
-stale ``user_image.active`` hazard after a ``#MC`` kills the user owner.
+The source-level classification and owner-death test cover the user-mode
+``#MC`` task-death path; actual hardware machine-check injection remains
+deferred.
 
 The opt-in ``flush_work_with_sync_wait()`` API can be checked with a probe
 that queues work on the active owner CPU, then flushes it from another CPU.
@@ -1196,9 +1205,9 @@ run-specific results must be recorded with the kernel build and test logs.
          open.
    * - Exceptions, NMIs, and machine checks
       - **NMI escape is owner-terminating recovery for the tested ring-3
-        workload, and a hardware ``#MC`` is source-classified as
-        domain-terminating for the owner with a residual stale-state hazard;
-        general events are not contained.** Recovery state, error, attempt
+        workload; user-mode ``#MC`` death is reconciled through task exit;
+        kernel-mode ``#MC`` is domain-terminating; general events are not
+        contained.** Recovery state, error, attempt
         count, timestamps, and successful escape count use fixed shared ABI
         fields. MCE injection is deferred on this recovery-sensitive VM:
         the in-tree injector's software mode only decodes a synthetic record,
@@ -1225,16 +1234,15 @@ run-specific results must be recorded with the kernel build and test logs.
          through ``queue_task_work()`` (``task_work_add(TWA_RESUME)``) to
          ``kill_me_maybe()`` or ``kill_me_now()``: the owner dies from
          ``memory_failure()`` page isolation plus SIGBUS, or a direct SIGBUS,
-         at the next resume to user mode. The driver has no task-death hook
-         and the ``USER_EXIT`` ioctl never runs, so ``user_image.active``
-         stays set, the pinned image/stack/rseq/reclaim pages remain pinned,
-         the work region stays ``CPU_ACCEL_REGION_ACCELERATOR`` owned, and
-         ``CONFIG`` and start are rejected with ``-EBUSY`` until module
-         reload. In addition, ``cpu_accel_arch_stop_user()`` still observes
-         ``active`` and sends the escape NMI, and the NMI handler has no mm
-         check, so a later stop request (for example CPU offline) can rewrite
-         an unrelated user-mode task's IP and SP to the dead owner's
-         ``escape_ip`` and ``stack_top``. A kernel-mode ``#MC`` (kernel owner
+         at the next resume to user mode. The driver registers both
+         ``sched_process_exit_early`` and ``sched_process_exit`` tracepoints:
+         the early hook balances the accelerated owner's preempt/IRQ state and
+         mm lock, while the death work clears ``user_image.active``, releases
+         the pinned image, restores IRQ/workqueue/region state, records
+         ``-ESRCH``, and transitions the device to ``ERROR`` in Linux mode.
+         The NMI handler also checks ``current`` against the admitted owner,
+         so a stale active flag cannot retarget an unrelated user task. A
+         kernel-mode ``#MC`` (kernel owner
          or the owner's kernel entry/exit window) reaches ``mce_panic()`` and
          is domain-terminating for the whole system, so no owner
          reconciliation is needed there. Corrected machine checks (CMCI) are
@@ -1242,8 +1250,12 @@ run-specific results must be recorded with the kernel build and test logs.
          (``machine_check_poll()``): bounded timer and softirq activity on
          the owned CPU that does not change owner state and is counted by the
          IRQ and softirq telemetry.
-       - No exception-specific counter or fault matrix, general NMI containment
-         evidence, or actual MCE injection. Hardware MCE injection requires a
+       - The ``user-death`` workload is the focused test for this
+         reconciliation path: it must report ``state=4 mode=0``,
+         ``recovery_state=5 recovery_error=-3``, ``user_escape_count=0``, and
+         ``migration_detected=0`` with no kernel-error match. No
+         exception-specific counter, general NMI containment evidence, or
+         actual MCE injection is covered. Hardware MCE injection requires a
          disposable recovery-capable test system. A kernel-initiated stop
         (for example ``khugepaged``'s ``lru_add_drain_all()``) outranks an
         injected drop window and ends the run early; the focused test

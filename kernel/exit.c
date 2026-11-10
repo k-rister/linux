@@ -951,6 +951,7 @@ void __noreturn do_exit(long code)
 	io_uring_files_cancel();
 	sched_mm_cid_exit(tsk);
 	exit_signals(tsk);  /* sets PF_EXITING */
+	trace_sched_process_exit_early(tsk);
 
 	seccomp_filter_release(tsk);
 

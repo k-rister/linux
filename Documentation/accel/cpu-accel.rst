@@ -848,7 +848,8 @@ run-specific results must be recorded with the kernel build and test logs.
        all executable-memory writers.
    * - Perf and tracing operations
      - **Owner-stop for the audited ftrace maintenance path and per-CPU PMU
-       event installation; otherwise unclassified.** Perf's per-CPU event
+       event installation; broader operations are deferred pending
+       operation-specific audit.** Perf's per-CPU event
        installation uses a synchronous CPU callback, which enters the generic
        owner-stop hook before it can complete on the target CPU.
      - ``test-ftrace-maintenance.sh`` tests function-graph teardown and
@@ -1493,7 +1494,8 @@ run-specific results must be recorded with the kernel build and test logs.
 
 The plan's disposition vocabulary is safe, routed to housekeeping, deferred,
 rejected, or domain-terminating. Phase 8 is closed for the tested x86
-prototype: every activity row has one of those dispositions, the bounded
+prototype: every activity row has one of those dispositions, with owner-stop
+and owner-drain mechanisms counted as safe, the bounded
 fault-injection and counter evidence is recorded, and hardware- or
 environment-gated follow-up validation is an explicit deferral rather than an
 open classification. The run-specific worst-case latency report and closure

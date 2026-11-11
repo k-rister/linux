@@ -421,7 +421,7 @@ hardware and environment deferrals. The closure basis is:
 
 - Every activity row in `Documentation/accel/cpu-accel.rst` has an enforced
   disposition of safe, routed to housekeeping, deferred, rejected, or
-  domain-terminating.
+  domain-terminating; owner-stop and owner-drain mechanisms count as safe.
 - The common portable set, optional portable set, `timer_migration`,
   `net_backlog`, focused stop-machine fault and lock-order cases, loaded
   hotplug races, and all four netdevsim lifecycle classes passed on the

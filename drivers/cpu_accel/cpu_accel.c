@@ -387,6 +387,7 @@ struct cpu_accel_device {
 	struct cpu_accel_shared *shared;
 	wait_queue_head_t poll_wait;
 	u32 selected_abi;
+	u32 lifecycle_final_state;
 	/* mm of the process that opened the device as the control companion. */
 	struct mm_struct *companion_mm;
 	struct cpu_accel_config config;
@@ -2326,7 +2327,7 @@ finish:
 	cpu_accel_observation_finish(dev, obs);
 	/* Publish all result fields before publishing the terminal state. */
 	smp_wmb();
-	cpu_accel_state_write(dev, final_state);
+	dev->lifecycle_final_state = final_state;
 }
 
 static void cpu_accel_lifecycle_entry(void *data)
@@ -2346,10 +2347,10 @@ static void cpu_accel_lifecycle_entry(void *data)
 	    !quiescent) {
 		cpu_accel_observation_finish(dev, &obs);
 		cpu_accel_region_end(dev, CPU_ACCEL_STATE_ERROR);
+		dev->lifecycle_final_state = CPU_ACCEL_STATE_ERROR;
 		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_RECOVERY);
 		/* Publish the failed admission before restoring execution. */
 		smp_wmb();
-		cpu_accel_state_write(dev, CPU_ACCEL_STATE_ERROR);
 		local_irq_restore(irq_flags);
 		preempt_enable();
 		return;
@@ -2400,12 +2401,11 @@ static int cpu_accel_lifecycle_thread(void *data)
 	atomic_set(&dev->enter_requested, 0);
 	if (ret) {
 		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_RECOVERY);
-		if (READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_READY ||
-		    READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_RUNNING)
-			cpu_accel_state_write(dev, CPU_ACCEL_STATE_ERROR);
-	} else if (READ_ONCE(dev->shared->state) != CPU_ACCEL_STATE_ERROR) {
+		dev->lifecycle_final_state = CPU_ACCEL_STATE_ERROR;
+	} else {
 		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_LINUX);
 	}
+	cpu_accel_state_write(dev, dev->lifecycle_final_state);
 	complete(&dev->lifecycle_done);
 	module_put(THIS_MODULE);
 	return 0;
@@ -2468,6 +2468,10 @@ static int cpu_accel_open(struct inode *inode, struct file *file)
 	if (atomic_cmpxchg(&cpu_accel.opened, 0, 1))
 		goto busy;
 
+	mutex_lock(&cpu_accel.lock);
+	cpu_accel.selected_abi = CPU_ACCEL_ABI_MIN_VERSION;
+	WRITE_ONCE(cpu_accel.shared->abi_version, cpu_accel.selected_abi);
+	mutex_unlock(&cpu_accel.lock);
 	mmgrab(mm);
 	cpu_accel.companion_mm = mm;
 	file->private_data = &cpu_accel;

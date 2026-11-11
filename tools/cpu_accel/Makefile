@@ -12,6 +12,8 @@ test: cpu-accel-testctl test-region-lifecycle test-tlb-generation test-tlb-cow-c
 	./test-region-lifecycle
 	./test-uapi-contract
 	./test-uapi-lifecycle
+	./test-uapi-abi23-compat
+	LD_PRELOAD=$(CURDIR)/libcpu-accel-sdk-fallback.so ./test-uapi-sdk-fallback
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-cpu-accel.sh
 
 test-sync-work-owner-stop: cpu-accel-testctl test-sync-wait-prime
@@ -88,7 +90,8 @@ test-user-escape-fault: cpu-accel-testctl test-user-escape-rescue
 test-user-death-owner: cpu-accel-testctl
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-user-death-owner.sh
 
-test-phase9-freeze-gate: cpu-accel-testctl test-uapi-contract test-uapi-lifecycle
+test-phase9-freeze-gate: cpu-accel-testctl test-uapi-contract test-uapi-lifecycle \
+	test-uapi-abi23-compat test-uapi-sdk-fallback
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-phase9-freeze-gate.sh
 
 test-hotplug-race: cpu-accel-testctl
@@ -135,6 +138,16 @@ test-uapi-contract: test-uapi-contract.o libcpu_accel.o
 test-uapi-lifecycle: test-uapi-lifecycle.o libcpu_accel.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
+test-uapi-abi23-compat: test-uapi-abi23-compat.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+test-uapi-sdk-fallback: test-uapi-sdk-fallback.o libcpu_accel.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+libcpu-accel-sdk-fallback.so: test-uapi-sdk-fallback-ioctl.c
+	$(CC) $(CPPFLAGS) -O2 -g -Wall -Wextra -std=c11 -fPIC -shared \
+		-o $@ $<
+
 test-seccomp-jit-churn: test-seccomp-jit-churn.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
@@ -174,6 +187,9 @@ clean:
 		test-migration-owner-helper test-migration-owner-helper.o \
 		test-uapi-contract test-uapi-contract.o \
 		test-uapi-lifecycle test-uapi-lifecycle.o \
+		test-uapi-abi23-compat test-uapi-abi23-compat.o \
+		test-uapi-sdk-fallback test-uapi-sdk-fallback.o \
+		libcpu-accel-sdk-fallback.so \
 		cpu-accel-testctl.o libcpu_accel.o
 	$(MAKE) -C $(KDIR) M=$(CURDIR)/rcu-probe clean
 	$(MAKE) -C $(KDIR) M=$(CURDIR)/stop-machine-probe clean

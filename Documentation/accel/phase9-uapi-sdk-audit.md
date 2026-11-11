@@ -1,8 +1,8 @@
 # CPU accelerator Phase 9 UAPI and SDK audit
 
-Date: 2026-11-10
+Date: 2026-11-10; updated 2026-11-11
 Branch: `codex/accelerator-oslat`
-Audited ABI: 23
+Audited ABI: 23; post-implementation ABI: 24
 
 ## Scope
 
@@ -17,31 +17,32 @@ lifecycle and ioctl implementation are in `drivers/cpu_accel/cpu_accel.c`.
 
 ## Result
 
-**ABI 23 is not ready to freeze.**
+**The historical ABI 23 audit found the interface not ready to freeze. The
+ABI 24 control plane is now a freeze candidate.**
 
-The current design has valuable prototype properties: it is file-descriptor
-based, uses fixed-width UAPI types, validates explicit flags and reserved
-fields, exposes runtime capabilities, and has deliberate process teardown
-behavior. The control mapping also carries an ABI version, structure size, and
-layout fingerprint.
+The original ABI 23 verdict remains below as the audit record. ABI 24 resolves
+the control-plane blockers by adding explicit negotiation, immutable
+extension commands, `CAP_SYS_ADMIN` enforcement, terminal-state `poll()`,
+focused process-lifecycle tests, and ABI 23 compatibility tests.
 
-The blocking gaps are equally clear:
+The post-implementation decisions are:
 
-* The ioctl argument structures are fixed-size and have no per-object version
-  or length field, so the reserved fields are not a real extension mechanism.
-* SDK attach uses strict ABI equality and returns `EPROTO`; it does not
-  negotiate with older userspace or newer kernels.
-* User-image admission exposes numeric worker virtual addresses and x86-specific
-  backend and telemetry values in the shared control ABI.
-* The device is a single global domain rather than a scalable domain object.
-* There is no `poll()` file operation; the SDK waits by sleeping and re-reading
-  shared state.
-* Permission policy is currently implicit in the `0600` misc-device mode rather
-  than an explicit capability policy.
-* Process-exit cleanup is implemented, but control-process crash, descriptor
-  passing, and accidental `execve()` leakage are not covered by focused tests.
-* Compatibility testing consists of one synthetic old-version rejection case,
-  not old userspace against a newer kernel or the reverse.
+* `/dev/cpu_accel` is explicitly one singleton administrative domain for this
+  prototype. A future multi-domain ABI must use new objects rather than
+  changing this contract.
+* Existing command layouts are immutable. Extensions use new commands and new
+  argument objects; reserved words and unknown flags remain mandatory-zero.
+* ABI 23 is the compatibility floor. ABI 24 adds negotiation and extension
+  commands without changing the control mapping.
+* Architecture telemetry is extension-scoped. The x86 image-admission object,
+  including its numeric virtual addresses, is experimental and excluded from
+  the frozen control-plane contract.
+* `poll()` is a terminal-state control-plane optimization; shared memory
+  remains authoritative.
+* The driver requires `CAP_SYS_ADMIN` at open.
+
+The normative rules and compatibility matrix are in
+`:doc:`cpu-accel-uapi``.
 
 ## Requirement matrix
 
@@ -173,11 +174,23 @@ its timeout semantics should be documented as the supported SDK behavior.
    documentation, and only then run the bidirectional compatibility matrix and
    declare a freeze candidate.
 
-## Freeze verdict
+## Historical freeze verdict
 
-The Phase 9 gate is not met. The current UAPI can express the proven one-CPU
-lifecycle and recovery operations, but it also exposes prototype details that
-would become permanent ABI accidents if frozen now. The most important next
-work is extension policy, version negotiation, explicit permissions, and the
-missing process-lifecycle compatibility tests. ABI 23 should remain explicitly
-experimental until those items are complete.
+The Phase 9 gate was not met at ABI 23. The current UAPI could express the
+proven one-CPU lifecycle and recovery operations, but it also exposed prototype
+details that would become permanent ABI accidents if frozen. ABI 23 remains
+experimental and is a compatibility floor, not the freeze candidate.
+
+## Post-implementation closure
+
+ABI 24 is a control-plane freeze candidate. The expanded Simon runtime gate
+passed ABI 23 and ABI 24 `user-oslat`, manager crash, descriptor movement,
+`execve()`, fork lifecycle, direct ABI 23 client compatibility, and SDK
+fallback compatibility, with zero module refcount and no accelerator errors in
+`dmesg`.
+
+Bidirectional compatibility is covered by an ABI 23-only client against the
+ABI 24 kernel and by the SDK fallback path when ABI info returns `ENOTTY`,
+which is the observable behavior of an ABI 23-only kernel. Final freeze still
+requires review of the normative document and the deliberate decision to keep
+the x86 ring-3 workload extension outside the frozen control-plane contract.

@@ -9,6 +9,8 @@ dataplane accelerator environment.  It is an experimental control plane for
 one online CPU and is intended to make the control and measurement interfaces
 concrete for a persistent accelerator ownership mode.
 
+The normative control UAPI contract is in :doc:`cpu-accel-uapi`.
+
 This version is deliberately not a complete isolated accelerator CPU.  Its
 architecture-neutral lifecycle boundary synchronously dispatches an entry
 function to the target CPU while a controller thread holds the CPU-hotplug

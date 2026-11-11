@@ -46,6 +46,11 @@ CPU_ACCEL_UAPI_CPU=$target_cpu "$script_dir/test-uapi-contract" || \
 	fail "ABI contract test failed"
 CPU_ACCEL_UAPI_CPU=$target_cpu "$script_dir/test-uapi-lifecycle" || \
 	fail "UAPI lifecycle test failed"
+CPU_ACCEL_UAPI_CPU=$target_cpu "$script_dir/test-uapi-abi23-compat" || \
+	fail "ABI 23 client compatibility test failed"
+LD_PRELOAD="$script_dir/libcpu-accel-sdk-fallback.so" \
+	"$script_dir/test-uapi-sdk-fallback" || \
+	fail "SDK ABI 23 fallback test failed"
 
 CPU_ACCEL_ABI_VERSION=23 "$tool" run \
 	--cpu "$target_cpu" --duration-ms "$duration_ms" \

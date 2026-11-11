@@ -18,7 +18,7 @@ lifecycle and ioctl implementation are in `drivers/cpu_accel/cpu_accel.c`.
 ## Result
 
 **The historical ABI 23 audit found the interface not ready to freeze. The
-ABI 24 control plane is now a freeze candidate.**
+ABI 24 control plane is now frozen.**
 
 The original ABI 23 verdict remains below as the audit record. ABI 24 resolves
 the control-plane blockers by adding explicit negotiation, immutable
@@ -183,14 +183,15 @@ experimental and is a compatibility floor, not the freeze candidate.
 
 ## Post-implementation closure
 
-ABI 24 is a control-plane freeze candidate. The expanded Simon runtime gate
+ABI 24 is a frozen control plane. The expanded Simon runtime gate
 passed ABI 23 and ABI 24 `user-oslat`, manager crash, descriptor movement,
 `execve()`, fork lifecycle, direct ABI 23 client compatibility, and SDK
 fallback compatibility, with zero module refcount and no accelerator errors in
 `dmesg`.
 
-Bidirectional compatibility is covered by an ABI 23-only client against the
-ABI 24 kernel and by the SDK fallback path when ABI info returns `ENOTTY`,
-which is the observable behavior of an ABI 23-only kernel. Final freeze still
-requires review of the normative document and the deliberate decision to keep
-the x86 ring-3 workload extension outside the frozen control-plane contract.
+Compatibility is covered by a runtime-tested ABI 23-only client against the
+ABI 24 kernel and by the SDK fallback path when a test-only ioctl shim makes
+ABI info return `ENOTTY`, which is the observable behavior of an ABI 23-only
+kernel. No physical ABI 23-only kernel boot was performed. The normative
+document was reviewed, and the x86 ring-3 workload extension remains outside
+the frozen control-plane contract.

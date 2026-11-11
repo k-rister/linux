@@ -5,8 +5,8 @@ CPU accelerator UAPI
 ========================
 
 This document is the normative contract for the CPU accelerator control UAPI.
-The current ABI is 24 and the minimum supported ABI is 23. ABI 24 is a
-control-plane freeze candidate. The x86 ring-3 workload and image-admission
+The current ABI is 24 and the minimum supported ABI is 23. The ABI 24
+control plane is frozen. The x86 ring-3 workload and image-admission
 extension remains experimental and is not part of the frozen control-plane
 contract.
 
@@ -106,9 +106,11 @@ Compatibility matrix
      - Selects ABI 24 and completes the workload with no latency regression.
      - Phase 9 freeze gate
 
-The SDK fallback test uses a test-only ``LD_PRELOAD`` ioctl shim to make
-``CPU_ACCEL_IOC_GET_ABI_INFO`` return ``ENOTTY``. This exercises the same SDK
-fallback path as an ABI 23-only kernel without requiring a second boot.
+The direct ABI 23 client was runtime-tested against the ABI 24 kernel. The ABI
+24 SDK fallback path was validated with a test-only ``LD_PRELOAD`` ioctl shim
+that makes ``CPU_ACCEL_IOC_GET_ABI_INFO`` return ``ENOTTY``, the observable
+behavior of an ABI 23-only kernel. No physical ABI 23-only kernel boot was
+performed.
 
 Error policy
 ============

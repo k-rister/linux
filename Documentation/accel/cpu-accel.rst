@@ -1003,7 +1003,7 @@ run-specific results must be recorded with the kernel build and test logs.
        value zero. Kernel build ``#02114`` passed four additional loaded runs
        with that trace order and successful inactive-CPU rendezvous; the
        maximum observed owner-stop-request-to-exit interval was 16 us.
-     - ``test-stop-machine-owner-stop.sh`` provides a general
+       ``test-stop-machine-owner-stop.sh`` provides a general
        ``stop_machine()`` fault injector. It invokes the public wrapper while a
        ring-3 owner is active, proves owner drain before callback execution,
        and exercises both success and ``-EIO`` propagation. On 2026-11-10,
@@ -1048,10 +1048,10 @@ run-specific results must be recorded with the kernel build and test logs.
        A syscall from the accelerated user image enables interrupts before
        dispatch, so the queued IPI callback can run before
        ``CPU_ACCEL_IOC_USER_EXIT`` reconciles TLB state and completes owner
-        exit. Waiting for the callback therefore does not prove that the policy
-        operation runs after ownership ends; an owner-exit-before-callback
-        handshake is required and is implemented and verified below.
-        On 2026-10-29, one bounded run of
+       exit. Waiting for the callback therefore does not prove that the policy
+       operation runs after ownership ends; an owner-exit-before-callback
+       handshake is required and is implemented and verified below.
+       On 2026-10-29, one bounded run of
        ``test-call-function-single-owner-stop.sh irq-work`` confirmed that
        gap on kernel
        ``7.3.0-rc3-accel-tlbfix-02141-g1c9eb2e109a0``. With a 5 s user-hang
@@ -1068,43 +1068,43 @@ run-specific results must be recorded with the kernel build and test logs.
        completed. The run reported ``state=7``, ``recovery_state=2``,
        ``user_escape_count=1``, the paired owner-stop and owner-exit trace
        events, an empty kernel-error log, and clean module and owner
-        cleanup; it was recorded as gap confirmation, and the
-        owner-exit-before-callback handshake design is the required
-        follow-up.
-        On 2026-10-29, that handshake (Option C in
-        ``phase8-owner-exit-handshake-design.md``) was implemented in
-        ``de9255a04ef7``: the stop NMI handler completes the owner's
-        remaining exit steps (``x86_cpu_accel_owner_exit()``, the
-        local-branch ``x86_cpu_accel_tlb_reconcile()``, and
-        ``x86_cpu_accel_owner_exit_finish()``) through the new
-        ``x86_cpu_accel_user_stop_exit()`` before redirecting to the escape
-        tail, so no vector can be serviced before the exit publishes; the
-        release path stays idempotent and prefers the NMI-captured
-        ``tlb_shootdown_targets`` snapshot for telemetry. On candidate
-        kernel ``7.3.0-rc3-accel-tlbfix-02150-gde9255a04ef7``, four bounded
-        ``irq-work`` probe runs each reported
-        ``irq_work_callback_owner_active_count=0 callback_count=1`` with
-        ``state=7``, ``recovery_state=2``, ``user_escape_count=1``, the
-        paired owner-stop and owner-exit trace events, and empty
-        kernel-error logs. The regression modes ``sync``,
-        ``smp-call-on-cpu``, and ``work-on-cpu`` each passed with empty
-        kernel-error logs, ``test-watchdog-owner-admission.sh`` passed
-        (admission rejected with ``-EBUSY`` while the lockup detector
-        covered CPU 2, mask restored on exit), and
-        ``test-perf-owner-stop.sh`` passed with the per-CPU perf event
-        stopping the owner before the timed escape. The sync-callback
-         ordering gap is closed for the waited call-function path on this
-         build.
-         On 2026-10-30, the same four probe modes re-validated on
-         ``7.3.0-rc3-accel-tlbfix-gb381f8577d1a-dirty`` (build #80): the
-         ``irq-work`` mode reported
-         ``irq_work_callback_count_while_owner=0
-         irq_work_callback_owner_active_count=0 callback_count=1`` with
-         ``state=7``, ``recovery_state=2``, and an empty kernel-error log;
-         the ``sync``, ``smp-call-on-cpu``, and ``work-on-cpu`` regression
-         modes each passed with ``callback_count=1`` and empty kernel-error
-         logs. The sync-callback ordering gap remains closed on this build.
-         A source review of the in-tree x86 per-CPU MSR paths found the same
+       cleanup; it was recorded as gap confirmation, and the
+       owner-exit-before-callback handshake design is the required
+       follow-up.
+       On 2026-10-29, that handshake (Option C in
+       ``phase8-owner-exit-handshake-design.md``) was implemented in
+       ``de9255a04ef7``: the stop NMI handler completes the owner's
+       remaining exit steps (``x86_cpu_accel_owner_exit()``, the
+       local-branch ``x86_cpu_accel_tlb_reconcile()``, and
+       ``x86_cpu_accel_owner_exit_finish()``) through the new
+       ``x86_cpu_accel_user_stop_exit()`` before redirecting to the escape
+       tail, so no vector can be serviced before the exit publishes; the
+       release path stays idempotent and prefers the NMI-captured
+       ``tlb_shootdown_targets`` snapshot for telemetry. On candidate
+       kernel ``7.3.0-rc3-accel-tlbfix-02150-gde9255a04ef7``, four bounded
+       ``irq-work`` probe runs each reported
+       ``irq_work_callback_owner_active_count=0 callback_count=1`` with
+       ``state=7``, ``recovery_state=2``, ``user_escape_count=1``, the
+       paired owner-stop and owner-exit trace events, and empty
+       kernel-error logs. The regression modes ``sync``,
+       ``smp-call-on-cpu``, and ``work-on-cpu`` each passed with empty
+       kernel-error logs, ``test-watchdog-owner-admission.sh`` passed
+       (admission rejected with ``-EBUSY`` while the lockup detector
+       covered CPU 2, mask restored on exit), and
+       ``test-perf-owner-stop.sh`` passed with the per-CPU perf event
+       stopping the owner before the timed escape. The sync-callback
+       ordering gap is closed for the waited call-function path on this
+       build.
+       On 2026-10-30, the same four probe modes re-validated on
+       ``7.3.0-rc3-accel-tlbfix-gb381f8577d1a-dirty`` (build #80): the
+       ``irq-work`` mode reported
+       ``irq_work_callback_count_while_owner=0
+       irq_work_callback_owner_active_count=0 callback_count=1`` with
+       ``state=7``, ``recovery_state=2``, and an empty kernel-error log;
+       the ``sync``, ``smp-call-on-cpu``, and ``work-on-cpu`` regression
+       modes each passed with ``callback_count=1`` and empty kernel-error
+       logs. The sync-callback ordering gap remains closed on this build.
+       A source review of the in-tree x86 per-CPU MSR paths found the same
        waited ``smp_call_function_single()`` mechanism (``wrmsrq_on_cpu()``
        and ``rdmsrq_on_cpu()`` in ``arch/x86/lib/msr-smp.c``) for the
        remaining power-policy writers: ``amd-pstate`` (CPPC_REQ, CPPC_REQ2,
@@ -1163,45 +1163,45 @@ run-specific results must be recorded with the kernel build and test logs.
        architecture IPI, and an empty kernel-error log.  This covers the
        runtime idle state-disable path; driver register/unregister and
        coupled-idle pokes remain source-classified.
-      - ``test-watchdog-owner-admission.sh`` changes the watchdog mask to the
-        selected CPU and expects owner entry to fail with ``-EBUSY``; it restores
-        the prior mask on exit. The x86 object builds, and one bounded run passed
-        on candidate kernel
-        ``7.3.0-rc3-accel-tlbfix-02141-g1c9eb2e109a0`` and a repeated bounded
-        run passed on
-        ``7.3.0-rc3-accel-tlbfix-02150-gde9255a04ef7``. The power-policy MSR
-        review is source-only, and the bounded irq-work runs above are
-        observations, not a stress envelope or a latency bound.
+     - ``test-watchdog-owner-admission.sh`` changes the watchdog mask to the
+       selected CPU and expects owner entry to fail with ``-EBUSY``; it restores
+       the prior mask on exit. The x86 object builds, and one bounded run passed
+       on candidate kernel
+       ``7.3.0-rc3-accel-tlbfix-02141-g1c9eb2e109a0`` and a repeated bounded
+       run passed on
+       ``7.3.0-rc3-accel-tlbfix-02150-gde9255a04ef7``. The power-policy MSR
+       review is source-only, and the bounded irq-work runs above are
+       observations, not a stress envelope or a latency bound.
        The 2026-11-10 WCL optional set passed the bounded AMD P-state,
        thermal-cooling, idle-state, and dirty-writeback classes. Driver
        register/unregister, coupled-idle pokes, broader event counters,
        fault injection, and stress-envelope latency are source-classified or
        deferred to disposable-host validation.
-    * - Microcode updates
-      - **The complete update transaction is gated: runtime reload drains
-        owners before the stop-machine rendezvous; early and hotplug paths are
-        out of scope or caller-local; resume applies on the BSP only.**
-      - 2026-10-29 source audit of all x86 microcode update paths (built-in,
-        no module-load trigger). Runtime reload through
-        ``/sys/devices/system/cpu/microcode/reload`` is the only cross-CPU
-        update entry point: ``reload_store()`` in
-        ``arch/x86/kernel/cpu/microcode/core.c`` takes the
-        ``x86_cpu_accel_maintenance_begin()`` owner-drain gate before
-        ``cpus_read_lock()`` and ``load_late_locked()`` reaches the
-        ``stop_machine_cpuslocked()`` rendezvous on ``cpu_online_mask``
-        (``core.c``), already audited under the ``stop_machine()`` row; the
-        Intel NMI rendezvous variant self-NMIs each stopped CPU and the AMD
-        variant invokes the update handler directly in the stopped context.
-        Early boot loading is per-CPU before SMP, when no ownership exists.
-        The CPU-hotplug callback only collects CPU information and manages
-        the sysfs group; it performs no update and is synchronized with the
-        update path by ``cpus_read_lock()``. The suspend-resume syscore
-        callback applies cached firmware on the BSP only, inside the
-        owner-drain span of the suspend row. No microcode update was run
-        during Phase 8 validation.
-      - No runtime update run is recorded. Failure injection, event counters,
-        and run-specific latency evidence are deferred to disposable-host
-        validation.
+   * - Microcode updates
+     - **The complete update transaction is gated: runtime reload drains
+       owners before the stop-machine rendezvous; early and hotplug paths are
+       out of scope or caller-local; resume applies on the BSP only.**
+     - 2026-10-29 source audit of all x86 microcode update paths (built-in,
+       no module-load trigger). Runtime reload through
+       ``/sys/devices/system/cpu/microcode/reload`` is the only cross-CPU
+       update entry point: ``reload_store()`` in
+       ``arch/x86/kernel/cpu/microcode/core.c`` takes the
+       ``x86_cpu_accel_maintenance_begin()`` owner-drain gate before
+       ``cpus_read_lock()`` and ``load_late_locked()`` reaches the
+       ``stop_machine_cpuslocked()`` rendezvous on ``cpu_online_mask``
+       (``core.c``), already audited under the ``stop_machine()`` row; the
+       Intel NMI rendezvous variant self-NMIs each stopped CPU and the AMD
+       variant invokes the update handler directly in the stopped context.
+       Early boot loading is per-CPU before SMP, when no ownership exists.
+       The CPU-hotplug callback only collects CPU information and manages
+       the sysfs group; it performs no update and is synchronized with the
+       update path by ``cpus_read_lock()``. The suspend-resume syscore
+       callback applies cached firmware on the BSP only, inside the
+       owner-drain span of the suspend row. No microcode update was run
+       during Phase 8 validation.
+     - No runtime update run is recorded. Failure injection, event counters,
+       and run-specific latency evidence are deferred to disposable-host
+       validation.
    * - Suspend and hibernate
      - **Owner-drain gate spans CPU freeze through thaw.** The gate nests
        with each CPU-hotplug transition and prevents admission on the retained
@@ -1230,280 +1230,283 @@ run-specific results must be recorded with the kernel build and test logs.
      - **Safe only on audited completion paths; otherwise synchronous.** A
        clean file-page reclaim probe waits for owner reconciliation. Dirty or
        writeback reclaim and migration remain synchronous.
-      - ``test-tlb-generation.c`` exercises ``MADV_PAGEOUT``; sync-work tests
-        cover LRU/SLUB drains and vmalloc purge. On 2026-10-30, a sustained
-        5 s ``user-oslat`` run on
-        ``7.3.0-rc3-accel-tlbfix-gb381f8577d1a-dirty`` with concurrent
-        ``drop_caches`` and 256 MB page-allocation churn (three iterations)
-        completed with ``state=3``, 5000 samples, p50=8 ns, p90=16 ns,
-        p99=8192 ns, max=169377 ns, ``arch_tlb_shootdown_targets=3``,
-        ``user_escape_count=0``, and an empty kernel-error log. The three
-        TLB shootdowns from reclaim were absorbed without an escape.
-        On 2026-11-09, a traced ABI-22 run on simon.lab used one 256 MB
-        page-cache churn and ``drop_caches`` cycle while CPU 3 was owned.
-        ``__lru_add_drain_all()`` requested the owner stop after 439.6 ms;
-        owner exit followed 16 us later.  The owner completed cooperatively
-        with no escape, context switch, migration, or arch IPI, and the worst
-        observed sample was 290 ns.
-        On 2026-11-09, ``test-dirty-writeback-owner.sh`` passed on simon.lab:
-        a 64 MiB XFS temporary file was written and flushed from CPU 0 while
-        CPU 3 was owned.  Inode-matched ``writeback_dirty_folio`` and
-        ``writeback_single_inode`` traces recorded 16,384 written pages in
-        121 ms, before owner exit.  The 10 s owner run completed with
-        ``state=3``, ``stop_requested=0``, no escape, context switch, or
-        migration, and an empty kernel-error log.
-      - ``test-migration-owner.sh`` now provides the focused migration-stress
-        harness. Modeled on the upstream selftest's ``move_pages()`` loop, it
-        moves one private anonymous page between two NUMA nodes while a pinned
-        reader touches it and a bounded owner remains active. The harness
-        requires two memory NUMA nodes and a third online CPU; its runtime
-        report remains pending because simon.lab has only NUMA node 0.
-    * - Device-management operations
-      - **Caller-local management is safe by construction; device-specific
-        steering is rejected or routed to housekeeping at configuration time;
-        the one residual steering path to an owned CPU is deferred.**
-      - 2026-10-29 source audit. Management operations (driver-core
-        probe/remove/bind/unbind, PCI/FLR and reset-control resets, sysfs
-        handlers, netdev register/unregister) run in caller context and never
-        execute code on the target CPU. RPS configuration is filtered by
-        ``rps_cpumask_housekeeping()`` (``net/core/net-sysfs.c``), which
-        intersects ``rps_cpus`` and ``rps_default_mask`` with the housekeeping
-        mask and rejects an empty result, so RPS cannot steer to an isolated
-        CPU; the veth/network-backlog case of
-        ``test-sync-work-owner-stop.sh`` exercises this routed path. XPS
-        selects the transmit queue on the current CPU only, so it performs no
-        cross-CPU execution. NAPI and tasklets run on the current or IRQ CPU,
-        which the IRQ-affinity quarantine excludes. The RFS flow table targets
-        the CPU where the socket last received data and is not filtered at
-        configuration time, so a flow recorded on an owned CPU keeps targeting
-        it while owned; delivery then rides the general mechanisms, either
-        ``smp_call_function_single_async()`` of the non-threaded backlog RPS
-        IPI (``net/core/dev.c``) or a ``wake_up_process()`` of the per-CPU
-        ``backlog_napi`` thread in threaded mode, both of which leave the work
-        pending until the owner exits. Device operations that use waited or
-        deferred call-function, workqueues, stop machine, or CPU hotplug
-        inherit the corresponding row's disposition.
-       - On 2026-10-30, a 3 s ``user-oslat`` run on
-         ``7.3.0-rc3-accel-tlbfix-gb381f8577d1a-dirty`` with a concurrent
-         NIC down/up cycle (``ip link set ens18 down`` / ``up``) and an ARP
-         flush completed with ``state=7``, ``recovery_state=2``,
-         ``user_escape_count=1``, ``arch_tlb_shootdown_targets=1``, 1583
-         samples before the escape, and an empty kernel-error log. The NIC
-         stop path requested an owner stop through the generic
-         call-function mechanism; the operation completed and the owner
-         recovered. On 2026-11-09, ``test-rfs-owner-stop.sh`` passed on
-         simon.lab with the same ABI-22 kernel: one UDP flow was primed on
-         owned CPU 3, and 32 packets on that flow were sent while a 5 s
-         ``user-oslat`` owner was active. None arrived during a 500 ms
-         observation window; all 32 arrived after owner exit. The owner
-         reported ``state=3``, one deferred call-function IPI, no escape,
-         no context switch, and no migration. The trace ordered the veth
-         transmit and receive events before an owner exit with
-         ``stop_requested=0``, and the kernel-error log was empty.
-         On 2026-11-09, ``test-veth-teardown-owner.sh`` passed on simon.lab:
-         after 32 queued packets remained undelivered for 500 ms during
-         ownership, deleting the temporary veth pair from CPU 0 while the
-         flow sockets remained open completed in 24 ms. The owner finished
-         normally with ``state=3``,
-         ``stop_requested=0``, no owner-stop request, no escape, no context
-         switch, no migration, and an empty kernel-error log. This covers one
-         bounded caller-local veth unregister/teardown case; the broader
-         physical device reset and teardown matrix is deferred to
-         hardware-specific validation.
-         On 2026-11-09, ``test-veth-newlink-fault-owner.sh`` passed on
-         simon.lab: creating a veth whose peer name collided with loopback
-         failed on CPU 0 in 15 ms with ``-EEXIST``, left no partial device, and
-         traced both ``veth_newlink`` and ``register_netdevice`` on CPU 0.
-         The ``register_netdevice`` path reached a waited
-         ``smp_call_function_many_cond()`` owner-stop request.  The CPU 3 owner
-         exited cooperatively 22 us after the stop request with ``state=3``,
-         ``stop_requested=1``, no escape, no context switch, no migration, and
-         an empty kernel-error log. This covers one bounded device-creation
-         failure unwind; the broader physical device reset and teardown matrix
-         is deferred to hardware-specific validation.
-         ``test-netdevsim-reload-owner.sh`` provides the next focused reset
-         path: it creates a temporary one-port netdevsim device, fails a
-         ``devlink`` driver reload while an owner is active, and reloads
-         successfully after ownership ends. Function-graph tracing records
-         ``nsim_dev_reload_down()``, ``nsim_dev_reload_up()``,
-         ``unregister_netdevice_queue()``, and ``register_netdevice()`` on the work
-         CPU; the owner must complete without an escape, context switch,
-         migration, or kernel error. Its runtime report follows.
-         ``test-netdevsim-teardown-owner.sh`` adds a distinct device-removal
-         path: it deletes the temporary netdevsim bus device while the owner
-         is active and traces ``device_unregister()``,
-         ``nsim_drv_remove()``, and ``unregister_netdevice_queue()`` on the work
-         CPU. Its runtime report follows.
-         ``test-netdevsim-rebind-owner.sh`` adds a driver-bind lifecycle
-         path: it unbinds and rebinds the temporary netdevsim driver while
-         the owner is active and traces ``device_driver_detach()``,
-         ``device_driver_attach()``, ``nsim_drv_remove()``,
-         ``nsim_drv_probe()``, ``unregister_netdevice_queue()``, and
-         ``register_netdevice()`` on the work CPU. Its runtime report follows.
-         ``test-netdevsim-sriov-owner.sh`` adds an SR-IOV configuration
-         path: it switches the temporary netdevsim device to switchdev mode,
-         creates and removes one VF, and returns to legacy mode while the
-         owner is active. It traces
-         ``nsim_devlink_eswitch_mode_set()``,
-         ``nsim_esw_switchdev_enable()``,
-         ``nsim_drv_configure_vfs()``, ``__nsim_dev_port_add()``,
-         ``__nsim_dev_port_del()``, ``register_netdevice()``, and
-         ``unregister_netdevice_queue()`` on the work CPU. Its runtime report
-         follows.
-         On 2026-11-10, all four netdevsim lifecycle classes passed on
-         simon.lab with ABI 23 on
-         ``7.3.0-rc3-accel-tlbfix-gbff69f41a61b``. Each class started from a
-         cold ``netdevsim`` module state, used owner CPU 5 and work CPU 0,
-         and completed with exit status 0, ``state=3``, no owner escape, no
-         context switch, no migration, and no matched kernel error. The
-         standard WCL runner recorded 773,958 reload samples, 801,209
-         teardown samples, 778,651 rebind samples, and 744,339 SR-IOV
-         samples. Every class reported p50/p90/p99/p999 lateness of 32 ns;
-         the maxima were 150 ns for reload and teardown and 140 ns for
-         rebind and SR-IOV. Evidence is in
-         ``/root/accel-measure/phase8-netdevsim-prereq-fix-20261110T1832Z/wcl-device_*``.
+     - ``test-tlb-generation.c`` exercises ``MADV_PAGEOUT``; sync-work tests
+       cover LRU/SLUB drains and vmalloc purge. On 2026-10-30, a sustained
+       5 s ``user-oslat`` run on
+       ``7.3.0-rc3-accel-tlbfix-gb381f8577d1a-dirty`` with concurrent
+       ``drop_caches`` and 256 MB page-allocation churn (three iterations)
+       completed with ``state=3``, 5000 samples, p50=8 ns, p90=16 ns,
+       p99=8192 ns, max=169377 ns, ``arch_tlb_shootdown_targets=3``,
+       ``user_escape_count=0``, and an empty kernel-error log. The three
+       TLB shootdowns from reclaim were absorbed without an escape.
+       On 2026-11-09, a traced ABI-22 run on simon.lab used one 256 MB
+       page-cache churn and ``drop_caches`` cycle while CPU 3 was owned.
+       ``__lru_add_drain_all()`` requested the owner stop after 439.6 ms;
+       owner exit followed 16 us later.  The owner completed cooperatively
+       with no escape, context switch, migration, or arch IPI, and the worst
+       observed sample was 290 ns.
+       On 2026-11-09, ``test-dirty-writeback-owner.sh`` passed on simon.lab:
+       a 64 MiB XFS temporary file was written and flushed from CPU 0 while
+       CPU 3 was owned.  Inode-matched ``writeback_dirty_folio`` and
+       ``writeback_single_inode`` traces recorded 16,384 written pages in
+       121 ms, before owner exit.  The 10 s owner run completed with
+       ``state=3``, ``stop_requested=0``, no escape, context switch, or
+       migration, and an empty kernel-error log.
+     - ``test-migration-owner.sh`` now provides the focused migration-stress
+       harness. Modeled on the upstream selftest's ``move_pages()`` loop, it
+       moves one private anonymous page between two NUMA nodes while a pinned
+       reader touches it and a bounded owner remains active. The harness
+       requires two memory NUMA nodes and a third online CPU; its runtime
+       report remains pending because simon.lab has only NUMA node 0.
+   * - Device-management operations
+     - **Caller-local management is safe by construction; device-specific
+       steering is rejected or routed to housekeeping at configuration time;
+       the one residual steering path to an owned CPU is deferred.**
+     - 2026-10-29 source audit. Management operations (driver-core
+       probe/remove/bind/unbind, PCI/FLR and reset-control resets, sysfs
+       handlers, netdev register/unregister) run in caller context and never
+       execute code on the target CPU. RPS configuration is filtered by
+       ``rps_cpumask_housekeeping()`` (``net/core/net-sysfs.c``), which
+       intersects ``rps_cpus`` and ``rps_default_mask`` with the housekeeping
+       mask and rejects an empty result, so RPS cannot steer to an isolated
+       CPU; the veth/network-backlog case of
+       ``test-sync-work-owner-stop.sh`` exercises this routed path. XPS
+       selects the transmit queue on the current CPU only, so it performs no
+       cross-CPU execution. NAPI and tasklets run on the current or IRQ CPU,
+       which the IRQ-affinity quarantine excludes. The RFS flow table targets
+       the CPU where the socket last received data and is not filtered at
+       configuration time, so a flow recorded on an owned CPU keeps targeting
+       it while owned; delivery then rides the general mechanisms, either
+       ``smp_call_function_single_async()`` of the non-threaded backlog RPS
+       IPI (``net/core/dev.c``) or a ``wake_up_process()`` of the per-CPU
+       ``backlog_napi`` thread in threaded mode, both of which leave the work
+       pending until the owner exits. Device operations that use waited or
+       deferred call-function, workqueues, stop machine, or CPU hotplug
+       inherit the corresponding row's disposition.
+       On 2026-10-30, a 3 s ``user-oslat`` run on
+       ``7.3.0-rc3-accel-tlbfix-gb381f8577d1a-dirty`` with a concurrent
+       NIC down/up cycle (``ip link set ens18 down`` / ``up``) and an ARP
+       flush completed with ``state=7``, ``recovery_state=2``,
+       ``user_escape_count=1``, ``arch_tlb_shootdown_targets=1``, 1583
+       samples before the escape, and an empty kernel-error log. The NIC
+       stop path requested an owner stop through the generic
+       call-function mechanism; the operation completed and the owner
+       recovered. On 2026-11-09, ``test-rfs-owner-stop.sh`` passed on
+       simon.lab with the same ABI-22 kernel: one UDP flow was primed on
+       owned CPU 3, and 32 packets on that flow were sent while a 5 s
+       ``user-oslat`` owner was active. None arrived during a 500 ms
+       observation window; all 32 arrived after owner exit. The owner
+       reported ``state=3``, one deferred call-function IPI, no escape,
+       no context switch, and no migration. The trace ordered the veth
+       transmit and receive events before an owner exit with
+       ``stop_requested=0``, and the kernel-error log was empty.
+       On 2026-11-09, ``test-veth-teardown-owner.sh`` passed on simon.lab:
+       after 32 queued packets remained undelivered for 500 ms during
+       ownership, deleting the temporary veth pair from CPU 0 while the
+       flow sockets remained open completed in 24 ms. The owner finished
+       normally with ``state=3``,
+       ``stop_requested=0``, no owner-stop request, no escape, no context
+       switch, no migration, and an empty kernel-error log. This covers one
+       bounded caller-local veth unregister/teardown case; the broader
+       physical device reset and teardown matrix is deferred to
+       hardware-specific validation.
+       On 2026-11-09, ``test-veth-newlink-fault-owner.sh`` passed on
+       simon.lab: creating a veth whose peer name collided with loopback
+       failed on CPU 0 in 15 ms with ``-EEXIST``, left no partial device, and
+       traced both ``veth_newlink`` and ``register_netdevice`` on CPU 0.
+       The ``register_netdevice`` path reached a waited
+       ``smp_call_function_many_cond()`` owner-stop request.  The CPU 3 owner
+       exited cooperatively 22 us after the stop request with ``state=3``,
+       ``stop_requested=1``, no escape, no context switch, no migration, and
+       an empty kernel-error log. This covers one bounded device-creation
+       failure unwind; the broader physical device reset and teardown matrix
+       is deferred to hardware-specific validation.
+       ``test-netdevsim-reload-owner.sh`` provides the next focused reset
+       path: it creates a temporary one-port netdevsim device, fails a
+       ``devlink`` driver reload while an owner is active, and reloads
+       successfully after ownership ends. Function-graph tracing records
+       ``nsim_dev_reload_down()``, ``nsim_dev_reload_up()``,
+       ``unregister_netdevice_queue()``, and ``register_netdevice()`` on the work
+       CPU; the owner must complete without an escape, context switch,
+       migration, or kernel error. Its runtime report follows.
+       ``test-netdevsim-teardown-owner.sh`` adds a distinct device-removal
+       path: it deletes the temporary netdevsim bus device while the owner
+       is active and traces ``device_unregister()``,
+       ``nsim_drv_remove()``, and ``unregister_netdevice_queue()`` on the work
+       CPU. Its runtime report follows.
+       ``test-netdevsim-rebind-owner.sh`` adds a driver-bind lifecycle
+       path: it unbinds and rebinds the temporary netdevsim driver while
+       the owner is active and traces ``device_driver_detach()``,
+       ``device_driver_attach()``, ``nsim_drv_remove()``,
+       ``nsim_drv_probe()``, ``unregister_netdevice_queue()``, and
+       ``register_netdevice()`` on the work CPU. Its runtime report follows.
+       ``test-netdevsim-sriov-owner.sh`` adds an SR-IOV configuration
+       path: it switches the temporary netdevsim device to switchdev mode,
+       creates and removes one VF, and returns to legacy mode while the
+       owner is active. It traces
+       ``nsim_devlink_eswitch_mode_set()``,
+       ``nsim_esw_switchdev_enable()``,
+       ``nsim_drv_configure_vfs()``, ``__nsim_dev_port_add()``,
+       ``__nsim_dev_port_del()``, ``register_netdevice()``, and
+       ``unregister_netdevice_queue()`` on the work CPU. Its runtime report
+       follows.
+       On 2026-11-10, all four netdevsim lifecycle classes passed on
+       simon.lab with ABI 23 on
+       ``7.3.0-rc3-accel-tlbfix-gbff69f41a61b``. Each class started from a
+       cold ``netdevsim`` module state, used owner CPU 5 and work CPU 0,
+       and completed with exit status 0, ``state=3``, no owner escape, no
+       context switch, no migration, and no matched kernel error. The
+       standard WCL runner recorded 773,958 reload samples, 801,209
+       teardown samples, 778,651 rebind samples, and 744,339 SR-IOV
+       samples. Every class reported p50/p90/p99/p999 lateness of 32 ns;
+       the maxima were 150 ns for reload and teardown and 140 ns for
+       rebind and SR-IOV. Evidence is in
+       ``/root/accel-measure/phase8-netdevsim-prereq-fix-20261110T1832Z/wcl-device_*``.
+     - The bounded cases cover selected caller-local, deferred-call, and
+       netdevsim paths; broader physical-device reset and teardown matrices
+       remain hardware-specific.
    * - Exceptions, NMIs, and machine checks
-      - **NMI escape is owner-terminating recovery for the tested ring-3
-        workload; user-mode ``#MC`` death is reconciled through task exit;
-        kernel-mode ``#MC`` is domain-terminating; general events are not
-        contained.** Recovery state, error, attempt
-        count, timestamps, and successful escape count use fixed shared ABI
-        fields. MCE injection is deferred on this recovery-sensitive VM:
-        the in-tree injector's software mode only decodes a synthetic record,
-        while hardware mode invokes ``#MC`` and may panic.
-      - ``user_escape_count`` and recovery fields report the owner-termination
-        experiment. ABI 23 adds separate x86 NMI, MCE-exception, and MCE-poll
-        counter deltas, and ``test-user-escape-fault.sh`` now requires the
-        successful escape to correlate with at least one NMI entry. On
-        2026-10-29,
-        ``test-user-escape-fault.sh`` passed on
-        ``7.3.0-rc3-accel-tlbfix-02150-gde9255a04ef7`` with the sender-side
-        drop parameter for counts 0, 1, and 2, including a ten-run drop-2
-        stability loop: each run reported
-        ``recovery_attempts`` equal to ``drop + 1``,
-        ``user_escape_count=1``, no unknown-NMI diagnostics, no kernel-error
-        match, and full drop consumption, with the transparent hugepage mode
-        restored after each run. This validates the retry path for up to three
-        deliberately suppressed escape NMIs. The earlier 2026-10-28
-        receiver-side drop on
-        ``7.3.0-rc3-accel-tlbfix-phase8-irq-d08dba1-02098-gd08dba1bad4f``
-        demonstrated that an unrelated NMI can consume a drop slot and was
-        replaced by sender-side suppression.
-       - **MCE source classification (injection itself deferred).** A
-         user-mode ``#MC`` on the owner (for example the user-reclaim workload
-         reading a poisoned page) is dispatched by ``do_machine_check()``
-         through ``queue_task_work()`` (``task_work_add(TWA_RESUME)``) to
-         ``kill_me_maybe()`` or ``kill_me_now()``: the owner dies from
-         ``memory_failure()`` page isolation plus SIGBUS, or a direct SIGBUS,
-         at the next resume to user mode. The driver registers both
-         ``sched_process_exit_early`` and ``sched_process_exit`` tracepoints:
-         the early hook balances the accelerated owner's preempt/IRQ state and
-         mm lock, while the death work clears ``user_image.active``, releases
-         the pinned image, restores IRQ/workqueue/region state, records
-         ``-ESRCH``, and transitions the device to ``ERROR`` in Linux mode.
-         The NMI handler also checks ``current`` against the admitted owner,
-         so a stale active flag cannot retarget an unrelated user task. A
-         kernel-mode ``#MC`` (kernel owner
-         or the owner's kernel entry/exit window) reaches ``mce_panic()`` and
-         is domain-terminating for the whole system, so no owner
-         reconciliation is needed there. Corrected machine checks (CMCI) are
-         logged by the per-CPU ``mce_timer`` poll pass
-         (``machine_check_poll()``): bounded timer and softirq activity on
-         the owned CPU that does not change owner state and is counted by the
-         IRQ and softirq telemetry.
-       - The ``user-death`` workload is the focused test for this
-         reconciliation path: it must report ``state=5 mode=0``,
-         ``recovery_state=5 recovery_error=-3``, ``user_escape_count=0``, and
-         ``migration_detected=0`` with no kernel-error match. ABI 23's
-         exception counters are not yet runtime-validated on the rebuilt
-         kernel; general NMI containment evidence and actual MCE injection
-         remain uncovered. Hardware MCE injection requires a
-         disposable recovery-capable test system. A kernel-initiated stop
-        (for example ``khugepaged``'s ``lru_add_drain_all()``) outranks an
-        injected drop window and ends the run early; the focused test
-        disables transparent hugepages during the run to keep that source out
-        of the window.
-    * - No ordinary task or unbounded path; latency
-      - **Measured envelope per bounded stress class; no hard bound.**
-        Existing counters do not prove absence of every ordinary Linux or
-        unbounded kernel path.
-      - ABI 18 adds a 64-bin log2 lateness histogram to the shared struct;
-        both owner-side sampling paths fill it and ``cpu-accel-testctl`` reports
-        the non-zero bins plus p50/p90/p99/p999 upper-edge estimates.
-        ``test-wcl-report.sh`` runs one bounded stress class at a time
-        (transparent hugepages disabled for the matrix to keep
-	``khugepaged`` out of the window) and records the distribution and
-	counter correlation per class, including the ABI 23 NMI and MCE deltas.
-        The default set is portable; selecting ``all`` or an individual class
-        through ``CPU_ACCEL_WCL_CLASSES`` also permits the topology-specific
-        device-lifecycle, power-policy, resctrl, perf, ftrace, TLB, hotplug,
-        stop-machine, exception, RCU, ``migration``, ``net_backlog``,
-        ``timer_migration``, and ``irq_storm`` rows.
-	On 2026-10-29 on
-        ``7.3.0-rc3-accel-tlbfix-02150-gde9255a04ef7``, the 5 s
-        ``user-oslat`` baseline and five-busy-CPU load runs each produced
-        5000 samples with p50=8 ns, p90=16 ns, p999=16384 ns, and maxima
-        of 15137 ns and 16350 ns; the vmstat, lru, slub_shrink,
-        ring_resize, call_function, and irq_work owner-stop runs each
-        completed with their stop/exit trace pair and the expected
-        deferred-work and IPI counters; and the timerlat baseline on CPU 2
-        measured p99 of 7874 ns (irq) / 13000 ns (thread) with a 253 ms
-        max-active timer IRQ during the owner interval, bounded by the
-        owner stop. On 2026-11-09, the new ``memory_pressure`` class on
-        simon.lab repeatedly wrote and read a 128 MiB tmpfs file from CPU 0
-        while CPU 3 ran a 5 s ``user-cyclictest`` owner.  It produced 5003
-        samples with p50=16 ns, p90/p99/p999=32 ns, max=19 ns, no IRQ,
-        softirq, workqueue, architecture-IPI, TLB, context-switch, or
-        migration event, and completed with ``state=3``.  The full report is
-        ``Documentation/accel/phase8-wcl-report.md``.
-        On 2026-11-09, the sync-work harness was fixed to keep trace events and
-        ``function_graph`` in separate instances and to enable an owner-stop
-        stack trace.  The vmstat case passed on simon.lab: writing
-        ``vm.stat_refresh`` from CPU 0 stopped the CPU 3 owner in 3 ms, and the
-        stack proved the request came through ``schedule_on_each_cpu()``.  The
-        stop and owner-exit tracepoints were 10 us apart; the owner escaped and
-        recovered with no context switch, migration, or matched kernel error.
-        The LRU case also passed: ``drop_caches`` from CPU 0 stopped the CPU 3
-        owner in 17 ms, the stack proved the request came through
-        ``__lru_add_drain_all()``, and the stop and owner-exit tracepoints were
-        9 us apart with the same clean owner telemetry.
-        The SLUB-shrink and trace-ring-resize cases passed with 4 ms and 9 ms
-        helpers; their stacks proved ``flush_all_cpus_locked()`` and
-        ``ring_buffer_resize()``, respectively, and each stop-to-exit interval
-        was 9 us.  The timer-migration case also passed on this
-        ``rcu_nocbs``-covered boot: isolating CPU 1 stopped its owner in 11 ms,
-        the stack proved ``housekeeping_update()``, the stop-to-exit interval
-        was 9 us, and the cgroup and transparent-hugepage state were restored.
-        On 2026-11-10, the full common portable set passed on simon.lab with
-        ABI 23 on ``7.3.0-rc3-accel-tlbfix-gbff69f41a61b``.  With owner CPU 6,
-        work CPU 0, and load CPUs 3/4/5/7, baseline, load, and
-        ``memory_pressure`` each recorded 5003 samples with p50=16 ns,
-        p90/p99/p999=32 ns, and max=19 ns.  The terminal classes exited through
-        owner stop with ``state=7`` and the expected workqueue, architecture
-        IPI, and NMI correlations; every row reported zero IRQ, softirq, TLB,
-        MCE, and context-switch deltas.  The first full attempt exposed an LRU
-        readiness race: the harness treated ``x86_cpu_accel_user_enter()`` in
-        function graph as completed ownership.  It now waits for the controller
-        active marker before triggering work, and the corrected harness passed
-        both the isolated LRU case and a new full common-set run.  The report
-        also propagates class failures instead of returning success after
-        printing the summary.  Per-class results are in
-        ``Documentation/accel/phase8-wcl-report.md``.
-        The topology-specific optional set was then run individually on the
-        same kernel.  The power-policy, storage, resctrl, perf, ftrace, TLB,
-        hotplug, stop-machine, exception, RCU, timer-migration, and
-        ``net_backlog`` classes passed; the per-class table and evidence are in
-        ``Documentation/accel/phase8-wcl-report.md``.  The four netdevsim
-        lifecycle classes are unsupported on this kernel because the required
-        netdevsim symbols are absent.
-        ``migration`` is not applicable on this one-NUMA-node host, and
-        ``irq_storm`` is not applicable without an isolated test NIC.
-      - No hard bound; log2-bin percentiles are factor-of-two ceilings.
-        ``timer_migration`` passed on the earlier ``rcu_nocbs=1-11`` boot.
-        ``net_backlog`` passed on CPU 5 under the later tuned
-        ``cpu-partitioning`` layout by using RFS from a cork-held TCP flow,
-        with CPU 0 as the RPS fallback and trigger CPU.  ``irq_storm`` needs a
-        test NIC.
+     - **NMI escape is owner-terminating recovery for the tested ring-3
+       workload; user-mode ``#MC`` death is reconciled through task exit;
+       kernel-mode ``#MC`` is domain-terminating; general events are not
+       contained.** Recovery state, error, attempt
+       count, timestamps, and successful escape count use fixed shared ABI
+       fields. MCE injection is deferred on this recovery-sensitive VM:
+       the in-tree injector's software mode only decodes a synthetic record,
+       while hardware mode invokes ``#MC`` and may panic.
+     - ``user_escape_count`` and recovery fields report the owner-termination
+       experiment. ABI 23 adds separate x86 NMI, MCE-exception, and MCE-poll
+       counter deltas, and ``test-user-escape-fault.sh`` now requires the
+       successful escape to correlate with at least one NMI entry. On
+       2026-10-29,
+       ``test-user-escape-fault.sh`` passed on
+       ``7.3.0-rc3-accel-tlbfix-02150-gde9255a04ef7`` with the sender-side
+       drop parameter for counts 0, 1, and 2, including a ten-run drop-2
+       stability loop: each run reported
+       ``recovery_attempts`` equal to ``drop + 1``,
+       ``user_escape_count=1``, no unknown-NMI diagnostics, no kernel-error
+       match, and full drop consumption, with the transparent hugepage mode
+       restored after each run. This validates the retry path for up to three
+       deliberately suppressed escape NMIs. The earlier 2026-10-28
+       receiver-side drop on
+       ``7.3.0-rc3-accel-tlbfix-phase8-irq-d08dba1-02098-gd08dba1bad4f``
+       demonstrated that an unrelated NMI can consume a drop slot and was
+       replaced by sender-side suppression.
+       **MCE source classification (injection itself deferred).** A
+       user-mode ``#MC`` on the owner (for example the user-reclaim workload
+       reading a poisoned page) is dispatched by ``do_machine_check()``
+       through ``queue_task_work()`` (``task_work_add(TWA_RESUME)``) to
+       ``kill_me_maybe()`` or ``kill_me_now()``: the owner dies from
+       ``memory_failure()`` page isolation plus SIGBUS, or a direct SIGBUS,
+       at the next resume to user mode. The driver registers both
+       ``sched_process_exit_early`` and ``sched_process_exit`` tracepoints:
+       the early hook balances the accelerated owner's preempt/IRQ state and
+       mm lock, while the death work clears ``user_image.active``, releases
+       the pinned image, restores IRQ/workqueue/region state, records
+       ``-ESRCH``, and transitions the device to ``ERROR`` in Linux mode.
+       The NMI handler also checks ``current`` against the admitted owner,
+       so a stale active flag cannot retarget an unrelated user task. A
+       kernel-mode ``#MC`` (kernel owner
+       or the owner's kernel entry/exit window) reaches ``mce_panic()`` and
+       is domain-terminating for the whole system, so no owner
+       reconciliation is needed there. Corrected machine checks (CMCI) are
+       logged by the per-CPU ``mce_timer`` poll pass
+       (``machine_check_poll()``): bounded timer and softirq activity on
+       the owned CPU that does not change owner state and is counted by the
+       IRQ and softirq telemetry.
+     - The ``user-death`` workload is the focused test for this
+       reconciliation path: it must report ``state=5 mode=0``,
+       ``recovery_state=5 recovery_error=-3``, ``user_escape_count=0``, and
+       ``migration_detected=0`` with no kernel-error match. ABI 23's
+       exception counters are not yet runtime-validated on the rebuilt
+       kernel; general NMI containment evidence and actual MCE injection
+       remain uncovered. Hardware MCE injection requires a
+       disposable recovery-capable test system. A kernel-initiated stop
+       (for example ``khugepaged``'s ``lru_add_drain_all()``) outranks an
+       injected drop window and ends the run early; the focused test
+       disables transparent hugepages during the run to keep that source out
+       of the window.
+   * - No ordinary task or unbounded path; latency
+     - **Measured envelope per bounded stress class; no hard bound.**
+       Existing counters do not prove absence of every ordinary Linux or
+       unbounded kernel path.
+     - ABI 18 adds a 64-bin log2 lateness histogram to the shared struct;
+       both owner-side sampling paths fill it and ``cpu-accel-testctl`` reports
+       the non-zero bins plus p50/p90/p99/p999 upper-edge estimates.
+       ``test-wcl-report.sh`` runs one bounded stress class at a time
+       (transparent hugepages disabled for the matrix to keep
+       ``khugepaged`` out of the window) and records the distribution and
+       counter correlation per class, including the ABI 23 NMI and MCE deltas.
+       The default set is portable; selecting ``all`` or an individual class
+       through ``CPU_ACCEL_WCL_CLASSES`` also permits the topology-specific
+       device-lifecycle, power-policy, resctrl, perf, ftrace, TLB, hotplug,
+       stop-machine, exception, RCU, ``migration``, ``net_backlog``,
+       ``timer_migration``, and ``irq_storm`` rows.
+       On 2026-10-29 on
+       ``7.3.0-rc3-accel-tlbfix-02150-gde9255a04ef7``, the 5 s
+       ``user-oslat`` baseline and five-busy-CPU load runs each produced
+       5000 samples with p50=8 ns, p90=16 ns, p999=16384 ns, and maxima
+       of 15137 ns and 16350 ns; the vmstat, lru, slub_shrink,
+       ring_resize, call_function, and irq_work owner-stop runs each
+       completed with their stop/exit trace pair and the expected
+       deferred-work and IPI counters; and the timerlat baseline on CPU 2
+       measured p99 of 7874 ns (irq) / 13000 ns (thread) with a 253 ms
+       max-active timer IRQ during the owner interval, bounded by the
+       owner stop. On 2026-11-09, the new ``memory_pressure`` class on
+       simon.lab repeatedly wrote and read a 128 MiB tmpfs file from CPU 0
+       while CPU 3 ran a 5 s ``user-cyclictest`` owner.  It produced 5003
+       samples with p50=16 ns, p90/p99/p999=32 ns, max=19 ns, no IRQ,
+       softirq, workqueue, architecture-IPI, TLB, context-switch, or
+       migration event, and completed with ``state=3``.  The full report is
+       ``Documentation/accel/phase8-wcl-report.md``.
+       On 2026-11-09, the sync-work harness was fixed to keep trace events and
+       ``function_graph`` in separate instances and to enable an owner-stop
+       stack trace.  The vmstat case passed on simon.lab: writing
+       ``vm.stat_refresh`` from CPU 0 stopped the CPU 3 owner in 3 ms, and the
+       stack proved the request came through ``schedule_on_each_cpu()``.  The
+       stop and owner-exit tracepoints were 10 us apart; the owner escaped and
+       recovered with no context switch, migration, or matched kernel error.
+       The LRU case also passed: ``drop_caches`` from CPU 0 stopped the CPU 3
+       owner in 17 ms, the stack proved the request came through
+       ``__lru_add_drain_all()``, and the stop and owner-exit tracepoints were
+       9 us apart with the same clean owner telemetry.
+       The SLUB-shrink and trace-ring-resize cases passed with 4 ms and 9 ms
+       helpers; their stacks proved ``flush_all_cpus_locked()`` and
+       ``ring_buffer_resize()``, respectively, and each stop-to-exit interval
+       was 9 us.  The timer-migration case also passed on this
+       ``rcu_nocbs``-covered boot: isolating CPU 1 stopped its owner in 11 ms,
+       the stack proved ``housekeeping_update()``, the stop-to-exit interval
+       was 9 us, and the cgroup and transparent-hugepage state were restored.
+       On 2026-11-10, the full common portable set passed on simon.lab with
+       ABI 23 on ``7.3.0-rc3-accel-tlbfix-gbff69f41a61b``.  With owner CPU 6,
+       work CPU 0, and load CPUs 3/4/5/7, baseline, load, and
+       ``memory_pressure`` each recorded 5003 samples with p50=16 ns,
+       p90/p99/p999=32 ns, and max=19 ns.  The terminal classes exited through
+       owner stop with ``state=7`` and the expected workqueue, architecture
+       IPI, and NMI correlations; every row reported zero IRQ, softirq, TLB,
+       MCE, and context-switch deltas.  The first full attempt exposed an LRU
+       readiness race: the harness treated ``x86_cpu_accel_user_enter()`` in
+       function graph as completed ownership.  It now waits for the controller
+       active marker before triggering work, and the corrected harness passed
+       both the isolated LRU case and a new full common-set run.  The report
+       also propagates class failures instead of returning success after
+       printing the summary.  Per-class results are in
+       ``Documentation/accel/phase8-wcl-report.md``.
+       The topology-specific optional set was then run individually on the
+       same kernel.  The power-policy, storage, resctrl, perf, ftrace, TLB,
+       hotplug, stop-machine, exception, RCU, timer-migration, and
+       ``net_backlog`` classes passed; the per-class table and evidence are in
+       ``Documentation/accel/phase8-wcl-report.md``.  The four netdevsim
+       lifecycle classes are unsupported on this kernel because the required
+       netdevsim symbols are absent.
+       ``migration`` is not applicable on this one-NUMA-node host, and
+       ``irq_storm`` is not applicable without an isolated test NIC.
+     - No hard bound; log2-bin percentiles are factor-of-two ceilings.
+       ``timer_migration`` passed on the earlier ``rcu_nocbs=1-11`` boot.
+       ``net_backlog`` passed on CPU 5 under the later tuned
+       ``cpu-partitioning`` layout by using RFS from a cork-held TCP flow,
+       with CPU 0 as the RPS fallback and trigger CPU.  ``irq_storm`` needs a
+       test NIC.
 
 The plan's disposition vocabulary is safe, routed to housekeeping, deferred,
 rejected, or domain-terminating. Phase 8 is closed for the tested x86

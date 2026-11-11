@@ -5,7 +5,7 @@ Branch: `codex/accelerator-oslat`
 ABI: 24 (minimum supported ABI: 23)
 
 Normative object, extension, state, and compatibility rules are in
-`:doc:`cpu-accel-uapi``. ABI 24 is a control-plane freeze candidate; the x86
+`:doc:`cpu-accel-uapi``. ABI 24 is a frozen control plane; the x86
 ring-3 workload and image-admission extension remains experimental.
 
 ## Summary
@@ -63,7 +63,8 @@ The gate:
 1. Runs the ABI contract test.
 2. Runs the UAPI lifecycle test.
 3. Runs an ABI 23-only client against the ABI 24 kernel.
-4. Simulates an ABI 23-only kernel and verifies SDK fallback.
+4. Simulates an ABI 23-only kernel with a test ioctl shim and verifies SDK
+   fallback.
 5. Runs `user-oslat` on ABI 23.
 6. Runs `user-oslat` on ABI 24.
 7. Compares p99, p999, and maximum latency against the ABI 23 baseline.

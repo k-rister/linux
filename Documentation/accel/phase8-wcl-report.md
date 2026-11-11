@@ -367,6 +367,17 @@ The standard WCL runner now integrates the general fault injector as
 work CPU 0, and a 10-second bounded window. Evidence is in
 `/root/accel-measure/phase8-stop-machine-fault-wcl-20261110T1747Z/evidence-stop-machine-fault/summary.tsv`.
 
+The lock-order harness records the public wrapper's maintenance gate, owner
+exit, CPU-hotplug read lock, and stop-machine return sequence. The direct run
+passed both success and injected-fault cases, and the subsequent standard WCL
+rerun repeated that result. Both traces ordered the events as `stop_machine`
+entry, maintenance begin, owner-stop request, owner-exit completion,
+maintenance return, `cpus_read_lock()`, `cpus_read_unlock()`, maintenance end,
+and `stop_machine` return. Evidence is in
+`/root/accel-measure/phase8-stop-machine-lock-order-20261110T1805Z/evidence-stop-machine-lock-order`
+and
+`/root/accel-measure/phase8-stop-machine-lock-order-wcl-20261110T1812Z/evidence-stop-machine-fault/summary.tsv`.
+
 The remaining optional classes are unsupported or not applicable on this boot:
 
 - `device_reload`, `device_teardown`, and `device_rebind` fail before creating
@@ -385,7 +396,7 @@ The remaining optional classes are unsupported or not applicable on this boot:
 | Optional portable WCL classes | Passed individually on the same kernel | `/root/accel-measure/phase8-bff69f4-wcl-optional-20261110/<class>/summary.tsv` |
 | `timer_migration` | Passed with the corrected active-marker harness | `/root/accel-measure/phase8-bff69f4-wcl-timer-20261110T1310/summary.tsv` |
 | `net_backlog` | Passed with RFS and a cork-held TCP flow under the active tuned `cpu-partitioning` profile | `/root/accel-measure/phase8-bff69f4-wcl-net-backlog-rfs23-20261110T2243Z/summary.tsv` |
-| `stop_machine_fault` | Passed success and injected `-EIO` cases with owner drain on all online CPUs, both directly and through the standard WCL runner | `/root/accel-measure/phase8-stop-machine-fault-20261110T233220Z/evidence-stop-machine-owner-stop`; `/root/accel-measure/phase8-stop-machine-fault-wcl-20261110T1747Z/evidence-stop-machine-fault/summary.tsv` |
+| `stop_machine_fault` | Passed success and injected `-EIO` cases with owner drain on all online CPUs and gate-before-hotplug-lock ordering, both directly and through the standard WCL runner | `/root/accel-measure/phase8-stop-machine-fault-20261110T233220Z/evidence-stop-machine-owner-stop`; `/root/accel-measure/phase8-stop-machine-fault-wcl-20261110T1747Z/evidence-stop-machine-fault/summary.tsv`; `/root/accel-measure/phase8-stop-machine-lock-order-wcl-20261110T1812Z/evidence-stop-machine-fault/summary.tsv` |
 | Higher-volume hotplug races | Passed 16 loaded CPU-up and 16 loaded CPU-down iterations | `/root/accel-measure/phase8-stop-machine-fault-20261110T233220Z/evidence-hotplug-{up,down}-loaded/summary.tsv` |
 | Netdevsim lifecycle classes | Unsupported on this kernel because required symbols are absent | `/root/accel-measure/phase8-bff69f4-wcl-optional-20261110/device_*/summary.tsv` |
 | `migration` | Not applicable on this one-NUMA-node host | No runtime run |
@@ -418,8 +429,8 @@ The remaining optional classes are unsupported or not applicable on this boot:
 - `timer_migration` passed on the earlier `rcu_nocbs=1-11` boot. After the
   later repartition, `net_backlog` passed through RFS steering of a cork-held
   TCP flow; `irq_storm` remains deferred to a test NIC.
-- Caller lock-order fault injection and disposition of out-of-tree direct
-  `stop_machine_cpuslocked()` callers remain open.
+- Disposition of out-of-tree direct `stop_machine_cpuslocked()` callers
+  remains open; the public `stop_machine()` wrapper lock order is validated.
 - Machine-check injection remains out of scope (see the exceptions/NMI
   row).
 

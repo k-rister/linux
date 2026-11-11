@@ -392,11 +392,11 @@ stop_machine_case()
 
 stop_machine_fault_case()
 {
+	stop_machine_probe="$script_dir/stop-machine-probe/cpu_accel_stop_machine_probe.ko"
 	CPU_ACCEL_CPU="$target_cpu" \
 	CPU_ACCEL_DURATION_MS="$duration_ms" \
 	CPU_ACCEL_TESTCTL="$tool" \
-	CPU_ACCEL_STOP_MACHINE_PROBE=\
-		"$script_dir/stop-machine-probe/cpu_accel_stop_machine_probe.ko" \
+	CPU_ACCEL_STOP_MACHINE_PROBE="$stop_machine_probe" \
 		sh "$script_dir/test-stop-machine-owner-stop.sh"
 }
 

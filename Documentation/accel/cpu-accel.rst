@@ -1001,8 +1001,15 @@ run-specific results must be recorded with the kernel build and test logs.
        injector as ``stop_machine_fault`` and passed it on Simon with owner
        CPU 5, work CPU 0, and a 10-second bounded window. Evidence is in
        ``/root/accel-measure/phase8-stop-machine-fault-wcl-20261110T1747Z/evidence-stop-machine-fault/summary.tsv``.
-     - Caller lock-order fault injection and disposition of out-of-tree direct
-       ``stop_machine_cpuslocked()`` callers remain open.
+       The lock-order rerun passed both cases and traced ``stop_machine()``
+       entry, maintenance begin, owner-stop request, owner-exit completion,
+       maintenance return, ``cpus_read_lock()``, ``cpus_read_unlock()``,
+       maintenance end, and ``stop_machine()`` return in that order. Evidence
+       is in
+       ``/root/accel-measure/phase8-stop-machine-lock-order-wcl-20261110T1812Z/evidence-stop-machine-fault/summary.tsv``.
+     - Disposition of out-of-tree direct ``stop_machine_cpuslocked()``
+       callers remains open; the public wrapper's gate-before-hotplug-lock
+       ordering is validated.
    * - Frequency, idle, thermal, power-policy, and watchdog changes
      - **Watchdog admission is rejected when an enabled lockup detector
        covers the target CPU; in-tree x86 per-CPU MSR policy writes are

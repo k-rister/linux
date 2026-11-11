@@ -42,7 +42,8 @@ cleanup()
 	if [ -n "$trace_dir" ] && [ -d "$trace_dir" ]; then
 		echo 0 >"$trace_dir/tracing_on" 2>/dev/null || true
 		echo nop >"$trace_dir/current_tracer" 2>/dev/null || true
-		for event in sm_entry sm_return; do
+		for event in sm_entry sm_return maint_begin maint_return \
+			    cpu_lock cpu_unlock maint_end; do
 			echo 0 >"$trace_dir/events/$trace_probe_group/$event/enable" \
 				2>/dev/null || true
 		done
@@ -53,10 +54,11 @@ cleanup()
 		rmdir "$trace_dir" 2>/dev/null || true
 	fi
 	if [ -n "$trace_probe_group" ]; then
-		printf '%s\n' "-:$trace_probe_group/sm_entry" \
-			>>"$trace_root/kprobe_events" 2>/dev/null || true
-		printf '%s\n' "-:$trace_probe_group/sm_return" \
-			>>"$trace_root/kprobe_events" 2>/dev/null || true
+		for event in sm_entry sm_return maint_begin maint_return \
+			    cpu_lock cpu_unlock maint_end; do
+			printf '%s\n' "-:$trace_probe_group/$event" \
+				>>"$trace_root/kprobe_events" 2>/dev/null || true
+		done
 	fi
 	exit "$status"
 }
@@ -97,12 +99,30 @@ printf 'p:%s/sm_entry stop_machine\n' "$trace_probe_group" \
 printf 'r:%s/sm_return stop_machine retval=$retval\n' \
 	"$trace_probe_group" >>"$trace_root/kprobe_events" || \
 	fail "could not register stop-machine return probe"
-[ -e "$trace_dir/events/$trace_probe_group/sm_entry/enable" ] || \
-	fail "stop-machine entry event is unavailable in trace instance"
-[ -e "$trace_dir/events/$trace_probe_group/sm_return/enable" ] || \
-	fail "stop-machine return event is unavailable in trace instance"
-echo 1 >"$trace_dir/events/$trace_probe_group/sm_entry/enable"
-echo 1 >"$trace_dir/events/$trace_probe_group/sm_return/enable"
+printf 'p:%s/maint_begin x86_cpu_accel_maintenance_begin\n' \
+	"$trace_probe_group" >>"$trace_root/kprobe_events" || \
+	fail "could not register maintenance-begin entry probe"
+printf 'r:%s/maint_return x86_cpu_accel_maintenance_begin\n' \
+	"$trace_probe_group" >>"$trace_root/kprobe_events" || \
+	fail "could not register maintenance-begin return probe"
+printf 'p:%s/cpu_lock cpus_read_lock\n' \
+	"$trace_probe_group" >>"$trace_root/kprobe_events" || \
+	fail "could not register CPU-hotplug lock probe"
+printf 'p:%s/cpu_unlock cpus_read_unlock\n' \
+	"$trace_probe_group" >>"$trace_root/kprobe_events" || \
+	fail "could not register CPU-hotplug unlock probe"
+printf 'p:%s/maint_end x86_cpu_accel_maintenance_end\n' \
+	"$trace_probe_group" >>"$trace_root/kprobe_events" || \
+	fail "could not register maintenance-end probe"
+for event in sm_entry sm_return maint_begin maint_return \
+	    cpu_lock cpu_unlock maint_end; do
+	event_path=$trace_dir/events/$trace_probe_group/$event
+	[ -e "$event_path/enable" ] || \
+		fail "stop-machine $event event is unavailable in trace instance"
+	echo "common_pid == $$" >"$event_path/filter" || \
+		fail "could not filter stop-machine $event event"
+	echo 1 >"$event_path/enable"
+done
 for event in owner_stop_request owner_exit_complete; do
 	[ -e "$trace_dir/events/cpu_accel/$event/enable" ] || \
 		fail "CPU accelerator $event tracepoint is unavailable"
@@ -223,17 +243,25 @@ run_case()
 
 	awk '
 	/sm_entry:/ && !entry { entry = NR }
+	/maint_begin:/ && !maint_begin { maint_begin = NR }
 	/owner_stop_request:/ && !stop_request { stop_request = NR }
 	/owner_exit_complete:/ && !owner_exit { owner_exit = NR }
+	/maint_return:/ && !maint_return { maint_return = NR }
+	/cpu_lock:/ && !cpu_lock { cpu_lock = NR }
 	/sm_return:/ && !machine_return { machine_return = NR }
+	/cpu_unlock:/ && !cpu_unlock { cpu_unlock = NR }
+	/maint_end:/ && !maint_end { maint_end = NR }
 	END {
-		if (!(entry && stop_request && owner_exit && machine_return &&
-		      entry < stop_request && stop_request < owner_exit &&
-		      owner_exit < machine_return))
+		if (!(maint_begin && stop_request && owner_exit && maint_return &&
+		      cpu_lock && entry && machine_return && cpu_unlock && maint_end &&
+		      entry < maint_begin && maint_begin < stop_request &&
+		      stop_request < owner_exit &&
+		      owner_exit < maint_return && maint_return < cpu_lock &&
+		      cpu_unlock < maint_end && maint_end < machine_return))
 			exit 1
 	}' "$trace_output" || {
 		cat "$trace_output"
-		fail "$case_name trace did not prove owner exit before stop-machine return"
+		fail "$case_name trace did not prove lock-order and owner exit"
 	}
 
 	cat "$run_output"

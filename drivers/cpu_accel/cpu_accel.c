@@ -2502,8 +2502,10 @@ static int cpu_accel_release(struct inode *inode, struct file *file)
 			pr_err("unable to exit accelerator CPU %u after release: %d\n",
 			       dev->config.cpu, ret);
 	}
-	if (!dev->lifecycle_thread && !dev->user_image.active)
+	if (!dev->lifecycle_thread && !dev->user_image.active) {
 		cpu_accel_regions_release(dev);
+		dev->configured = false;
+	}
 	mutex_unlock(&dev->lock);
 	if (dev->companion_mm) {
 		mmdrop(dev->companion_mm);

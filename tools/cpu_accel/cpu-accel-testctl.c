@@ -58,8 +58,11 @@ struct cpu_accel_user_context {
 	struct cpu_accel_workload_region *region;
 	int fd;
 	uint64_t cycles_per_ns;
+	uint64_t fail_after_samples;
 	struct cpu_accel_user_unmap_range *unmap_ranges;
 	unsigned long nr_unmap_ranges;
+	struct cpu_accel_domain_worker_join domain_join;
+	bool use_domain_join;
 };
 
 struct cpu_accel_user_unmap_range {
@@ -120,6 +123,11 @@ static inline uint64_t cpu_accel_read_tsc_ordered(void)
 			 "rdtsc"
 			 : "=a"(low), "=d"(high));
 	return ((uint64_t)high << 32) | low;
+}
+
+static inline void cpu_relax(void)
+{
+	__asm__ volatile("pause" ::: "memory");
 }
 
 static __attribute__((always_inline)) inline long
@@ -189,8 +197,13 @@ static void cpu_accel_user_seal_and_start(
 		}
 	}
 
-	ret = cpu_accel_user_syscall3(SYS_ioctl, context->fd,
-				      CPU_ACCEL_IOC_START, 0);
+	if (context->use_domain_join)
+		ret = cpu_accel_user_syscall3(SYS_ioctl, context->fd,
+					      CPU_ACCEL_IOC_DOMAIN_WORKER_JOIN,
+					      (unsigned long)&context->domain_join);
+	else
+		ret = cpu_accel_user_syscall3(SYS_ioctl, context->fd,
+					      CPU_ACCEL_IOC_START, 0);
 	cpu_accel_user_syscall1(SYS_exit_group, ret < 0 ? 126 : 0);
 	__builtin_unreachable();
 }
@@ -347,8 +360,8 @@ static void cpu_accel_user_oslat(void *argument)
 	struct cpu_accel_user_context *context = argument;
 	struct cpu_accel_workload_region *region = context->region;
 	uint64_t cpm = context->cycles_per_ns;
-	uint64_t start_tsc = cpu_accel_read_tsc_ordered();
-	uint64_t prev = start_tsc;
+	uint64_t start_tsc;
+	uint64_t prev;
 	uint64_t samples = 0;
 	uint64_t max_delta = 0;
 	uint64_t min_delta = UINT64_MAX;
@@ -362,6 +375,18 @@ static void cpu_accel_user_oslat(void *argument)
 	}
 	if (!cpm)
 		cpm = CPU_ACCEL_CP_SCALE;
+
+	while (__atomic_load_n(&context->shared->state, __ATOMIC_ACQUIRE) !=
+	       CPU_ACCEL_STATE_RUNNING) {
+		if (__atomic_load_n(&context->shared->stop_requested,
+				    __ATOMIC_ACQUIRE)) {
+			(void)cpu_accel_user_exit_syscall(context->fd);
+			__builtin_unreachable();
+		}
+		cpu_relax();
+	}
+	start_tsc = cpu_accel_read_tsc_ordered();
+	prev = start_tsc;
 
 	for (;;) {
 		uint64_t now = cpu_accel_read_tsc_ordered();
@@ -381,6 +406,11 @@ static void cpu_accel_user_oslat(void *argument)
 			samples_valid++;
 		}
 		samples++;
+		if (context->fail_after_samples &&
+		    samples >= context->fail_after_samples) {
+			(void)cpu_accel_user_syscall1(SYS_exit_group, 90);
+			__builtin_unreachable();
+		}
 		if (delta_ns > max_delta)
 			max_delta = delta_ns;
 		if (delta_ns < min_delta)
@@ -650,11 +680,13 @@ static int cpu_accel_collect_unmap_ranges(
 	unsigned long rseq_start, unsigned long rseq_end,
 	unsigned long page_size)
 {
-	struct cpu_accel_user_keep_range keep[6] = {
+	struct cpu_accel_user_keep_range keep[7] = {
 		{ .start = image_start, .end = image_end },
 		{ .start = stack_start, .end = stack_end },
 		{ .start = (uintptr_t)handle->shared,
 		  .end = (uintptr_t)handle->shared + CPU_ACCEL_MAP_SIZE },
+		{ .start = (uintptr_t)context->shared,
+		  .end = (uintptr_t)context->shared + CPU_ACCEL_MAP_SIZE },
 		{ .start = (uintptr_t)context->region,
 		  .end = context->region ?
 			(uintptr_t)context->region +
@@ -914,6 +946,8 @@ static void usage(FILE *stream, const char *program)
 	fprintf(stream,
 		"Usage:\n"
 		"  %s run [--cpu N] [--duration-ms N] [--period-us N]\n"
+		"      [--cpus CPU[,CPU...]] (multi-CPU user-oslat)\n"
+		"      [--smp-fail-worker N] (expect one worker to fail)\n"
 		"      [--workload timestamp|memmove|user-region|user-cyclictest|\n"
 		"                   user-hang|user-reclaim|user-death|user-oslat]\n"
 		"      [--work-bytes N]\n"
@@ -1086,7 +1120,9 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 				 struct cpu_accel_config *config,
 				 const char *reclaim_file,
 				 uint64_t region_token, uint64_t region_size,
-				 uint64_t region_epoch)
+				 uint64_t region_epoch,
+				 uint64_t worker_token,
+				 uint64_t fail_after_samples)
 {
 	struct cpu_accel_user_context *context;
 	struct cpu_accel_region_create region_create = {};
@@ -1102,6 +1138,7 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 	size_t unmap_offset;
 	void *stack;
 	void *reclaim_mapping = MAP_FAILED;
+	struct cpu_accel_shared *worker_shared = NULL;
 	long page_size;
 	int reclaim_fd = -1;
 	int user_hang = config->workload == CPU_ACCEL_WORKLOAD_USER_HANG;
@@ -1110,6 +1147,15 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 	int user_oslat = config->workload == CPU_ACCEL_WORKLOAD_USER_OSLAT;
 	int user_region = config->workload == CPU_ACCEL_WORKLOAD_USER_REGION;
 	int ret = 1;
+
+	if (worker_token) {
+		worker_shared = (struct cpu_accel_shared *)
+			cpu_accel_worker_mmap(handle, worker_token);
+		if (!worker_shared) {
+			perror("map worker telemetry");
+			return 1;
+		}
+	}
 
 	if (region_token) {
 		region_create.size_bytes = region_size;
@@ -1223,12 +1269,14 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 
 	context = stack;
 	context->region = owner_region == MAP_FAILED ? NULL : owner_region;
-	context->shared = (struct cpu_accel_shared *)(uintptr_t)handle->shared;
+	context->shared = worker_shared ? worker_shared :
+		(struct cpu_accel_shared *)(uintptr_t)handle->shared;
 	context->reclaim_page = user_reclaim ?
 		(uintptr_t)reclaim_mapping : 0;
 	context->reclaim_bytes = reclaim_bytes;
 	context->fd = handle->fd;
 	context->cycles_per_ns = cpu_accel_calibrate_cycles_per_ns();
+	context->fail_after_samples = fail_after_samples;
 	if (user_hang)
 		entry_ip = (uintptr_t)cpu_accel_user_hang;
 	else if (user_death)
@@ -1280,7 +1328,20 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 		goto out_stack;
 	}
 
-	if (cpu_accel_configure(handle, config) < 0) {
+	if (worker_token) {
+		context->domain_join = (struct cpu_accel_domain_worker_join){
+			.cpu = config->cpu,
+			.user_entry_ip = config->user_entry_ip,
+			.user_stack_top = config->user_stack_top,
+			.user_stack_bytes = config->user_stack_bytes,
+			.user_image_start = config->user_image_start,
+			.user_image_bytes = config->user_image_bytes,
+			.user_arg = config->user_arg,
+			.user_escape_ip = config->user_escape_ip,
+			.user_reclaim_page = config->user_reclaim_page,
+		};
+		context->use_domain_join = true;
+	} else if (cpu_accel_configure(handle, config) < 0) {
 		perror("configure user accelerator");
 		goto out_stack;
 	}
@@ -1362,7 +1423,58 @@ static int run_user_worker(int argc, char **argv)
 		return 1;
 	}
 	return run_user_worker_image(&handle, &config, reclaim_file,
-				     values[6], values[7], values[8]);
+				     values[6], values[7], values[8], 0, 0);
+}
+
+static int run_smp_user_worker(int argc, char **argv)
+{
+	enum { SMP_WORKER_VALUE_COUNT = 11 };
+	struct cpu_accel_config config = {};
+	struct cpu_accel_handle handle;
+	uint64_t values[SMP_WORKER_VALUE_COUNT];
+	const char *reclaim_file = argv[SMP_WORKER_VALUE_COUNT + 2];
+	int fd;
+
+	if (argc != SMP_WORKER_VALUE_COUNT + 3) {
+		fprintf(stderr, "invalid internal SMP user-worker arguments\n");
+		return 2;
+	}
+	for (unsigned int index = 0; index < SMP_WORKER_VALUE_COUNT; index++) {
+		if (parse_u64(argv[index + 2], &values[index])) {
+			fprintf(stderr, "invalid internal SMP user-worker argument\n");
+			return 2;
+		}
+	}
+	if (values[0] > INT_MAX || values[1] > UINT_MAX ||
+	    values[2] != CPU_ACCEL_WORKLOAD_USER_OSLAT ||
+	    values[3] > UINT_MAX ||
+	    (values[8] && values[9] > SIZE_MAX) || !values[6] ||
+	    (values[7] && (!values[8] || !values[9])) ||
+	    (!values[7] && (values[8] || values[9])) ||
+	    strcmp(reclaim_file, "-")) {
+		fprintf(stderr, "out-of-range internal SMP user-worker argument\n");
+		return 2;
+	}
+
+	fd = values[0];
+	config.cpu = values[1];
+	config.workload = values[2];
+	config.flags = values[3];
+	config.duration_ns = values[4];
+	config.period_ns = values[5];
+	if (pin_cpu(config.cpu) < 0) {
+		perror("pin SMP user accelerator");
+		close(fd);
+		return 1;
+	}
+	if (cpu_accel_attach_worker_fd(&handle, fd) < 0) {
+		perror("map inherited SMP accelerator device");
+		close(fd);
+		return 1;
+	}
+	return run_user_worker_image(&handle, &config, reclaim_file,
+				     values[7], values[8], values[9], values[6],
+				     values[10]);
 }
 
 static bool user_escape_completed(
@@ -1960,6 +2072,407 @@ out_close:
 	return ret < 0 ? 1 : 0;
 }
 
+static int parse_cpu_list(const char *text, unsigned int *cpus,
+			  unsigned int *cpu_count)
+{
+	const char *cursor = text;
+	unsigned int count = 0;
+
+	if (!text || !*text)
+		return -1;
+	for (;;) {
+		char *end;
+		unsigned long value;
+
+		errno = 0;
+		value = strtoul(cursor, &end, 10);
+		if (errno || end == cursor || value > UINT_MAX || !value)
+			return -1;
+		if (count >= CPU_ACCEL_MAX_WORKERS)
+			return -1;
+		for (unsigned int index = 0; index < count; index++) {
+			if (cpus[index] == value)
+				return -1;
+		}
+		cpus[count++] = value;
+		cursor = end;
+		if (!*cursor)
+			break;
+		if (*cursor++ != ',')
+			return -1;
+		if (!*cursor)
+			return -1;
+	}
+	*cpu_count = count;
+	return 0;
+}
+
+static int run_smp_user_oslat(const struct cpu_accel_config *requested,
+			      const unsigned int *cpus,
+			      unsigned int cpu_count,
+			      unsigned int fail_worker)
+{
+	struct cpu_accel_handle handle;
+	struct cpu_accel_capabilities capabilities = {};
+	struct cpu_accel_domain_config domain_config = {};
+	struct cpu_accel_domain_status domain_status = {};
+	struct cpu_accel_region_create region_create = {};
+	struct cpu_accel_region_ref region_ref = {};
+	struct {
+		struct cpu_accel_region_create create;
+		struct cpu_accel_region_ref ref;
+		struct cpu_accel_workload_region *mapping;
+	} regions[CPU_ACCEL_MAX_WORKERS] = {};
+	struct cpu_accel_shared *worker_shared[CPU_ACCEL_MAX_WORKERS] = {};
+	pid_t children[CPU_ACCEL_MAX_WORKERS] = {};
+	const struct timespec poll_delay = { .tv_nsec = 1000000 };
+	struct timespec run_delay;
+	uint64_t region_size;
+	uint64_t deadline;
+	long page_size;
+	bool domain_configured = false;
+	bool domain_started = false;
+	bool expected_failure = fail_worker != UINT_MAX;
+	int ret = 1;
+
+	if (cpu_accel_open(&handle) < 0) {
+		perror("open /dev/cpu_accel");
+		return 1;
+	}
+	if (cpu_accel_get_capabilities(&handle, &capabilities) < 0) {
+		perror("get SMP workload region capabilities");
+		goto out_close;
+	}
+	if (pin_control_cpu() < 0) {
+		perror("pin SMP control process to CPU 0");
+		goto out_close;
+	}
+	page_size = sysconf(_SC_PAGESIZE);
+	if (page_size <= 0) {
+		errno = EINVAL;
+		perror("get page size");
+		goto out_close;
+	}
+	for (unsigned int index = 0; index < cpu_count; index++) {
+		if (cpu_accel_workload_region_size(requested->workload,
+						   requested->work_bytes,
+						   page_size,
+						   capabilities.max_region_bytes,
+						   &region_size)) {
+			errno = EINVAL;
+			perror("size SMP workload region");
+			goto out_close;
+		}
+		region_create = (struct cpu_accel_region_create){
+			.size_bytes = region_size,
+			.permissions = CPU_ACCEL_REGION_PERM_BIDIRECTIONAL,
+			.numa_node = -1,
+		};
+		if (cpu_accel_region_create(&handle, &region_create) < 0) {
+			perror("create SMP workload region");
+			goto out_close;
+		}
+		regions[index].create = region_create;
+		regions[index].mapping = cpu_accel_region_mmap(
+			&handle, &region_create, true);
+		if (regions[index].mapping == MAP_FAILED) {
+			perror("map SMP workload region");
+			goto out_close;
+		}
+		cpu_accel_workload_region_init(regions[index].mapping,
+					       region_size,
+					       region_create.epoch,
+					       region_create.mmap_token,
+					       requested->workload,
+					       requested->work_bytes);
+		region_ref = (struct cpu_accel_region_ref){
+			.region_id = region_create.region_id,
+			.epoch = region_create.epoch,
+		};
+		if (cpu_accel_region_attach(&handle, &region_ref) < 0) {
+			perror("attach SMP workload region");
+			goto out_close;
+		}
+		regions[index].ref = region_ref;
+		regions[index].mapping->region_epoch = region_ref.epoch;
+	}
+
+	domain_config = (struct cpu_accel_domain_config){
+		.cpu_count = cpu_count,
+		.flags = requested->flags | CPU_ACCEL_FLAG_PERSISTENT,
+		.workload = requested->workload,
+		.work_bytes = requested->work_bytes,
+		.duration_ns = requested->duration_ns,
+		.period_ns = requested->period_ns,
+	};
+	memcpy(domain_config.cpus, cpus, sizeof(*cpus) * cpu_count);
+	if (cpu_accel_domain_config(&handle, &domain_config) < 0) {
+		perror("configure SMP accelerator domain");
+		goto out_regions;
+	}
+	domain_configured = true;
+	for (unsigned int index = 0; index < cpu_count; index++) {
+		worker_shared[index] = mmap(NULL, CPU_ACCEL_MAP_SIZE,
+					    PROT_READ, MAP_SHARED, handle.fd,
+					    domain_config.mmap_tokens[index]);
+		if (worker_shared[index] == MAP_FAILED) {
+			perror("map SMP worker telemetry");
+			goto out_domain;
+		}
+	}
+	if (cpu_accel_domain_start(&handle) < 0) {
+		perror("start SMP accelerator domain");
+		goto out_domain;
+	}
+	domain_started = true;
+
+	for (unsigned int index = 0; index < cpu_count; index++) {
+		char arguments[11][24];
+		char *const worker_argv[] = {
+			"/proc/self/exe", "--cpu-accel-smp-user-worker",
+			arguments[0], arguments[1], arguments[2], arguments[3],
+			arguments[4], arguments[5], arguments[6], arguments[7],
+			arguments[8], arguments[9], arguments[10], "-", NULL,
+		};
+		int fd_flags = fcntl(handle.fd, F_GETFD);
+
+		snprintf(arguments[0], sizeof(arguments[0]), "%d", handle.fd);
+		snprintf(arguments[1], sizeof(arguments[1]), "%u", cpus[index]);
+		snprintf(arguments[2], sizeof(arguments[2]), "%u",
+			 requested->workload);
+		snprintf(arguments[3], sizeof(arguments[3]), "%u",
+			 domain_config.flags);
+		snprintf(arguments[4], sizeof(arguments[4]), "%llu",
+			 (unsigned long long)requested->duration_ns);
+		snprintf(arguments[5], sizeof(arguments[5]), "%llu",
+			 (unsigned long long)requested->period_ns);
+		snprintf(arguments[6], sizeof(arguments[6]), "%llu",
+			 (unsigned long long)domain_config.mmap_tokens[index]);
+		snprintf(arguments[7], sizeof(arguments[7]), "%llu",
+			 (unsigned long long)regions[index].create.mmap_token);
+		snprintf(arguments[8], sizeof(arguments[8]), "%llu",
+			 (unsigned long long)regions[index].create.size_bytes);
+		snprintf(arguments[9], sizeof(arguments[9]), "%llu",
+			 (unsigned long long)regions[index].ref.epoch);
+		snprintf(arguments[10], sizeof(arguments[10]), "%llu",
+			 (unsigned long long)(index == fail_worker ? 16 : 0));
+
+		children[index] = fork();
+		if (children[index] < 0) {
+			perror("fork SMP user accelerator");
+			goto out_stop;
+		}
+		if (!children[index]) {
+			if (close_worker_fds(handle.fd) < 0 ||
+			    fd_flags < 0 ||
+			    fcntl(handle.fd, F_SETFD,
+				  fd_flags & ~FD_CLOEXEC) < 0) {
+				perror("prepare SMP accelerator worker");
+				_exit(1);
+			}
+			if (pin_cpu(cpus[index]) < 0) {
+				perror("pin SMP user accelerator");
+				_exit(1);
+			}
+			execve("/proc/self/exe", worker_argv,
+			       (char *const[]){ NULL });
+			perror("exec isolated SMP accelerator worker");
+			_exit(127);
+		}
+	}
+	deadline = (uint64_t)time(NULL) + requested->duration_ns / 1000000000ULL + 5;
+	for (;;) {
+		if (cpu_accel_domain_status(&handle, &domain_status) < 0) {
+			perror("get SMP accelerator status");
+			goto out_stop;
+		}
+		if (domain_status.state == CPU_ACCEL_STATE_RUNNING)
+			break;
+		if (domain_status.state == CPU_ACCEL_STATE_ERROR) {
+			errno = EIO;
+			perror("SMP accelerator domain failed to start");
+			goto out_stop;
+		}
+		if ((uint64_t)time(NULL) >= deadline) {
+			errno = ETIMEDOUT;
+			perror("wait for SMP accelerator domain");
+			goto out_stop;
+		}
+		nanosleep(&poll_delay, NULL);
+	}
+
+	run_delay.tv_sec = requested->duration_ns / 1000000000ULL;
+	run_delay.tv_nsec = requested->duration_ns % 1000000000ULL;
+	while (nanosleep(&run_delay, &run_delay) && errno == EINTR) {
+		if (interrupted)
+			break;
+	}
+	if (cpu_accel_stop(&handle) < 0 && errno != EALREADY) {
+		perror("stop SMP accelerator domain");
+		goto out_stop;
+	}
+
+	deadline = (uint64_t)time(NULL) + 5;
+	for (;;) {
+		if (cpu_accel_domain_status(&handle, &domain_status) < 0) {
+			perror("get SMP accelerator terminal status");
+			goto out_stop;
+		}
+		if (domain_status.terminal_workers == cpu_count ||
+		    domain_status.state == CPU_ACCEL_STATE_ERROR)
+			break;
+		if ((uint64_t)time(NULL) >= deadline) {
+			errno = ETIMEDOUT;
+			perror("wait for SMP accelerator terminal state");
+			goto out_stop;
+		}
+		nanosleep(&poll_delay, NULL);
+	}
+
+	ret = 0;
+	for (unsigned int index = 0; index < cpu_count; index++) {
+		int status;
+		bool child_failed;
+
+		child_failed = waitpid(children[index], &status, 0) !=
+			children[index] ||
+			(WIFEXITED(status) ? WEXITSTATUS(status) : 1);
+		if (child_failed) {
+			fprintf(stderr, "SMP user accelerator %u failed\n",
+				index);
+			if (!expected_failure || index != fail_worker)
+				ret = 1;
+		}
+		children[index] = 0;
+	}
+	if (cpu_accel_domain_status(&handle, &domain_status) < 0) {
+		perror("get final SMP accelerator status");
+		ret = 1;
+	}
+	if (expected_failure) {
+		if (domain_status.state != CPU_ACCEL_STATE_ERROR ||
+		    domain_status.terminal_workers != cpu_count ||
+		    handle.shared->mode != CPU_ACCEL_MODE_LINUX)
+			ret = 1;
+	}
+
+out_stop:
+	if (domain_started) {
+		(void)cpu_accel_stop(&handle);
+		for (unsigned int index = 0; index < cpu_count; index++) {
+			if (children[index] > 0) {
+				int status;
+
+				(void)waitpid(children[index], &status, 0);
+				children[index] = 0;
+			}
+		}
+	}
+	if (expected_failure) {
+		if (cpu_accel_domain_status(&handle, &domain_status) == 0 &&
+		    domain_status.state == CPU_ACCEL_STATE_ERROR &&
+		    domain_status.terminal_workers == cpu_count &&
+		    handle.shared->mode == CPU_ACCEL_MODE_LINUX)
+			ret = 0;
+		else
+			ret = 1;
+	}
+out_domain:
+	if (domain_configured && cpu_accel_exit(&handle) < 0) {
+		perror("exit SMP accelerator domain");
+		ret = 1;
+	}
+	if (domain_configured && cpu_accel_reset(&handle) < 0) {
+		perror("reset SMP accelerator domain");
+		ret = 1;
+	}
+	print_status((struct cpu_accel_shared *)handle.shared, NULL,
+		     requested->work_bytes);
+	for (unsigned int index = 0; index < cpu_count; index++) {
+		const struct cpu_accel_workload_region *region =
+			regions[index].mapping;
+		const struct cpu_accel_shared *shared =
+			worker_shared[index];
+		uint64_t total = cpu_accel_hist_total(region);
+
+		printf("worker=%u cpu=%u state=%u result=%d samples=%"
+		       PRIu64 " hist_total=%" PRIu64
+		       " hist_p50_ns=%" PRIu64
+		       " hist_p99_ns=%" PRIu64
+			       " max_lateness_ns=%" PRIu64
+		       " context_switches=%" PRIu64
+		       " migration_detected=%u"
+		       " user_escape_count=%" PRIu64 "\n",
+		       index, cpus[index],
+		       domain_status.worker_states[index],
+		       domain_status.worker_results[index],
+		       region->samples_produced, total,
+		       cpu_accel_hist_percentile(region, total, 500),
+		       cpu_accel_hist_percentile(region, total, 990),
+			       region->max_lateness_ns,
+		       (uint64_t)shared->context_switches,
+		       shared->migration_detected,
+		       (uint64_t)shared->user_escape_count);
+		if (expected_failure) {
+			if (index == fail_worker ?
+			    !domain_status.worker_results[index] :
+			    domain_status.worker_results[index])
+				ret = 1;
+		} else if (domain_status.worker_states[index] !=
+			   CPU_ACCEL_STATE_COMPLETE ||
+			   domain_status.worker_results[index] ||
+			   !region->samples_produced ||
+			   region->completion_sequence != 1 ||
+			   shared->context_switches ||
+			   shared->migration_detected ||
+			   shared->user_escape_count) {
+			ret = 1;
+		}
+	}
+	if ((!expected_failure &&
+	     domain_status.state != CPU_ACCEL_STATE_COMPLETE) ||
+	    handle.shared->mode != CPU_ACCEL_MODE_LINUX)
+		ret = 1;
+out_regions:
+	for (unsigned int index = 0; index < cpu_count; index++) {
+		if (worker_shared[index] && worker_shared[index] != MAP_FAILED)
+			munmap(worker_shared[index], CPU_ACCEL_MAP_SIZE);
+		struct cpu_accel_region_info region_info = {
+			.region_id = regions[index].create.region_id,
+		};
+
+		if (regions[index].mapping && regions[index].mapping != MAP_FAILED)
+			munmap(regions[index].mapping,
+			       regions[index].create.size_bytes);
+		if (regions[index].create.region_id) {
+			struct cpu_accel_region_ref destroy_ref = {
+				.region_id = regions[index].create.region_id,
+			};
+
+			if (cpu_accel_region_get_info(&handle, &region_info) == 0 &&
+			    region_info.state == CPU_ACCEL_REGION_ATTACHED) {
+				struct cpu_accel_region_ref detach_ref = {
+					.region_id = region_info.region_id,
+					.epoch = region_info.epoch,
+				};
+
+				(void)cpu_accel_region_detach(&handle,
+							      &detach_ref);
+				(void)cpu_accel_region_get_info(&handle,
+								&region_info);
+			}
+			destroy_ref.epoch = region_info.epoch;
+			if (cpu_accel_region_destroy(&handle, &destroy_ref) < 0) {
+				perror("destroy SMP workload region");
+				ret = 1;
+			}
+		}
+	}
+out_close:
+	cpu_accel_close(&handle);
+	return ret;
+}
+
 static int run_workload(const char *program, int argc, char **argv)
 {
 	struct cpu_accel_config config = {
@@ -1978,7 +2491,11 @@ static int run_workload(const char *program, int argc, char **argv)
 	uint64_t escape_attempts = 1;
 	const char *reclaim_file = NULL;
 	const char *worker_cgroup = NULL;
+	unsigned int smp_cpus[CPU_ACCEL_MAX_WORKERS];
+	unsigned int smp_cpu_count = 0;
+	unsigned int smp_fail_worker = UINT_MAX;
 	unsigned int timeout_ms;
+	bool cpu_selected = false;
 	int persistent = 0;
 	int require_quiescent = 0;
 	int quarantine_irqs = 0;
@@ -1998,6 +2515,23 @@ static int run_workload(const char *program, int argc, char **argv)
 				return 2;
 			}
 			config.cpu = value;
+			cpu_selected = true;
+		} else if (!strcmp(argv[index], "--cpus") &&
+			   index + 1 < argc) {
+			if (parse_cpu_list(argv[++index], smp_cpus,
+					   &smp_cpu_count)) {
+				fprintf(stderr, "%s: invalid CPU list\n", program);
+				return 2;
+			}
+		} else if (!strcmp(argv[index], "--smp-fail-worker") &&
+			   index + 1 < argc) {
+			if (parse_u64(argv[++index], &value) ||
+			    value >= CPU_ACCEL_MAX_WORKERS) {
+				fprintf(stderr, "%s: invalid SMP failure worker\n",
+					program);
+				return 2;
+			}
+			smp_fail_worker = value;
 		} else if (!strcmp(argv[index], "--duration-ms") &&
 			   index + 1 < argc) {
 			if (parse_u64(argv[++index], &value) ||
@@ -2091,6 +2625,25 @@ static int run_workload(const char *program, int argc, char **argv)
 		config.flags |= CPU_ACCEL_FLAG_REQUIRE_QUIESCENT;
 	if (quarantine_irqs)
 		config.flags |= CPU_ACCEL_FLAG_IRQ_QUARANTINE;
+	if (smp_cpu_count) {
+		if (cpu_selected || config.workload !=
+		    CPU_ACCEL_WORKLOAD_USER_OSLAT || worker_cgroup ||
+		    escape_after_ms) {
+			fprintf(stderr,
+				"%s: --cpus requires user-oslat without the single-CPU or escape options\n",
+				program);
+			return 2;
+		}
+		if (smp_fail_worker != UINT_MAX &&
+		    (smp_cpu_count < 2 || smp_fail_worker >= smp_cpu_count)) {
+			fprintf(stderr,
+				"%s: --smp-fail-worker requires a multi-CPU domain containing that worker\n",
+				program);
+			return 2;
+		}
+		return run_smp_user_oslat(&config, smp_cpus, smp_cpu_count,
+					  smp_fail_worker);
+	}
 	if (escape_after_ms && config.workload != CPU_ACCEL_WORKLOAD_USER_CYCLICTEST &&
 	    config.workload != CPU_ACCEL_WORKLOAD_USER_HANG &&
 	    config.workload != CPU_ACCEL_WORKLOAD_USER_RECLAIM &&
@@ -2196,6 +2749,8 @@ int main(int argc, char **argv)
 	}
 	if (!strcmp(argv[1], "--cpu-accel-user-worker"))
 		return run_user_worker(argc, argv);
+	if (!strcmp(argv[1], "--cpu-accel-smp-user-worker"))
+		return run_smp_user_worker(argc, argv);
 	if (!strcmp(argv[1], "run"))
 		return run_workload(argv[0], argc - 2, argv + 2);
 	if (strcmp(argv[1], "exit") && strcmp(argv[1], "stop") &&

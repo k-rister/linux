@@ -5,10 +5,11 @@
 #include <linux/ioctl.h>
 #include <linux/types.h>
 
-/* ABI 24 adds explicit version negotiation and architecture extension commands. */
-#define CPU_ACCEL_ABI_VERSION		24
+/* ABI 25 adds experimental static multi-worker domain commands. */
+#define CPU_ACCEL_ABI_VERSION		25
 #define CPU_ACCEL_ABI_MIN_VERSION	23
 #define CPU_ACCEL_MAP_SIZE		(64U * 1024U)
+#define CPU_ACCEL_MAX_WORKERS		16U
 #define CPU_ACCEL_MAX_WORK_BYTES	(1ULL * 1024ULL * 1024ULL * 1024ULL)
 #define CPU_ACCEL_MAX_MEMMOVE_WORK_BYTES	(64ULL * 1024ULL)
 
@@ -288,6 +289,52 @@ struct cpu_accel_region_info {
 	__u64 epoch;
 };
 
+struct cpu_accel_domain_config {
+	__u32 cpu_count;
+	__u32 flags;
+	__u32 workload;
+	__u32 reserved;
+	__u64 work_bytes;
+	__u64 duration_ns;
+	__u64 period_ns;
+	__u32 cpus[CPU_ACCEL_MAX_WORKERS];
+	__u32 reserved_words[4];
+	__u64 mmap_tokens[CPU_ACCEL_MAX_WORKERS];
+};
+
+struct cpu_accel_domain_worker_join {
+	__u64 user_entry_ip;
+	__u64 user_stack_top;
+	__u64 user_stack_bytes;
+	__u64 user_image_start;
+	__u64 user_image_bytes;
+	__u64 user_arg;
+	__u64 user_escape_ip;
+	__u64 user_reclaim_page;
+	__u32 cpu;
+	__u32 worker_index;
+	__u32 reserved;
+};
+
+struct cpu_accel_domain_worker_escape {
+	__u32 worker_index;
+	__u32 reserved;
+};
+
+struct cpu_accel_domain_status {
+	__u32 state;
+	__u32 worker_count;
+	__u32 joined_workers;
+	__u32 active_workers;
+	__u32 terminal_workers;
+	__s32 result;
+	__u32 reserved;
+	__u64 start_ns;
+	__u64 end_ns;
+	__u32 worker_states[CPU_ACCEL_MAX_WORKERS];
+	__s32 worker_results[CPU_ACCEL_MAX_WORKERS];
+};
+
 #define CPU_ACCEL_IOC_MAGIC	'C'
 #define CPU_ACCEL_IOC_CONFIG	_IOW(CPU_ACCEL_IOC_MAGIC, 0x00, \
 						struct cpu_accel_config)
@@ -318,5 +365,15 @@ struct cpu_accel_region_info {
 						struct cpu_accel_arch_telemetry)
 #define CPU_ACCEL_IOC_X86_IMAGE_ADMISSION	_IOWR(CPU_ACCEL_IOC_MAGIC, 0x10, \
 						struct cpu_accel_x86_image_admission)
+#define CPU_ACCEL_IOC_DOMAIN_CONFIG	_IOWR(CPU_ACCEL_IOC_MAGIC, 0x11, \
+							struct cpu_accel_domain_config)
+#define CPU_ACCEL_IOC_DOMAIN_START	_IO(CPU_ACCEL_IOC_MAGIC, 0x12)
+#define CPU_ACCEL_IOC_DOMAIN_WORKER_JOIN	_IOWR(CPU_ACCEL_IOC_MAGIC, 0x13, \
+							struct cpu_accel_domain_worker_join)
+#define CPU_ACCEL_IOC_DOMAIN_STATUS	_IOWR(CPU_ACCEL_IOC_MAGIC, 0x14, \
+							struct cpu_accel_domain_status)
+
+#define CPU_ACCEL_IOC_DOMAIN_WORKER_ESCAPE	_IOW(CPU_ACCEL_IOC_MAGIC, 0x15, \
+							struct cpu_accel_domain_worker_escape)
 
 #endif /* _UAPI_LINUX_CPU_ACCEL_H */

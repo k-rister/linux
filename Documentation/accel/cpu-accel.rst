@@ -250,15 +250,28 @@ The companion SDK in ``tools/cpu_accel`` wraps the device and
     --period-us 1000 --workload user-region --work-bytes 4096
   sudo tools/cpu_accel/cpu-accel-testctl run --cpu 1 --duration-ms 100 \
     --period-us 1000 --workload user-oslat
+  sudo tools/cpu_accel/cpu-accel-testctl run --cpus 5,7 \
+    --duration-ms 1000 --period-us 1000 --workload user-oslat
   sudo tools/cpu_accel/cpu-accel-testctl run --cpu 1 --duration-ms 5000 \
     --period-us 1000 --workload user-hang --escape-after-ms 20
   sudo tools/cpu_accel/cpu-accel-testctl run --cpu 1 --duration-ms 100 \
     --period-us 1000 --quarantine-irqs
 
 ABI 23 remains the minimum supported compatibility version. The SDK requests
-ABI 24 by default and uses ``poll()`` for terminal-state waits. Set
-``CPU_ACCEL_ABI_VERSION=23`` or ``CPU_ACCEL_ABI_VERSION=24`` to force a
-specific ABI for testing.
+the current ABI by default and uses ``poll()`` for terminal-state waits. Set
+``CPU_ACCEL_ABI_VERSION=23``, ``CPU_ACCEL_ABI_VERSION=24``, or
+``CPU_ACCEL_ABI_VERSION=25`` to force a specific ABI for testing.
+
+ABI 25 adds the experimental static SMP domain. ``--cpus`` accepts a
+comma-separated list of up to 16 distinct non-zero online CPUs and currently
+requires ``--workload user-oslat``. The manager creates one telemetry region
+and one per-worker shared mapping for every CPU. Workers join from their own
+pinned, sealed processes; activation, stop, failure, and rollback are
+domain-wide. ``--smp-fail-worker`` is a test-only fault selector that makes
+one sealed worker exit abnormally after producing samples. The Phase 10 gate
+uses it to verify domain-wide failure propagation and is available with::
+
+  sudo make -C tools/cpu_accel test-phase10-smp-gate
 
 Opening the device requires ``CAP_SYS_ADMIN``. The device-node mode remains a
 defense-in-depth restriction rather than the permission contract.
@@ -558,7 +571,7 @@ address-space/TLB ownership policy, including completion before eligible
 page reuse and conservative synchronous paths for other cases. Same-mm range
 flushes and page-table release remain synchronous; runtime ``INVLPGB``
 validation awaits AMD EPYC 7003-or-later hardware. The current roadmap focus is
-Phase 8 adversarial isolation validation. A controller may retry after
+Phase 10 SMP accelerator domains. A controller may retry after
 ``TIMEOUT`` or ``FAILED``; it must not treat those states as a return to Linux.
 The proposed protected address-space and shared-memory contract is documented
 in :doc:`cpu-accel-memory`; the internal region/epoch model and the first

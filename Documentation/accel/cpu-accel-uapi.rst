@@ -5,10 +5,10 @@ CPU accelerator UAPI
 ========================
 
 This document is the normative contract for the CPU accelerator control UAPI.
-The current ABI is 24 and the minimum supported ABI is 23. The ABI 24
-control plane is frozen. The x86 ring-3 workload and image-admission
-extension remains experimental and is not part of the frozen control-plane
-contract.
+The current ABI is 25 and the minimum supported ABI is 23. ABI 23 and ABI 24
+are frozen compatibility surfaces. The x86 ring-3 workload, image-admission,
+and ABI 25 static-domain extensions remain experimental and are not part of
+the frozen control-plane contract.
 
 Object model
 ============
@@ -58,6 +58,30 @@ are compatibility-critical. ABI 24 adds commands ``0x0d`` through ``0x10``:
 ABI negotiation, architecture telemetry, and x86 image admission. The mapping
 layout and fingerprint are unchanged from ABI 23.
 
+ABI 25 adds commands ``0x11`` through ``0x15`` for domain configuration,
+domain start, user-worker join, worker-targeted user escape, and domain
+status. It also defines the per-worker telemetry mapping tokens returned by
+domain configuration. ABI 25 does not change ``struct cpu_accel_config``,
+``struct cpu_accel_shared``, or any ABI 23/24 command encoding.
+
+An ABI 25 domain contains a fixed set of up to ``CPU_ACCEL_MAX_WORKERS``
+CPUs. Admission rejects repeated CPUs, CPU 0, an offline CPU, multiple NUMA
+nodes, incomplete SMT sibling sets, and a set that leaves no online Linux
+housekeeping CPU. The CPU set is immutable while configured. Normal stop,
+worker failure, watchdog expiry, manager death, and activation rollback are
+domain-wide. No partially active or mixed Linux/accelerator domain is a
+success state.
+
+For a user workload, the manager configures common domain parameters and
+creates one attached workload region per worker. Each worker process receives
+the descriptor, is pinned to its selected CPU, maps its per-worker telemetry
+token and region, and calls ``CPU_ACCEL_IOC_DOMAIN_WORKER_JOIN`` from its own
+sealed memory map. The manager never remotely enters another task's address
+space. The legacy ``START`` and ``CONFIG`` commands are rejected after ABI 25
+is selected; ABI 25 callers use the new domain commands. The ABI 25 escape
+command targets one joined worker by index. The ABI 23 ``USER_ESCAPE``
+command continues to target worker 0 and preserves its original encoding.
+
 Architecture telemetry is a separate extension object. The x86 image-admission
 object contains numeric virtual addresses and is architecture-specific. It is
 not portable and is not part of the frozen control-plane contract. A production
@@ -67,11 +91,14 @@ frozen.
 State and result contract
 =========================
 
-The shared control mapping is authoritative for state, terminal result fields,
-and workload telemetry. ``poll()`` is a control-plane optimization only. It
-reports ``EPOLLIN | EPOLLRDNORM`` after a terminal state is published and never
-replaces shared-memory state. Applications may instead poll the mapping
-directly.
+For ABI 23 and ABI 24, the shared control mapping is authoritative for state,
+terminal result fields, and workload telemetry. For ABI 25, the legacy shared
+mapping is a domain summary and each worker has a separate read-only telemetry
+mapping. ``CPU_ACCEL_IOC_DOMAIN_STATUS`` reports joined, active, terminal, and
+per-worker state and result counts. ``poll()`` is a control-plane optimization
+only. It reports ``EPOLLIN | EPOLLRDNORM`` after the domain summary reaches a
+terminal state and never replaces shared-memory state. Applications may
+instead poll the mapping directly.
 
 Terminal states are ``CPU_ACCEL_STATE_COMPLETE``, ``STOPPED``, ``ERROR``,
 ``WATCHDOG``, and ``ESCAPED``. A controller may retry after ``ERROR``,
@@ -91,7 +118,7 @@ Compatibility matrix
    * - Combination
      - Required behavior
      - Evidence
-   * - ABI 23 client on ABI 24 kernel
+   * - ABI 23 client on ABI 25 kernel
      - Uses only ABI 23 commands; observes selected ABI 23 and unchanged
        mapping layout, structure size, and fingerprint.
      - ``tools/cpu_accel/test-uapi-abi23-compat.c``
@@ -99,12 +126,16 @@ Compatibility matrix
      - Sees ``ENOTTY`` from ABI info, falls back to ABI 23, and maps
        successfully.
      - ``tools/cpu_accel/test-uapi-sdk-fallback.c`` with the test ioctl shim
-   * - ABI 23 forced SDK on ABI 24 kernel
+   * - ABI 23 forced SDK on ABI 25 kernel
      - Selects ABI 23 and completes the workload.
      - Phase 9 freeze gate
-   * - ABI 24 SDK on ABI 24 kernel
+   * - ABI 24 SDK on ABI 25 kernel
      - Selects ABI 24 and completes the workload with no latency regression.
      - Phase 9 freeze gate
+   * - ABI 25 SDK on ABI 25 kernel
+     - Selects ABI 25, configures a multi-CPU static domain, and completes
+       one independent user-oslat worker per selected CPU.
+     - Phase 10 SMP gate
 
 The direct ABI 23 client was runtime-tested against the ABI 24 kernel. The ABI
 24 SDK fallback path was validated with a test-only ``LD_PRELOAD`` ioctl shim

@@ -94,6 +94,9 @@ test-phase9-freeze-gate: cpu-accel-testctl test-uapi-contract test-uapi-lifecycl
 	test-uapi-abi23-compat test-uapi-sdk-fallback
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-phase9-freeze-gate.sh
 
+test-phase10-smp-gate: cpu-accel-testctl test-uapi-lifecycle
+	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-phase10-smp-gate.sh
+
 test-hotplug-race: cpu-accel-testctl
 	CPU_ACCEL_TESTCTL=./cpu-accel-testctl sh ./test-hotplug-race.sh
 

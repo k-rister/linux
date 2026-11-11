@@ -133,8 +133,8 @@ int cpu_accel_attach_fd(struct cpu_accel_handle *handle, int fd)
 
 	handle->fd = fd;
 	handle->shared = mapping;
-	if ((handle->shared->abi_version != CPU_ACCEL_ABI_VERSION &&
-	     handle->shared->abi_version != CPU_ACCEL_ABI_MIN_VERSION) ||
+	if (handle->shared->abi_version < CPU_ACCEL_ABI_MIN_VERSION ||
+	    handle->shared->abi_version > CPU_ACCEL_ABI_VERSION ||
 	    handle->shared->struct_size != sizeof(struct cpu_accel_shared) ||
 	    handle->shared->layout_fingerprint !=
 		    CPU_ACCEL_LAYOUT_FINGERPRINT()) {
@@ -145,6 +145,25 @@ int cpu_accel_attach_fd(struct cpu_accel_handle *handle, int fd)
 		return -1;
 	}
 
+	return 0;
+}
+
+int cpu_accel_attach_worker_fd(struct cpu_accel_handle *handle, int fd)
+{
+	struct cpu_accel_abi_info info;
+
+	memset(handle, 0, sizeof(*handle));
+	if (fd < 0) {
+		errno = EBADF;
+		return -1;
+	}
+	if (cpu_accel_ioctl(fd, CPU_ACCEL_IOC_GET_ABI_INFO, &info) < 0)
+		return -1;
+	if (info.current_abi < CPU_ACCEL_ABI_VERSION) {
+		errno = ENOTSUP;
+		return -1;
+	}
+	handle->fd = fd;
 	return 0;
 }
 
@@ -177,11 +196,14 @@ int cpu_accel_x86_image_admission(struct cpu_accel_handle *handle,
 
 void cpu_accel_close(struct cpu_accel_handle *handle)
 {
+	if (handle->worker_shared && handle->worker_shared != MAP_FAILED)
+		munmap((void *)handle->worker_shared, CPU_ACCEL_MAP_SIZE);
 	if (handle->shared && handle->shared != MAP_FAILED)
 		munmap((void *)handle->shared, CPU_ACCEL_MAP_SIZE);
 	if (handle->fd >= 0)
 		close(handle->fd);
 	handle->shared = NULL;
+	handle->worker_shared = NULL;
 	handle->fd = -1;
 }
 
@@ -215,6 +237,58 @@ int cpu_accel_user_escape(struct cpu_accel_handle *handle)
 int cpu_accel_reset(struct cpu_accel_handle *handle)
 {
 	return cpu_accel_ioctl(handle->fd, CPU_ACCEL_IOC_RESET, NULL);
+}
+
+int cpu_accel_domain_config(struct cpu_accel_handle *handle,
+			    struct cpu_accel_domain_config *config)
+{
+	return cpu_accel_ioctl(handle->fd, CPU_ACCEL_IOC_DOMAIN_CONFIG,
+			       config);
+}
+
+int cpu_accel_domain_start(struct cpu_accel_handle *handle)
+{
+	return cpu_accel_ioctl(handle->fd, CPU_ACCEL_IOC_DOMAIN_START, NULL);
+}
+
+int cpu_accel_domain_worker_join(
+	struct cpu_accel_handle *handle,
+	struct cpu_accel_domain_worker_join *join)
+{
+	return cpu_accel_ioctl(handle->fd, CPU_ACCEL_IOC_DOMAIN_WORKER_JOIN,
+			       join);
+}
+
+int cpu_accel_domain_worker_escape(
+	struct cpu_accel_handle *handle,
+	struct cpu_accel_domain_worker_escape *escape)
+{
+	return cpu_accel_ioctl(handle->fd, CPU_ACCEL_IOC_DOMAIN_WORKER_ESCAPE,
+			       escape);
+}
+
+int cpu_accel_domain_status(struct cpu_accel_handle *handle,
+			    struct cpu_accel_domain_status *status)
+{
+	return cpu_accel_ioctl(handle->fd, CPU_ACCEL_IOC_DOMAIN_STATUS,
+			       status);
+}
+
+volatile struct cpu_accel_shared *cpu_accel_worker_mmap(
+	struct cpu_accel_handle *handle, uint64_t mmap_token)
+{
+	volatile struct cpu_accel_shared *mapping;
+
+	if (handle->worker_shared) {
+		errno = EALREADY;
+		return NULL;
+	}
+	mapping = mmap(NULL, CPU_ACCEL_MAP_SIZE, PROT_READ, MAP_SHARED,
+		       handle->fd, mmap_token);
+	if (mapping == MAP_FAILED)
+		return NULL;
+	handle->worker_shared = mapping;
+	return mapping;
 }
 
 int cpu_accel_get_capabilities(struct cpu_accel_handle *handle,

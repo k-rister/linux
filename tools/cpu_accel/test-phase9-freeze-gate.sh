@@ -44,7 +44,8 @@ done
 
 CPU_ACCEL_UAPI_CPU=$target_cpu "$script_dir/test-uapi-contract" || \
 	fail "ABI contract test failed"
-CPU_ACCEL_UAPI_CPU=$target_cpu "$script_dir/test-uapi-lifecycle" || \
+CPU_ACCEL_ABI_VERSION=24 CPU_ACCEL_UAPI_CPU=$target_cpu \
+	"$script_dir/test-uapi-lifecycle" || \
 	fail "UAPI lifecycle test failed"
 CPU_ACCEL_UAPI_CPU=$target_cpu "$script_dir/test-uapi-abi23-compat" || \
 	fail "ABI 23 client compatibility test failed"

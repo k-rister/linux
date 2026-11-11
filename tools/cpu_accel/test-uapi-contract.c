@@ -83,15 +83,74 @@ static void test_abi_negotiation(struct cpu_accel_handle *handle)
 	}
 	select.requested_abi = CPU_ACCEL_ABI_VERSION;
 	if (cpu_accel_set_abi_version(handle, &select) < 0)
-		fail("select ABI 24");
+		fail("select current ABI");
 	if (select.selected_abi != CPU_ACCEL_ABI_VERSION) {
-		fprintf(stderr, "ABI 24 was not selected\n");
+		fprintf(stderr, "current ABI was not selected\n");
 		exit(1);
 	}
 	if (handle->shared->abi_version != CPU_ACCEL_ABI_VERSION) {
-		fprintf(stderr, "shared mapping did not report ABI 24\n");
+		fprintf(stderr, "shared mapping did not report current ABI\n");
 		exit(1);
 	}
+}
+
+static void test_invalid_domain_config(struct cpu_accel_handle *handle,
+				       unsigned int cpu)
+{
+	struct cpu_accel_domain_config config = {
+		.cpu_count = 1,
+		.flags = CPU_ACCEL_FLAG_IRQS_OFF,
+		.workload = CPU_ACCEL_WORKLOAD_TIMESTAMP,
+		.duration_ns = 100000000,
+		.period_ns = 1000000,
+	};
+	struct cpu_accel_domain_status status = {};
+
+	if (!cpu)
+		return;
+	config.cpus[0] = cpu;
+	config.reserved = 1;
+	errno = 0;
+	expect_ioctl_failure("configure domain with reserved word",
+			     cpu_accel_domain_config(handle, &config), EINVAL);
+	config.reserved = 0;
+	config.reserved_words[0] = 1;
+	errno = 0;
+	expect_ioctl_failure("configure domain with reserved array word",
+			     cpu_accel_domain_config(handle, &config), EINVAL);
+	config.reserved_words[0] = 0;
+
+	status.reserved = 1;
+	errno = 0;
+	expect_ioctl_failure("get domain status with reserved word",
+			     cpu_accel_domain_status(handle, &status), EINVAL);
+	config.cpu_count = 2;
+	config.cpus[1] = cpu;
+	errno = 0;
+	expect_ioctl_failure("configure domain with repeated CPU",
+			     cpu_accel_domain_config(handle, &config), EINVAL);
+	config.cpus[0] = 0;
+	config.cpus[1] = cpu;
+	errno = 0;
+	expect_ioctl_failure("configure domain with CPU 0",
+			     cpu_accel_domain_config(handle, &config), EINVAL);
+}
+
+static void test_invalid_domain_worker_escape(struct cpu_accel_handle *handle)
+{
+	struct cpu_accel_domain_worker_escape escape = {};
+
+	escape.reserved = 1;
+	errno = 0;
+	expect_ioctl_failure("escape domain worker with reserved word",
+			     cpu_accel_domain_worker_escape(handle, &escape),
+			     EINVAL);
+	escape.reserved = 0;
+	escape.worker_index = CPU_ACCEL_MAX_WORKERS;
+	errno = 0;
+	expect_ioctl_failure("escape invalid domain worker",
+			     cpu_accel_domain_worker_escape(handle, &escape),
+			     EINVAL);
 }
 
 static void test_invalid_abi_selection(struct cpu_accel_handle *handle)
@@ -214,7 +273,25 @@ int main(void)
 		fail("open cpu accelerator");
 	test_abi_negotiation(&handle);
 	test_invalid_abi_selection(&handle);
+	{
+		struct cpu_accel_abi_select select = {
+			.requested_abi = CPU_ACCEL_ABI_VERSION - 1,
+		};
+
+		if (cpu_accel_set_abi_version(&handle, &select) < 0)
+			fail("select ABI 24 for legacy contract");
+	}
 	test_invalid_config(&handle, cpu);
+	{
+		struct cpu_accel_abi_select select = {
+			.requested_abi = CPU_ACCEL_ABI_VERSION,
+		};
+
+		if (cpu_accel_set_abi_version(&handle, &select) < 0)
+			fail("select ABI 25 for domain contract");
+	}
+	test_invalid_domain_config(&handle, cpu);
+	test_invalid_domain_worker_escape(&handle);
 	test_invalid_region(&handle);
 	test_unknown_ioctl(&handle);
 	test_arch_telemetry(&handle);

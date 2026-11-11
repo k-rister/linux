@@ -21,6 +21,33 @@ static void fail(const char *message)
 	exit(1);
 }
 
+static bool terminal_state(uint32_t state)
+{
+	return state == CPU_ACCEL_STATE_COMPLETE ||
+		state == CPU_ACCEL_STATE_STOPPED ||
+		state == CPU_ACCEL_STATE_ERROR ||
+		state == CPU_ACCEL_STATE_WATCHDOG ||
+		state == CPU_ACCEL_STATE_ESCAPED;
+}
+
+static void set_activation_fail_worker(uint32_t worker_index)
+{
+	const char *path =
+		"/sys/module/cpu_accel/parameters/domain_activation_fail_worker";
+	FILE *parameter = fopen(path, "w");
+	int write_result;
+	int close_result;
+
+	if (!parameter)
+		fail("set domain activation failure worker");
+	write_result = fprintf(parameter, "%u\n", worker_index);
+	close_result = fclose(parameter);
+	if (write_result < 0 || close_result) {
+		errno = errno ? errno : EIO;
+		fail("set domain activation failure worker");
+	}
+}
+
 static unsigned int test_target_cpu(void)
 {
 	cpu_set_t allowed;
@@ -45,6 +72,31 @@ static unsigned int test_target_cpu(void)
 			return cpu;
 	}
 	return 0;
+}
+
+static bool parse_smp_cpus(unsigned int cpus[2])
+{
+	const char *list = getenv("CPU_ACCEL_UAPI_SMP_CPUS");
+	char *end = NULL;
+	unsigned long first;
+	unsigned long second;
+
+	if (!list || !*list)
+		return false;
+	errno = 0;
+	first = strtoul(list, &end, 10);
+	if (errno || !end || *end != ',' || end == list ||
+	    first >= CPU_SETSIZE)
+		return false;
+	list = end + 1;
+	errno = 0;
+	second = strtoul(list, &end, 10);
+	if (errno || !end || *end || end == list || second >= CPU_SETSIZE ||
+	    !first || !second || first == second)
+		return false;
+	cpus[0] = first;
+	cpus[1] = second;
+	return true;
 }
 
 static int send_fd(int socket, int fd)
@@ -165,6 +217,130 @@ static void test_manager_crash(unsigned int cpu)
 	}
 	if (cpu_accel_reset(&handle) < 0)
 		fail("reset after manager crash");
+	cpu_accel_close(&handle);
+}
+
+static void test_smp_manager_crash(unsigned int cpus[2])
+{
+	struct cpu_accel_domain_config config = {
+		.cpu_count = 2,
+		.flags = CPU_ACCEL_FLAG_IRQS_OFF |
+			 CPU_ACCEL_FLAG_PERSISTENT,
+		.workload = CPU_ACCEL_WORKLOAD_TIMESTAMP,
+		.duration_ns = 5000000000ULL,
+		.period_ns = 1000000,
+	};
+	struct cpu_accel_domain_status status = {};
+	int pipes[2];
+	pid_t child;
+	char marker;
+	struct cpu_accel_handle handle;
+
+	config.cpus[0] = cpus[0];
+	config.cpus[1] = cpus[1];
+	if (pipe(pipes) < 0)
+		fail("create SMP manager crash pipe");
+	child = fork();
+	if (child < 0)
+		fail("fork SMP manager crash child");
+	if (!child) {
+		cpu_set_t manager_affinity;
+
+		close(pipes[0]);
+		CPU_ZERO(&manager_affinity);
+		CPU_SET(0, &manager_affinity);
+		if (sched_setaffinity(0, sizeof(manager_affinity),
+				      &manager_affinity) < 0)
+			fail("pin SMP manager crash child");
+		if (cpu_accel_open(&handle) < 0)
+			fail("open SMP manager crash device");
+		if (cpu_accel_domain_config(&handle, &config) < 0)
+			fail("configure SMP manager crash domain");
+		if (cpu_accel_domain_start(&handle) < 0)
+			fail("start SMP manager crash domain");
+		if (write(pipes[1], "R", 1) != 1)
+			fail("signal SMP manager crash start");
+		pause();
+		_exit(0);
+	}
+	close(pipes[1]);
+	if (read(pipes[0], &marker, 1) != 1 || marker != 'R')
+		fail("wait for SMP manager crash start");
+	close(pipes[0]);
+	if (kill(child, SIGKILL) < 0)
+		fail("kill SMP manager crash child");
+	if (waitpid(child, NULL, 0) < 0)
+		fail("reap SMP manager crash child");
+	if (cpu_accel_open(&handle) < 0)
+		fail("reopen after SMP manager crash");
+	if (cpu_accel_domain_status(&handle, &status) < 0)
+		fail("get SMP manager crash status");
+	if (status.worker_count != 2 || status.joined_workers != 2 ||
+	    status.terminal_workers != 2 ||
+	    !terminal_state(status.state) ||
+	    handle.shared->mode != CPU_ACCEL_MODE_LINUX) {
+		fprintf(stderr,
+			"SMP manager crash left invalid state %u mode %u workers %u/%u\n",
+			status.state, handle.shared->mode,
+			status.terminal_workers, status.worker_count);
+		exit(1);
+	}
+	if (cpu_accel_reset(&handle) < 0)
+		fail("reset after SMP manager crash");
+	cpu_accel_close(&handle);
+}
+
+static void test_smp_activation_rollback(unsigned int cpus[2])
+{
+	struct cpu_accel_domain_config config = {
+		.cpu_count = 2,
+		.flags = CPU_ACCEL_FLAG_IRQS_OFF |
+			 CPU_ACCEL_FLAG_PERSISTENT,
+		.workload = CPU_ACCEL_WORKLOAD_TIMESTAMP,
+		.duration_ns = 5000000000ULL,
+		.period_ns = 1000000,
+	};
+	struct cpu_accel_domain_status status = {};
+	struct cpu_accel_handle handle;
+	int start_result;
+	int start_errno;
+
+	config.cpus[0] = cpus[0];
+	config.cpus[1] = cpus[1];
+	if (cpu_accel_open(&handle) < 0)
+		fail("open SMP activation rollback device");
+	if (cpu_accel_domain_config(&handle, &config) < 0) {
+		cpu_accel_close(&handle);
+		fail("configure SMP activation rollback domain");
+	}
+	set_activation_fail_worker(1);
+	errno = 0;
+	start_result = cpu_accel_domain_start(&handle);
+	start_errno = errno;
+	set_activation_fail_worker(UINT32_MAX);
+	if (start_result == 0)
+		(void)cpu_accel_stop(&handle);
+	if (cpu_accel_domain_status(&handle, &status) < 0) {
+		cpu_accel_close(&handle);
+		fail("get SMP activation rollback status");
+	}
+	if (start_result == 0 || start_errno != ENOMEM ||
+	    status.state != CPU_ACCEL_STATE_ERROR ||
+	    status.worker_count != 2 || status.terminal_workers != 2 ||
+	    handle.shared->mode != CPU_ACCEL_MODE_LINUX) {
+		fprintf(stderr,
+			"SMP activation rollback failed with errno %d state %u mode %u\n",
+			start_errno, status.state, handle.shared->mode);
+		exit(1);
+	}
+	if (cpu_accel_exit(&handle) < 0) {
+		cpu_accel_close(&handle);
+		fail("exit SMP activation rollback domain");
+	}
+	if (cpu_accel_reset(&handle) < 0) {
+		cpu_accel_close(&handle);
+		fail("reset SMP activation rollback domain");
+	}
 	cpu_accel_close(&handle);
 }
 
@@ -293,6 +469,7 @@ static void test_fork_without_exec(void)
 int main(int argc, char **argv)
 {
 	unsigned int cpu = test_target_cpu();
+	unsigned int smp_cpus[2];
 
 	if (argc == 4 && !strcmp(argv[1], "--cpu-accel-exec-child")) {
 		struct cpu_accel_handle handle;
@@ -314,6 +491,11 @@ int main(int argc, char **argv)
 	if (argc != 1) {
 		fprintf(stderr, "unexpected arguments\n");
 		return 1;
+	}
+	if (parse_smp_cpus(smp_cpus)) {
+		test_smp_activation_rollback(smp_cpus);
+		test_smp_manager_crash(smp_cpus);
+		return 0;
 	}
 	test_manager_crash(cpu);
 	test_descriptor_passing();

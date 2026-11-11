@@ -414,7 +414,32 @@ The remaining optional classes are not applicable on this boot:
 | `irq_storm` | Not applicable without an isolated test NIC | No runtime run |
 | Broader lifecycle rows | Source-classified in `Documentation/accel/cpu-accel.rst`; runtime runs remain outside this WCL report | `Documentation/accel/cpu-accel.rst` Phase 8 matrix |
 
-## Known limitations and open items
+## Phase 8 closure disposition
+
+Phase 8 is closed for the tested x86 prototype on Simon with explicit
+hardware and environment deferrals. The closure basis is:
+
+- Every activity row in `Documentation/accel/cpu-accel.rst` has an enforced
+  disposition of safe, routed to housekeeping, deferred, rejected, or
+  domain-terminating.
+- The common portable set, optional portable set, `timer_migration`,
+  `net_backlog`, focused stop-machine fault and lock-order cases, loaded
+  hotplug races, and all four netdevsim lifecycle classes passed on the
+  ABI-23 Simon kernel with per-class counters and evidence.
+- Out-of-tree direct `stop_machine_cpuslocked()` callers are unsupported by
+  contract while an owner is active. They must use the validated public
+  `stop_machine()` wrapper or acquire the owner-drain gate before CPU-hotplug
+  locks.
+- Runtime microcode updates, suspend and hibernate, kexec, reboot and panic,
+  machine-check hardware injection, INVLPGB, two-NUMA-node migration, and
+  isolated-NIC IRQ-storm validation are explicit follow-up items outside the
+  available Simon environment. Their absence does not leave an activity row
+  unclassified.
+
+This closure is a bounded prototype validation, not a hard latency bound or
+an exhaustive certification of every possible hardware platform.
+
+## Known limitations and deferred evidence
 
 - No hard bound is claimed. The measured maxima are envelopes for the
   listed bounded classes on one VM image; the row's disposition remains
@@ -440,10 +465,8 @@ The remaining optional classes are not applicable on this boot:
 - `timer_migration` passed on the earlier `rcu_nocbs=1-11` boot. After the
   later repartition, `net_backlog` passed through RFS steering of a cork-held
   TCP flow; `irq_storm` remains deferred to a test NIC.
-- Disposition of out-of-tree direct `stop_machine_cpuslocked()` callers
-  remains open; the public `stop_machine()` wrapper lock order is validated.
-- Machine-check injection remains out of scope (see the exceptions/NMI
-  row).
+- Machine-check hardware injection remains deferred to a disposable host
+  (see the exceptions/NMI row).
 
 ## Reproduction
 

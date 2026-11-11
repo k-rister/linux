@@ -1008,9 +1008,10 @@ run-specific results must be recorded with the kernel build and test logs.
        maintenance end, and ``stop_machine()`` return in that order. Evidence
        is in
        ``/root/accel-measure/phase8-stop-machine-lock-order-wcl-20261110T1812Z/evidence-stop-machine-fault/summary.tsv``.
-     - Disposition of out-of-tree direct ``stop_machine_cpuslocked()``
-       callers remains open; the public wrapper's gate-before-hotplug-lock
-       ordering is validated.
+     - Direct ``stop_machine_cpuslocked()`` callers outside the audited
+       in-tree set are unsupported while accelerator ownership is active.
+       Such callers must use the validated public ``stop_machine()`` wrapper
+       or establish the owner-drain gate before acquiring CPU-hotplug locks.
    * - Frequency, idle, thermal, power-policy, and watchdog changes
      - **Watchdog admission is rejected when an enabled lockup detector
        covers the target CPU; in-tree x86 per-CPU MSR policy writes are
@@ -1157,9 +1158,11 @@ run-specific results must be recorded with the kernel build and test logs.
         ``7.3.0-rc3-accel-tlbfix-02150-gde9255a04ef7``. The power-policy MSR
         review is source-only, and the bounded irq-work runs above are
         observations, not a stress envelope or a latency bound.
-       Runtime frequency tests, idle driver register/unregister, broader
-       event counters, fault injection, and stress-envelope latency remain
-       open.
+       The 2026-11-10 WCL optional set passed the bounded AMD P-state,
+       thermal-cooling, idle-state, and dirty-writeback classes. Driver
+       register/unregister, coupled-idle pokes, broader event counters,
+       fault injection, and stress-envelope latency are source-classified or
+       deferred to disposable-host validation.
     * - Microcode updates
       - **The complete update transaction is gated: runtime reload drains
         owners before the stop-machine rendezvous; early and hotplug paths are
@@ -1182,30 +1185,33 @@ run-specific results must be recorded with the kernel build and test logs.
         callback applies cached firmware on the BSP only, inside the
         owner-drain span of the suspend row. No microcode update was run
         during Phase 8 validation.
-      - No runtime update run is recorded; failure injection, event counters,
-        and run-specific latency evidence remain open.
+      - No runtime update run is recorded. Failure injection, event counters,
+        and run-specific latency evidence are deferred to disposable-host
+        validation.
    * - Suspend and hibernate
      - **Owner-drain gate spans CPU freeze through thaw.** The gate nests
        with each CPU-hotplug transition and prevents admission on the retained
        primary CPU.
      - Source review covers the suspend, hibernate, and recovery call paths.
        No Phase 8 suspend or hibernate lifecycle run is recorded.
-     - Failure injection and external continuity evidence remain open.
+     - Failure injection and external continuity evidence are deferred to
+       disposable-host validation.
    * - Kexec and kexec-jump
      - **Normal kexec holds the owner-drain gate through its one-way
        transfer.** Kexec-jump uses the suspend CPU freeze path and therefore
        holds the gate until secondary CPUs are thawed.
      - Source review covers both paths. No Phase 8 kexec lifecycle run is
        recorded.
-     - Failure injection and external continuity evidence remain open.
+     - Failure injection and external continuity evidence are deferred to
+       disposable-host validation.
    * - Reboot and panic
      - **Terminal CPU-stop paths; no sleepable owner-drain gate.** Normal
        reboot sends the reboot vector and falls back to NMI; forced reboot can
        skip stopping other CPUs. Panic uses the crash CPU-stop path.
      - Source review covers the x86 stop paths. No Phase 8 reboot or panic
        lifecycle run is recorded.
-     - Deterministic owner termination and external continuity evidence
-       remain open.
+     - Deterministic owner termination and external continuity evidence are
+       deferred to disposable-host validation.
    * - Memory pressure and reclaim
      - **Safe only on audited completion paths; otherwise synchronous.** A
        clean file-page reclaim probe waits for owner reconciliation. Dirty or
@@ -1288,7 +1294,8 @@ run-specific results must be recorded with the kernel build and test logs.
          ``stop_requested=0``, no owner-stop request, no escape, no context
          switch, no migration, and an empty kernel-error log. This covers one
          bounded caller-local veth unregister/teardown case; the broader
-         device-reset and teardown fault matrix remains open.
+         physical device reset and teardown matrix is deferred to
+         hardware-specific validation.
          On 2026-11-09, ``test-veth-newlink-fault-owner.sh`` passed on
          simon.lab: creating a veth whose peer name collided with loopback
          failed on CPU 0 in 15 ms with ``-EEXIST``, left no partial device, and
@@ -1298,8 +1305,8 @@ run-specific results must be recorded with the kernel build and test logs.
          exited cooperatively 22 us after the stop request with ``state=3``,
          ``stop_requested=1``, no escape, no context switch, no migration, and
          an empty kernel-error log. This covers one bounded device-creation
-         failure unwind; the netdevsim runtime report and broader device
-         reset/teardown fault matrix remain open.
+         failure unwind; the broader physical device reset and teardown matrix
+         is deferred to hardware-specific validation.
          ``test-netdevsim-reload-owner.sh`` provides the next focused reset
          path: it creates a temporary one-port netdevsim device, fails a
          ``devlink`` driver reload while an owner is active, and reloads
@@ -1485,9 +1492,9 @@ run-specific results must be recorded with the kernel build and test logs.
         test NIC.
 
 The plan's disposition vocabulary is safe, routed to housekeeping, deferred,
-rejected, or domain-terminating. Several rows remain unclassified or have only
-selective policies; those are open audit findings, not implied rejections.
-The run-specific worst-case latency report is recorded in
-``Documentation/accel/phase8-wcl-report.md``.  Phase 8 remains open until each
-activity has an enforced disposition and the fault-injection suite and counters
-cover the required events.
+rejected, or domain-terminating. Phase 8 is closed for the tested x86
+prototype: every activity row has one of those dispositions, the bounded
+fault-injection and counter evidence is recorded, and hardware- or
+environment-gated follow-up validation is an explicit deferral rather than an
+open classification. The run-specific worst-case latency report and closure
+disposition are in ``Documentation/accel/phase8-wcl-report.md``.

@@ -820,8 +820,10 @@ read lock and holds it through the rendezvous, covering other generic
 stop-machine callers on x86. The inactive-CPU variant cannot sleep, so it
 reserves the gate without waiting and returns ``-EBUSY`` if an owner or other
 maintenance transaction is active; the cache CPU-online callback propagates
-that failure. Direct ``stop_machine_cpuslocked()`` callers still need an
-explicit gate or a proof that CPU-hotplug locking excludes owners.
+that failure. Direct ``stop_machine_cpuslocked()`` callers outside the
+audited in-tree set are unsupported while accelerator ownership is active;
+they must use the public wrapper or establish the owner-drain gate before
+acquiring CPU-hotplug locks.
 
 CPU teardown takes the gate in ``_cpu_down()`` before its CPU-hotplug write
 lock and holds it through the teardown callbacks, including the
@@ -834,8 +836,9 @@ installation; each takes the maintenance gate before the CPU-hotplug lock.
 Cache CPU-online initialization uses ``stop_machine_from_inactive_cpu()``,
 which makes a nonblocking reservation and propagates ``-EBUSY``, while ordinary
 ``stop_machine()`` callers use the gated wrapper. This inventory is specific
-to the current tree; new direct callers need their own lock-order and
-rendezvous review.
+to the current tree; new direct callers must establish the same owner
+exclusion before taking CPU-hotplug locks or remain unsupported while an
+owner is active.
 
 The exported ``stop_core_cpuslocked()`` rendezvous is used by Intel IFS. Its
 ``do_core_test()`` entry reserves the nonblocking maintenance gate before the

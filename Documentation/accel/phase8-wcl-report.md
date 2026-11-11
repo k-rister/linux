@@ -300,7 +300,9 @@ The isolated `timer_migration` rerun used the corrected active-marker harness
 and is preserved in
 `/root/accel-measure/phase8-bff69f4-wcl-timer-20261110T1310`
 (summary SHA-256
-`82c734b280fa794d1291c6df05002fd38563776ec63d4e50b6fe12c5e8713963`).
+`d457bc0f650982070f5d6595c5f542b339aa737bd15f2d60097244bee260bb91`;
+the malformed one-line header was repaired in place from the existing data
+row).
 
 | class                | exit | state | samples    | p50_ns | p90_ns | p99_ns | p999_ns | max_ns | workqueue_queued | arch_ipi_count | arch_nmi_count |
 |----------------------|------|-------|------------|--------|--------|--------|---------|--------|------------------|----------------|----------------|

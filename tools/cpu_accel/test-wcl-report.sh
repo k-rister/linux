@@ -36,12 +36,13 @@ fail()
 [ "$(id -u)" -eq 0 ] || fail "run as root"
 [ -x "$tool" ] || fail "cpu-accel-testctl not found or not executable: $tool"
 mkdir -p "$outdir"
-	printf 'class\texit\tstate\tsamples\tmin_ns\tp50_ns\tp90_ns\tp99_ns\t' \
-	       'p999_ns\tmax_ns\thist_total\tirq_count\tsoftirq_count\t' \
-	       'workqueue_queued\tarch_ipi_count\tarch_tlb_count\t' \
-	       'arch_nmi_count\tarch_mce_exception_count\t' \
-	       'arch_mce_poll_count\tcontext_switches\n' \
-	>"$summary"
+	header='class\texit\tstate\tsamples\tmin_ns\t'
+	header="$header"'p50_ns\tp90_ns\tp99_ns\tp999_ns\tmax_ns\t'
+	header="$header"'hist_total\tirq_count\tsoftirq_count\t'
+	header="$header"'workqueue_queued\tarch_ipi_count\tarch_tlb_count\t'
+	header="$header"'arch_nmi_count\tarch_mce_exception_count\t'
+	header="$header"'arch_mce_poll_count\tcontext_switches'
+	printf '%b\n' "$header" >"$summary"
 
 # khugepaged's lru_add_drain_all() stops every owned CPU on its scan
 # period and would end a run early; disable THP for the whole matrix.

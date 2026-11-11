@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
 #include <linux/atomic.h>
+#include <linux/capability.h>
 #include <linux/completion.h>
 #include <linux/cpu.h>
 #include <linux/fs.h>
@@ -18,6 +19,7 @@
 #include <linux/preempt.h>
 #include <linux/processor.h>
 #include <linux/ptrace.h>
+#include <linux/poll.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/smp.h>
@@ -382,6 +384,8 @@ struct cpu_accel_device {
 	struct work_struct owner_death_work;
 	struct irq_accel_quarantine *irq_quarantine;
 	struct cpu_accel_shared *shared;
+	wait_queue_head_t poll_wait;
+	u32 selected_abi;
 	/* mm of the process that opened the device as the control companion. */
 	struct mm_struct *companion_mm;
 	struct cpu_accel_config config;
@@ -602,15 +606,25 @@ static int cpu_accel_user_nmi(unsigned int type, struct pt_regs *regs)
 NOKPROBE_SYMBOL(cpu_accel_user_nmi);
 #endif
 
-static bool cpu_accel_user_terminal(struct cpu_accel_device *dev)
+static bool cpu_accel_state_terminal(u32 state)
 {
-	u32 state = READ_ONCE(dev->shared->state);
-
 	return state == CPU_ACCEL_STATE_COMPLETE ||
 		state == CPU_ACCEL_STATE_STOPPED ||
 		state == CPU_ACCEL_STATE_ERROR ||
 		state == CPU_ACCEL_STATE_WATCHDOG ||
 		state == CPU_ACCEL_STATE_ESCAPED;
+}
+
+static bool cpu_accel_user_terminal(struct cpu_accel_device *dev)
+{
+	return cpu_accel_state_terminal(READ_ONCE(dev->shared->state));
+}
+
+static void cpu_accel_state_write(struct cpu_accel_device *dev, u32 state)
+{
+	WRITE_ONCE(dev->shared->state, state);
+	if (cpu_accel_state_terminal(state))
+		wake_up_poll(&dev->poll_wait, EPOLLIN | EPOLLRDNORM);
 }
 
 static int cpu_accel_user_escape(struct cpu_accel_device *dev)
@@ -1361,7 +1375,7 @@ static void cpu_accel_watchdog(struct timer_list *timer)
 static void cpu_accel_reset_shared(struct cpu_accel_device *dev)
 {
 	memset(dev->shared, 0, CPU_ACCEL_MAP_SIZE);
-	dev->shared->abi_version = CPU_ACCEL_ABI_VERSION;
+	dev->shared->abi_version = dev->selected_abi;
 	dev->shared->struct_size = sizeof(*dev->shared);
 	dev->shared->layout_fingerprint = CPU_ACCEL_LAYOUT_FINGERPRINT();
 	dev->shared->backend = cpu_accel_backend_id();
@@ -1369,7 +1383,7 @@ static void cpu_accel_reset_shared(struct cpu_accel_device *dev)
 	dev->shared->recovery_state = CPU_ACCEL_RECOVERY_NONE;
 	dev->shared->mode = CPU_ACCEL_MODE_LINUX;
 	dev->shared->workload = CPU_ACCEL_WORKLOAD_TIMESTAMP;
-	WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_IDLE);
+	cpu_accel_state_write(dev, CPU_ACCEL_STATE_IDLE);
 }
 
 static void cpu_accel_observation_begin(struct cpu_accel_observation *obs)
@@ -2084,10 +2098,10 @@ static int cpu_accel_user_exit_locked(struct cpu_accel_device *dev)
 		WRITE_ONCE(dev->shared->recovery_completed_ns,
 			   ktime_get_mono_fast_ns());
 		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_RECOVERY);
-		WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_ERROR);
+		cpu_accel_state_write(dev, CPU_ACCEL_STATE_ERROR);
 	} else {
 		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_LINUX);
-		WRITE_ONCE(dev->shared->state, escaped ?
+		cpu_accel_state_write(dev, escaped ?
 			CPU_ACCEL_STATE_ESCAPED : CPU_ACCEL_STATE_COMPLETE);
 	}
 	cpu_accel_region_finish(dev, escaped || irq_ret);
@@ -2228,7 +2242,7 @@ static void cpu_accel_owner_death_work(struct work_struct *work)
 		cpu_accel_release_workqueue(dev);
 	cpu_accel_region_finish(dev, true);
 	WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_LINUX);
-	WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_ERROR);
+	cpu_accel_state_write(dev, CPU_ACCEL_STATE_ERROR);
 	mutex_unlock(&dev->lock);
 }
 #endif
@@ -2255,7 +2269,7 @@ static void cpu_accel_run(struct cpu_accel_device *dev,
 	}
 
 	atomic_set(&dev->running, 1);
-	WRITE_ONCE(shared->state, CPU_ACCEL_STATE_RUNNING);
+	cpu_accel_state_write(dev, CPU_ACCEL_STATE_RUNNING);
 	start = ktime_get_mono_fast_ns();
 	shared->start_ns = start;
 	deadline = start + dev->config.period_ns;
@@ -2311,7 +2325,7 @@ finish:
 	cpu_accel_observation_finish(dev, obs);
 	/* Publish all result fields before publishing the terminal state. */
 	smp_wmb();
-	WRITE_ONCE(shared->state, final_state);
+	cpu_accel_state_write(dev, final_state);
 }
 
 static void cpu_accel_lifecycle_entry(void *data)
@@ -2331,10 +2345,10 @@ static void cpu_accel_lifecycle_entry(void *data)
 	    !quiescent) {
 		cpu_accel_observation_finish(dev, &obs);
 		cpu_accel_region_end(dev, CPU_ACCEL_STATE_ERROR);
+		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_RECOVERY);
 		/* Publish the failed admission before restoring execution. */
 		smp_wmb();
-		WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_ERROR);
-		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_RECOVERY);
+		cpu_accel_state_write(dev, CPU_ACCEL_STATE_ERROR);
 		local_irq_restore(irq_flags);
 		preempt_enable();
 		return;
@@ -2387,7 +2401,7 @@ static int cpu_accel_lifecycle_thread(void *data)
 		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_RECOVERY);
 		if (READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_READY ||
 		    READ_ONCE(dev->shared->state) == CPU_ACCEL_STATE_RUNNING)
-			WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_ERROR);
+			cpu_accel_state_write(dev, CPU_ACCEL_STATE_ERROR);
 	} else if (READ_ONCE(dev->shared->state) != CPU_ACCEL_STATE_ERROR) {
 		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_LINUX);
 	}
@@ -2447,6 +2461,10 @@ static int cpu_accel_open(struct inode *inode, struct file *file)
 
 	if (!mm)
 		return -EINVAL;
+	if (!capable(CAP_SYS_ADMIN)) {
+		mmput(mm);
+		return -EPERM;
+	}
 	if (atomic_cmpxchg(&cpu_accel.opened, 0, 1))
 		goto busy;
 
@@ -2709,7 +2727,7 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 	atomic_set(&dev->watchdog_fired, 0);
 	atomic_set(&dev->enter_requested, 1);
 	WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_ENTERING);
-	WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_READY);
+	cpu_accel_state_write(dev, CPU_ACCEL_STATE_READY);
 
 	if (user_workload) {
 		ret = cpu_accel_user_image_prepare(dev);
@@ -2719,7 +2737,7 @@ static int cpu_accel_start_locked(struct cpu_accel_device *dev)
 		atomic_set(&dev->running, 1);
 		dev->lifecycle_ret = 0;
 		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_ACCELERATOR);
-		WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_RUNNING);
+		cpu_accel_state_write(dev, CPU_ACCEL_STATE_RUNNING);
 		local_irq_disable();
 		ret = cpu_accel_arch_user_enter(dev);
 		/*
@@ -2759,7 +2777,7 @@ user_start_fail:
 		atomic_set(&dev->running, 0);
 		atomic_set(&dev->enter_requested, 0);
 		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_RECOVERY);
-		WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_ERROR);
+		cpu_accel_state_write(dev, CPU_ACCEL_STATE_ERROR);
 		return ret;
 	}
 
@@ -2778,7 +2796,7 @@ user_start_fail:
 		cpu_accel_region_recover(dev);
 		atomic_set(&dev->enter_requested, 0);
 		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_RECOVERY);
-		WRITE_ONCE(dev->shared->state, CPU_ACCEL_STATE_ERROR);
+		cpu_accel_state_write(dev, CPU_ACCEL_STATE_ERROR);
 	} else if (dev->config.flags & CPU_ACCEL_FLAG_PERSISTENT) {
 		unsigned long watchdog_jiffies;
 
@@ -2795,6 +2813,10 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 	struct cpu_accel_device *dev = file->private_data;
 	struct cpu_accel_config config;
 	struct cpu_accel_capabilities capabilities;
+	struct cpu_accel_abi_info abi_info;
+	struct cpu_accel_abi_select abi_select;
+	struct cpu_accel_arch_telemetry arch_telemetry;
+	struct cpu_accel_x86_image_admission x86_image;
 	struct cpu_accel_region_create region_create;
 	struct cpu_accel_region_ref region_ref;
 	struct cpu_accel_region_info region_info;
@@ -2808,6 +2830,85 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 
 	mutex_lock(&dev->lock);
 	switch (command) {
+	case CPU_ACCEL_IOC_GET_ABI_INFO:
+		abi_info = (struct cpu_accel_abi_info){
+			.current_abi = CPU_ACCEL_ABI_VERSION,
+			.min_abi = CPU_ACCEL_ABI_MIN_VERSION,
+			.max_abi = CPU_ACCEL_ABI_VERSION,
+			.selected_abi = dev->selected_abi,
+		};
+		if (copy_to_user((void __user *)argument, &abi_info,
+				 sizeof(abi_info)))
+			ret = -EFAULT;
+		break;
+
+	case CPU_ACCEL_IOC_SET_ABI_VERSION:
+		if (copy_from_user(&abi_select, (void __user *)argument,
+				   sizeof(abi_select))) {
+			ret = -EFAULT;
+			break;
+		}
+		if (abi_select.reserved ||
+		    abi_select.requested_abi < CPU_ACCEL_ABI_MIN_VERSION ||
+		    abi_select.requested_abi > CPU_ACCEL_ABI_VERSION) {
+			ret = -EINVAL;
+			break;
+		}
+		abi_select.selected_abi = abi_select.requested_abi;
+		if (copy_to_user((void __user *)argument, &abi_select,
+				 sizeof(abi_select))) {
+			ret = -EFAULT;
+		} else {
+			dev->selected_abi = abi_select.requested_abi;
+			dev->shared->abi_version = dev->selected_abi;
+		}
+		break;
+
+	case CPU_ACCEL_IOC_GET_ARCH_TELEMETRY:
+		arch_telemetry = (struct cpu_accel_arch_telemetry){
+			.arch_irq_count = dev->shared->arch_irq_count,
+			.arch_ipi_count = dev->shared->arch_ipi_count,
+			.arch_tlb_count = dev->shared->arch_tlb_count,
+			.arch_tlb_shootdown_targets =
+				dev->shared->arch_tlb_shootdown_targets,
+			.arch_reschedule_deferred =
+				dev->shared->arch_reschedule_deferred,
+			.arch_call_function_deferred =
+				dev->shared->arch_call_function_deferred,
+			.arch_nmi_count = dev->shared->arch_nmi_count,
+			.arch_mce_exception_count =
+				dev->shared->arch_mce_exception_count,
+			.arch_mce_poll_count =
+				dev->shared->arch_mce_poll_count,
+			.arch_counters_valid =
+				dev->shared->arch_counters_valid,
+		};
+		if (copy_to_user((void __user *)argument, &arch_telemetry,
+				 sizeof(arch_telemetry)))
+			ret = -EFAULT;
+		break;
+
+	case CPU_ACCEL_IOC_X86_IMAGE_ADMISSION:
+		if (copy_from_user(&x86_image, (void __user *)argument,
+				   sizeof(x86_image))) {
+			ret = -EFAULT;
+			break;
+		}
+		if (x86_image.reserved || x86_image.image_handle ||
+		    !x86_image.user_entry_ip || !x86_image.user_stack_top ||
+		    !x86_image.user_stack_bytes ||
+		    !x86_image.user_image_start ||
+		    !x86_image.user_image_bytes || !x86_image.user_arg ||
+		    !x86_image.user_escape_ip) {
+			ret = -EINVAL;
+			break;
+		}
+		x86_image.image_handle = 1;
+		if (copy_to_user((void __user *)argument, &x86_image,
+				 sizeof(x86_image)))
+			ret = -EFAULT;
+		break;
+
 	case CPU_ACCEL_IOC_CONFIG:
 		if (copy_from_user(&config, (void __user *)argument,
 				   sizeof(config))) {
@@ -3063,12 +3164,24 @@ config_fail:
 	return ret;
 }
 
+static __poll_t cpu_accel_poll(struct file *file, poll_table *wait)
+{
+	struct cpu_accel_device *dev = file->private_data;
+	__poll_t events = 0;
+
+	poll_wait(file, &dev->poll_wait, wait);
+	if (cpu_accel_state_terminal(READ_ONCE(dev->shared->state)))
+		events |= EPOLLIN | EPOLLRDNORM;
+	return events;
+}
+
 static const struct file_operations cpu_accel_fops = {
 	.owner		= THIS_MODULE,
 	.open		= cpu_accel_open,
 	.release	= cpu_accel_release,
 	.mmap		= cpu_accel_mmap,
 	.unlocked_ioctl	= cpu_accel_ioctl,
+	.poll		= cpu_accel_poll,
 };
 
 static int __init cpu_accel_init(void)
@@ -3088,6 +3201,8 @@ static int __init cpu_accel_init(void)
 
 	mutex_init(&cpu_accel.lock);
 	mutex_init(&cpu_accel.region_lock);
+	init_waitqueue_head(&cpu_accel.poll_wait);
+	cpu_accel.selected_abi = CPU_ACCEL_ABI_MIN_VERSION;
 	init_completion(&cpu_accel.lifecycle_done);
 	atomic_set(&cpu_accel.opened, 0);
 	atomic_set(&cpu_accel.enter_requested, 0);

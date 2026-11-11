@@ -4,11 +4,14 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <stdbool.h>
+#include <stdlib.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <poll.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -30,10 +33,67 @@ int cpu_accel_open(struct cpu_accel_handle *handle)
 	int fd;
 	int ret;
 	int saved_errno;
+	struct cpu_accel_abi_info info;
+	struct cpu_accel_abi_select select;
+	const char *requested_env = getenv("CPU_ACCEL_ABI_VERSION");
+	unsigned long requested_abi = CPU_ACCEL_ABI_VERSION;
+	bool explicit_abi = false;
+	bool have_abi_info = false;
+	char *end = NULL;
 
 	fd = open(CPU_ACCEL_DEVICE, O_RDWR | O_CLOEXEC);
 	if (fd < 0)
 		return -1;
+	if (requested_env && *requested_env) {
+		explicit_abi = true;
+		errno = 0;
+		requested_abi = strtoul(requested_env, &end, 10);
+		if (errno || !end || *end ||
+		    requested_abi < CPU_ACCEL_ABI_MIN_VERSION ||
+		    requested_abi > CPU_ACCEL_ABI_VERSION) {
+			close(fd);
+			errno = EINVAL;
+			return -1;
+		}
+	}
+	if (ioctl(fd, CPU_ACCEL_IOC_GET_ABI_INFO, &info) == 0) {
+		have_abi_info = true;
+		if (requested_abi < info.min_abi ||
+		    requested_abi > info.max_abi) {
+			if (!explicit_abi &&
+			    requested_abi == CPU_ACCEL_ABI_VERSION &&
+			    info.max_abi < requested_abi) {
+				requested_abi = info.max_abi;
+			} else {
+				close(fd);
+				errno = ENOTSUP;
+				return -1;
+			}
+		}
+	} else if (!explicit_abi && errno == ENOTTY) {
+		requested_abi = CPU_ACCEL_ABI_MIN_VERSION;
+	} else {
+		saved_errno = errno;
+		close(fd);
+		errno = saved_errno;
+		return -1;
+	}
+	if (have_abi_info) {
+		select = (struct cpu_accel_abi_select){
+			.requested_abi = requested_abi,
+		};
+		if (ioctl(fd, CPU_ACCEL_IOC_SET_ABI_VERSION, &select) < 0) {
+			saved_errno = errno;
+			close(fd);
+			errno = saved_errno;
+			return -1;
+		}
+		if (select.selected_abi != requested_abi) {
+			close(fd);
+			errno = EPROTO;
+			return -1;
+		}
+	}
 	ret = cpu_accel_attach_fd(handle, fd);
 	if (!ret)
 		return 0;
@@ -73,7 +133,8 @@ int cpu_accel_attach_fd(struct cpu_accel_handle *handle, int fd)
 
 	handle->fd = fd;
 	handle->shared = mapping;
-	if (handle->shared->abi_version != CPU_ACCEL_ABI_VERSION ||
+	if ((handle->shared->abi_version != CPU_ACCEL_ABI_VERSION &&
+	     handle->shared->abi_version != CPU_ACCEL_ABI_MIN_VERSION) ||
 	    handle->shared->struct_size != sizeof(struct cpu_accel_shared) ||
 	    handle->shared->layout_fingerprint !=
 		    CPU_ACCEL_LAYOUT_FINGERPRINT()) {
@@ -85,6 +146,33 @@ int cpu_accel_attach_fd(struct cpu_accel_handle *handle, int fd)
 	}
 
 	return 0;
+}
+
+int cpu_accel_get_abi_info(struct cpu_accel_handle *handle,
+			   struct cpu_accel_abi_info *info)
+{
+	return cpu_accel_ioctl(handle->fd, CPU_ACCEL_IOC_GET_ABI_INFO, info);
+}
+
+int cpu_accel_set_abi_version(struct cpu_accel_handle *handle,
+			      struct cpu_accel_abi_select *select)
+{
+	return cpu_accel_ioctl(handle->fd, CPU_ACCEL_IOC_SET_ABI_VERSION,
+			       select);
+}
+
+int cpu_accel_get_arch_telemetry(struct cpu_accel_handle *handle,
+				 struct cpu_accel_arch_telemetry *telemetry)
+{
+	return cpu_accel_ioctl(handle->fd, CPU_ACCEL_IOC_GET_ARCH_TELEMETRY,
+			       telemetry);
+}
+
+int cpu_accel_x86_image_admission(struct cpu_accel_handle *handle,
+				  struct cpu_accel_x86_image_admission *image)
+{
+	return cpu_accel_ioctl(handle->fd, CPU_ACCEL_IOC_X86_IMAGE_ADMISSION,
+			       image);
 }
 
 void cpu_accel_close(struct cpu_accel_handle *handle)
@@ -195,9 +283,9 @@ int cpu_accel_wait(struct cpu_accel_handle *handle, unsigned int timeout_ms)
 {
 	uint64_t deadline = cpu_accel_now_ns() +
 		(uint64_t)timeout_ms * 1000000ULL;
-	struct timespec sleep_for = {
-		.tv_sec = 0,
-		.tv_nsec = 1000000,
+	struct pollfd pfd = {
+		.fd = handle->fd,
+		.events = POLLIN,
 	};
 
 	for (;;) {
@@ -218,7 +306,11 @@ int cpu_accel_wait(struct cpu_accel_handle *handle, unsigned int timeout_ms)
 			errno = ETIMEDOUT;
 			return -1;
 		}
-		if (nanosleep(&sleep_for, NULL) < 0 && errno == EINTR) {
+		uint64_t remaining_ns = deadline - cpu_accel_now_ns();
+		int remaining_ms = (int)((remaining_ns + 999999) / 1000000);
+		int poll_ret = poll(&pfd, 1, remaining_ms);
+
+		if (poll_ret < 0 && errno == EINTR) {
 			errno = EINTR;
 			return -1;
 		}

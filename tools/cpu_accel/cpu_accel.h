@@ -17,6 +17,14 @@ int cpu_accel_open_control(struct cpu_accel_handle *handle);
 /* On success, handle owns fd; on failure, the caller still owns fd. */
 int cpu_accel_attach_fd(struct cpu_accel_handle *handle, int fd);
 void cpu_accel_close(struct cpu_accel_handle *handle);
+int cpu_accel_get_abi_info(struct cpu_accel_handle *handle,
+			   struct cpu_accel_abi_info *info);
+int cpu_accel_set_abi_version(struct cpu_accel_handle *handle,
+			      struct cpu_accel_abi_select *select);
+int cpu_accel_get_arch_telemetry(struct cpu_accel_handle *handle,
+				 struct cpu_accel_arch_telemetry *telemetry);
+int cpu_accel_x86_image_admission(struct cpu_accel_handle *handle,
+				  struct cpu_accel_x86_image_admission *image);
 int cpu_accel_configure(struct cpu_accel_handle *handle,
 			const struct cpu_accel_config *config);
 int cpu_accel_start(struct cpu_accel_handle *handle);

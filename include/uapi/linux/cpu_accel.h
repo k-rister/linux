@@ -5,8 +5,9 @@
 #include <linux/ioctl.h>
 #include <linux/types.h>
 
-/* ABI 23 separates control/status data from regions and adds exception counters. */
-#define CPU_ACCEL_ABI_VERSION		23
+/* ABI 24 adds explicit version negotiation and architecture extension commands. */
+#define CPU_ACCEL_ABI_VERSION		24
+#define CPU_ACCEL_ABI_MIN_VERSION	23
 #define CPU_ACCEL_MAP_SIZE		(64U * 1024U)
 #define CPU_ACCEL_MAX_WORK_BYTES	(1ULL * 1024ULL * 1024ULL * 1024ULL)
 #define CPU_ACCEL_MAX_MEMMOVE_WORK_BYTES	(64ULL * 1024ULL)
@@ -218,6 +219,47 @@ struct cpu_accel_capabilities {
 	__u64 supported_region_permissions;
 };
 
+struct cpu_accel_abi_info {
+	__u32 current_abi;
+	__u32 min_abi;
+	__u32 max_abi;
+	__u32 selected_abi;
+	__u32 reserved;
+};
+
+struct cpu_accel_abi_select {
+	__u32 requested_abi;
+	__u32 selected_abi;
+	__u32 reserved;
+};
+
+struct cpu_accel_arch_telemetry {
+	__u64 arch_irq_count;
+	__u64 arch_ipi_count;
+	__u64 arch_tlb_count;
+	__u64 arch_tlb_shootdown_targets;
+	__u64 arch_reschedule_deferred;
+	__u64 arch_call_function_deferred;
+	__u64 arch_nmi_count;
+	__u64 arch_mce_exception_count;
+	__u64 arch_mce_poll_count;
+	__u32 arch_counters_valid;
+	__u32 reserved;
+};
+
+struct cpu_accel_x86_image_admission {
+	__u64 user_entry_ip;
+	__u64 user_stack_top;
+	__u64 user_stack_bytes;
+	__u64 user_image_start;
+	__u64 user_image_bytes;
+	__u64 user_arg;
+	__u64 user_escape_ip;
+	__u64 user_reclaim_page;
+	__u32 image_handle;
+	__u32 reserved;
+};
+
 struct cpu_accel_region_create {
 	__u64 size_bytes;
 	__u32 permissions;
@@ -267,5 +309,14 @@ struct cpu_accel_region_info {
 						struct cpu_accel_region_info)
 #define CPU_ACCEL_IOC_USER_EXIT	_IO(CPU_ACCEL_IOC_MAGIC, 0x0b)
 #define CPU_ACCEL_IOC_USER_ESCAPE	_IO(CPU_ACCEL_IOC_MAGIC, 0x0c)
+
+#define CPU_ACCEL_IOC_GET_ABI_INFO	_IOR(CPU_ACCEL_IOC_MAGIC, 0x0d, \
+						struct cpu_accel_abi_info)
+#define CPU_ACCEL_IOC_SET_ABI_VERSION	_IOWR(CPU_ACCEL_IOC_MAGIC, 0x0e, \
+						struct cpu_accel_abi_select)
+#define CPU_ACCEL_IOC_GET_ARCH_TELEMETRY	_IOR(CPU_ACCEL_IOC_MAGIC, 0x0f, \
+						struct cpu_accel_arch_telemetry)
+#define CPU_ACCEL_IOC_X86_IMAGE_ADMISSION	_IOWR(CPU_ACCEL_IOC_MAGIC, 0x10, \
+						struct cpu_accel_x86_image_admission)
 
 #endif /* _UAPI_LINUX_CPU_ACCEL_H */

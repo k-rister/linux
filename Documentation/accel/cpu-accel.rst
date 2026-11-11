@@ -44,6 +44,9 @@ and a small ioctl interface:
 * ``REGION_CREATE``, ``REGION_ATTACH``, ``REGION_DETACH``,
   ``REGION_DESTROY``, and ``REGION_GET_INFO`` manage variable-size,
   workload-owned shared regions.
+* ABI 24 adds ``GET_ABI_INFO`` and ``SET_ABI_VERSION`` for explicit version
+  negotiation, plus ``GET_ARCH_TELEMETRY`` and ``X86_IMAGE_ADMISSION`` as
+  architecture extension commands.
 
 The control mapping contains the state, explicit Linux/accelerator transition
 mode, selected workload, run timestamps, region-set metadata, and kernel-owned
@@ -249,6 +252,14 @@ The companion SDK in ``tools/cpu_accel`` wraps the device and
     --period-us 1000 --workload user-hang --escape-after-ms 20
   sudo tools/cpu_accel/cpu-accel-testctl run --cpu 1 --duration-ms 100 \
     --period-us 1000 --quarantine-irqs
+
+ABI 23 remains the minimum supported compatibility version. The SDK requests
+ABI 24 by default and uses ``poll()`` for terminal-state waits. Set
+``CPU_ACCEL_ABI_VERSION=23`` or ``CPU_ACCEL_ABI_VERSION=24`` to force a
+specific ABI for testing.
+
+Opening the device requires ``CAP_SYS_ADMIN``. The device-node mode remains a
+defense-in-depth restriction rather than the permission contract.
 
 The focused function-graph teardown test can also overlap BPF JIT/seccomp
 filter allocation and teardown with an active owner. Build the bounded churn

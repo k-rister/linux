@@ -88,6 +88,11 @@ trap 'exit 1' HUP INT TERM
 [ -c /dev/cpu_accel ] || fail "/dev/cpu_accel is unavailable"
 [ -d "$trace_root/events/cpu_accel" ] || fail "cpu_accel tracepoints are unavailable"
 [ -d "$trace_root/instances" ] || fail "tracefs instances are unavailable"
+modprobe netdevsim || fail "netdevsim module is unavailable"
+for symbol in device_unregister nsim_drv_remove unregister_netdevice_queue; do
+	grep -Eq " $symbol([[:space:]]*\[netdevsim\])?$" /proc/kallsyms || \
+		fail "required symbol is unavailable: $symbol"
+done
 [ -w /sys/bus/netdevsim/new_device ] || \
 	fail "netdevsim new_device control is unavailable"
 [ -w /sys/bus/netdevsim/del_device ] || \
@@ -107,18 +112,12 @@ for event in cpu_accel/owner_stop_request cpu_accel/owner_exit_complete; do
 		fail "trace event is unavailable: $event"
 done
 
-modprobe netdevsim || fail "netdevsim module is unavailable"
-for symbol in device_unregister nsim_drv_remove unregister_netdevice; do
-	grep -Eq " $symbol([[:space:]]*\[netdevsim\])?$" /proc/kallsyms || \
-		fail "required symbol is unavailable: $symbol"
-done
-
 echo "$netdevsim_id 1" >/sys/bus/netdevsim/new_device || \
 	fail "could not create temporary netdevsim device"
 device_created=1
 netdevsim_sysfs="/sys/bus/netdevsim/devices/netdevsim$netdevsim_id"
 [ -d "$netdevsim_sysfs/net" ] || fail "temporary netdevsim port was not created"
-graph_filter='device_unregister nsim_drv_remove unregister_netdevice'
+graph_filter='device_unregister nsim_drv_remove unregister_netdevice_queue'
 
 mkdir "$event_instance"
 echo 4096 >"$event_instance/buffer_size_kb"
@@ -214,7 +213,7 @@ grep -q 'migration_detected=0' "$outdir/ctl.log" || \
 [ -s "$outdir/kernel-errors.log" ] && \
 	fail "kernel errors appeared during netdevsim teardown"
 
-for symbol in device_unregister nsim_drv_remove unregister_netdevice; do
+for symbol in device_unregister nsim_drv_remove unregister_netdevice_queue; do
 	grep -Eq "^[[:space:]]*$work_cpu\\).*$symbol" \
 		"$outdir/function-graph.log" || \
 		fail "$symbol was not traced on the work CPU"

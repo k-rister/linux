@@ -88,6 +88,13 @@ trap 'exit 1' HUP INT TERM
 [ -c /dev/cpu_accel ] || fail "/dev/cpu_accel is unavailable"
 [ -d "$trace_root/events/cpu_accel" ] || fail "cpu_accel tracepoints are unavailable"
 [ -d "$trace_root/instances" ] || fail "tracefs instances are unavailable"
+modprobe netdevsim || fail "netdevsim module is unavailable"
+for symbol in device_driver_detach device_driver_attach \
+	nsim_drv_remove nsim_drv_probe unregister_netdevice_queue \
+	register_netdevice; do
+	grep -Eq " $symbol([[:space:]]*\[netdevsim\])?$" /proc/kallsyms || \
+		fail "required symbol is unavailable: $symbol"
+done
 [ -w /sys/bus/netdevsim/new_device ] || \
 	fail "netdevsim new_device control is unavailable"
 [ -w /sys/bus/netdevsim/del_device ] || \
@@ -112,14 +119,6 @@ for event in cpu_accel/owner_stop_request cpu_accel/owner_exit_complete; do
 		fail "trace event is unavailable: $event"
 done
 
-modprobe netdevsim || fail "netdevsim module is unavailable"
-for symbol in device_driver_detach device_driver_attach \
-	nsim_drv_remove nsim_drv_probe unregister_netdevice \
-	register_netdevice; do
-	grep -Eq " $symbol([[:space:]]*\[netdevsim\])?$" /proc/kallsyms || \
-		fail "required symbol is unavailable: $symbol"
-done
-
 echo "$netdevsim_id 1" >/sys/bus/netdevsim/new_device || \
 	fail "could not create temporary netdevsim device"
 device_created=1
@@ -128,7 +127,7 @@ netdevsim_sysfs="/sys/bus/netdevsim/devices/netdevsim$netdevsim_id"
 [ -L "$netdevsim_sysfs/driver" ] || \
 	fail "temporary netdevsim device is not bound to its driver"
 graph_filter='device_driver_detach device_driver_attach nsim_drv_remove '
-graph_filter="${graph_filter}nsim_drv_probe unregister_netdevice "
+graph_filter="${graph_filter}nsim_drv_probe unregister_netdevice_queue "
 graph_filter="${graph_filter}register_netdevice"
 
 mkdir "$event_instance"
@@ -174,9 +173,9 @@ echo 1 >"$graph_instance/tracing_on"
 rebind_start_ns=$(date +%s%N)
 if timeout --kill-after=2s 10s taskset -c "$work_cpu" sh -c \
 	'echo $$ >"$1/set_ftrace_pid"
-	 echo "$2" >"$3"
-	 echo "$2" >"$4"' \
-	sh "$graph_instance" "$netdevsim_id" \
+		 echo "netdevsim$2" >"$3"
+		 echo "netdevsim$2" >"$4"' \
+		sh "$graph_instance" "$netdevsim_id" \
 	"$netdevsim_driver/unbind" "$netdevsim_driver/bind" \
 	>"$outdir/rebind.log" 2>&1; then
 	rebind_rc=0
@@ -229,7 +228,7 @@ grep -q 'migration_detected=0' "$outdir/ctl.log" || \
 	fail "kernel errors appeared during netdevsim rebind"
 
 for symbol in device_driver_detach device_driver_attach \
-	nsim_drv_remove nsim_drv_probe unregister_netdevice \
+	nsim_drv_remove nsim_drv_probe unregister_netdevice_queue \
 	register_netdevice; do
 	grep -Eq "^[[:space:]]*$work_cpu\\).*$symbol" \
 		"$outdir/function-graph.log" || \

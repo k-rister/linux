@@ -378,13 +378,24 @@ and `stop_machine` return. Evidence is in
 and
 `/root/accel-measure/phase8-stop-machine-lock-order-wcl-20261110T1812Z/evidence-stop-machine-fault/summary.tsv`.
 
-The remaining optional classes are unsupported or not applicable on this boot:
+The netdevsim lifecycle classes were initially classified as unsupported
+because the harness required an inline-only `unregister_netdevice` symbol,
+expected a build-inlined `nsim_esw_legacy_enable` symbol, and tested sysfs
+controls before loading the module. The corrected harness loads the module
+first, traces `unregister_netdevice_queue()`, and uses the full
+`netdevsim<ID>` device name for driver rebind.
 
-- `device_reload`, `device_teardown`, and `device_rebind` fail before creating
-  the temporary netdevsim device because this kernel does not export
-  `unregister_netdevice`; `device_sriov` additionally lacks
-  `nsim_esw_legacy_enable`. Their evidence and per-class logs are preserved in
-  `/root/accel-measure/phase8-bff69f4-wcl-optional-20261110/device_*`.
+On 2026-11-10, all four netdevsim classes passed on Simon with owner CPU 5
+and work CPU 0 from a cold module state. Each standard WCL run exited zero
+with `state=3`, no escape, no context switch, no migration, and no matched
+kernel error. The sample counts were 773,958 for reload, 801,209 for
+teardown, 778,651 for rebind, and 744,339 for SR-IOV. Every class reported
+p50/p90/p99/p999 lateness of 32 ns; the maxima were 150 ns for reload and
+teardown and 140 ns for rebind and SR-IOV. Evidence is in
+`/root/accel-measure/phase8-netdevsim-prereq-fix-20261110T1832Z/wcl-device_*/summary.tsv`.
+
+The remaining optional classes are not applicable on this boot:
+
 - `migration` is not applicable because Simon has one NUMA node.
 - `irq_storm` is not applicable because no isolated test NIC is available.
 
@@ -398,7 +409,7 @@ The remaining optional classes are unsupported or not applicable on this boot:
 | `net_backlog` | Passed with RFS and a cork-held TCP flow under the active tuned `cpu-partitioning` profile | `/root/accel-measure/phase8-bff69f4-wcl-net-backlog-rfs23-20261110T2243Z/summary.tsv` |
 | `stop_machine_fault` | Passed success and injected `-EIO` cases with owner drain on all online CPUs and gate-before-hotplug-lock ordering, both directly and through the standard WCL runner | `/root/accel-measure/phase8-stop-machine-fault-20261110T233220Z/evidence-stop-machine-owner-stop`; `/root/accel-measure/phase8-stop-machine-fault-wcl-20261110T1747Z/evidence-stop-machine-fault/summary.tsv`; `/root/accel-measure/phase8-stop-machine-lock-order-wcl-20261110T1812Z/evidence-stop-machine-fault/summary.tsv` |
 | Higher-volume hotplug races | Passed 16 loaded CPU-up and 16 loaded CPU-down iterations | `/root/accel-measure/phase8-stop-machine-fault-20261110T233220Z/evidence-hotplug-{up,down}-loaded/summary.tsv` |
-| Netdevsim lifecycle classes | Unsupported on this kernel because required symbols are absent | `/root/accel-measure/phase8-bff69f4-wcl-optional-20261110/device_*/summary.tsv` |
+| Netdevsim lifecycle classes | Passed from cold module state after correcting symbol, module-load, and rebind-name harness expectations | `/root/accel-measure/phase8-netdevsim-prereq-fix-20261110T1832Z/wcl-device_*/summary.tsv` |
 | `migration` | Not applicable on this one-NUMA-node host | No runtime run |
 | `irq_storm` | Not applicable without an isolated test NIC | No runtime run |
 | Broader lifecycle rows | Source-classified in `Documentation/accel/cpu-accel.rst`; runtime runs remain outside this WCL report | `Documentation/accel/cpu-accel.rst` Phase 8 matrix |

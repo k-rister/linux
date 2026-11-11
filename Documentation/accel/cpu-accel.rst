@@ -373,7 +373,8 @@ error::
 
 The netdevsim teardown owner test creates a temporary one-port ``netdevsim``
 device and deletes its bus device while the owner is active. It traces
-``device_unregister()``, ``nsim_drv_remove()``, and ``unregister_netdevice()``
+``device_unregister()``, ``nsim_drv_remove()``, and
+``unregister_netdevice_queue()``
 on the work CPU and verifies that the bounded owner completes without an
 escape, context switch, task migration, or kernel error::
 
@@ -1304,31 +1305,42 @@ run-specific results must be recorded with the kernel build and test logs.
          ``devlink`` driver reload while an owner is active, and reloads
          successfully after ownership ends. Function-graph tracing records
          ``nsim_dev_reload_down()``, ``nsim_dev_reload_up()``,
-         ``unregister_netdevice()``, and ``register_netdevice()`` on the work
+         ``unregister_netdevice_queue()``, and ``register_netdevice()`` on the work
          CPU; the owner must complete without an escape, context switch,
-         migration, or kernel error. Its runtime report remains pending.
+         migration, or kernel error. Its runtime report follows.
          ``test-netdevsim-teardown-owner.sh`` adds a distinct device-removal
          path: it deletes the temporary netdevsim bus device while the owner
          is active and traces ``device_unregister()``,
-         ``nsim_drv_remove()``, and ``unregister_netdevice()`` on the work
-         CPU. Its runtime report also remains pending.
+         ``nsim_drv_remove()``, and ``unregister_netdevice_queue()`` on the work
+         CPU. Its runtime report follows.
          ``test-netdevsim-rebind-owner.sh`` adds a driver-bind lifecycle
          path: it unbinds and rebinds the temporary netdevsim driver while
          the owner is active and traces ``device_driver_detach()``,
          ``device_driver_attach()``, ``nsim_drv_remove()``,
-         ``nsim_drv_probe()``, ``unregister_netdevice()``, and
-         ``register_netdevice()`` on the work CPU. Its runtime report also
-         remains pending.
+         ``nsim_drv_probe()``, ``unregister_netdevice_queue()``, and
+         ``register_netdevice()`` on the work CPU. Its runtime report follows.
          ``test-netdevsim-sriov-owner.sh`` adds an SR-IOV configuration
          path: it switches the temporary netdevsim device to switchdev mode,
          creates and removes one VF, and returns to legacy mode while the
          owner is active. It traces
          ``nsim_devlink_eswitch_mode_set()``,
-         ``nsim_esw_switchdev_enable()``, ``nsim_esw_legacy_enable()``,
+         ``nsim_esw_switchdev_enable()``,
          ``nsim_drv_configure_vfs()``, ``__nsim_dev_port_add()``,
          ``__nsim_dev_port_del()``, ``register_netdevice()``, and
-         ``unregister_netdevice()`` on the work CPU. Its runtime report also
-         remains pending.
+         ``unregister_netdevice_queue()`` on the work CPU. Its runtime report
+         follows.
+         On 2026-11-10, all four netdevsim lifecycle classes passed on
+         simon.lab with ABI 23 on
+         ``7.3.0-rc3-accel-tlbfix-gbff69f41a61b``. Each class started from a
+         cold ``netdevsim`` module state, used owner CPU 5 and work CPU 0,
+         and completed with exit status 0, ``state=3``, no owner escape, no
+         context switch, no migration, and no matched kernel error. The
+         standard WCL runner recorded 773,958 reload samples, 801,209
+         teardown samples, 778,651 rebind samples, and 744,339 SR-IOV
+         samples. Every class reported p50/p90/p99/p999 lateness of 32 ns;
+         the maxima were 150 ns for reload and teardown and 140 ns for
+         rebind and SR-IOV. Evidence is in
+         ``/root/accel-measure/phase8-netdevsim-prereq-fix-20261110T1832Z/wcl-device_*``.
    * - Exceptions, NMIs, and machine checks
       - **NMI escape is owner-terminating recovery for the tested ring-3
         workload; user-mode ``#MC`` death is reconciled through task exit;

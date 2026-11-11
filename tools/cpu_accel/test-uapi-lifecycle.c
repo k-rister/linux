@@ -124,7 +124,14 @@ static void test_manager_crash(unsigned int cpu)
 	if (child < 0)
 		fail("fork manager crash child");
 	if (!child) {
+		cpu_set_t manager_affinity;
+
 		close(pipes[0]);
+		CPU_ZERO(&manager_affinity);
+		CPU_SET(cpu ? 0 : 1, &manager_affinity);
+		if (sched_setaffinity(0, sizeof(manager_affinity),
+				      &manager_affinity) < 0)
+			fail("pin manager crash child");
 		if (cpu_accel_open(&handle) < 0)
 			fail("open manager crash device");
 		if (cpu_accel_configure(&handle, &config) < 0)

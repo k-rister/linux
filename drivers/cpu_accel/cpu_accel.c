@@ -21,6 +21,7 @@
 #include <linux/ptrace.h>
 #include <linux/poll.h>
 #include <linux/sched.h>
+#include <linux/sched/mm.h>
 #include <linux/slab.h>
 #include <linux/smp.h>
 #include <linux/string.h>
@@ -2457,23 +2458,22 @@ static int cpu_accel_lifecycle_exit(struct cpu_accel_device *dev)
 
 static int cpu_accel_open(struct inode *inode, struct file *file)
 {
-	struct mm_struct *mm = get_task_mm(current);
+	struct mm_struct *mm = current->mm;
 
 	if (!mm)
 		return -EINVAL;
 	if (!capable(CAP_SYS_ADMIN)) {
-		mmput(mm);
 		return -EPERM;
 	}
 	if (atomic_cmpxchg(&cpu_accel.opened, 0, 1))
 		goto busy;
 
+	mmgrab(mm);
 	cpu_accel.companion_mm = mm;
 	file->private_data = &cpu_accel;
 	return 0;
 
 busy:
-	mmput(mm);
 	return -EBUSY;
 }
 
@@ -2506,7 +2506,7 @@ static int cpu_accel_release(struct inode *inode, struct file *file)
 		cpu_accel_regions_release(dev);
 	mutex_unlock(&dev->lock);
 	if (dev->companion_mm) {
-		mmput(dev->companion_mm);
+		mmdrop(dev->companion_mm);
 		dev->companion_mm = NULL;
 	}
 

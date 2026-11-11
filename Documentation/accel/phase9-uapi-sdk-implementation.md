@@ -94,6 +94,8 @@ metrics, or if either run reports:
 `tools/cpu_accel/test-uapi-lifecycle.c` covers:
 
 * manager crash during an active run,
+  with the manager pinned to a housekeeping CPU before starting a kernel-backed
+  workload on the target CPU,
 * descriptor passing over a Unix socket,
 * accidental `execve()` descriptor closure,
 * deliberate `execve()` descriptor retention,

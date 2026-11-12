@@ -64,21 +64,27 @@ done
 	fail "multi-CPU user-oslat run failed"
 grep -q '^state=0 mode=0 ' "$normal_output" || \
 	fail "multi-CPU run did not reset to Linux mode"
-worker_lines=$(grep -c '^worker=' "$normal_output" || true)
+worker_lines=$(grep -c '^worker=[0-9][0-9]* cpu=[0-9][0-9]* state=' \
+	"$normal_output" || true)
 [ "$worker_lines" -eq "$worker_count" ] || \
 	fail "expected $worker_count healthy worker records, found $worker_lines"
-successful_lines=$(grep -c '^worker=.* state=3 result=0 ' \
+successful_lines=$(grep -c \
+	'^worker=[0-9][0-9]* cpu=[0-9][0-9]* state=3 result=0 ' \
 	"$normal_output" || true)
 [ "$successful_lines" -eq "$worker_count" ] || \
 	fail "expected $worker_count successful workers, found $successful_lines"
 for pattern in 'context_switches=0' 'migration_detected=0' \
 	       'user_escape_count=0'; do
-	matching_lines=$(grep -c "^worker=.* $pattern" "$normal_output" || true)
+	matching_lines=$(grep -c \
+		"^worker=[0-9][0-9]* cpu=[0-9][0-9]* state=.* $pattern" \
+		"$normal_output" || true)
 	[ "$matching_lines" -eq "$worker_count" ] || \
 		fail "healthy worker telemetry mismatch for $pattern"
 done
 for name in samples hist_total; do
-	values=$(grep '^worker=.* state=3 result=0 ' "$normal_output" |
+	values=$(grep \
+		'^worker=[0-9][0-9]* cpu=[0-9][0-9]* state=3 result=0 ' \
+		"$normal_output" |
 		sed -n "s/.*[[:space:]]$name=\([0-9][0-9]*\).*/\1/p")
 	value_count=0
 	for value in $values; do
@@ -89,6 +95,14 @@ for name in samples hist_total; do
 	[ "$value_count" -eq "$worker_count" ] || \
 		fail "expected $worker_count healthy $name records"
 done
+for name in hist_p50_ns hist_p90_ns hist_p99_ns hist_p999_ns \
+	   max_lateness_ns avg_lateness_ns; do
+	matching_lines=$(grep -c \
+		"^worker=[0-9][0-9]* cpu=[0-9][0-9]* state=3 result=0 .*$name=" \
+		"$normal_output" || true)
+	[ "$matching_lines" -eq "$worker_count" ] || \
+		fail "expected $worker_count healthy $name records"
+done
 
 "$tool" run --cpus "$target_cpus" --duration-ms "$duration_ms" \
 	--period-us "$period_us" --workload user-pipeline \
@@ -96,10 +110,12 @@ done
 	fail "multi-CPU user-pipeline run failed"
 grep -q '^state=0 mode=0 ' "$pipeline_output" || \
 	fail "user-pipeline run did not reset to Linux mode"
-worker_lines=$(grep -c '^worker=' "$pipeline_output" || true)
+worker_lines=$(grep -c '^worker=[0-9][0-9]* cpu=[0-9][0-9]* state=' \
+	"$pipeline_output" || true)
 [ "$worker_lines" -eq "$worker_count" ] || \
 	fail "expected $worker_count pipeline worker records, found $worker_lines"
-successful_lines=$(grep -c '^worker=.* state=3 result=0 ' \
+successful_lines=$(grep -c \
+	'^worker=[0-9][0-9]* cpu=[0-9][0-9]* state=3 result=0 ' \
 	"$pipeline_output" || true)
 [ "$successful_lines" -eq "$worker_count" ] || \
 	fail "expected $worker_count successful pipeline workers, found $successful_lines"
@@ -141,12 +157,16 @@ done
 	fail "pipeline queues reported no full or empty events"
 for pattern in 'context_switches=0' 'migration_detected=0' \
 	       'user_escape_count=0'; do
-	matching_lines=$(grep -c "^worker=.* $pattern" "$pipeline_output" || true)
+	matching_lines=$(grep -c \
+		"^worker=[0-9][0-9]* cpu=[0-9][0-9]* state=.* $pattern" \
+		"$pipeline_output" || true)
 	[ "$matching_lines" -eq "$worker_count" ] || \
 		fail "pipeline worker telemetry mismatch for $pattern"
 done
 for name in samples hist_total; do
-	values=$(grep '^worker=.* state=3 result=0 ' "$pipeline_output" |
+	values=$(grep \
+		'^worker=[0-9][0-9]* cpu=[0-9][0-9]* state=3 result=0 ' \
+		"$pipeline_output" |
 		sed -n "s/.*[[:space:]]$name=\([0-9][0-9]*\).*/\1/p")
 	value_count=0
 	for value in $values; do
@@ -157,6 +177,14 @@ for name in samples hist_total; do
 	[ "$value_count" -eq "$worker_count" ] || \
 		fail "expected $worker_count pipeline $name records"
 done
+for name in hist_p50_ns hist_p90_ns hist_p99_ns hist_p999_ns \
+	   max_lateness_ns avg_lateness_ns; do
+	matching_lines=$(grep -c \
+		"^worker=[0-9][0-9]* cpu=[0-9][0-9]* state=3 result=0 .*$name=" \
+		"$pipeline_output" || true)
+	[ "$matching_lines" -eq "$worker_count" ] || \
+		fail "expected $worker_count pipeline $name records"
+done
 
 CPU_ACCEL_UAPI_SMP_CPUS="$target_cpus" "$script_dir/test-uapi-lifecycle" || \
 	fail "SMP manager-death test failed"
@@ -165,30 +193,38 @@ CPU_ACCEL_UAPI_SMP_CPUS="$target_cpus" "$script_dir/test-uapi-lifecycle" || \
 	--period-us "$period_us" --workload user-oslat \
 	--smp-fail-worker 1 >"$failure_output" 2>&1 || \
 	fail "SMP one-worker forced-stop test failed"
-grep -q '^worker=1 .* state=7 result=0 .*user_escape_count=1' \
+grep -q \
+	'^worker=1 cpu=[0-9][0-9]* state=7 result=0 .*user_escape_count=1' \
 	"$failure_output" || \
 	fail "forced-stop worker did not report an escaped result"
 grep -q '^state=0 mode=0 ' "$failure_output" || \
 	fail "one-worker forced stop did not reset the domain to Linux mode"
-worker_lines=$(grep -c '^worker=' "$failure_output" || true)
+worker_lines=$(grep -c '^worker=[0-9][0-9]* cpu=[0-9][0-9]* state=' \
+	"$failure_output" || true)
 [ "$worker_lines" -eq "$worker_count" ] || \
 	fail "expected $worker_count forced-stop worker records, found $worker_lines"
-successful_lines=$(grep -c '^worker=.* state=3 result=0 ' \
+successful_lines=$(grep -c \
+	'^worker=[0-9][0-9]* cpu=[0-9][0-9]* state=3 result=0 ' \
 	"$failure_output" || true)
 expected_successes=$((worker_count - 1))
 [ "$successful_lines" -eq "$expected_successes" ] || \
 	fail "expected $expected_successes surviving workers, found $successful_lines"
 for pattern in 'context_switches=0' 'migration_detected=0'; do
-	matching_lines=$(grep -c "^worker=.* $pattern" "$failure_output" || true)
+	matching_lines=$(grep -c \
+		"^worker=[0-9][0-9]* cpu=[0-9][0-9]* state=.* $pattern" \
+		"$failure_output" || true)
 	[ "$matching_lines" -eq "$worker_count" ] || \
 		fail "forced-stop worker telemetry mismatch for $pattern"
 done
-matching_lines=$(grep -c '^worker=.* state=3 .*user_escape_count=0' \
+matching_lines=$(grep -c \
+	'^worker=[0-9][0-9]* cpu=[0-9][0-9]* state=3 .*user_escape_count=0' \
 	"$failure_output" || true)
 [ "$matching_lines" -eq "$expected_successes" ] || \
 	fail "forced-stop surviving worker telemetry mismatch"
 for name in samples hist_total; do
-	values=$(grep '^worker=.* state=3 result=0 ' "$failure_output" |
+	values=$(grep \
+		'^worker=[0-9][0-9]* cpu=[0-9][0-9]* state=3 result=0 ' \
+		"$failure_output" |
 		sed -n "s/.*[[:space:]]$name=\([0-9][0-9]*\).*/\1/p")
 	value_count=0
 	for value in $values; do
@@ -205,15 +241,19 @@ done
 	--queue-capacity 1 --smp-fail-worker 1 \
 	>"$pipeline_failure_output" 2>&1 || \
 	fail "user-pipeline one-worker forced-stop test failed"
-grep -q '^worker=1 .* state=7 result=0 .*user_escape_count=1' \
+grep -q \
+	'^worker=1 cpu=[0-9][0-9]* state=7 result=0 .*user_escape_count=1' \
 	"$pipeline_failure_output" || \
 	fail "forced-stop pipeline worker did not report an escaped result"
 grep -q '^state=0 mode=0 ' "$pipeline_failure_output" || \
 	fail "user-pipeline forced stop did not reset the domain to Linux mode"
-worker_lines=$(grep -c '^worker=' "$pipeline_failure_output" || true)
+worker_lines=$(grep -c \
+	'^worker=[0-9][0-9]* cpu=[0-9][0-9]* state=' \
+	"$pipeline_failure_output" || true)
 [ "$worker_lines" -eq "$worker_count" ] || \
 	fail "expected $worker_count pipeline forced-stop worker records, found $worker_lines"
-successful_lines=$(grep -c '^worker=.* state=3 result=0 ' \
+successful_lines=$(grep -c \
+	'^worker=[0-9][0-9]* cpu=[0-9][0-9]* state=3 result=0 ' \
 	"$pipeline_failure_output" || true)
 expected_successes=$((worker_count - 1))
 [ "$successful_lines" -eq "$expected_successes" ] || \
@@ -222,12 +262,14 @@ queue_lines=$(grep -c '^queue=' "$pipeline_failure_output" || true)
 [ "$queue_lines" -eq "$queue_count" ] || \
 	fail "expected $queue_count forced-stop pipeline queue records, found $queue_lines"
 for pattern in 'context_switches=0' 'migration_detected=0'; do
-	matching_lines=$(grep -c "^worker=.* $pattern" \
+	matching_lines=$(grep -c \
+		"^worker=[0-9][0-9]* cpu=[0-9][0-9]* state=.* $pattern" \
 		"$pipeline_failure_output" || true)
 	[ "$matching_lines" -eq "$worker_count" ] || \
 		fail "pipeline forced-stop telemetry mismatch for $pattern"
 done
-matching_lines=$(grep -c '^worker=.* state=3 .*user_escape_count=0' \
+matching_lines=$(grep -c \
+	'^worker=[0-9][0-9]* cpu=[0-9][0-9]* state=3 .*user_escape_count=0' \
 	"$pipeline_failure_output" || true)
 [ "$matching_lines" -eq "$expected_successes" ] || \
 	fail "pipeline forced-stop surviving worker telemetry mismatch"

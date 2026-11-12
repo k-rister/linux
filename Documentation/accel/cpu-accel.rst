@@ -267,7 +267,9 @@ comma-separated list of up to 16 distinct non-zero online CPUs and currently
 requires ``--workload user-oslat``. The manager creates one telemetry region
 and one per-worker shared mapping for every CPU. Workers join from their own
 pinned, sealed processes; activation, stop, failure, and rollback are
-domain-wide. ``--smp-fail-worker`` is a test-only fault selector that makes
+domain-wide. The controller prints each worker with the same status fields
+and histograms as the single-CPU path, prefixed by the worker index and CPU.
+``--smp-fail-worker`` is a test-only fault selector that makes
 one sealed worker exit abnormally after producing samples.
 ``--smp-join-delay-ms`` is a test-only startup-delay selector that holds the
 final sealed worker longer than the requested duration before it joins. The

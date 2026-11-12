@@ -1290,6 +1290,153 @@ static void print_status(const struct cpu_accel_shared *shared,
 	}
 }
 
+static void print_worker_status(unsigned int index, unsigned int cpu,
+				unsigned int state, int result,
+				const struct cpu_accel_shared *shared,
+				const struct cpu_accel_workload_region *region,
+				uint64_t work_bytes)
+{
+	bool telemetry_region = region &&
+		region->region_role == CPU_ACCEL_WORKLOAD_ROLE_TELEMETRY;
+	uint64_t user_active_ns =
+		shared->user_active_end_ns > shared->user_active_start_ns ?
+		shared->user_active_end_ns - shared->user_active_start_ns : 0;
+	uint64_t hist_total = telemetry_region ?
+		cpu_accel_hist_total(region) : 0;
+	uint64_t avg_lateness_ns = hist_total ?
+		(uint64_t)region->sum_lateness_ns / hist_total : 0;
+	uint64_t samples = region ? region->samples_produced : 0;
+	uint64_t max_lateness = region ? region->max_lateness_ns : 0;
+	uint64_t min_lateness = region ? region->min_lateness_ns : 0;
+	uint64_t last_lateness = region ? region->last_lateness_ns : 0;
+	uint64_t work_iterations = region ? region->work_iterations : 0;
+
+	printf("worker=%u cpu=%u state=%u result=%d"
+	       " mode=%u sequence=%" PRIu64
+	       " backend=%u backend_flags=%u"
+	       " recovery_state=%u recovery_error=%d recovery_attempts=%u"
+	       " recovery_requested_ns=%" PRIu64
+	       " recovery_completed_ns=%" PRIu64 " samples=%" PRIu64
+	       " max_lateness_ns=%" PRIu64 " min_lateness_ns=%" PRIu64
+	       " last_lateness_ns=%" PRIu64 " duration_ns=%" PRIu64
+	       " period_ns=%" PRIu64 " region_count=%u region_set_epoch=%"
+	       PRIu64 " workload=%u work_bytes=%" PRIu64
+	       " work_iterations=%" PRIu64
+	       " lifecycle_entry_ns=%" PRIu64 " lifecycle_exit_ns=%" PRIu64
+	       " user_active_start_ns=%" PRIu64
+	       " user_active_end_ns=%" PRIu64 " user_active_ns=%" PRIu64
+	       " user_escape_count=%" PRIu64
+	       " irq_count=%" PRIu64
+	       " irq_quarantined=%u irq_quarantine_blockers=%u"
+	       " softirq_count=%" PRIu64 " timer_softirq_count=%" PRIu64
+	       " hrtimer_softirq_count=%" PRIu64 " rcu_softirq_count=%" PRIu64
+	       " sched_softirq_count=%" PRIu64 " workqueue_queued=%" PRIu64
+	       " workqueue_executed=%" PRIu64 " context_switches=%" PRIu64
+	       " need_resched_samples=%" PRIu64 " arch_irq_count=%" PRIu64
+	       " arch_ipi_count=%" PRIu64 " arch_tlb_count=%" PRIu64
+	       " arch_tlb_shootdown_targets=%" PRIu64
+	       " arch_reschedule_deferred=%" PRIu64
+	       " arch_call_function_deferred=%" PRIu64
+	       " arch_nmi_count=%" PRIu64
+	       " arch_mce_exception_count=%" PRIu64
+	       " arch_mce_poll_count=%" PRIu64
+	       " need_resched_entry=%u need_resched_exit=%u"
+	       " softirq_pending_entry=%u softirq_pending_exit=%u"
+	       " preempt_count_entry=%u preempt_count_exit=%u"
+	       " arch_counters_valid=%u lifecycle_cpu_entry=%u"
+	       " lifecycle_cpu_exit=%u migration_detected=%u"
+	       " hist_total=%" PRIu64
+	       " hist_p50_ns=%" PRIu64 " hist_p90_ns=%" PRIu64
+	       " hist_p99_ns=%" PRIu64 " hist_p999_ns=%" PRIu64
+	       " avg_lateness_ns=%" PRIu64 "\n",
+	       index, cpu, state, result,
+	       shared->mode, (uint64_t)shared->sequence,
+	       shared->backend, shared->backend_flags,
+	       shared->recovery_state, shared->recovery_error,
+	       shared->recovery_attempts,
+	       (uint64_t)shared->recovery_requested_ns,
+	       (uint64_t)shared->recovery_completed_ns,
+	       samples, max_lateness, min_lateness, last_lateness,
+	       (uint64_t)shared->duration_ns, (uint64_t)shared->period_ns,
+	       shared->region_count, (uint64_t)shared->region_set_epoch,
+	       shared->workload, work_bytes, work_iterations,
+	       (uint64_t)shared->lifecycle_entry_ns,
+	       (uint64_t)shared->lifecycle_exit_ns,
+	       (uint64_t)shared->user_active_start_ns,
+	       (uint64_t)shared->user_active_end_ns,
+	       user_active_ns,
+	       (uint64_t)shared->user_escape_count,
+	       (uint64_t)shared->irq_count,
+	       shared->irq_quarantined, shared->irq_quarantine_blockers,
+	       (uint64_t)shared->softirq_count,
+	       (uint64_t)shared->timer_softirq_count,
+	       (uint64_t)shared->hrtimer_softirq_count,
+	       (uint64_t)shared->rcu_softirq_count,
+	       (uint64_t)shared->sched_softirq_count,
+	       (uint64_t)shared->workqueue_queued,
+	       (uint64_t)shared->workqueue_executed,
+	       (uint64_t)shared->context_switches,
+	       (uint64_t)shared->need_resched_samples,
+	       (uint64_t)shared->arch_irq_count,
+	       (uint64_t)shared->arch_ipi_count,
+	       (uint64_t)shared->arch_tlb_count,
+	       (uint64_t)shared->arch_tlb_shootdown_targets,
+	       (uint64_t)shared->arch_reschedule_deferred,
+	       (uint64_t)shared->arch_call_function_deferred,
+	       (uint64_t)shared->arch_nmi_count,
+	       (uint64_t)shared->arch_mce_exception_count,
+	       (uint64_t)shared->arch_mce_poll_count,
+	       shared->need_resched_entry, shared->need_resched_exit,
+	       shared->softirq_pending_entry, shared->softirq_pending_exit,
+	       shared->preempt_count_entry, shared->preempt_count_exit,
+	       shared->arch_counters_valid,
+	       shared->lifecycle_cpu_entry, shared->lifecycle_cpu_exit,
+	       shared->migration_detected,
+	       hist_total,
+	       telemetry_region ?
+	       cpu_accel_hist_percentile(region, hist_total, 500) : 0,
+	       telemetry_region ?
+	       cpu_accel_hist_percentile(region, hist_total, 900) : 0,
+	       telemetry_region ?
+	       cpu_accel_hist_percentile(region, hist_total, 990) : 0,
+	       telemetry_region ?
+	       cpu_accel_hist_percentile(region, hist_total, 999) : 0,
+	       avg_lateness_ns);
+
+	if (!telemetry_region)
+		return;
+	for (unsigned int i = 0; i < CPU_ACCEL_WORKLOAD_LATENESS_BINS; i++) {
+		uint64_t count = ((const uint64_t *)
+			(region->payload + region->lateness_hist_offset))[i];
+
+		if (!count)
+			continue;
+		printf("worker=%u lateness_hist_bin=%u"
+		       " range_ns=[%" PRIu64 ",%" PRIu64 ")"
+		       " count=%" PRIu64 "\n",
+		       index, i,
+		       (uint64_t)(i ? 1ULL << (i - 1) : 0),
+		       (uint64_t)(1ULL << i),
+		       count);
+	}
+
+	for (unsigned int i = 0; i <= CPU_ACCEL_WORKLOAD_LINEAR_BINS; i++) {
+		uint64_t count = ((const uint64_t *)
+			(region->payload + region->linear_hist_offset))[i];
+
+		if (!count)
+			continue;
+		printf("worker=%u ", index);
+		if (i < CPU_ACCEL_WORKLOAD_LINEAR_BINS)
+			printf("linear_ns_hist_ns=%u count=%" PRIu64 "\n",
+			       i, count);
+		else
+			printf("linear_ns_hist_ns>=%u count=%" PRIu64 "\n",
+			       (unsigned int)CPU_ACCEL_WORKLOAD_LINEAR_BINS,
+			       count);
+	}
+}
+
 static void usage(FILE *stream, const char *program)
 {
 	fprintf(stream,
@@ -3128,37 +3275,14 @@ out_domain:
 			regions[index].mapping;
 		const struct cpu_accel_shared *shared =
 			worker_shared[index];
-		uint64_t total = cpu_accel_hist_total(region);
 
 		if (!shared)
 			continue;
 
-		printf("worker=%u cpu=%u state=%u result=%d samples=%"
-		       PRIu64 " hist_total=%" PRIu64
-		       " hist_p50_ns=%" PRIu64
-		       " hist_p99_ns=%" PRIu64
-		       " max_lateness_ns=%" PRIu64
-		       " queue_enqueued=%" PRIu64
-		       " queue_dequeued=%" PRIu64
-		       " queue_full_events=%" PRIu64
-		       " queue_empty_events=%" PRIu64
-		       " context_switches=%" PRIu64
-		       " migration_detected=%u"
-		       " user_escape_count=%" PRIu64 "\n",
-		       index, cpus[index],
-		       domain_status.worker_states[index],
-		       domain_status.worker_results[index],
-		       region->samples_produced, total,
-		       cpu_accel_hist_percentile(region, total, 500),
-		       cpu_accel_hist_percentile(region, total, 990),
-			       region->max_lateness_ns,
-			       region->queue_enqueued,
-			       region->queue_dequeued,
-			       region->queue_full_events,
-			       region->queue_empty_events,
-		       (uint64_t)shared->context_switches,
-		       shared->migration_detected,
-		       (uint64_t)shared->user_escape_count);
+		print_worker_status(index, cpus[index],
+				    domain_status.worker_states[index],
+				    domain_status.worker_results[index],
+				    shared, region, requested->work_bytes);
 		if (expected_failure) {
 			if (index == fail_worker) {
 				if (domain_status.worker_states[index] !=

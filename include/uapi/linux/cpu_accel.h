@@ -81,6 +81,8 @@ enum cpu_accel_workload {
 	CPU_ACCEL_WORKLOAD_USER_DEATH,
 	/* Tight-loop inter-iteration (oslat) latency probe on the owned CPU. */
 	CPU_ACCEL_WORKLOAD_USER_OSLAT,
+	/* Static linear pipeline using bounded SPSC queues. */
+	CPU_ACCEL_WORKLOAD_USER_PIPELINE,
 };
 
 struct cpu_accel_config {
@@ -265,7 +267,7 @@ struct cpu_accel_region_create {
 	__u64 size_bytes;
 	__u32 permissions;
 	__s32 numa_node;
-	__u32 reserved;
+	__u32 region_type;
 	__u32 region_id;
 	__u64 mmap_token;
 	__u64 epoch;
@@ -335,6 +337,71 @@ struct cpu_accel_domain_status {
 	__s32 worker_results[CPU_ACCEL_MAX_WORKERS];
 };
 
+#define CPU_ACCEL_REGION_TYPE_WORKLOAD		0U
+#define CPU_ACCEL_REGION_TYPE_SPSC_QUEUE	1U
+
+#define CPU_ACCEL_MAX_SPSC_QUEUES \
+	(CPU_ACCEL_MAX_WORKERS - 1U)
+#define CPU_ACCEL_SPSC_MAX_CAPACITY		1024U
+#define CPU_ACCEL_SPSC_ABI_VERSION		1U
+#define CPU_ACCEL_SPSC_MAGIC			0x53505343U
+#define CPU_ACCEL_SPSC_CACHE_LINE		64U
+#define CPU_ACCEL_SPSC_SLOTS_OFFSET		256U
+#define CPU_ACCEL_SPSC_OWNER_PRODUCER_READY	1U
+#define CPU_ACCEL_SPSC_OWNER_CONSUMER_READY	2U
+#define CPU_ACCEL_SPSC_PRODUCER_DONE		4U
+
+struct cpu_accel_spsc_producer_line {
+	__u64 head;
+	__u64 enqueued;
+	__u64 full_events;
+	__u64 checksum;
+	__u64 reserved[4];
+};
+
+struct cpu_accel_spsc_consumer_line {
+	__u64 tail;
+	__u64 dequeued;
+	__u64 empty_events;
+	__u64 checksum;
+	__u64 reserved[4];
+};
+
+struct cpu_accel_spsc_slot {
+	__u64 sequence;
+	__u64 value;
+};
+
+struct cpu_accel_spsc_queue {
+	__u32 magic;
+	__u32 abi_version;
+	__u32 header_size;
+	__u32 capacity;
+	__u32 slot_mask;
+	__u32 producer_worker;
+	__u32 consumer_worker;
+	__u32 owner_ready;
+	__u64 region_size;
+	__u64 epoch;
+	__u64 mmap_token;
+	__u8 header_pad[8];
+	struct cpu_accel_spsc_producer_line producer;
+	__u8 producer_pad[CPU_ACCEL_SPSC_CACHE_LINE -
+			  sizeof(struct cpu_accel_spsc_producer_line)];
+	struct cpu_accel_spsc_consumer_line consumer;
+	__u8 consumer_pad[CPU_ACCEL_SPSC_CACHE_LINE -
+			  sizeof(struct cpu_accel_spsc_consumer_line)];
+	__u8 slots_pad[CPU_ACCEL_SPSC_CACHE_LINE];
+	struct cpu_accel_spsc_slot slots[];
+};
+
+struct cpu_accel_domain_queue_config {
+	__u32 queue_count;
+	__u32 reserved;
+	__u32 region_ids[CPU_ACCEL_MAX_SPSC_QUEUES];
+	__u32 capacities[CPU_ACCEL_MAX_SPSC_QUEUES];
+};
+
 #define CPU_ACCEL_IOC_MAGIC	'C'
 #define CPU_ACCEL_IOC_CONFIG	_IOW(CPU_ACCEL_IOC_MAGIC, 0x00, \
 						struct cpu_accel_config)
@@ -375,5 +442,7 @@ struct cpu_accel_domain_status {
 
 #define CPU_ACCEL_IOC_DOMAIN_WORKER_ESCAPE	_IOW(CPU_ACCEL_IOC_MAGIC, 0x15, \
 							struct cpu_accel_domain_worker_escape)
+#define CPU_ACCEL_IOC_DOMAIN_QUEUE_CONFIG	_IOWR(CPU_ACCEL_IOC_MAGIC, 0x16, \
+							struct cpu_accel_domain_queue_config)
 
 #endif /* _UAPI_LINUX_CPU_ACCEL_H */

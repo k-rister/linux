@@ -4,11 +4,25 @@
 
 #include <errno.h>
 #include <sched.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
+
+_Static_assert(sizeof(struct cpu_accel_spsc_queue) ==
+	       CPU_ACCEL_SPSC_SLOTS_OFFSET,
+	       "SPSC queue fixed header must be 256 bytes");
+_Static_assert(sizeof(struct cpu_accel_spsc_producer_line) ==
+	       CPU_ACCEL_SPSC_CACHE_LINE,
+	       "SPSC producer line must be cache-line sized");
+_Static_assert(sizeof(struct cpu_accel_spsc_consumer_line) ==
+	       CPU_ACCEL_SPSC_CACHE_LINE,
+	       "SPSC consumer line must be cache-line sized");
+_Static_assert(offsetof(struct cpu_accel_spsc_queue, slots) ==
+	       CPU_ACCEL_SPSC_SLOTS_OFFSET,
+	       "SPSC slots must begin after four cache lines");
 
 static void fail(const char *message)
 {
@@ -207,9 +221,9 @@ static void test_invalid_region(struct cpu_accel_handle *handle)
 	expect_ioctl_failure("create region with unknown permission",
 			     cpu_accel_region_create(handle, &create), EINVAL);
 	create.permissions = CPU_ACCEL_REGION_PERM_BIDIRECTIONAL;
-	create.reserved = 1;
+	create.region_type = 2;
 	errno = 0;
-	expect_ioctl_failure("create region with reserved word",
+	expect_ioctl_failure("create region with unknown type",
 			     cpu_accel_region_create(handle, &create), EINVAL);
 }
 

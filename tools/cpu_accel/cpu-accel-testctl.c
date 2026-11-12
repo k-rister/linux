@@ -56,9 +56,12 @@ struct cpu_accel_user_context {
 	unsigned long reclaim_bytes;
 	struct cpu_accel_shared *shared;
 	struct cpu_accel_workload_region *region;
+	struct cpu_accel_spsc_queue *input_queue;
+	struct cpu_accel_spsc_queue *output_queue;
 	int fd;
 	uint64_t cycles_per_ns;
-	uint64_t fail_after_samples;
+	uint32_t worker_index;
+	uint32_t worker_count;
 	struct cpu_accel_user_unmap_range *unmap_ranges;
 	unsigned long nr_unmap_ranges;
 	struct cpu_accel_domain_worker_join domain_join;
@@ -68,6 +71,21 @@ struct cpu_accel_user_context {
 struct cpu_accel_user_unmap_range {
 	unsigned long start;
 	unsigned long length;
+};
+
+struct cpu_accel_user_queue_spec {
+	uint64_t token;
+	uint64_t size;
+	uint64_t epoch;
+	uint64_t capacity;
+	bool present;
+};
+
+struct cpu_accel_user_pipeline_spec {
+	struct cpu_accel_user_queue_spec input;
+	struct cpu_accel_user_queue_spec output;
+	uint32_t worker_index;
+	uint32_t worker_count;
 };
 
 #define CPU_ACCEL_MAX_USER_UNMAP_RANGES	256
@@ -128,6 +146,35 @@ static inline uint64_t cpu_accel_read_tsc_ordered(void)
 static inline void cpu_relax(void)
 {
 	__asm__ volatile("pause" ::: "memory");
+}
+
+CPU_ACCEL_USER_IMAGE
+static bool cpu_accel_spsc_wait_owners(
+	struct cpu_accel_spsc_queue *queue, bool producer,
+	const struct cpu_accel_shared *shared)
+{
+	uint32_t bit = producer ? CPU_ACCEL_SPSC_OWNER_PRODUCER_READY :
+				  CPU_ACCEL_SPSC_OWNER_CONSUMER_READY;
+
+	__atomic_fetch_or(&queue->owner_ready, bit, __ATOMIC_RELEASE);
+	while ((__atomic_load_n(&queue->owner_ready, __ATOMIC_ACQUIRE) &
+		 (CPU_ACCEL_SPSC_OWNER_PRODUCER_READY |
+		  CPU_ACCEL_SPSC_OWNER_CONSUMER_READY)) !=
+	       (CPU_ACCEL_SPSC_OWNER_PRODUCER_READY |
+		CPU_ACCEL_SPSC_OWNER_CONSUMER_READY)) {
+		if (__atomic_load_n(&shared->stop_requested,
+				    __ATOMIC_ACQUIRE))
+			return false;
+		cpu_relax();
+	}
+	return true;
+}
+
+CPU_ACCEL_USER_IMAGE
+static void cpu_accel_spsc_producer_done(struct cpu_accel_spsc_queue *queue)
+{
+	__atomic_fetch_or(&queue->owner_ready,
+			  CPU_ACCEL_SPSC_PRODUCER_DONE, __ATOMIC_RELEASE);
 }
 
 static __attribute__((always_inline)) inline long
@@ -406,11 +453,6 @@ static void cpu_accel_user_oslat(void *argument)
 			samples_valid++;
 		}
 		samples++;
-		if (context->fail_after_samples &&
-		    samples >= context->fail_after_samples) {
-			(void)cpu_accel_user_syscall1(SYS_exit_group, 90);
-			__builtin_unreachable();
-		}
 		if (delta_ns > max_delta)
 			max_delta = delta_ns;
 		if (delta_ns < min_delta)
@@ -445,6 +487,305 @@ static void cpu_accel_user_oslat(void *argument)
 	__atomic_store_n(&region->sum_lateness_ns, sum_delta,
 			 __ATOMIC_RELAXED);
 	__atomic_store_n(&region->work_iterations, samples,
+			 __ATOMIC_RELAXED);
+	__atomic_thread_fence(__ATOMIC_RELEASE);
+	__atomic_store_n(&region->completion_sequence, 1, __ATOMIC_RELEASE);
+	(void)cpu_accel_user_exit_syscall(context->fd);
+	__builtin_unreachable();
+}
+
+CPU_ACCEL_USER_IMAGE
+static bool cpu_accel_spsc_enqueue(struct cpu_accel_spsc_queue *queue,
+				   uint64_t sequence, uint64_t value,
+				   const struct cpu_accel_shared *shared)
+{
+	for (;;) {
+		uint64_t head = __atomic_load_n(&queue->producer.head,
+						__ATOMIC_RELAXED);
+		uint64_t tail = __atomic_load_n(&queue->consumer.tail,
+						__ATOMIC_ACQUIRE);
+		struct cpu_accel_spsc_slot *slot;
+		bool counted_full = false;
+
+		while (head - tail >= queue->capacity) {
+			if (!counted_full) {
+				queue->producer.full_events++;
+				counted_full = true;
+			}
+			if (__atomic_load_n(&shared->stop_requested,
+					    __ATOMIC_ACQUIRE))
+				return false;
+			cpu_relax();
+			tail = __atomic_load_n(&queue->consumer.tail,
+					       __ATOMIC_ACQUIRE);
+		}
+		slot = &queue->slots[head & queue->slot_mask];
+		slot->sequence = sequence;
+		slot->value = value;
+		__atomic_store_n(&queue->producer.head, head + 1,
+				 __ATOMIC_RELEASE);
+		queue->producer.enqueued++;
+		queue->producer.checksum += sequence ^ value;
+		return true;
+	}
+}
+
+CPU_ACCEL_USER_IMAGE
+static bool cpu_accel_spsc_dequeue(struct cpu_accel_spsc_queue *queue,
+				   uint64_t *sequence, uint64_t *value,
+				   const struct cpu_accel_shared *shared)
+{
+	for (;;) {
+		uint64_t tail = __atomic_load_n(&queue->consumer.tail,
+						__ATOMIC_RELAXED);
+		uint64_t head = __atomic_load_n(&queue->producer.head,
+						__ATOMIC_ACQUIRE);
+		const struct cpu_accel_spsc_slot *slot;
+		bool counted_empty = false;
+
+		while (head == tail) {
+			if (!counted_empty) {
+				queue->consumer.empty_events++;
+				counted_empty = true;
+			}
+			if (__atomic_load_n(&shared->stop_requested,
+					    __ATOMIC_ACQUIRE))
+				return false;
+			if (__atomic_load_n(&queue->owner_ready,
+					    __ATOMIC_ACQUIRE) &
+			    CPU_ACCEL_SPSC_PRODUCER_DONE)
+				return false;
+			cpu_relax();
+			head = __atomic_load_n(&queue->producer.head,
+					       __ATOMIC_ACQUIRE);
+		}
+		slot = &queue->slots[tail & queue->slot_mask];
+		*sequence = slot->sequence;
+		*value = slot->value;
+		__atomic_store_n(&queue->consumer.tail, tail + 1,
+				 __ATOMIC_RELEASE);
+		queue->consumer.dequeued++;
+		queue->consumer.checksum += *sequence ^ *value;
+		return true;
+	}
+}
+
+CPU_ACCEL_USER_IMAGE
+struct cpu_accel_user_latency_state {
+	uint64_t samples;
+	uint64_t max_delta;
+	uint64_t min_delta;
+	uint64_t last_delta;
+	uint64_t sum_delta;
+	uint32_t samples_valid;
+};
+
+CPU_ACCEL_USER_IMAGE
+static void cpu_accel_user_record_latency(
+	struct cpu_accel_workload_region *region,
+	struct cpu_accel_user_latency_state *latency,
+	uint64_t delta_ns, uint64_t timestamp_ns)
+{
+	if (latency->samples_valid < CPU_ACCEL_WORKLOAD_MAX_SAMPLES) {
+		struct cpu_accel_workload_sample *sample =
+			(void *)(region->payload + region->samples_offset);
+
+		sample[latency->samples_valid].timestamp_ns = timestamp_ns;
+		sample[latency->samples_valid].lateness_ns = delta_ns;
+		latency->samples_valid++;
+	}
+	latency->samples++;
+	if (delta_ns > latency->max_delta)
+		latency->max_delta = delta_ns;
+	if (delta_ns < latency->min_delta)
+		latency->min_delta = delta_ns;
+	latency->last_delta = delta_ns;
+	((uint64_t *)(region->payload + region->lateness_hist_offset))
+		[cpu_accel_user_lateness_bin(delta_ns)]++;
+	if (delta_ns < CPU_ACCEL_WORKLOAD_LINEAR_BINS)
+		((uint64_t *)(region->payload + region->linear_hist_offset))
+			[delta_ns]++;
+	else
+		((uint64_t *)(region->payload + region->linear_hist_offset))
+			[CPU_ACCEL_WORKLOAD_LINEAR_BINS]++;
+	latency->sum_delta += delta_ns;
+}
+
+CPU_ACCEL_USER_IMAGE
+__attribute__((optimize("no-tree-vectorize", "no-tree-slp-vectorize")))
+static void cpu_accel_user_pipeline(void *argument)
+{
+	struct cpu_accel_user_context *context = argument;
+	struct cpu_accel_workload_region *region = context->region;
+	struct cpu_accel_user_latency_state latency = {
+		.min_delta = UINT64_MAX,
+	};
+	uint64_t cpm = context->cycles_per_ns;
+	uint64_t start_tsc;
+	uint64_t duration_cycles;
+	uint64_t input_sequence = 0;
+	uint64_t output_sequence = 0;
+	uint64_t enqueued = 0;
+	uint64_t dequeued = 0;
+	uint64_t max_backlog = 0;
+
+	if (!region || context->worker_index >= context->worker_count ||
+	    (!context->input_queue && context->worker_index) ||
+	    (context->input_queue && context->worker_index + 1 >
+	     context->worker_count) ||
+	    (!context->output_queue &&
+	     context->worker_index + 1 != context->worker_count) ||
+	    (context->output_queue &&
+	     context->worker_index + 1 >= context->worker_count)) {
+		cpu_accel_user_syscall1(SYS_exit_group, 124);
+		__builtin_unreachable();
+	}
+	if (!cpm)
+		cpm = CPU_ACCEL_CP_SCALE;
+	while (__atomic_load_n(&context->shared->state, __ATOMIC_ACQUIRE) !=
+	       CPU_ACCEL_STATE_RUNNING) {
+		if (__atomic_load_n(&context->shared->stop_requested,
+				    __ATOMIC_ACQUIRE)) {
+			(void)cpu_accel_user_exit_syscall(context->fd);
+			__builtin_unreachable();
+		}
+		cpu_relax();
+	}
+
+	start_tsc = cpu_accel_read_tsc_ordered();
+	duration_cycles = (__atomic_load_n(&context->shared->duration_ns,
+					   __ATOMIC_RELAXED) * cpm) /
+		CPU_ACCEL_CP_SCALE;
+	for (;;) {
+		uint64_t now = cpu_accel_read_tsc_ordered();
+		bool duration_done = now - start_tsc >= duration_cycles;
+		bool stop_requested = __atomic_load_n(
+			&context->shared->stop_requested, __ATOMIC_RELAXED);
+		uint64_t operation_start;
+		uint64_t operation_end;
+		uint64_t sequence;
+		uint64_t value;
+
+		if (stop_requested)
+			break;
+		if (!context->input_queue) {
+			if (duration_done)
+				break;
+			operation_start = cpu_accel_read_tsc_ordered();
+			if (!cpu_accel_spsc_enqueue(context->output_queue,
+						    output_sequence,
+						    output_sequence ^ 0x5a,
+						    context->shared))
+				break;
+			output_sequence++;
+			enqueued++;
+			operation_end = cpu_accel_read_tsc_ordered();
+			cpu_accel_user_record_latency(
+				region, &latency,
+				((operation_end - operation_start) *
+				 CPU_ACCEL_CP_SCALE) / cpm,
+				__atomic_load_n(&context->shared->start_ns,
+						__ATOMIC_RELAXED) +
+				((operation_end - start_tsc) *
+				 CPU_ACCEL_CP_SCALE) / cpm);
+		} else {
+			operation_start = cpu_accel_read_tsc_ordered();
+			if (!cpu_accel_spsc_dequeue(context->input_queue,
+						    &sequence, &value,
+						    context->shared)) {
+				if (duration_done)
+					break;
+				continue;
+			}
+			if (sequence != input_sequence ||
+			    value != (input_sequence ^ 0x5a)) {
+				cpu_accel_user_syscall1(SYS_exit_group, 91);
+				__builtin_unreachable();
+			}
+			input_sequence++;
+			dequeued++;
+			operation_end = cpu_accel_read_tsc_ordered();
+			cpu_accel_user_record_latency(
+				region, &latency,
+				((operation_end - operation_start) *
+				 CPU_ACCEL_CP_SCALE) / cpm,
+				__atomic_load_n(&context->shared->start_ns,
+						__ATOMIC_RELAXED) +
+				((operation_end - start_tsc) *
+				 CPU_ACCEL_CP_SCALE) / cpm);
+			if (context->output_queue) {
+				operation_start = cpu_accel_read_tsc_ordered();
+				if (!cpu_accel_spsc_enqueue(
+						context->output_queue,
+						output_sequence,
+						output_sequence ^ 0x5a,
+						context->shared))
+					break;
+				output_sequence++;
+				enqueued++;
+				operation_end = cpu_accel_read_tsc_ordered();
+				cpu_accel_user_record_latency(
+					region, &latency,
+					((operation_end - operation_start) *
+					 CPU_ACCEL_CP_SCALE) / cpm,
+					__atomic_load_n(
+						&context->shared->start_ns,
+						__ATOMIC_RELAXED) +
+					((operation_end - start_tsc) *
+					 CPU_ACCEL_CP_SCALE) / cpm);
+			}
+		}
+		if (context->output_queue) {
+			uint64_t backlog =
+				__atomic_load_n(
+					&context->output_queue->producer.head,
+					__ATOMIC_RELAXED) -
+				__atomic_load_n(
+					&context->output_queue->consumer.tail,
+					__ATOMIC_RELAXED);
+
+			if (backlog > max_backlog)
+				max_backlog = backlog;
+		}
+	}
+
+	if (context->output_queue)
+		cpu_accel_spsc_producer_done(context->output_queue);
+
+	__atomic_store_n(&region->samples_produced, latency.samples,
+			 __ATOMIC_RELAXED);
+	__atomic_store_n(&region->samples_valid, latency.samples_valid,
+			 __ATOMIC_RELAXED);
+	__atomic_store_n(&region->max_lateness_ns, latency.max_delta,
+			 __ATOMIC_RELAXED);
+	__atomic_store_n(&region->min_lateness_ns,
+			 latency.samples ? latency.min_delta : 0,
+			 __ATOMIC_RELAXED);
+	__atomic_store_n(&region->last_lateness_ns, latency.last_delta,
+			 __ATOMIC_RELAXED);
+	__atomic_store_n(&region->sum_lateness_ns, latency.sum_delta,
+			 __ATOMIC_RELAXED);
+	__atomic_store_n(&region->work_iterations, enqueued + dequeued,
+			 __ATOMIC_RELAXED);
+	__atomic_store_n(&region->queue_enqueued, enqueued,
+			 __ATOMIC_RELAXED);
+	__atomic_store_n(&region->queue_dequeued, dequeued,
+			 __ATOMIC_RELAXED);
+	__atomic_store_n(&region->queue_full_events,
+			 context->output_queue ?
+			 context->output_queue->producer.full_events : 0,
+			 __ATOMIC_RELAXED);
+	__atomic_store_n(&region->queue_empty_events,
+			 context->input_queue ?
+			 context->input_queue->consumer.empty_events : 0,
+			 __ATOMIC_RELAXED);
+	__atomic_store_n(&region->queue_max_backlog, max_backlog,
+			 __ATOMIC_RELAXED);
+	__atomic_store_n(&region->queue_checksum,
+			 (context->output_queue ?
+			  context->output_queue->producer.checksum : 0) +
+			 (context->input_queue ?
+			  context->input_queue->consumer.checksum : 0),
 			 __ATOMIC_RELAXED);
 	__atomic_thread_fence(__ATOMIC_RELEASE);
 	__atomic_store_n(&region->completion_sequence, 1, __ATOMIC_RELEASE);
@@ -680,7 +1021,7 @@ static int cpu_accel_collect_unmap_ranges(
 	unsigned long rseq_start, unsigned long rseq_end,
 	unsigned long page_size)
 {
-	struct cpu_accel_user_keep_range keep[7] = {
+	struct cpu_accel_user_keep_range keep[9] = {
 		{ .start = image_start, .end = image_end },
 		{ .start = stack_start, .end = stack_end },
 		{ .start = (uintptr_t)handle->shared,
@@ -695,6 +1036,14 @@ static int cpu_accel_collect_unmap_ranges(
 		{ .start = context->reclaim_page,
 		  .end = context->reclaim_page ?
 			context->reclaim_page + context->reclaim_bytes : 0 },
+		{ .start = (uintptr_t)context->input_queue,
+		  .end = context->input_queue ?
+			(uintptr_t)context->input_queue +
+			context->input_queue->region_size : 0 },
+		{ .start = (uintptr_t)context->output_queue,
+		  .end = context->output_queue ?
+			(uintptr_t)context->output_queue +
+			context->output_queue->region_size : 0 },
 	};
 	FILE *maps;
 	char *line = NULL;
@@ -947,7 +1296,9 @@ static void usage(FILE *stream, const char *program)
 		"Usage:\n"
 		"  %s run [--cpu N] [--duration-ms N] [--period-us N]\n"
 		"      [--cpus CPU[,CPU...]] (multi-CPU user-oslat)\n"
+		"      [--queue-capacity N] (power-of-two SPSC slots)\n"
 		"      [--smp-fail-worker N] (expect one worker to fail)\n"
+		"      [--smp-join-delay-ms N] (test final-worker startup delay)\n"
 		"      [--workload timestamp|memmove|user-region|user-cyclictest|\n"
 		"                   user-hang|user-reclaim|user-death|user-oslat]\n"
 		"      [--work-bytes N]\n"
@@ -978,6 +1329,18 @@ static int pin_cpu(unsigned int cpu)
 	CPU_ZERO(&set);
 	CPU_SET(cpu, &set);
 	return sched_setaffinity(0, sizeof(set), &set);
+}
+
+static int wait_for_cpu(unsigned int cpu)
+{
+	for (unsigned int attempts = 0; attempts < 1000; attempts++) {
+		if ((unsigned int)sched_getcpu() == cpu)
+			return 0;
+		if (sched_yield() < 0)
+			return -1;
+	}
+	errno = EAGAIN;
+	return -1;
 }
 
 static int move_self_to_cgroup(const char *cgroup)
@@ -1035,7 +1398,8 @@ static bool cpu_accel_user_workload_needs_region(uint32_t workload)
 {
 	return workload == CPU_ACCEL_WORKLOAD_USER_REGION ||
 		workload == CPU_ACCEL_WORKLOAD_USER_CYCLICTEST ||
-		workload == CPU_ACCEL_WORKLOAD_USER_OSLAT;
+		workload == CPU_ACCEL_WORKLOAD_USER_OSLAT ||
+		workload == CPU_ACCEL_WORKLOAD_USER_PIPELINE;
 }
 
 static uint64_t cpu_accel_align_up_page(uint64_t value, uint64_t page_size)
@@ -1072,6 +1436,90 @@ static int cpu_accel_workload_region_size(uint32_t workload,
 	if (*size_bytes > max_region_bytes)
 		return -EINVAL;
 	return 0;
+}
+
+static bool cpu_accel_spsc_capacity_valid(uint64_t capacity)
+{
+	return capacity && capacity <= CPU_ACCEL_SPSC_MAX_CAPACITY &&
+		!(capacity & (capacity - 1));
+}
+
+static int cpu_accel_spsc_queue_region_size(uint64_t capacity,
+					    uint64_t page_size,
+					    uint64_t max_region_bytes,
+					    uint64_t *size_bytes)
+{
+	uint64_t raw_size;
+
+	if (!cpu_accel_spsc_capacity_valid(capacity))
+		return -EINVAL;
+	raw_size = CPU_ACCEL_SPSC_SLOTS_OFFSET +
+		capacity * sizeof(struct cpu_accel_spsc_slot);
+	*size_bytes = cpu_accel_align_up_page(raw_size, page_size);
+	return *size_bytes > max_region_bytes ? -EINVAL : 0;
+}
+
+static void
+cpu_accel_spsc_queue_init(struct cpu_accel_spsc_queue *queue,
+			  uint64_t size_bytes, uint64_t epoch,
+			  uint64_t token, uint32_t capacity,
+			  uint32_t producer_worker,
+			  uint32_t consumer_worker)
+{
+	memset(queue, 0, size_bytes);
+	queue->magic = CPU_ACCEL_SPSC_MAGIC;
+	queue->abi_version = CPU_ACCEL_SPSC_ABI_VERSION;
+	queue->header_size = sizeof(*queue);
+	queue->capacity = capacity;
+	queue->slot_mask = capacity - 1;
+	queue->producer_worker = producer_worker;
+	queue->consumer_worker = consumer_worker;
+	queue->region_size = size_bytes;
+	queue->epoch = epoch;
+	queue->mmap_token = token;
+}
+
+static bool cpu_accel_spsc_queue_valid(
+	const struct cpu_accel_spsc_queue *queue,
+	const struct cpu_accel_user_queue_spec *spec,
+	uint32_t producer_worker, uint32_t consumer_worker)
+{
+	return spec->present && queue &&
+		queue->magic == CPU_ACCEL_SPSC_MAGIC &&
+		queue->abi_version == CPU_ACCEL_SPSC_ABI_VERSION &&
+		queue->header_size == sizeof(*queue) &&
+		queue->capacity == spec->capacity &&
+		queue->slot_mask == spec->capacity - 1 &&
+		queue->producer_worker == producer_worker &&
+		queue->consumer_worker == consumer_worker &&
+		queue->region_size == spec->size &&
+		queue->epoch == spec->epoch &&
+		queue->mmap_token == spec->token;
+}
+
+static struct cpu_accel_spsc_queue *cpu_accel_user_queue_map(
+	struct cpu_accel_handle *handle,
+	const struct cpu_accel_user_queue_spec *spec,
+	uint32_t producer_worker, uint32_t consumer_worker)
+{
+	struct cpu_accel_region_create create = {
+		.size_bytes = spec->size,
+		.permissions = CPU_ACCEL_REGION_PERM_BIDIRECTIONAL,
+		.region_type = CPU_ACCEL_REGION_TYPE_SPSC_QUEUE,
+		.mmap_token = spec->token,
+	};
+	struct cpu_accel_spsc_queue *queue;
+
+	queue = cpu_accel_region_mmap(handle, &create, false);
+	if (queue == MAP_FAILED)
+		return NULL;
+	if (!cpu_accel_spsc_queue_valid(queue, spec, producer_worker,
+					 consumer_worker)) {
+		errno = EINVAL;
+		munmap(queue, spec->size);
+		return NULL;
+	}
+	return queue;
 }
 
 static void
@@ -1122,11 +1570,13 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 				 uint64_t region_token, uint64_t region_size,
 				 uint64_t region_epoch,
 				 uint64_t worker_token,
-				 uint64_t fail_after_samples)
+				 const struct cpu_accel_user_pipeline_spec *pipeline)
 {
 	struct cpu_accel_user_context *context;
 	struct cpu_accel_region_create region_create = {};
 	struct cpu_accel_workload_region *owner_region = MAP_FAILED;
+	struct cpu_accel_spsc_queue *input_queue = NULL;
+	struct cpu_accel_spsc_queue *output_queue = NULL;
 	uintptr_t entry_ip;
 	uintptr_t image_end;
 	uintptr_t image_start;
@@ -1145,6 +1595,8 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 	int user_reclaim = config->workload == CPU_ACCEL_WORKLOAD_USER_RECLAIM;
 	int user_death = config->workload == CPU_ACCEL_WORKLOAD_USER_DEATH;
 	int user_oslat = config->workload == CPU_ACCEL_WORKLOAD_USER_OSLAT;
+	int user_pipeline = config->workload ==
+		CPU_ACCEL_WORKLOAD_USER_PIPELINE;
 	int user_region = config->workload == CPU_ACCEL_WORKLOAD_USER_REGION;
 	int ret = 1;
 
@@ -1187,6 +1639,48 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 		fprintf(stderr, "missing workload region mapping\n");
 		goto out;
 	}
+	if (user_pipeline && !pipeline) {
+		fprintf(stderr, "missing pipeline queue mapping\n");
+		goto out;
+	}
+	if (!user_pipeline && pipeline) {
+		fprintf(stderr, "queue mappings require user-pipeline\n");
+		goto out;
+	}
+	if (pipeline && pipeline->input.present) {
+		input_queue = cpu_accel_user_queue_map(
+			handle, &pipeline->input, pipeline->worker_index - 1,
+			pipeline->worker_index);
+		if (!input_queue) {
+			if (!errno)
+				errno = EINVAL;
+			perror("map input SPSC queue");
+			goto out;
+		}
+	}
+	if (pipeline && pipeline->output.present) {
+		output_queue = cpu_accel_user_queue_map(
+			handle, &pipeline->output, pipeline->worker_index,
+			pipeline->worker_index + 1);
+		if (!output_queue) {
+			if (!errno)
+				errno = EINVAL;
+			perror("map output SPSC queue");
+			goto out;
+		}
+	}
+	if (input_queue &&
+	    !cpu_accel_spsc_wait_owners(
+		    input_queue, false,
+		    worker_shared ? worker_shared :
+		    (const struct cpu_accel_shared *)handle->shared))
+		goto out;
+	if (output_queue &&
+	    !cpu_accel_spsc_wait_owners(
+		    output_queue, true,
+		    worker_shared ? worker_shared :
+		    (const struct cpu_accel_shared *)handle->shared))
+		goto out;
 
 	page_size = sysconf(_SC_PAGESIZE);
 	if (page_size <= 0 || (size_t)page_size > SIZE_MAX / 16 ||
@@ -1269,6 +1763,8 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 
 	context = stack;
 	context->region = owner_region == MAP_FAILED ? NULL : owner_region;
+	context->input_queue = input_queue;
+	context->output_queue = output_queue;
 	context->shared = worker_shared ? worker_shared :
 		(struct cpu_accel_shared *)(uintptr_t)handle->shared;
 	context->reclaim_page = user_reclaim ?
@@ -1276,13 +1772,18 @@ static int run_user_worker_image(struct cpu_accel_handle *handle,
 	context->reclaim_bytes = reclaim_bytes;
 	context->fd = handle->fd;
 	context->cycles_per_ns = cpu_accel_calibrate_cycles_per_ns();
-	context->fail_after_samples = fail_after_samples;
+	if (pipeline) {
+		context->worker_index = pipeline->worker_index;
+		context->worker_count = pipeline->worker_count;
+	}
 	if (user_hang)
 		entry_ip = (uintptr_t)cpu_accel_user_hang;
 	else if (user_death)
 		entry_ip = (uintptr_t)cpu_accel_user_death;
 	else if (user_oslat)
 		entry_ip = (uintptr_t)cpu_accel_user_oslat;
+	else if (user_pipeline)
+		entry_ip = (uintptr_t)cpu_accel_user_pipeline;
 	else if (user_region)
 		entry_ip = (uintptr_t)cpu_accel_user_region_workload;
 	else
@@ -1357,6 +1858,10 @@ out:
 		munmap(reclaim_mapping, reclaim_bytes);
 	if (owner_region != MAP_FAILED)
 		munmap(owner_region, region_size);
+	if (input_queue)
+		munmap(input_queue, input_queue->region_size);
+	if (output_queue)
+		munmap(output_queue, output_queue->region_size);
 	cpu_accel_close(handle);
 	return ret;
 }
@@ -1423,14 +1928,15 @@ static int run_user_worker(int argc, char **argv)
 		return 1;
 	}
 	return run_user_worker_image(&handle, &config, reclaim_file,
-				     values[6], values[7], values[8], 0, 0);
+				     values[6], values[7], values[8], 0, NULL);
 }
 
 static int run_smp_user_worker(int argc, char **argv)
 {
-	enum { SMP_WORKER_VALUE_COUNT = 11 };
+		enum { SMP_WORKER_VALUE_COUNT = 23 };
 	struct cpu_accel_config config = {};
 	struct cpu_accel_handle handle;
+	struct cpu_accel_user_pipeline_spec pipeline = {};
 	uint64_t values[SMP_WORKER_VALUE_COUNT];
 	const char *reclaim_file = argv[SMP_WORKER_VALUE_COUNT + 2];
 	int fd;
@@ -1446,14 +1952,59 @@ static int run_smp_user_worker(int argc, char **argv)
 		}
 	}
 	if (values[0] > INT_MAX || values[1] > UINT_MAX ||
-	    values[2] != CPU_ACCEL_WORKLOAD_USER_OSLAT ||
+	    (values[2] != CPU_ACCEL_WORKLOAD_USER_OSLAT &&
+	     values[2] != CPU_ACCEL_WORKLOAD_USER_PIPELINE) ||
 	    values[3] > UINT_MAX ||
 	    (values[8] && values[9] > SIZE_MAX) || !values[6] ||
 	    (values[7] && (!values[8] || !values[9])) ||
 	    (!values[7] && (values[8] || values[9])) ||
+		    values[10] >= values[11] || values[11] < 2 ||
+		    values[11] > CPU_ACCEL_MAX_WORKERS || values[12] > 1 ||
+		    values[17] > 1 ||
+		    (values[14] > SIZE_MAX || values[19] > SIZE_MAX) ||
+		    values[22] > CPU_ACCEL_MAX_DURATION_NS / 1000000ULL ||
 	    strcmp(reclaim_file, "-")) {
 		fprintf(stderr, "out-of-range internal SMP user-worker argument\n");
 		return 2;
+	}
+	if (values[2] == CPU_ACCEL_WORKLOAD_USER_OSLAT &&
+	    (values[12] || values[13] || values[14] || values[15] ||
+	     values[16] || values[17] || values[18] || values[19] ||
+	     values[20] || values[21])) {
+		fprintf(stderr, "user-oslat does not accept queue mappings\n");
+		return 2;
+	}
+	if (values[2] == CPU_ACCEL_WORKLOAD_USER_PIPELINE) {
+		bool input_present = values[10] > 0;
+		bool output_present = values[10] + 1 < values[11];
+
+		if (input_present != !!values[12] ||
+		    output_present != !!values[17] ||
+		    (input_present &&
+		     (!values[13] || !values[14] || !values[15] ||
+		      !cpu_accel_spsc_capacity_valid(values[16]))) ||
+		    (output_present &&
+		     (!values[18] || !values[19] || !values[20] ||
+		      !cpu_accel_spsc_capacity_valid(values[21])))) {
+			fprintf(stderr, "invalid internal pipeline queue mapping\n");
+			return 2;
+		}
+		pipeline.worker_index = values[10];
+		pipeline.worker_count = values[11];
+		pipeline.input = (struct cpu_accel_user_queue_spec){
+			.token = values[13],
+			.size = values[14],
+			.epoch = values[15],
+			.capacity = values[16],
+			.present = input_present,
+		};
+		pipeline.output = (struct cpu_accel_user_queue_spec){
+			.token = values[18],
+			.size = values[19],
+			.epoch = values[20],
+			.capacity = values[21],
+			.present = output_present,
+		};
 	}
 
 	fd = values[0];
@@ -1467,6 +2018,20 @@ static int run_smp_user_worker(int argc, char **argv)
 		close(fd);
 		return 1;
 	}
+	if (wait_for_cpu(config.cpu) < 0) {
+		perror("wait for SMP user accelerator CPU");
+		close(fd);
+		return 1;
+	}
+	if (values[22]) {
+		struct timespec delay = {
+			.tv_sec = values[22] / 1000,
+			.tv_nsec = (values[22] % 1000) * 1000000,
+		};
+
+		while (nanosleep(&delay, &delay) && errno == EINTR)
+			;
+	}
 	if (cpu_accel_attach_worker_fd(&handle, fd) < 0) {
 		perror("map inherited SMP accelerator device");
 		close(fd);
@@ -1474,7 +2039,8 @@ static int run_smp_user_worker(int argc, char **argv)
 	}
 	return run_user_worker_image(&handle, &config, reclaim_file,
 				     values[7], values[8], values[9], values[6],
-				     values[10]);
+				     values[2] == CPU_ACCEL_WORKLOAD_USER_PIPELINE ?
+				     &pipeline : NULL);
 }
 
 static bool user_escape_completed(
@@ -2107,15 +2673,19 @@ static int parse_cpu_list(const char *text, unsigned int *cpus,
 	return 0;
 }
 
-static int run_smp_user_oslat(const struct cpu_accel_config *requested,
-			      const unsigned int *cpus,
-			      unsigned int cpu_count,
-			      unsigned int fail_worker)
+static int run_smp_user_workload(const struct cpu_accel_config *requested,
+				 const unsigned int *cpus,
+				 unsigned int cpu_count,
+				 unsigned int fail_worker,
+				 uint64_t queue_capacity,
+				 uint64_t join_delay_ms)
 {
 	struct cpu_accel_handle handle;
 	struct cpu_accel_capabilities capabilities = {};
 	struct cpu_accel_domain_config domain_config = {};
+	struct cpu_accel_domain_queue_config queue_config = {};
 	struct cpu_accel_domain_status domain_status = {};
+	struct cpu_accel_domain_worker_escape worker_escape = {};
 	struct cpu_accel_region_create region_create = {};
 	struct cpu_accel_region_ref region_ref = {};
 	struct {
@@ -2123,6 +2693,11 @@ static int run_smp_user_oslat(const struct cpu_accel_config *requested,
 		struct cpu_accel_region_ref ref;
 		struct cpu_accel_workload_region *mapping;
 	} regions[CPU_ACCEL_MAX_WORKERS] = {};
+	struct {
+		struct cpu_accel_region_create create;
+		struct cpu_accel_region_ref ref;
+		struct cpu_accel_spsc_queue *mapping;
+	} queues[CPU_ACCEL_MAX_SPSC_QUEUES] = {};
 	struct cpu_accel_shared *worker_shared[CPU_ACCEL_MAX_WORKERS] = {};
 	pid_t children[CPU_ACCEL_MAX_WORKERS] = {};
 	const struct timespec poll_delay = { .tv_nsec = 1000000 };
@@ -2130,6 +2705,8 @@ static int run_smp_user_oslat(const struct cpu_accel_config *requested,
 	uint64_t region_size;
 	uint64_t deadline;
 	long page_size;
+	unsigned int queue_count = requested->workload ==
+		CPU_ACCEL_WORKLOAD_USER_PIPELINE ? cpu_count - 1 : 0;
 	bool domain_configured = false;
 	bool domain_started = false;
 	bool expected_failure = fail_worker != UINT_MAX;
@@ -2166,6 +2743,7 @@ static int run_smp_user_oslat(const struct cpu_accel_config *requested,
 		region_create = (struct cpu_accel_region_create){
 			.size_bytes = region_size,
 			.permissions = CPU_ACCEL_REGION_PERM_BIDIRECTIONAL,
+			.region_type = CPU_ACCEL_REGION_TYPE_WORKLOAD,
 			.numa_node = -1,
 		};
 		if (cpu_accel_region_create(&handle, &region_create) < 0) {
@@ -2196,6 +2774,47 @@ static int run_smp_user_oslat(const struct cpu_accel_config *requested,
 		regions[index].ref = region_ref;
 		regions[index].mapping->region_epoch = region_ref.epoch;
 	}
+	for (unsigned int index = 0; index < queue_count; index++) {
+		if (cpu_accel_spsc_queue_region_size(queue_capacity,
+						      page_size,
+						      capabilities.max_region_bytes,
+						      &region_size)) {
+			errno = EINVAL;
+			perror("size SMP SPSC queue region");
+			goto out_close;
+		}
+		region_create = (struct cpu_accel_region_create){
+			.size_bytes = region_size,
+			.permissions = CPU_ACCEL_REGION_PERM_BIDIRECTIONAL,
+			.region_type = CPU_ACCEL_REGION_TYPE_SPSC_QUEUE,
+			.numa_node = -1,
+		};
+		if (cpu_accel_region_create(&handle, &region_create) < 0) {
+			perror("create SMP SPSC queue region");
+			goto out_close;
+		}
+		queues[index].create = region_create;
+		queues[index].mapping = cpu_accel_region_mmap(
+			&handle, &region_create, true);
+		if (queues[index].mapping == MAP_FAILED) {
+			perror("map SMP SPSC queue region");
+			goto out_close;
+		}
+		cpu_accel_spsc_queue_init(queues[index].mapping, region_size,
+					  region_create.epoch,
+					  region_create.mmap_token,
+					  queue_capacity, index, index + 1);
+		region_ref = (struct cpu_accel_region_ref){
+			.region_id = region_create.region_id,
+			.epoch = region_create.epoch,
+		};
+		if (cpu_accel_region_attach(&handle, &region_ref) < 0) {
+			perror("attach SMP SPSC queue region");
+			goto out_close;
+		}
+		queues[index].ref = region_ref;
+		queues[index].mapping->epoch = region_ref.epoch;
+	}
 
 	domain_config = (struct cpu_accel_domain_config){
 		.cpu_count = cpu_count,
@@ -2211,6 +2830,20 @@ static int run_smp_user_oslat(const struct cpu_accel_config *requested,
 		goto out_regions;
 	}
 	domain_configured = true;
+	if (queue_count) {
+		queue_config = (struct cpu_accel_domain_queue_config){
+			.queue_count = queue_count,
+		};
+		for (unsigned int index = 0; index < queue_count; index++) {
+			queue_config.region_ids[index] =
+				queues[index].create.region_id;
+			queue_config.capacities[index] = queue_capacity;
+		}
+		if (cpu_accel_domain_queue_config(&handle, &queue_config) < 0) {
+			perror("configure SMP SPSC queues");
+			goto out_domain;
+		}
+	}
 	for (unsigned int index = 0; index < cpu_count; index++) {
 		worker_shared[index] = mmap(NULL, CPU_ACCEL_MAP_SIZE,
 					    PROT_READ, MAP_SHARED, handle.fd,
@@ -2227,14 +2860,21 @@ static int run_smp_user_oslat(const struct cpu_accel_config *requested,
 	domain_started = true;
 
 	for (unsigned int index = 0; index < cpu_count; index++) {
-		char arguments[11][24];
+		char arguments[23][24];
 		char *const worker_argv[] = {
 			"/proc/self/exe", "--cpu-accel-smp-user-worker",
 			arguments[0], arguments[1], arguments[2], arguments[3],
 			arguments[4], arguments[5], arguments[6], arguments[7],
-			arguments[8], arguments[9], arguments[10], "-", NULL,
+			arguments[8], arguments[9], arguments[10], arguments[11],
+			arguments[12], arguments[13], arguments[14], arguments[15],
+			arguments[16], arguments[17], arguments[18], arguments[19],
+			arguments[20], arguments[21], arguments[22], "-", NULL,
 		};
 		int fd_flags = fcntl(handle.fd, F_GETFD);
+		bool pipeline = requested->workload ==
+			CPU_ACCEL_WORKLOAD_USER_PIPELINE;
+		bool input_present = pipeline && index > 0;
+		bool output_present = pipeline && index + 1 < cpu_count;
 
 		snprintf(arguments[0], sizeof(arguments[0]), "%d", handle.fd);
 		snprintf(arguments[1], sizeof(arguments[1]), "%u", cpus[index]);
@@ -2254,8 +2894,35 @@ static int run_smp_user_oslat(const struct cpu_accel_config *requested,
 			 (unsigned long long)regions[index].create.size_bytes);
 		snprintf(arguments[9], sizeof(arguments[9]), "%llu",
 			 (unsigned long long)regions[index].ref.epoch);
-		snprintf(arguments[10], sizeof(arguments[10]), "%llu",
-			 (unsigned long long)(index == fail_worker ? 16 : 0));
+		snprintf(arguments[10], sizeof(arguments[10]), "%u", index);
+		snprintf(arguments[11], sizeof(arguments[11]), "%u", cpu_count);
+		snprintf(arguments[12], sizeof(arguments[12]), "%u", input_present);
+		snprintf(arguments[13], sizeof(arguments[13]), "%llu",
+			 input_present ?
+			 (unsigned long long)queues[index - 1].create.mmap_token : 0ULL);
+		snprintf(arguments[14], sizeof(arguments[14]), "%llu",
+			 input_present ?
+			 (unsigned long long)queues[index - 1].create.size_bytes : 0ULL);
+		snprintf(arguments[15], sizeof(arguments[15]), "%llu",
+			 input_present ?
+			 (unsigned long long)queues[index - 1].ref.epoch : 0ULL);
+		snprintf(arguments[16], sizeof(arguments[16]), "%llu",
+			 input_present ? (unsigned long long)queue_capacity : 0ULL);
+		snprintf(arguments[17], sizeof(arguments[17]), "%u", output_present);
+		snprintf(arguments[18], sizeof(arguments[18]), "%llu",
+			 output_present ?
+			 (unsigned long long)queues[index].create.mmap_token : 0ULL);
+		snprintf(arguments[19], sizeof(arguments[19]), "%llu",
+			 output_present ?
+			 (unsigned long long)queues[index].create.size_bytes : 0ULL);
+		snprintf(arguments[20], sizeof(arguments[20]), "%llu",
+			 output_present ?
+			 (unsigned long long)queues[index].ref.epoch : 0ULL);
+		snprintf(arguments[21], sizeof(arguments[21]), "%llu",
+			 output_present ? (unsigned long long)queue_capacity : 0ULL);
+		snprintf(arguments[22], sizeof(arguments[22]), "%llu",
+			 index + 1 == cpu_count ?
+			 (unsigned long long)join_delay_ms : 0ULL);
 
 		children[index] = fork();
 		if (children[index] < 0) {
@@ -2301,15 +2968,47 @@ static int run_smp_user_oslat(const struct cpu_accel_config *requested,
 		nanosleep(&poll_delay, NULL);
 	}
 
-	run_delay.tv_sec = requested->duration_ns / 1000000000ULL;
-	run_delay.tv_nsec = requested->duration_ns % 1000000000ULL;
-	while (nanosleep(&run_delay, &run_delay) && errno == EINTR) {
-		if (interrupted)
-			break;
-	}
-	if (cpu_accel_stop(&handle) < 0 && errno != EALREADY) {
-		perror("stop SMP accelerator domain");
-		goto out_stop;
+	if (expected_failure) {
+		worker_escape = (struct cpu_accel_domain_worker_escape){
+			.worker_index = fail_worker,
+		};
+		if (cpu_accel_domain_worker_escape(&handle, &worker_escape) < 0) {
+			perror("escape SMP user accelerator worker");
+			goto out_stop;
+		}
+		if (cpu_accel_stop(&handle) < 0 && errno != EALREADY) {
+			perror("stop SMP accelerator domain");
+			goto out_stop;
+		}
+	} else if (requested->workload == CPU_ACCEL_WORKLOAD_USER_PIPELINE) {
+		deadline = (uint64_t)time(NULL) +
+			requested->duration_ns / 1000000000ULL + 10;
+		for (;;) {
+			if (cpu_accel_domain_status(&handle, &domain_status) < 0) {
+				perror("wait for SMP pipeline workers");
+				goto out_stop;
+			}
+			if (domain_status.terminal_workers == cpu_count ||
+			    domain_status.state == CPU_ACCEL_STATE_ERROR)
+				break;
+			if ((uint64_t)time(NULL) >= deadline) {
+				errno = ETIMEDOUT;
+				perror("wait for SMP pipeline workers");
+				goto out_stop;
+			}
+			nanosleep(&poll_delay, NULL);
+		}
+	} else {
+		run_delay.tv_sec = requested->duration_ns / 1000000000ULL;
+		run_delay.tv_nsec = requested->duration_ns % 1000000000ULL;
+		while (nanosleep(&run_delay, &run_delay) && errno == EINTR) {
+			if (interrupted)
+				break;
+		}
+		if (cpu_accel_stop(&handle) < 0 && errno != EALREADY) {
+			perror("stop SMP accelerator domain");
+			goto out_stop;
+		}
 	}
 
 	deadline = (uint64_t)time(NULL) + 5;
@@ -2340,8 +3039,7 @@ static int run_smp_user_oslat(const struct cpu_accel_config *requested,
 		if (child_failed) {
 			fprintf(stderr, "SMP user accelerator %u failed\n",
 				index);
-			if (!expected_failure || index != fail_worker)
-				ret = 1;
+			ret = 1;
 		}
 		children[index] = 0;
 	}
@@ -2350,7 +3048,7 @@ static int run_smp_user_oslat(const struct cpu_accel_config *requested,
 		ret = 1;
 	}
 	if (expected_failure) {
-		if (domain_status.state != CPU_ACCEL_STATE_ERROR ||
+		if (domain_status.state != CPU_ACCEL_STATE_ESCAPED ||
 		    domain_status.terminal_workers != cpu_count ||
 		    handle.shared->mode != CPU_ACCEL_MODE_LINUX)
 			ret = 1;
@@ -2370,9 +3068,9 @@ out_stop:
 	}
 	if (expected_failure) {
 		if (cpu_accel_domain_status(&handle, &domain_status) == 0 &&
-		    domain_status.state == CPU_ACCEL_STATE_ERROR &&
+		    domain_status.state == CPU_ACCEL_STATE_ESCAPED &&
 		    domain_status.terminal_workers == cpu_count &&
-		    handle.shared->mode == CPU_ACCEL_MODE_LINUX)
+		    handle.shared->mode == CPU_ACCEL_MODE_LINUX && !ret)
 			ret = 0;
 		else
 			ret = 1;
@@ -2388,6 +3086,43 @@ out_domain:
 	}
 	print_status((struct cpu_accel_shared *)handle.shared, NULL,
 		     requested->work_bytes);
+	for (unsigned int index = 0; index < queue_count; index++) {
+		const struct cpu_accel_spsc_queue *queue =
+			queues[index].mapping;
+		uint64_t enqueued = __atomic_load_n(&queue->producer.enqueued,
+						     __ATOMIC_ACQUIRE);
+		uint64_t dequeued = __atomic_load_n(&queue->consumer.dequeued,
+						    __ATOMIC_ACQUIRE);
+		uint64_t head = __atomic_load_n(&queue->producer.head,
+						__ATOMIC_ACQUIRE);
+		uint64_t tail = __atomic_load_n(&queue->consumer.tail,
+						__ATOMIC_ACQUIRE);
+
+		printf("queue=%u producer=%u consumer=%u capacity=%u ",
+		       index, index, index + 1, queue->capacity);
+		printf("enqueued=%" PRIu64 " dequeued=%" PRIu64 " ",
+		       enqueued, dequeued);
+		printf("full_events=%" PRIu64 " empty_events=%" PRIu64 " ",
+		       (uint64_t)__atomic_load_n(&queue->producer.full_events,
+						 __ATOMIC_ACQUIRE),
+		       (uint64_t)__atomic_load_n(&queue->consumer.empty_events,
+						 __ATOMIC_ACQUIRE));
+		printf("backlog=%" PRIu64 " producer_checksum=%" PRIu64 " ",
+		       head - tail,
+		       (uint64_t)__atomic_load_n(&queue->producer.checksum,
+						 __ATOMIC_ACQUIRE));
+		printf("consumer_checksum=%" PRIu64 "\n",
+		       (uint64_t)__atomic_load_n(&queue->consumer.checksum,
+						 __ATOMIC_ACQUIRE));
+		if (!expected_failure &&
+		    (enqueued != dequeued || head != tail ||
+		     head - tail > queue->capacity ||
+		     __atomic_load_n(&queue->producer.checksum,
+				     __ATOMIC_ACQUIRE) !=
+		     __atomic_load_n(&queue->consumer.checksum,
+				     __ATOMIC_ACQUIRE)))
+			ret = 1;
+	}
 	for (unsigned int index = 0; index < cpu_count; index++) {
 		const struct cpu_accel_workload_region *region =
 			regions[index].mapping;
@@ -2395,11 +3130,18 @@ out_domain:
 			worker_shared[index];
 		uint64_t total = cpu_accel_hist_total(region);
 
+		if (!shared)
+			continue;
+
 		printf("worker=%u cpu=%u state=%u result=%d samples=%"
 		       PRIu64 " hist_total=%" PRIu64
 		       " hist_p50_ns=%" PRIu64
 		       " hist_p99_ns=%" PRIu64
-			       " max_lateness_ns=%" PRIu64
+		       " max_lateness_ns=%" PRIu64
+		       " queue_enqueued=%" PRIu64
+		       " queue_dequeued=%" PRIu64
+		       " queue_full_events=%" PRIu64
+		       " queue_empty_events=%" PRIu64
 		       " context_switches=%" PRIu64
 		       " migration_detected=%u"
 		       " user_escape_count=%" PRIu64 "\n",
@@ -2410,14 +3152,32 @@ out_domain:
 		       cpu_accel_hist_percentile(region, total, 500),
 		       cpu_accel_hist_percentile(region, total, 990),
 			       region->max_lateness_ns,
+			       region->queue_enqueued,
+			       region->queue_dequeued,
+			       region->queue_full_events,
+			       region->queue_empty_events,
 		       (uint64_t)shared->context_switches,
 		       shared->migration_detected,
 		       (uint64_t)shared->user_escape_count);
 		if (expected_failure) {
-			if (index == fail_worker ?
-			    !domain_status.worker_results[index] :
-			    domain_status.worker_results[index])
+			if (index == fail_worker) {
+				if (domain_status.worker_states[index] !=
+				    CPU_ACCEL_STATE_ESCAPED ||
+				    domain_status.worker_results[index] ||
+				    shared->context_switches ||
+				    shared->migration_detected ||
+				    shared->user_escape_count != 1)
+					ret = 1;
+			} else if (domain_status.worker_states[index] !=
+				   CPU_ACCEL_STATE_COMPLETE ||
+				   domain_status.worker_results[index] ||
+				   !region->samples_produced ||
+				   region->completion_sequence != 1 ||
+				   shared->context_switches ||
+				   shared->migration_detected ||
+				   shared->user_escape_count) {
 				ret = 1;
+			}
 		} else if (domain_status.worker_states[index] !=
 			   CPU_ACCEL_STATE_COMPLETE ||
 			   domain_status.worker_results[index] ||
@@ -2468,6 +3228,38 @@ out_regions:
 			}
 		}
 	}
+	for (unsigned int index = 0; index < queue_count; index++) {
+		struct cpu_accel_region_info region_info = {
+			.region_id = queues[index].create.region_id,
+		};
+
+		if (queues[index].mapping && queues[index].mapping != MAP_FAILED)
+			munmap(queues[index].mapping,
+			       queues[index].create.size_bytes);
+		if (!queues[index].create.region_id)
+			continue;
+		if (cpu_accel_region_get_info(&handle, &region_info) == 0 &&
+		    region_info.state == CPU_ACCEL_REGION_ATTACHED) {
+			struct cpu_accel_region_ref detach_ref = {
+				.region_id = region_info.region_id,
+				.epoch = region_info.epoch,
+			};
+
+			(void)cpu_accel_region_detach(&handle, &detach_ref);
+			(void)cpu_accel_region_get_info(&handle, &region_info);
+		}
+		if (queues[index].create.region_id) {
+			struct cpu_accel_region_ref destroy_ref = {
+				.region_id = queues[index].create.region_id,
+				.epoch = region_info.epoch,
+			};
+
+			if (cpu_accel_region_destroy(&handle, &destroy_ref) < 0) {
+				perror("destroy SMP SPSC queue region");
+				ret = 1;
+			}
+		}
+	}
 out_close:
 	cpu_accel_close(&handle);
 	return ret;
@@ -2489,11 +3281,13 @@ static int run_workload(const char *program, int argc, char **argv)
 	uint64_t value;
 	uint64_t escape_after_ms = 0;
 	uint64_t escape_attempts = 1;
+		uint64_t queue_capacity = 64;
 	const char *reclaim_file = NULL;
 	const char *worker_cgroup = NULL;
 	unsigned int smp_cpus[CPU_ACCEL_MAX_WORKERS];
 	unsigned int smp_cpu_count = 0;
 	unsigned int smp_fail_worker = UINT_MAX;
+	uint64_t smp_join_delay_ms = 0;
 	unsigned int timeout_ms;
 	bool cpu_selected = false;
 	int persistent = 0;
@@ -2532,6 +3326,24 @@ static int run_workload(const char *program, int argc, char **argv)
 				return 2;
 			}
 			smp_fail_worker = value;
+		} else if (!strcmp(argv[index], "--smp-join-delay-ms") &&
+			   index + 1 < argc) {
+			if (parse_u64(argv[++index], &value) ||
+			    value > CPU_ACCEL_MAX_DURATION_NS / 1000000ULL) {
+				fprintf(stderr, "%s: invalid SMP join delay\n",
+					program);
+				return 2;
+			}
+			smp_join_delay_ms = value;
+		} else if (!strcmp(argv[index], "--queue-capacity") &&
+			   index + 1 < argc) {
+			if (parse_u64(argv[++index], &value) ||
+			    !cpu_accel_spsc_capacity_valid(value)) {
+				fprintf(stderr, "%s: invalid queue capacity\n",
+					program);
+				return 2;
+			}
+			queue_capacity = value;
 		} else if (!strcmp(argv[index], "--duration-ms") &&
 			   index + 1 < argc) {
 			if (parse_u64(argv[++index], &value) ||
@@ -2568,6 +3380,8 @@ static int run_workload(const char *program, int argc, char **argv)
 				config.workload = CPU_ACCEL_WORKLOAD_USER_DEATH;
 			else if (!strcmp(workload, "user-oslat"))
 				config.workload = CPU_ACCEL_WORKLOAD_USER_OSLAT;
+			else if (!strcmp(workload, "user-pipeline"))
+				config.workload = CPU_ACCEL_WORKLOAD_USER_PIPELINE;
 			else {
 				fprintf(stderr, "%s: invalid workload\n", program);
 				return 2;
@@ -2626,11 +3440,12 @@ static int run_workload(const char *program, int argc, char **argv)
 	if (quarantine_irqs)
 		config.flags |= CPU_ACCEL_FLAG_IRQ_QUARANTINE;
 	if (smp_cpu_count) {
-		if (cpu_selected || config.workload !=
-		    CPU_ACCEL_WORKLOAD_USER_OSLAT || worker_cgroup ||
-		    escape_after_ms) {
+		if (cpu_selected ||
+		    (config.workload != CPU_ACCEL_WORKLOAD_USER_OSLAT &&
+		     config.workload != CPU_ACCEL_WORKLOAD_USER_PIPELINE) ||
+		    worker_cgroup || escape_after_ms) {
 			fprintf(stderr,
-				"%s: --cpus requires user-oslat without the single-CPU or escape options\n",
+				"%s: --cpus requires user-oslat or user-pipeline without the single-CPU or escape options\n",
 				program);
 			return 2;
 		}
@@ -2641,9 +3456,30 @@ static int run_workload(const char *program, int argc, char **argv)
 				program);
 			return 2;
 		}
-		return run_smp_user_oslat(&config, smp_cpus, smp_cpu_count,
-					  smp_fail_worker);
+		return run_smp_user_workload(&config, smp_cpus,
+					     smp_cpu_count,
+					     smp_fail_worker,
+					     queue_capacity,
+					     smp_join_delay_ms);
 	}
+	if (config.workload == CPU_ACCEL_WORKLOAD_USER_PIPELINE) {
+		fprintf(stderr,
+			"%s: user-pipeline requires --cpus with at least two CPUs\n",
+			program);
+		return 2;
+	}
+		if (queue_capacity != 64) {
+			fprintf(stderr,
+				"%s: --queue-capacity requires user-pipeline with --cpus\n",
+				program);
+			return 2;
+		}
+		if (smp_join_delay_ms) {
+			fprintf(stderr,
+				"%s: --smp-join-delay-ms requires --cpus\n",
+				program);
+			return 2;
+		}
 	if (escape_after_ms && config.workload != CPU_ACCEL_WORKLOAD_USER_CYCLICTEST &&
 	    config.workload != CPU_ACCEL_WORKLOAD_USER_HANG &&
 	    config.workload != CPU_ACCEL_WORKLOAD_USER_RECLAIM &&

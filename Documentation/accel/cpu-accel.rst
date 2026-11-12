@@ -268,8 +268,12 @@ requires ``--workload user-oslat``. The manager creates one telemetry region
 and one per-worker shared mapping for every CPU. Workers join from their own
 pinned, sealed processes; activation, stop, failure, and rollback are
 domain-wide. ``--smp-fail-worker`` is a test-only fault selector that makes
-one sealed worker exit abnormally after producing samples. The Phase 10 gate
-uses it to verify domain-wide failure propagation and is available with::
+one sealed worker exit abnormally after producing samples.
+``--smp-join-delay-ms`` is a test-only startup-delay selector that holds the
+final sealed worker longer than the requested duration before it joins. The
+Phase 10 gate uses both selectors to verify that watchdogs are armed only after
+domain-wide activation and that failures propagate domain-wide. The gate is
+available with::
 
   sudo make -C tools/cpu_accel test-phase10-smp-gate
 

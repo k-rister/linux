@@ -45,6 +45,9 @@ int cpu_accel_domain_worker_escape(
 	struct cpu_accel_domain_worker_escape *escape);
 int cpu_accel_domain_status(struct cpu_accel_handle *handle,
 			    struct cpu_accel_domain_status *status);
+int cpu_accel_domain_queue_config(
+	struct cpu_accel_handle *handle,
+	struct cpu_accel_domain_queue_config *config);
 volatile struct cpu_accel_shared *cpu_accel_worker_mmap(
 	struct cpu_accel_handle *handle, uint64_t mmap_token);
 int cpu_accel_get_capabilities(struct cpu_accel_handle *handle,

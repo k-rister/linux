@@ -7,7 +7,7 @@
 #include <stdint.h>
 
 #define CPU_ACCEL_WORKLOAD_MAGIC	0x43505541UL
-#define CPU_ACCEL_WORKLOAD_ABI_VERSION	1U
+#define CPU_ACCEL_WORKLOAD_ABI_VERSION	2U
 #define CPU_ACCEL_WORKLOAD_ROLE_TELEMETRY	1U
 #define CPU_ACCEL_WORKLOAD_ROLE_BUFFER	2U
 #define CPU_ACCEL_WORKLOAD_MAX_SAMPLES	2048U
@@ -49,6 +49,12 @@ struct cpu_accel_workload_region {
 	uint64_t manager_ready;
 	uint64_t ring_entries;
 	uint64_t ring_block_bytes;
+	uint64_t queue_enqueued;
+	uint64_t queue_dequeued;
+	uint64_t queue_full_events;
+	uint64_t queue_empty_events;
+	uint64_t queue_max_backlog;
+	uint64_t queue_checksum;
 	uint8_t payload[];
 };
 

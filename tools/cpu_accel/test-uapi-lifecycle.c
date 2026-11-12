@@ -74,29 +74,44 @@ static unsigned int test_target_cpu(void)
 	return 0;
 }
 
-static bool parse_smp_cpus(unsigned int cpus[2])
+static unsigned int parse_smp_cpus(unsigned int cpus[CPU_ACCEL_MAX_WORKERS])
 {
 	const char *list = getenv("CPU_ACCEL_UAPI_SMP_CPUS");
-	char *end = NULL;
-	unsigned long first;
-	unsigned long second;
+	unsigned int count = 0;
 
 	if (!list || !*list)
-		return false;
-	errno = 0;
-	first = strtoul(list, &end, 10);
-	if (errno || !end || *end != ',' || end == list ||
-	    first >= CPU_SETSIZE)
-		return false;
-	list = end + 1;
-	errno = 0;
-	second = strtoul(list, &end, 10);
-	if (errno || !end || *end || end == list || second >= CPU_SETSIZE ||
-	    !first || !second || first == second)
-		return false;
-	cpus[0] = first;
-	cpus[1] = second;
-	return true;
+		return 0;
+	while (*list) {
+		char *end = NULL;
+		unsigned long cpu;
+
+		errno = 0;
+		cpu = strtoul(list, &end, 10);
+		if (errno || end == list || (*end != ',' && *end != '\0') ||
+		    cpu >= CPU_SETSIZE || !cpu || count >= CPU_ACCEL_MAX_WORKERS)
+			fail("parse CPU_ACCEL_UAPI_SMP_CPUS");
+		for (unsigned int index = 0; index < count; index++) {
+			if (cpus[index] == cpu)
+				fail("parse CPU_ACCEL_UAPI_SMP_CPUS");
+		}
+		cpus[count++] = cpu;
+		list = end;
+		if (!*list)
+			break;
+		if (*list++ != ',' || !*list)
+			fail("parse CPU_ACCEL_UAPI_SMP_CPUS");
+	}
+	if (count < 2)
+		fail("parse CPU_ACCEL_UAPI_SMP_CPUS");
+	return count;
+}
+
+static void copy_smp_cpus(struct cpu_accel_domain_config *config,
+			  const unsigned int *cpus, unsigned int cpu_count)
+{
+	config->cpu_count = cpu_count;
+	for (unsigned int index = 0; index < cpu_count; index++)
+		config->cpus[index] = cpus[index];
 }
 
 static int send_fd(int socket, int fd)
@@ -220,10 +235,11 @@ static void test_manager_crash(unsigned int cpu)
 	cpu_accel_close(&handle);
 }
 
-static void test_smp_manager_crash(unsigned int cpus[2])
+static void test_smp_manager_crash(const unsigned int *cpus,
+				   unsigned int cpu_count)
 {
 	struct cpu_accel_domain_config config = {
-		.cpu_count = 2,
+		.cpu_count = cpu_count,
 		.flags = CPU_ACCEL_FLAG_IRQS_OFF |
 			 CPU_ACCEL_FLAG_PERSISTENT,
 		.workload = CPU_ACCEL_WORKLOAD_TIMESTAMP,
@@ -236,8 +252,7 @@ static void test_smp_manager_crash(unsigned int cpus[2])
 	char marker;
 	struct cpu_accel_handle handle;
 
-	config.cpus[0] = cpus[0];
-	config.cpus[1] = cpus[1];
+	copy_smp_cpus(&config, cpus, cpu_count);
 	if (pipe(pipes) < 0)
 		fail("create SMP manager crash pipe");
 	child = fork();
@@ -275,8 +290,9 @@ static void test_smp_manager_crash(unsigned int cpus[2])
 		fail("reopen after SMP manager crash");
 	if (cpu_accel_domain_status(&handle, &status) < 0)
 		fail("get SMP manager crash status");
-	if (status.worker_count != 2 || status.joined_workers != 2 ||
-	    status.terminal_workers != 2 ||
+	if (status.worker_count != cpu_count ||
+	    status.joined_workers != cpu_count ||
+	    status.terminal_workers != cpu_count ||
 	    !terminal_state(status.state) ||
 	    handle.shared->mode != CPU_ACCEL_MODE_LINUX) {
 		fprintf(stderr,
@@ -290,28 +306,39 @@ static void test_smp_manager_crash(unsigned int cpus[2])
 	cpu_accel_close(&handle);
 }
 
-static void test_smp_activation_rollback(unsigned int cpus[2])
+static void test_smp_activation_rollback(const unsigned int *cpus,
+					 unsigned int cpu_count)
 {
 	struct cpu_accel_domain_config config = {
-		.cpu_count = 2,
+		.cpu_count = cpu_count,
 		.flags = CPU_ACCEL_FLAG_IRQS_OFF |
 			 CPU_ACCEL_FLAG_PERSISTENT,
 		.workload = CPU_ACCEL_WORKLOAD_TIMESTAMP,
 		.duration_ns = 5000000000ULL,
 		.period_ns = 1000000,
 	};
+	struct cpu_accel_domain_queue_config queue_config = {
+		.queue_count = 1,
+		.region_ids[0] = 1,
+		.capacities[0] = 16,
+	};
 	struct cpu_accel_domain_status status = {};
 	struct cpu_accel_handle handle;
 	int start_result;
 	int start_errno;
 
-	config.cpus[0] = cpus[0];
-	config.cpus[1] = cpus[1];
+	copy_smp_cpus(&config, cpus, cpu_count);
 	if (cpu_accel_open(&handle) < 0)
 		fail("open SMP activation rollback device");
 	if (cpu_accel_domain_config(&handle, &config) < 0) {
 		cpu_accel_close(&handle);
 		fail("configure SMP activation rollback domain");
+	}
+	errno = 0;
+	if (cpu_accel_domain_queue_config(&handle, &queue_config) == 0 ||
+	    errno != EINVAL) {
+		cpu_accel_close(&handle);
+		fail("reject SPSC queue topology for non-pipeline domain");
 	}
 	set_activation_fail_worker(1);
 	errno = 0;
@@ -326,7 +353,8 @@ static void test_smp_activation_rollback(unsigned int cpus[2])
 	}
 	if (start_result == 0 || start_errno != ENOMEM ||
 	    status.state != CPU_ACCEL_STATE_ERROR ||
-	    status.worker_count != 2 || status.terminal_workers != 2 ||
+	    status.worker_count != cpu_count ||
+	    status.terminal_workers != cpu_count ||
 	    handle.shared->mode != CPU_ACCEL_MODE_LINUX) {
 		fprintf(stderr,
 			"SMP activation rollback failed with errno %d state %u mode %u\n",
@@ -469,7 +497,8 @@ static void test_fork_without_exec(void)
 int main(int argc, char **argv)
 {
 	unsigned int cpu = test_target_cpu();
-	unsigned int smp_cpus[2];
+	unsigned int smp_cpus[CPU_ACCEL_MAX_WORKERS];
+	unsigned int smp_cpu_count;
 
 	if (argc == 4 && !strcmp(argv[1], "--cpu-accel-exec-child")) {
 		struct cpu_accel_handle handle;
@@ -492,9 +521,10 @@ int main(int argc, char **argv)
 		fprintf(stderr, "unexpected arguments\n");
 		return 1;
 	}
-	if (parse_smp_cpus(smp_cpus)) {
-		test_smp_activation_rollback(smp_cpus);
-		test_smp_manager_crash(smp_cpus);
+	smp_cpu_count = parse_smp_cpus(smp_cpus);
+	if (smp_cpu_count) {
+		test_smp_activation_rollback(smp_cpus, smp_cpu_count);
+		test_smp_manager_crash(smp_cpus, smp_cpu_count);
 		return 0;
 	}
 	test_manager_crash(cpu);

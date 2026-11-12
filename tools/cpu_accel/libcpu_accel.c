@@ -274,6 +274,14 @@ int cpu_accel_domain_status(struct cpu_accel_handle *handle,
 			       status);
 }
 
+int cpu_accel_domain_queue_config(
+	struct cpu_accel_handle *handle,
+	struct cpu_accel_domain_queue_config *config)
+{
+	return cpu_accel_ioctl(handle->fd, CPU_ACCEL_IOC_DOMAIN_QUEUE_CONFIG,
+			       config);
+}
+
 volatile struct cpu_accel_shared *cpu_accel_worker_mmap(
 	struct cpu_accel_handle *handle, uint64_t mmap_token)
 {

@@ -95,7 +95,8 @@ static bool cpu_accel_user_workload(u32 workload)
 		workload == CPU_ACCEL_WORKLOAD_USER_HANG ||
 		workload == CPU_ACCEL_WORKLOAD_USER_RECLAIM ||
 		workload == CPU_ACCEL_WORKLOAD_USER_DEATH ||
-		workload == CPU_ACCEL_WORKLOAD_USER_OSLAT;
+		workload == CPU_ACCEL_WORKLOAD_USER_OSLAT ||
+		workload == CPU_ACCEL_WORKLOAD_USER_PIPELINE;
 }
 
 /*
@@ -347,6 +348,7 @@ struct cpu_accel_region {
 	struct cpu_accel_region_vma manager_vma;
 	struct cpu_accel_region_vma owner_vma;
 	u32 permissions;
+	u32 type;
 	atomic_t manager_mappings;
 	atomic_t owner_mappings;
 	int numa_node;
@@ -400,6 +402,8 @@ struct cpu_accel_worker {
 	atomic_t user_stop_exit_done;
 	struct cpu_accel_region work_region;
 	struct cpu_accel_region *workload_region;
+	struct cpu_accel_region *input_queue_region;
+	struct cpu_accel_region *output_queue_region;
 	unsigned int index;
 	unsigned int irq_quarantined;
 	unsigned int irq_quarantine_blockers;
@@ -428,6 +432,8 @@ struct cpu_accel_device {
 	/* mm of the process that opened the device as the control companion. */
 	struct mm_struct *companion_mm;
 	struct cpu_accel_domain_config domain_config;
+	struct cpu_accel_domain_queue_config queue_config;
+	struct cpu_accel_region *queue_regions[CPU_ACCEL_MAX_SPSC_QUEUES];
 	struct cpu_accel_region *regions[CPU_ACCEL_MAX_REGIONS];
 	struct cpu_accel_region *attached_regions[CPU_ACCEL_MAX_REGIONS];
 	atomic_t opened;
@@ -440,6 +446,7 @@ struct cpu_accel_device {
 	u64 region_set_epoch;
 	int domain_result;
 	bool configured;
+	bool queue_configured;
 	bool domain_running;
 };
 
@@ -473,6 +480,7 @@ static void cpu_accel_domain_try_finish(struct cpu_accel_device *dev);
 static int cpu_accel_domain_abort_user_locked(
 	struct cpu_accel_device *dev, struct cpu_accel_worker *failed,
 	int result);
+static void cpu_accel_domain_queue_clear(struct cpu_accel_device *dev);
 
 static struct cpu_accel_worker *
 cpu_accel_worker_for_cpu(struct cpu_accel_device *dev, unsigned int cpu)
@@ -730,7 +738,6 @@ static int cpu_accel_user_escape_worker(struct cpu_accel_device *dev,
 	WRITE_ONCE(worker->shared->recovery_completed_ns, 0);
 	WRITE_ONCE(worker->shared->recovery_attempts,
 		   READ_ONCE(worker->shared->recovery_attempts) + 1);
-	WRITE_ONCE(worker->shared->stop_requested, 1);
 	mutex_unlock(&dev->lock);
 
 	/* Publish the escape request before raising the target CPU's NMI. */
@@ -739,6 +746,7 @@ static int cpu_accel_user_escape_worker(struct cpu_accel_device *dev,
 	if (ret) {
 		mutex_lock(&dev->lock);
 		atomic_set(&worker->user_escape_requested, 0);
+			WRITE_ONCE(worker->shared->stop_requested, 1);
 		WRITE_ONCE(worker->shared->recovery_state,
 			   ret == -EOPNOTSUPP ? CPU_ACCEL_RECOVERY_UNSUPPORTED :
 			   CPU_ACCEL_RECOVERY_FAILED);
@@ -1014,6 +1022,8 @@ static unsigned int cpu_accel_region_snapshot(struct cpu_accel_device *dev,
 
 		if (!region || !region->attached)
 			continue;
+		if (region->type != CPU_ACCEL_REGION_TYPE_WORKLOAD)
+			continue;
 		if (region->state != CPU_ACCEL_REGION_ATTACHED)
 			goto fail;
 		if (atomic_read(&region->manager_mappings) != 1 ||
@@ -1058,14 +1068,27 @@ static void cpu_accel_region_activate_snapshot(struct cpu_accel_device *dev)
 static int
 cpu_accel_region_mapping_complete(struct cpu_accel_worker *worker)
 {
-	struct cpu_accel_region *region = worker->workload_region;
+	struct cpu_accel_region *regions[3] = {
+		worker->workload_region,
+		worker->input_queue_region,
+		worker->output_queue_region,
+	};
 	int ret = 0;
+	unsigned int index;
 
 	mutex_lock(&worker->dev->region_lock);
-	if (region &&
-	    (atomic_read(&region->manager_mappings) != 1 ||
-	     atomic_read(&region->owner_mappings) != 1))
-		ret = -EACCES;
+	for (index = 0; index < ARRAY_SIZE(regions); index++) {
+		struct cpu_accel_region *region = regions[index];
+		unsigned int owner_mappings;
+
+		if (!region)
+			continue;
+		owner_mappings =
+			region->type == CPU_ACCEL_REGION_TYPE_SPSC_QUEUE ? 2 : 1;
+		if (atomic_read(&region->manager_mappings) != 1 ||
+		    atomic_read(&region->owner_mappings) != owner_mappings)
+			ret = -EACCES;
+	}
 	mutex_unlock(&worker->dev->region_lock);
 	return ret;
 }
@@ -1110,11 +1133,15 @@ static int cpu_accel_region_create_locked(struct cpu_accel_device *dev,
 	unsigned int index;
 	int ret;
 
-	if (!cpu_accel_region_control_idle_locked(dev) || create->reserved ||
+	if (!cpu_accel_region_control_idle_locked(dev) ||
 	    create->size_bytes > ULONG_MAX ||
 	    !create->size_bytes || !PAGE_ALIGNED(create->size_bytes) ||
 	    create->size_bytes > cpu_accel_max_region_bytes ||
-	    !cpu_accel_region_permissions_valid(create->permissions))
+	    !cpu_accel_region_permissions_valid(create->permissions) ||
+	    (create->region_type != CPU_ACCEL_REGION_TYPE_WORKLOAD &&
+	     create->region_type != CPU_ACCEL_REGION_TYPE_SPSC_QUEUE) ||
+	    (create->region_type == CPU_ACCEL_REGION_TYPE_SPSC_QUEUE &&
+	     dev->selected_abi != CPU_ACCEL_ABI_VERSION))
 		return -EINVAL;
 	if (create->numa_node != NUMA_NO_NODE &&
 	    (create->numa_node < 0 || create->numa_node >= MAX_NUMNODES ||
@@ -1168,6 +1195,7 @@ static int cpu_accel_region_create_locked(struct cpu_accel_device *dev,
 	region->epoch = 1;
 	region->token = token_sequence << PAGE_SHIFT;
 	region->permissions = create->permissions;
+	region->type = create->region_type;
 	region->numa_node = create->numa_node;
 	region->state = CPU_ACCEL_REGION_CREATED;
 	region->manager_vma.region = region;
@@ -1749,12 +1777,22 @@ static bool cpu_accel_region_vma_matches(struct vm_area_struct *vma,
 
 static int cpu_accel_validate_control_and_regions(struct cpu_accel_device *dev,
 						  struct mm_struct *mm,
-						  struct cpu_accel_region *expected)
+						  const struct cpu_accel_worker *worker)
 {
+	struct cpu_accel_region *expected_regions[3] = {
+		worker->workload_region,
+		worker->input_queue_region,
+		worker->output_queue_region,
+	};
+	bool region_found[3] = {
+		!expected_regions[0],
+		!expected_regions[1],
+		!expected_regions[2],
+	};
 	struct vm_area_struct *vma;
 	bool control_found = false;
 	bool worker_control_found = false;
-	bool region_found = !expected;
+	unsigned int index;
 
 	VMA_ITERATOR(vmi, mm, 0);
 	for_each_vma(vmi, vma) {
@@ -1790,18 +1828,26 @@ static int cpu_accel_validate_control_and_regions(struct cpu_accel_device *dev,
 		    !vma->vm_file || vma->vm_file->private_data != dev)
 			continue;
 		region_vma = vma->vm_private_data;
-		if (!region_vma || region_vma->manager ||
-		    region_vma->region != expected)
+		if (!region_vma || region_vma->manager)
 			return -EACCES;
-		if (region_found ||
-		    !cpu_accel_region_vma_matches(vma, expected, false))
+		for (index = 0; index < ARRAY_SIZE(expected_regions); index++) {
+			if (!expected_regions[index] ||
+			    region_vma->region != expected_regions[index])
+				continue;
+			if (region_found[index] ||
+			    !cpu_accel_region_vma_matches(
+					vma, expected_regions[index], false))
+				return -EACCES;
+			region_found[index] = true;
+			break;
+		}
+		if (index == ARRAY_SIZE(expected_regions))
 			return -EACCES;
-		region_found = true;
 	}
 
 	if ((control_found && worker_control_found) ||
 	    (!control_found && !worker_control_found) ||
-	    (expected && !region_found))
+	    !region_found[0] || !region_found[1] || !region_found[2])
 		return -EACCES;
 	return 0;
 }
@@ -1815,7 +1861,7 @@ static int cpu_accel_validate_user_vma_set(struct cpu_accel_device *dev,
 					  unsigned long rseq_start,
 					  unsigned long rseq_end,
 						  unsigned long reclaim_page,
-						  struct cpu_accel_region *expected)
+						  const struct cpu_accel_worker *worker)
 {
 	struct vm_area_struct *vma;
 	VMA_ITERATOR(vmi, mm, 0);
@@ -1887,7 +1933,7 @@ static int cpu_accel_validate_user_vma_set(struct cpu_accel_device *dev,
 		return -EACCES;
 	}
 
-	ret = cpu_accel_validate_control_and_regions(dev, mm, expected);
+	ret = cpu_accel_validate_control_and_regions(dev, mm, worker);
 	if (ret)
 		return ret;
 
@@ -2101,7 +2147,7 @@ static int cpu_accel_user_image_prepare(struct cpu_accel_worker *worker)
 				worker->config.user_stack_top,
 				rseq_start, rseq_end,
 				reclaim_page,
-				worker->workload_region);
+				worker);
 	if (ret)
 		goto fail;
 
@@ -2159,7 +2205,7 @@ static int cpu_accel_arch_user_enter(struct cpu_accel_worker *worker)
 		   worker->user_observation.lifecycle_entry_ns);
 	image->return_regs = *regs;
 	regs->ip = image->entry_ip;
-	regs->sp = image->stack_top;
+	regs->sp = image->stack_top - 8;
 	regs->csx = __USER_CS;
 	regs->ssx = __USER_DS;
 	regs->di = image->arg;
@@ -2318,6 +2364,17 @@ static int cpu_accel_user_exit_locked(struct cpu_accel_device *dev)
 	(void)dev;
 	return -EOPNOTSUPP;
 #endif
+}
+
+static int cpu_accel_user_exit_ioctl(struct cpu_accel_device *dev)
+{
+	int ret;
+
+	while (!mutex_trylock(&dev->lock))
+		cpu_relax();
+	ret = cpu_accel_user_exit_locked(dev);
+	mutex_unlock(&dev->lock);
+	return ret;
 }
 
 #ifdef CONFIG_X86
@@ -2839,7 +2896,8 @@ static int cpu_accel_mmap(struct file *file, struct vm_area_struct *vma)
 	if (!region || region->bytes != size ||
 	    (dev->configured && !region->attached) ||
 	    (manager ? atomic_read(&region->manager_mappings) :
-		       atomic_read(&region->owner_mappings)) ||
+		       atomic_read(&region->owner_mappings) >=
+		       (region->type == CPU_ACCEL_REGION_TYPE_SPSC_QUEUE ? 2 : 1)) ||
 	    (!manager && !region->attached)) {
 		mutex_unlock(&dev->region_lock);
 		return -EINVAL;
@@ -3118,7 +3176,7 @@ static bool cpu_accel_domain_common_config_valid(
 	    config->reserved || config->reserved_words[0] ||
 	    config->reserved_words[1] || config->reserved_words[2] ||
 	    config->reserved_words[3] ||
-	    config->workload > CPU_ACCEL_WORKLOAD_USER_OSLAT ||
+	    config->workload > CPU_ACCEL_WORKLOAD_USER_PIPELINE ||
 	    config->work_bytes > CPU_ACCEL_MAX_WORK_BYTES ||
 	    !config->period_ns || !config->duration_ns ||
 	    config->duration_ns > CPU_ACCEL_MAX_DURATION_NS)
@@ -3180,6 +3238,106 @@ static int cpu_accel_domain_topology_valid(
 	return 0;
 }
 
+static bool cpu_accel_spsc_capacity_valid(u32 capacity)
+{
+	return capacity && capacity <= CPU_ACCEL_SPSC_MAX_CAPACITY &&
+		!(capacity & (capacity - 1));
+}
+
+static bool cpu_accel_spsc_queue_valid(
+		const struct cpu_accel_region *region, u32 capacity,
+		u32 producer_worker, u32 consumer_worker)
+{
+	const struct cpu_accel_spsc_queue *queue = region->address;
+
+	return queue->magic == CPU_ACCEL_SPSC_MAGIC &&
+		queue->abi_version == CPU_ACCEL_SPSC_ABI_VERSION &&
+		queue->header_size == sizeof(*queue) &&
+		queue->capacity == capacity &&
+		queue->slot_mask == capacity - 1 &&
+		queue->producer_worker == producer_worker &&
+		queue->consumer_worker == consumer_worker &&
+		queue->region_size == region->bytes &&
+		queue->epoch == region->epoch &&
+		queue->mmap_token == region->token;
+}
+
+static void cpu_accel_domain_queue_clear(struct cpu_accel_device *dev)
+{
+	unsigned int index;
+
+	memset(&dev->queue_config, 0, sizeof(dev->queue_config));
+	memset(dev->queue_regions, 0, sizeof(dev->queue_regions));
+	for (index = 0; index < CPU_ACCEL_MAX_WORKERS; index++) {
+		dev->workers[index]->input_queue_region = NULL;
+		dev->workers[index]->output_queue_region = NULL;
+	}
+	dev->queue_configured = false;
+}
+
+static int cpu_accel_domain_queue_config_locked(
+		struct cpu_accel_device *dev,
+		struct cpu_accel_domain_queue_config *config)
+{
+	struct cpu_accel_region *regions[CPU_ACCEL_MAX_SPSC_QUEUES] = {};
+	unsigned int cpu_count = dev->domain_config.cpu_count;
+	unsigned int index;
+	int ret = 0;
+
+	if (dev->selected_abi != CPU_ACCEL_ABI_VERSION ||
+	    current->mm != dev->companion_mm || !dev->configured ||
+	    dev->queue_configured ||
+	    READ_ONCE(dev->shared->state) != CPU_ACCEL_STATE_IDLE ||
+	    dev->domain_config.workload != CPU_ACCEL_WORKLOAD_USER_PIPELINE ||
+	    cpu_count < 2 || config->reserved ||
+	    config->queue_count != cpu_count - 1)
+		return -EINVAL;
+
+	mutex_lock(&dev->region_lock);
+	for (index = 0; index < config->queue_count; index++) {
+		struct cpu_accel_region *region =
+			cpu_accel_region_find(dev, config->region_ids[index]);
+		unsigned int sibling;
+
+		if (!region || region->type != CPU_ACCEL_REGION_TYPE_SPSC_QUEUE ||
+		    !region->attached ||
+		    region->state != CPU_ACCEL_REGION_ATTACHED ||
+		    region->permissions != CPU_ACCEL_REGION_PERM_BIDIRECTIONAL ||
+		    atomic_read(&region->manager_mappings) != 1 ||
+		    atomic_read(&region->owner_mappings) ||
+		    !cpu_accel_spsc_capacity_valid(config->capacities[index]) ||
+		    !cpu_accel_spsc_queue_valid(region, config->capacities[index],
+						index, index + 1)) {
+			ret = -EINVAL;
+			break;
+		}
+		for (sibling = 0; sibling < index; sibling++) {
+			if (regions[sibling] == region) {
+				ret = -EINVAL;
+				break;
+			}
+		}
+		if (ret)
+			break;
+		regions[index] = region;
+	}
+	if (!ret) {
+		memcpy(dev->queue_regions, regions, sizeof(regions));
+		dev->queue_config = *config;
+		for (index = 0; index < cpu_count; index++) {
+			dev->workers[index]->input_queue_region =
+				index ? regions[index - 1] : NULL;
+			dev->workers[index]->output_queue_region =
+				index + 1 < cpu_count ? regions[index] : NULL;
+		}
+		for (index = 0; index < config->queue_count; index++)
+			regions[index]->state = CPU_ACCEL_REGION_ACTIVE;
+		dev->queue_configured = true;
+	}
+	mutex_unlock(&dev->region_lock);
+	return ret;
+}
+
 static u64 cpu_accel_worker_mmap_token(void)
 {
 	u64 sequence = atomic64_inc_return(&cpu_accel_worker_token_sequence);
@@ -3239,6 +3397,7 @@ static int cpu_accel_domain_config_locked(struct cpu_accel_device *dev,
 	ret = cpu_accel_domain_topology_valid(config);
 	if (ret)
 		return ret;
+	cpu_accel_domain_queue_clear(dev);
 
 	mutex_lock(&dev->region_lock);
 	attached_count = cpu_accel_region_snapshot(dev, false);
@@ -3594,6 +3753,8 @@ static int cpu_accel_domain_worker_join_locked(
 	if (dev->selected_abi != CPU_ACCEL_ABI_VERSION ||
 	    READ_ONCE(dev->shared->state) != CPU_ACCEL_STATE_READY ||
 	    !cpu_accel_user_workload(dev->domain_config.workload) ||
+	    (dev->domain_config.workload ==
+	     CPU_ACCEL_WORKLOAD_USER_PIPELINE && !dev->queue_configured) ||
 	    current->mm == dev->companion_mm)
 		return -EOPNOTSUPP;
 	if (join->reserved)
@@ -3644,20 +3805,23 @@ static int cpu_accel_domain_worker_join_locked(
 			ret = -ECANCELED;
 			goto fail_after_join;
 		}
-		for (index = 0; index < dev->domain_config.cpu_count; index++)
-			cpu_accel_worker_state_write(dev->workers[index],
+		for (index = 0; index < dev->domain_config.cpu_count; index++) {
+			struct cpu_accel_worker *domain_worker = dev->workers[index];
+
+			if (domain_worker->config.flags & CPU_ACCEL_FLAG_PERSISTENT) {
+				unsigned long watchdog_jiffies =
+					max_t(unsigned long, 1,
+					      nsecs_to_jiffies(domain_worker->config.duration_ns));
+
+				mod_timer(&domain_worker->watchdog_timer,
+					  jiffies + watchdog_jiffies);
+			}
+			cpu_accel_worker_state_write(domain_worker,
 						     CPU_ACCEL_STATE_RUNNING);
+		}
 		WRITE_ONCE(dev->shared->mode, CPU_ACCEL_MODE_ACCELERATOR);
 		dev->domain_running = true;
 		cpu_accel_state_write(dev, CPU_ACCEL_STATE_RUNNING);
-	}
-	if (worker->config.flags & CPU_ACCEL_FLAG_PERSISTENT) {
-		unsigned long watchdog_jiffies =
-			max_t(unsigned long, 1,
-			      nsecs_to_jiffies(worker->config.duration_ns));
-
-		mod_timer(&worker->watchdog_timer,
-			  jiffies + watchdog_jiffies);
 	}
 	local_irq_disable();
 	ret = cpu_accel_arch_user_enter(worker);
@@ -3693,6 +3857,7 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 	struct cpu_accel_domain_worker_join domain_join;
 	struct cpu_accel_domain_worker_escape domain_worker_escape;
 	struct cpu_accel_domain_status domain_status;
+	struct cpu_accel_domain_queue_config domain_queue_config;
 	struct cpu_accel_region_create region_create;
 	struct cpu_accel_region_ref region_ref;
 	struct cpu_accel_region_info region_info;
@@ -3703,6 +3868,8 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 		return -ENOTTY;
 	if (command == CPU_ACCEL_IOC_USER_ESCAPE)
 		return cpu_accel_user_escape(dev);
+	if (command == CPU_ACCEL_IOC_USER_EXIT)
+		return cpu_accel_user_exit_ioctl(dev);
 
 	mutex_lock(&dev->lock);
 	switch (command) {
@@ -3868,6 +4035,21 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 			ret = -EFAULT;
 		break;
 
+	case CPU_ACCEL_IOC_DOMAIN_QUEUE_CONFIG:
+		if (copy_from_user(&domain_queue_config,
+				   (void __user *)argument,
+				   sizeof(domain_queue_config))) {
+			ret = -EFAULT;
+			break;
+		}
+		ret = cpu_accel_domain_queue_config_locked(
+			dev, &domain_queue_config);
+		if (!ret && copy_to_user((void __user *)argument,
+					 &domain_queue_config,
+					 sizeof(domain_queue_config)))
+			ret = -EFAULT;
+		break;
+
 	case CPU_ACCEL_IOC_CONFIG:
 	{
 		struct cpu_accel_worker *worker = dev->workers[0];
@@ -3904,7 +4086,7 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 				     CPU_ACCEL_FLAG_REQUIRE_QUIESCENT |
 				     CPU_ACCEL_FLAG_IRQ_QUARANTINE) ||
 			    config.reserved ||
-		    config.workload > CPU_ACCEL_WORKLOAD_USER_OSLAT ||
+		    config.workload > CPU_ACCEL_WORKLOAD_USER_PIPELINE ||
 		    config.work_bytes > CPU_ACCEL_MAX_WORK_BYTES ||
 		    (config.workload == CPU_ACCEL_WORKLOAD_TIMESTAMP &&
 		     config.work_bytes) ||
@@ -3955,7 +4137,8 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 		if (attached_count !=
 		    ((config.workload == CPU_ACCEL_WORKLOAD_USER_REGION ||
 		      config.workload == CPU_ACCEL_WORKLOAD_USER_CYCLICTEST ||
-		      config.workload == CPU_ACCEL_WORKLOAD_USER_OSLAT) ? 1 : 0)) {
+			      config.workload == CPU_ACCEL_WORKLOAD_USER_OSLAT ||
+			      config.workload == CPU_ACCEL_WORKLOAD_USER_PIPELINE) ? 1 : 0)) {
 			ret = -EINVAL;
 			goto config_unlock;
 		}
@@ -3980,7 +4163,7 @@ static long cpu_accel_ioctl(struct file *file, unsigned int command,
 
 			mmap_read_lock(current->mm);
 			ret = cpu_accel_validate_control_and_regions(
-				dev, mm, worker->workload_region);
+				dev, mm, worker);
 			mmap_read_unlock(current->mm);
 			if (ret)
 				goto config_fail;
@@ -4059,10 +4242,6 @@ config_fail:
 			break;
 		}
 		ret = cpu_accel_lifecycle_exit(dev);
-		break;
-
-	case CPU_ACCEL_IOC_USER_EXIT:
-		ret = cpu_accel_user_exit_locked(dev);
 		break;
 
 	case CPU_ACCEL_IOC_GET_CAPABILITIES:
@@ -4158,6 +4337,7 @@ config_fail:
 		}
 		if (ret)
 			break;
+		cpu_accel_domain_queue_clear(dev);
 		cpu_accel_region_detach_all(dev);
 		dev->configured = false;
 		dev->domain_running = false;

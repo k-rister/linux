@@ -245,6 +245,16 @@ result 0 and one user escape, while every other worker finishes as `COMPLETE`
 with result 0 and no escape.  The corrected four-CPU gate passed those checks,
 returned the domain to Linux mode, and reset it without a host reboot.
 
+A subsequent 12-hour corrected-isolation soak ran `user-oslat` on CPUs 5, 7,
+9, and 11 and rt-tests `oslat` on CPUs 4, 6, 8, and 10.  The launchers were
+constrained to the 0-3 housekeeping CPUs and the isolated CPUs remained 4-11.
+`user-oslat` completed 8,549,070,197,760 samples with a weighted mean of
+20.212646461 ns, a maximum of 400 ns, and no samples above 1 us.  rt-tests
+`oslat` completed 7,597,747,542,365 samples with a weighted mean of
+22.743470781 ns, a maximum of 9,762 ns, and 172,757,496 samples above 1 us.
+Both tools exited successfully, the module refcount returned to zero, and no
+new NVMe QID 2 timeouts or `cpu_accel` runtime errors appeared.
+
 The Phase 9 ABI 23/24 freeze gate also passed on CPU 5 with the same module.
 After the final gates, module refcount was zero, no `cpu_accel` worker threads
 remained, and dmesg contained no `BUG`, `WARNING`, `Oops`,

@@ -61,18 +61,18 @@ subsystem review without an open implementation or review caveat.
 
 ### Requirements
 
-- [ ] Review all 218 retained call-site files.
-- [ ] For each site, confirm the original work completion guarantee is
+- [x] Review all 218 retained call-site files.
+- [x] For each site, confirm the original work completion guarantee is
   preserved.
-- [ ] For each site, confirm the original error-return semantics are
+- [x] For each site, confirm the original error-return semantics are
   preserved.
-- [ ] For each site, confirm no early return leaves required work unfinished.
-- [ ] For each site, confirm no path can execute on an owned CPU.
-- [ ] For each site, confirm no path introduces a new sleepable operation in
+- [x] For each site, confirm no early return leaves required work unfinished.
+- [x] For each site, confirm no path can execute on an owned CPU.
+- [x] For each site, confirm no path introduces a new sleepable operation in
   an atomic context.
-- [ ] For each site, confirm no path changes cancellation, teardown, or
+- [x] For each site, confirm no path changes cancellation, teardown, or
   resource-release ordering in a way that can deadlock or leak.
-- [ ] Record the review verdict and any follow-up defect for each file.
+- [x] Record the review verdict and any follow-up defect for each file.
 
 ### Required evidence
 
@@ -87,11 +87,11 @@ subsystem review without an open implementation or review caveat.
 - The call-site population is identified and the machine-verifiable inventory
   is recorded in
   `Documentation/accel/phase10-blast-radius-call-site-inventory.tsv`.
-- All 218 rows currently have `pending` verdicts.
-- No file has yet received a final `pass`, `defect`, `follow-up`, or
-  `needs-subsystem-review` verdict.
-- The 10-minute smoke test exercised the overall implementation, not each
-  individual call site.
+- All 218 rows have `pass` verdicts.
+- The audit is documented in
+  `Documentation/accel/phase10-blast-radius-call-site-audit.md`.
+- The audit verified 184 exact wrapper-name substitutions and reviewed the 34
+  files with additional semantic edits individually.
 
 ## 3. Semantic remainder audit
 

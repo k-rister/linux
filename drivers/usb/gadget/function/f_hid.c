@@ -1290,7 +1290,7 @@ static int hidg_bind(struct usb_configuration *c, struct usb_function *f)
 
 	return 0;
 fail_free_all:
-	destroy_workqueue(hidg->workqueue);
+	cpu_accel_destroy_workqueue(hidg->workqueue);
 fail_free_descs:
 	usb_free_all_descriptors(f);
 fail:
@@ -1587,7 +1587,7 @@ static void hidg_unbind(struct usb_configuration *c, struct usb_function *f)
 	struct f_hidg *hidg = func_to_hidg(f);
 
 	cdev_device_del(hidg->cdev, &hidg->dev);
-	destroy_workqueue(hidg->workqueue);
+	cpu_accel_destroy_workqueue(hidg->workqueue);
 	usb_free_all_descriptors(f);
 }
 

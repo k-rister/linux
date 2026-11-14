@@ -252,9 +252,9 @@ static void wg_destruct(struct net_device *dev)
 	wg_socket_reinit(wg, NULL, NULL);
 	/* The final references are cleared in the below calls to destroy_workqueue. */
 	wg_peer_remove_all(wg);
-	destroy_workqueue(wg->handshake_receive_wq);
+	cpu_accel_destroy_workqueue(wg->handshake_receive_wq);
 	destroy_workqueue(wg->handshake_send_wq);
-	destroy_workqueue(wg->packet_crypt_wq);
+	cpu_accel_destroy_workqueue(wg->packet_crypt_wq);
 	wg_packet_queue_free(&wg->handshake_queue, true);
 	wg_packet_queue_free(&wg->decrypt_queue, false);
 	wg_packet_queue_free(&wg->encrypt_queue, false);
@@ -392,11 +392,11 @@ err_free_decrypt_queue:
 err_free_encrypt_queue:
 	wg_packet_queue_free(&wg->encrypt_queue, false);
 err_destroy_packet_crypt:
-	destroy_workqueue(wg->packet_crypt_wq);
+	cpu_accel_destroy_workqueue(wg->packet_crypt_wq);
 err_destroy_handshake_send:
 	destroy_workqueue(wg->handshake_send_wq);
 err_destroy_handshake_receive:
-	destroy_workqueue(wg->handshake_receive_wq);
+	cpu_accel_destroy_workqueue(wg->handshake_receive_wq);
 err_free_index_hashtable:
 	kvfree(wg->index_hashtable);
 err_free_peer_hashtable:

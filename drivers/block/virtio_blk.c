@@ -1715,7 +1715,7 @@ static int __init virtio_blk_init(void)
 out_unregister_blkdev:
 	unregister_blkdev(major, "virtblk");
 out_destroy_workqueue:
-	destroy_workqueue(virtblk_wq);
+	cpu_accel_destroy_workqueue(virtblk_wq);
 	return error;
 }
 
@@ -1723,7 +1723,7 @@ static void __exit virtio_blk_fini(void)
 {
 	unregister_virtio_driver(&virtio_blk);
 	unregister_blkdev(major, "virtblk");
-	destroy_workqueue(virtblk_wq);
+	cpu_accel_destroy_workqueue(virtblk_wq);
 }
 module_init(virtio_blk_init);
 module_exit(virtio_blk_fini);

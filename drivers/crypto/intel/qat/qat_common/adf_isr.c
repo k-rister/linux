@@ -432,7 +432,7 @@ int __init adf_init_misc_wq(void)
 void adf_exit_misc_wq(void)
 {
 	if (adf_misc_wq)
-		destroy_workqueue(adf_misc_wq);
+		cpu_accel_destroy_workqueue(adf_misc_wq);
 
 	adf_misc_wq = NULL;
 }
@@ -450,5 +450,5 @@ bool adf_misc_wq_queue_delayed_work(struct delayed_work *work,
 
 void adf_misc_wq_flush(void)
 {
-	flush_workqueue(adf_misc_wq);
+	cpu_accel_flush_workqueue(adf_misc_wq);
 }

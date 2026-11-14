@@ -2719,19 +2719,19 @@ static int __init isert_init(void)
 destroy_comp_wq:
 	destroy_workqueue(isert_comp_wq);
 destroy_login_wq:
-	destroy_workqueue(isert_login_wq);
+	cpu_accel_destroy_workqueue(isert_login_wq);
 
 	return -ENOMEM;
 }
 
 static void __exit isert_exit(void)
 {
-	flush_workqueue(isert_login_wq);
+	cpu_accel_flush_workqueue(isert_login_wq);
 	destroy_workqueue(isert_release_wq);
 	destroy_workqueue(isert_comp_wq);
 	iscsit_unregister_transport(&iser_target_transport);
 	isert_info("iSER_TARGET[0] - Released iser_target_transport\n");
-	destroy_workqueue(isert_login_wq);
+	cpu_accel_destroy_workqueue(isert_login_wq);
 }
 
 MODULE_DESCRIPTION("iSER-Target for mainline target infrastructure");

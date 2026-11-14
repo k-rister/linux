@@ -994,7 +994,7 @@ unreg_media_device:
 clean_up_media_device:
 	media_device_cleanup(&vde->mdev);
 
-	destroy_workqueue(vde->wq);
+	cpu_accel_destroy_workqueue(vde->wq);
 
 	return err;
 }
@@ -1010,5 +1010,5 @@ void tegra_vde_v4l2_deinit(struct tegra_vde *vde)
 	media_device_unregister(&vde->mdev);
 	media_device_cleanup(&vde->mdev);
 
-	destroy_workqueue(vde->wq);
+	cpu_accel_destroy_workqueue(vde->wq);
 }

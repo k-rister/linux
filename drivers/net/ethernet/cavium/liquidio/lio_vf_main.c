@@ -320,7 +320,7 @@ static void cleanup_link_status_change_wq(struct net_device *netdev)
 
 	if (lio->link_status_wq.wq) {
 		cancel_delayed_work_sync(&lio->link_status_wq.wk.work);
-		destroy_workqueue(lio->link_status_wq.wq);
+		cpu_accel_destroy_workqueue(lio->link_status_wq.wq);
 	}
 }
 

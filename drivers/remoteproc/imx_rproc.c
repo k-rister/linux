@@ -1243,7 +1243,7 @@ static void imx_rproc_destroy_workqueue(void *data)
 {
 	struct workqueue_struct *workqueue = data;
 
-	destroy_workqueue(workqueue);
+	cpu_accel_destroy_workqueue(workqueue);
 }
 
 static int imx_rproc_probe(struct platform_device *pdev)

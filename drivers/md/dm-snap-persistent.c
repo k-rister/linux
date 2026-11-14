@@ -258,7 +258,7 @@ static int chunk_io(struct pstore *ps, void *area, chunk_t chunk, blk_opf_t opf,
 	 */
 	INIT_WORK_ONSTACK(&req.work, do_metadata);
 	queue_work(ps->metadata_wq, &req.work);
-	flush_workqueue(ps->metadata_wq);
+	cpu_accel_flush_workqueue(ps->metadata_wq);
 	destroy_work_on_stack(&req.work);
 
 	return req.result;
@@ -593,7 +593,7 @@ static void persistent_dtr(struct dm_exception_store *store)
 {
 	struct pstore *ps = get_info(store);
 
-	destroy_workqueue(ps->metadata_wq);
+	cpu_accel_destroy_workqueue(ps->metadata_wq);
 
 	/* Created in read_header */
 	if (ps->io_client)
@@ -895,7 +895,7 @@ static int persistent_ctr(struct dm_exception_store *store, char *options)
 	return 0;
 
 err_options:
-	destroy_workqueue(ps->metadata_wq);
+	cpu_accel_destroy_workqueue(ps->metadata_wq);
 err_workqueue:
 	kfree(ps);
 

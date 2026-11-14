@@ -993,7 +993,7 @@ static void workqueue_uaf(struct kunit *test)
 
 	INIT_WORK(work, workqueue_uaf_work);
 	queue_work(workqueue, work);
-	destroy_workqueue(workqueue);
+	cpu_accel_destroy_workqueue(workqueue);
 
 	KUNIT_EXPECT_KASAN_FAIL_READ(test,
 			((volatile struct work_struct *)work)->data);

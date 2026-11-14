@@ -110,6 +110,7 @@ source "drivers/media/Kconfig"
 source "drivers/video/Kconfig"
 
 source "drivers/accel/Kconfig"
+source "drivers/cpu_accel/Kconfig"
 
 source "sound/Kconfig"
 

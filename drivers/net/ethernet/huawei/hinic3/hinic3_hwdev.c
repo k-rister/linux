@@ -598,7 +598,7 @@ err_uninit_comm_ch:
 err_free_cfg_mgmt:
 	hinic3_free_cfg_mgmt(hwdev);
 err_destroy_workqueue:
-	destroy_workqueue(hwdev->workq);
+	cpu_accel_destroy_workqueue(hwdev->workq);
 err_free_hwif:
 	hinic3_free_hwif(hwdev);
 err_free_hwdev:
@@ -618,7 +618,7 @@ void hinic3_free_hwdev(struct hinic3_hwdev *hwdev)
 	hinic3_func_rx_tx_flush(hwdev);
 	hinic3_uninit_comm_ch(hwdev);
 	hinic3_free_cfg_mgmt(hwdev);
-	destroy_workqueue(hwdev->workq);
+	cpu_accel_destroy_workqueue(hwdev->workq);
 	hinic3_free_hwif(hwdev);
 	hinic3_adev_idx_free(hwdev->dev_id);
 	kfree(hwdev);

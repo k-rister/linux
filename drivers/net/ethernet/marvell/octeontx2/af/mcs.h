@@ -8,6 +8,7 @@
 #define MCS_H
 
 #include <linux/bits.h>
+#include <linux/rcupdate.h>
 #include "rvu.h"
 
 #define PCI_DEVID_CN10K_MCS		0xA096
@@ -147,7 +148,7 @@ struct mcs {
 	struct mcs_pfvf		*pf;
 	struct mcs_pfvf		*vf;
 	u16			num_vec;
-	void			*rvu;
+	struct rvu __rcu		*rvu;
 	u16			*tx_sa_active;
 	bool                      bypass;
 };

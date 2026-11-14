@@ -2245,7 +2245,7 @@ static inline void dm_queue_destroy_crypto_profile(struct request_queue *q)
 static void cleanup_mapped_device(struct mapped_device *md)
 {
 	if (md->wq)
-		destroy_workqueue(md->wq);
+		cpu_accel_destroy_workqueue(md->wq);
 	dm_free_md_mempools(md->mempools);
 
 	if (md->dax_dev) {
@@ -3009,7 +3009,7 @@ static int __dm_suspend(struct mapped_device *md, struct dm_table *map,
 	 * we take the write lock. To prevent any process from reentering
 	 * dm_split_and_process_bio from dm_submit_bio and quiesce the thread
 	 * (dm_wq_work), we set DMF_BLOCK_IO_FOR_SUSPEND and call
-	 * flush_workqueue(md->wq).
+	 * cpu_accel_flush_workqueue(md->wq).
 	 */
 	set_bit(DMF_BLOCK_IO_FOR_SUSPEND, &md->flags);
 	if (map)
@@ -3024,7 +3024,7 @@ static int __dm_suspend(struct mapped_device *md, struct dm_table *map,
 		set_bit(DMF_QUEUE_STOPPED, &md->flags);
 	}
 
-	flush_workqueue(md->wq);
+	cpu_accel_flush_workqueue(md->wq);
 
 	/*
 	 * At this point no more requests are entering target request routines.
@@ -3272,7 +3272,7 @@ void dm_internal_suspend_fast(struct mapped_device *md)
 
 	set_bit(DMF_BLOCK_IO_FOR_SUSPEND, &md->flags);
 	synchronize_srcu(&md->io_barrier);
-	flush_workqueue(md->wq);
+	cpu_accel_flush_workqueue(md->wq);
 	dm_wait_for_completion(md, TASK_UNINTERRUPTIBLE);
 }
 EXPORT_SYMBOL_GPL(dm_internal_suspend_fast);

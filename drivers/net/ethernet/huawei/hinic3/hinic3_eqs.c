@@ -690,7 +690,7 @@ err_remove_eqs:
 		remove_eq(&aeqs->aeq[q_id]);
 	}
 
-	destroy_workqueue(aeqs->workq);
+	cpu_accel_destroy_workqueue(aeqs->workq);
 err_free_aeqs:
 	kfree(aeqs);
 
@@ -713,7 +713,7 @@ void hinic3_aeqs_free(struct hinic3_hwdev *hwdev)
 	for (aeq_event = 0; aeq_event < HINIC3_MAX_AEQ_EVENTS; aeq_event++)
 		hinic3_aeq_unregister_cb(hwdev, aeq_event);
 
-	destroy_workqueue(aeqs->workq);
+	cpu_accel_destroy_workqueue(aeqs->workq);
 
 	kfree(aeqs);
 }

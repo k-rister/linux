@@ -1905,7 +1905,7 @@ static void flush_delete_work(struct gfs2_glock *gl)
 void gfs2_flush_delete_work(struct gfs2_sbd *sdp)
 {
 	glock_hash_walk(flush_delete_work, sdp);
-	flush_workqueue(sdp->sd_delete_wq);
+	cpu_accel_flush_workqueue(sdp->sd_delete_wq);
 }
 
 /**
@@ -1999,7 +1999,7 @@ void gfs2_wait_glocks(struct gfs2_sbd *sdp)
 	gfs2_lm_unmount(sdp);
 	gfs2_free_dead_glocks(sdp);
 	glock_hash_walk(dump_glock_func, sdp);
-	destroy_workqueue(sdp->sd_glock_wq);
+	cpu_accel_destroy_workqueue(sdp->sd_glock_wq);
 	sdp->sd_glock_wq = NULL;
 }
 

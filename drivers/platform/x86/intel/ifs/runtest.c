@@ -626,6 +626,10 @@ int do_core_test(int cpu, struct device *dev)
 	struct ifs_data *ifsd = ifs_get_data(dev);
 	int ret = 0;
 
+	/* The core-stop rendezvous cannot run on an accelerator-owned CPU. */
+	if (!x86_cpu_accel_maintenance_try_begin())
+		return -EBUSY;
+
 	/* Prevent CPUs from being taken offline during the scan test */
 	cpus_read_lock();
 
@@ -659,5 +663,6 @@ int do_core_test(int cpu, struct device *dev)
 	}
 out:
 	cpus_read_unlock();
+	x86_cpu_accel_maintenance_try_end();
 	return ret;
 }

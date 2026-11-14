@@ -344,12 +344,14 @@ static int mv88e6352_ptp_enable_extts(struct mv88e6xxx_chip *chip,
 		func = MV88E6352_G2_SCRATCH_GPIO_PCTL_GPIO;
 
 		err = mv88e6352_set_gpio_func(chip, pin, func, true);
-
-		cancel_delayed_work_sync(&chip->tai_event_work);
 	}
 
 out:
 	mv88e6xxx_reg_unlock(chip);
+	if (!on) {
+		/* The work also takes the register lock. */
+		cancel_delayed_work_sync(&chip->tai_event_work);
+	}
 
 	return err;
 }

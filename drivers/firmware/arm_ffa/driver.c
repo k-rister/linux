@@ -1981,7 +1981,7 @@ static void ffa_uninit_pcpu_irq(void)
 	}
 
 	if (drv_info->notif_pcpu_wq) {
-		destroy_workqueue(drv_info->notif_pcpu_wq);
+		cpu_accel_destroy_workqueue(drv_info->notif_pcpu_wq);
 		drv_info->notif_pcpu_wq = NULL;
 	}
 

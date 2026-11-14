@@ -239,7 +239,7 @@ static void rxperf_close_socket(void)
 {
 	kernel_listen(rxperf_socket, 0);
 	kernel_sock_shutdown(rxperf_socket, SHUT_RDWR);
-	flush_workqueue(rxperf_workqueue);
+	cpu_accel_flush_workqueue(rxperf_workqueue);
 	sock_release(rxperf_socket);
 }
 
@@ -682,7 +682,7 @@ error_socket:
 error_key:
 	key_put(rxperf_sec_keyring);
 error_keyring:
-	destroy_workqueue(rxperf_workqueue);
+	cpu_accel_destroy_workqueue(rxperf_workqueue);
 	rcu_barrier();
 error_workqueue:
 	pr_err("Failed to register: %d\n", ret);
@@ -696,7 +696,7 @@ static void __exit rxperf_exit(void)
 
 	rxperf_close_socket();
 	key_put(rxperf_sec_keyring);
-	destroy_workqueue(rxperf_workqueue);
+	cpu_accel_destroy_workqueue(rxperf_workqueue);
 	rcu_barrier();
 }
 module_exit(rxperf_exit);

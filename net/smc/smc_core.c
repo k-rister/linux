@@ -1000,7 +1000,7 @@ static int smc_lgr_create(struct smc_sock *smc, struct smc_init_info *ini)
 	return 0;
 
 free_wq:
-	destroy_workqueue(lgr->tx_wq);
+	cpu_accel_destroy_workqueue(lgr->tx_wq);
 free_lgr:
 	kfree(lgr);
 ism_put_vlan:
@@ -1486,7 +1486,7 @@ static void smc_lgr_free(struct smc_link_group *lgr)
 		smc_llc_lgr_clear(lgr);
 	}
 
-	destroy_workqueue(lgr->tx_wq);
+	cpu_accel_destroy_workqueue(lgr->tx_wq);
 	if (lgr->is_smcd) {
 		smc_ism_put_vlan(lgr->smcd, lgr->vlan_id);
 		put_device(&lgr->smcd->dibs->dev);

@@ -5069,7 +5069,7 @@ err_dpio_setup:
 err_dpni_setup:
 	fsl_mc_portal_free(priv->mc_io);
 err_portal_alloc:
-	destroy_workqueue(priv->dpaa2_ptp_wq);
+	cpu_accel_destroy_workqueue(priv->dpaa2_ptp_wq);
 err_wq_alloc:
 	dev_set_drvdata(dev, NULL);
 	free_netdev(net_dev);
@@ -5094,6 +5094,7 @@ static void dpaa2_eth_remove(struct fsl_mc_device *ls_dev)
 #endif
 
 	unregister_netdev(net_dev);
+	cpu_accel_flush_workqueue(priv->dpaa2_ptp_wq);
 
 	dpaa2_eth_dl_port_del(priv);
 	dpaa2_eth_dl_traps_unregister(priv);
@@ -5121,7 +5122,7 @@ static void dpaa2_eth_remove(struct fsl_mc_device *ls_dev)
 
 	fsl_mc_portal_free(priv->mc_io);
 
-	destroy_workqueue(priv->dpaa2_ptp_wq);
+	cpu_accel_destroy_workqueue(priv->dpaa2_ptp_wq);
 
 	dev_dbg(net_dev->dev.parent, "Removed interface %s\n", net_dev->name);
 

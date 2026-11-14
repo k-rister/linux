@@ -843,7 +843,7 @@ static void san_remove(struct platform_device *pdev)
 	 * We have unregistered our event sources. Now we need to ensure that
 	 * all delayed works they may have spawned are run to completion.
 	 */
-	flush_workqueue(san_wq);
+	cpu_accel_flush_workqueue(san_wq);
 }
 
 static const struct acpi_device_id san_match[] = {
@@ -871,7 +871,7 @@ static int __init san_init(void)
 		return -ENOMEM;
 	ret = platform_driver_register(&surface_acpi_notify);
 	if (ret)
-		destroy_workqueue(san_wq);
+		cpu_accel_destroy_workqueue(san_wq);
 	return ret;
 }
 module_init(san_init);
@@ -879,7 +879,7 @@ module_init(san_init);
 static void __exit san_exit(void)
 {
 	platform_driver_unregister(&surface_acpi_notify);
-	destroy_workqueue(san_wq);
+	cpu_accel_destroy_workqueue(san_wq);
 }
 module_exit(san_exit);
 

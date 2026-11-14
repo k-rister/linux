@@ -809,7 +809,7 @@ static void __padata_free(struct padata_instance *pinst)
 	free_cpumask_var(pinst->cpumask.pcpu);
 	free_cpumask_var(pinst->cpumask.cbcpu);
 	free_cpumask_var(pinst->validate_cpumask);
-	destroy_workqueue(pinst->serial_wq);
+	cpu_accel_destroy_workqueue(pinst->serial_wq);
 	destroy_workqueue(pinst->parallel_wq);
 	kfree(pinst);
 }
@@ -1003,7 +1003,7 @@ err_free_cb_mask:
 err_free_p_mask:
 	free_cpumask_var(pinst->cpumask.pcpu);
 err_free_serial_wq:
-	destroy_workqueue(pinst->serial_wq);
+	cpu_accel_destroy_workqueue(pinst->serial_wq);
 err_put_cpus:
 	cpus_read_unlock();
 	destroy_workqueue(pinst->parallel_wq);

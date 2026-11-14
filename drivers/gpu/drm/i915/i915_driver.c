@@ -170,7 +170,7 @@ out_err:
 
 static void i915_workqueues_cleanup(struct drm_i915_private *dev_priv)
 {
-	destroy_workqueue(dev_priv->unordered_wq);
+	cpu_accel_destroy_workqueue(dev_priv->unordered_wq);
 	destroy_workqueue(dev_priv->wq);
 }
 

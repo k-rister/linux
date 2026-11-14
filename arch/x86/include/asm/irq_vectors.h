@@ -105,10 +105,19 @@
  */
 #define POSTED_MSI_NOTIFICATION_VECTOR	0xeb
 
+#ifdef CONFIG_CPU_ACCEL_CORE
+/* Dedicated entry vector for the online CPU accelerator prototype. */
+#define CPU_ACCEL_VECTOR			0xea
+#endif
+
 #define NR_VECTORS			 256
 
 #ifdef CONFIG_X86_LOCAL_APIC
+#ifdef CONFIG_CPU_ACCEL_CORE
+#define FIRST_SYSTEM_VECTOR		CPU_ACCEL_VECTOR
+#else
 #define FIRST_SYSTEM_VECTOR		POSTED_MSI_NOTIFICATION_VECTOR
+#endif
 #else
 #define FIRST_SYSTEM_VECTOR		NR_VECTORS
 #endif

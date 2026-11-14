@@ -37,6 +37,7 @@
 #include <linux/kfence.h>
 #include <linux/memory.h>
 #include <linux/math64.h>
+#include <linux/smp.h>
 #include <linux/fault-inject.h>
 #include <linux/kmemleak.h>
 #include <linux/stacktrace.h>
@@ -513,7 +514,6 @@ static struct workqueue_struct *flushwq;
 struct slub_flush_work {
 	struct work_struct work;
 	struct kmem_cache *s;
-	bool skip;
 };
 
 static DEFINE_MUTEX(flush_lock);
@@ -4071,28 +4071,29 @@ static void flush_cpu_sheaves(struct work_struct *w)
 static void flush_all_cpus_locked(struct kmem_cache *s)
 {
 	struct slub_flush_work *sfw;
+	cpumask_t sync_wait_cpus;
 	unsigned int cpu;
 
 	lockdep_assert_cpus_held();
 	mutex_lock(&flush_lock);
+	cpumask_clear(&sync_wait_cpus);
 
 	for_each_online_cpu(cpu) {
 		sfw = &per_cpu(slub_flush, cpu);
-		if (!has_pcs_used(cpu, s)) {
-			sfw->skip = true;
+		if (!has_pcs_used(cpu, s))
 			continue;
-		}
 		INIT_WORK(&sfw->work, flush_cpu_sheaves);
-		sfw->skip = false;
 		sfw->s = s;
+		arch_smp_sync_wait_begin(cpu);
 		queue_work_on(cpu, flushwq, &sfw->work);
+		arch_smp_sync_wait_stop(cpu);
+		cpumask_set_cpu(cpu, &sync_wait_cpus);
 	}
 
-	for_each_online_cpu(cpu) {
+	for_each_cpu(cpu, &sync_wait_cpus) {
 		sfw = &per_cpu(slub_flush, cpu);
-		if (sfw->skip)
-			continue;
 		flush_work(&sfw->work);
+		arch_smp_sync_wait_end(cpu);
 	}
 
 	mutex_unlock(&flush_lock);
@@ -4148,10 +4149,12 @@ static void flush_rcu_sheaf(struct work_struct *w)
 void flush_rcu_sheaves_on_cache(struct kmem_cache *s)
 {
 	struct slub_flush_work *sfw;
+	cpumask_t sync_wait_cpus;
 	unsigned int cpu;
 
 	lockdep_assert_cpus_held();
 	mutex_lock(&flush_lock);
+	cpumask_clear(&sync_wait_cpus);
 
 	for_each_online_cpu(cpu) {
 		sfw = &per_cpu(slub_flush, cpu);
@@ -4165,12 +4168,16 @@ void flush_rcu_sheaves_on_cache(struct kmem_cache *s)
 
 		INIT_WORK(&sfw->work, flush_rcu_sheaf);
 		sfw->s = s;
+		arch_smp_sync_wait_begin(cpu);
 		queue_work_on(cpu, flushwq, &sfw->work);
+		arch_smp_sync_wait_stop(cpu);
+		cpumask_set_cpu(cpu, &sync_wait_cpus);
 	}
 
-	for_each_online_cpu(cpu) {
+	for_each_cpu(cpu, &sync_wait_cpus) {
 		sfw = &per_cpu(slub_flush, cpu);
 		flush_work(&sfw->work);
+		arch_smp_sync_wait_end(cpu);
 	}
 
 	mutex_unlock(&flush_lock);

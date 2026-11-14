@@ -305,9 +305,9 @@ int intel_display_driver_probe_noirq(struct intel_display *display)
 	return 0;
 
 cleanup_wq_unordered:
-	destroy_workqueue(display->wq.unordered);
+	cpu_accel_destroy_workqueue(display->wq.unordered);
 cleanup_wq_cleanup:
-	destroy_workqueue(display->wq.cleanup);
+	cpu_accel_destroy_workqueue(display->wq.cleanup);
 cleanup_wq_flip:
 	destroy_workqueue(display->wq.flip);
 cleanup_wq_modeset:
@@ -605,8 +605,8 @@ void intel_display_driver_remove(struct intel_display *display)
 
 	flush_workqueue(display->wq.flip);
 	flush_workqueue(display->wq.modeset);
-	flush_workqueue(display->wq.cleanup);
-	flush_workqueue(display->wq.unordered);
+	cpu_accel_flush_workqueue(display->wq.cleanup);
+	cpu_accel_flush_workqueue(display->wq.unordered);
 
 	/*
 	 * MST topology needs to be suspended so we don't have any calls to
@@ -635,7 +635,7 @@ void intel_display_driver_remove_noirq(struct intel_display *display)
 	intel_unregister_dsm_handler();
 
 	/* flush any delayed tasks or pending work */
-	flush_workqueue(display->wq.unordered);
+	cpu_accel_flush_workqueue(display->wq.unordered);
 
 	intel_hdcp_component_fini(display);
 
@@ -650,8 +650,8 @@ void intel_display_driver_remove_noirq(struct intel_display *display)
 	destroy_workqueue(display->hotplug.dp_wq);
 	destroy_workqueue(display->wq.flip);
 	destroy_workqueue(display->wq.modeset);
-	destroy_workqueue(display->wq.cleanup);
-	destroy_workqueue(display->wq.unordered);
+	cpu_accel_destroy_workqueue(display->wq.cleanup);
+	cpu_accel_destroy_workqueue(display->wq.unordered);
 
 	intel_fbc_cleanup(display);
 }
@@ -756,7 +756,7 @@ static int __intel_display_driver_pm_suspend(struct intel_display *display, bool
 	}
 
 	/* ensure all DPT VMAs have been unpinned for intel_dpt_suspend() */
-	flush_workqueue(display->wq.cleanup);
+	cpu_accel_flush_workqueue(display->wq.cleanup);
 
 	intel_dp_mst_suspend(display);
 

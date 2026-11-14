@@ -78,17 +78,17 @@ static __init int smbdirect_module_init(void)
 	return 0;
 
 devices_init_failed:
-	destroy_workqueue(smbdirect_globals.workqueues.cleanup);
+	cpu_accel_destroy_workqueue(smbdirect_globals.workqueues.cleanup);
 alloc_cleanup_wq_failed:
-	destroy_workqueue(smbdirect_globals.workqueues.immediate);
+	cpu_accel_destroy_workqueue(smbdirect_globals.workqueues.immediate);
 alloc_immediate_wq_failed:
-	destroy_workqueue(smbdirect_globals.workqueues.refill);
+	cpu_accel_destroy_workqueue(smbdirect_globals.workqueues.refill);
 alloc_refill_wq_failed:
-	destroy_workqueue(smbdirect_globals.workqueues.idle);
+	cpu_accel_destroy_workqueue(smbdirect_globals.workqueues.idle);
 alloc_idle_wq_failed:
-	destroy_workqueue(smbdirect_globals.workqueues.connect);
+	cpu_accel_destroy_workqueue(smbdirect_globals.workqueues.connect);
 alloc_connect_wq_failed:
-	destroy_workqueue(smbdirect_globals.workqueues.accept);
+	cpu_accel_destroy_workqueue(smbdirect_globals.workqueues.accept);
 alloc_accept_wq_failed:
 	mutex_unlock(&smbdirect_globals.mutex);
 	pr_crit("failed to loaded: %d (%1pe)\n",
@@ -103,12 +103,12 @@ static __exit void smbdirect_module_exit(void)
 
 	smbdirect_devices_exit();
 
-	destroy_workqueue(smbdirect_globals.workqueues.accept);
-	destroy_workqueue(smbdirect_globals.workqueues.connect);
-	destroy_workqueue(smbdirect_globals.workqueues.idle);
-	destroy_workqueue(smbdirect_globals.workqueues.refill);
-	destroy_workqueue(smbdirect_globals.workqueues.immediate);
-	destroy_workqueue(smbdirect_globals.workqueues.cleanup);
+	cpu_accel_destroy_workqueue(smbdirect_globals.workqueues.accept);
+	cpu_accel_destroy_workqueue(smbdirect_globals.workqueues.connect);
+	cpu_accel_destroy_workqueue(smbdirect_globals.workqueues.idle);
+	cpu_accel_destroy_workqueue(smbdirect_globals.workqueues.refill);
+	cpu_accel_destroy_workqueue(smbdirect_globals.workqueues.immediate);
+	cpu_accel_destroy_workqueue(smbdirect_globals.workqueues.cleanup);
 
 	mutex_unlock(&smbdirect_globals.mutex);
 	pr_notice("subsystem unloaded\n");

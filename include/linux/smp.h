@@ -49,6 +49,26 @@ extern unsigned int total_cpus;
 
 int smp_call_function_single(int cpuid, smp_call_func_t func, void *info, bool wait);
 
+/*
+ * Optional architecture hooks around synchronous per-CPU work. Begin runs
+ * before queueing when the caller controls that operation. If the target is
+ * discovered while flushing already-queued work, begin may run with
+ * interrupts disabled and a pool lock held, before the flush barrier is
+ * exposed; it must not block. Stop requests an active owner to yield before
+ * the wait, and end runs after completion. These hooks also cover waits on
+ * work queued to the current CPU, so an accelerator owner cannot enter until
+ * that work has drained.
+ */
+#ifdef CONFIG_CPU_ACCEL_CORE
+void arch_smp_sync_wait_begin(int cpu);
+void arch_smp_sync_wait_stop(int cpu);
+void arch_smp_sync_wait_end(int cpu);
+#else
+static inline void arch_smp_sync_wait_begin(int cpu) { }
+static inline void arch_smp_sync_wait_stop(int cpu) { }
+static inline void arch_smp_sync_wait_end(int cpu) { }
+#endif
+
 void on_each_cpu_cond_mask(smp_cond_func_t cond_func, smp_call_func_t func,
 			   void *info, bool wait, const struct cpumask *mask);
 

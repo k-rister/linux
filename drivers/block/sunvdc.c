@@ -1261,7 +1261,7 @@ out_unregister_blkdev:
 	vdc_major = 0;
 
 out_free_wq:
-	destroy_workqueue(sunvdc_wq);
+	cpu_accel_destroy_workqueue(sunvdc_wq);
 	return err;
 }
 
@@ -1269,7 +1269,7 @@ static void __exit vdc_exit(void)
 {
 	vio_unregister_driver(&vdc_port_driver);
 	unregister_blkdev(vdc_major, VDCBLK_NAME);
-	destroy_workqueue(sunvdc_wq);
+	cpu_accel_destroy_workqueue(sunvdc_wq);
 }
 
 module_init(vdc_init);

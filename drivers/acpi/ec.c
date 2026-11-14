@@ -541,7 +541,7 @@ static void acpi_ec_enable_event(struct acpi_ec *ec)
 static void __acpi_ec_flush_work(void)
 {
 	flush_workqueue(ec_wq); /* flush ec->work */
-	flush_workqueue(ec_query_wq); /* flush queries */
+	cpu_accel_flush_workqueue(ec_query_wq); /* flush queries */
 }
 
 static void acpi_ec_disable_event(struct acpi_ec *ec)
@@ -1142,7 +1142,7 @@ static void acpi_ec_remove_query_handlers(struct acpi_ec *ec,
 void acpi_ec_remove_query_handler(struct acpi_ec *ec, u8 query_bit)
 {
 	acpi_ec_remove_query_handlers(ec, false, query_bit);
-	flush_workqueue(ec_query_wq);
+	cpu_accel_flush_workqueue(ec_query_wq);
 }
 EXPORT_SYMBOL_GPL(acpi_ec_remove_query_handler);
 
@@ -2289,7 +2289,7 @@ static void acpi_ec_destroy_workqueues(void)
 		ec_wq = NULL;
 	}
 	if (ec_query_wq) {
-		destroy_workqueue(ec_query_wq);
+		cpu_accel_destroy_workqueue(ec_query_wq);
 		ec_query_wq = NULL;
 	}
 }

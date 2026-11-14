@@ -275,8 +275,7 @@ MERT can report various kinds of telemetry information like the following:
 Amdxdna DRM client usage stats implementation
 =============================================
 
-The amdxdna driver implements the DRM client usage stats specification as
-documented in :ref:`drm-client-usage-stats`.
+The amdxdna driver implements the DRM client usage stats specification.
 
 Example of the output showing the implemented key value pairs:
 

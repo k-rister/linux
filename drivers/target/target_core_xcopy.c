@@ -492,7 +492,7 @@ int target_xcopy_setup_pt(void)
 void target_xcopy_release_pt(void)
 {
 	if (xcopy_wq)
-		destroy_workqueue(xcopy_wq);
+		cpu_accel_destroy_workqueue(xcopy_wq);
 }
 
 /*

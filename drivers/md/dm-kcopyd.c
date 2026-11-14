@@ -964,7 +964,7 @@ struct dm_kcopyd_client *dm_kcopyd_client_create(struct dm_kcopyd_throttle *thro
 bad_io_client:
 	client_free_pages(kc);
 bad_client_pages:
-	destroy_workqueue(kc->kcopyd_wq);
+	cpu_accel_destroy_workqueue(kc->kcopyd_wq);
 bad_workqueue:
 	mempool_exit(&kc->job_pool);
 bad_slab:
@@ -983,7 +983,7 @@ void dm_kcopyd_client_destroy(struct dm_kcopyd_client *kc)
 	BUG_ON(!list_empty(&kc->complete_jobs));
 	BUG_ON(!list_empty(&kc->io_jobs));
 	BUG_ON(!list_empty(&kc->pages_jobs));
-	destroy_workqueue(kc->kcopyd_wq);
+	cpu_accel_destroy_workqueue(kc->kcopyd_wq);
 	dm_io_client_destroy(kc->io_client);
 	client_free_pages(kc);
 	mempool_exit(&kc->job_pool);
@@ -993,6 +993,6 @@ EXPORT_SYMBOL(dm_kcopyd_client_destroy);
 
 void dm_kcopyd_client_flush(struct dm_kcopyd_client *kc)
 {
-	flush_workqueue(kc->kcopyd_wq);
+	cpu_accel_flush_workqueue(kc->kcopyd_wq);
 }
 EXPORT_SYMBOL(dm_kcopyd_client_flush);

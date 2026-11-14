@@ -1163,7 +1163,7 @@ qla2x00_wait_for_sess_deletion(scsi_qla_host_t *vha)
 			break;
 	}
 
-	flush_workqueue(vha->hw->wq);
+	cpu_accel_flush_workqueue(vha->hw->wq);
 }
 
 /*
@@ -1700,7 +1700,7 @@ qla2xxx_eh_host_reset(struct scsi_cmnd *cmd)
 			/* fall thru if ctx reset failed */
 		}
 		if (ha->wq)
-			flush_workqueue(ha->wq);
+			cpu_accel_flush_workqueue(ha->wq);
 
 		set_bit(ABORT_ISP_ACTIVE, &base_vha->dpc_flags);
 		if (ha->isp_ops->abort_isp(base_vha)) {
@@ -4134,7 +4134,7 @@ qla2x00_free_device(scsi_qla_host_t *vha)
 
 	/* Flush the work queue and remove it */
 	if (ha->wq) {
-		destroy_workqueue(ha->wq);
+		cpu_accel_destroy_workqueue(ha->wq);
 		ha->wq = NULL;
 	}
 

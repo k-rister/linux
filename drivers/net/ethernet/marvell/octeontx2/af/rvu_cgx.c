@@ -344,7 +344,7 @@ static int cgx_lmac_event_handler_init(struct rvu *rvu)
 static void rvu_cgx_wq_destroy(struct rvu *rvu)
 {
 	if (rvu->cgx_evh_wq) {
-		destroy_workqueue(rvu->cgx_evh_wq);
+		cpu_accel_destroy_workqueue(rvu->cgx_evh_wq);
 		rvu->cgx_evh_wq = NULL;
 	}
 }
@@ -446,6 +446,8 @@ int rvu_cgx_exit(struct rvu *rvu)
 	/* Ensure event handler unregister is completed */
 	mb();
 
+	if (rvu->cgx_evh_wq)
+		cpu_accel_drain_workqueue(rvu->cgx_evh_wq);
 	rvu_cgx_wq_destroy(rvu);
 	return 0;
 }

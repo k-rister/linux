@@ -1828,7 +1828,8 @@ static int cgx_lmac_exit(struct cgx *cgx)
 	int i;
 
 	if (cgx->cgx_cmd_workq) {
-		destroy_workqueue(cgx->cgx_cmd_workq);
+		cpu_accel_drain_workqueue(cgx->cgx_cmd_workq);
+		cpu_accel_destroy_workqueue(cgx->cgx_cmd_workq);
 		cgx->cgx_cmd_workq = NULL;
 	}
 

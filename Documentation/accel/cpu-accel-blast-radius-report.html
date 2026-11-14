@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CPU Accelerator Post-Reduction Kernel Blast-Radius Report</title>
+  <style>
+    :root { color-scheme: light; --ink:#17202a; --muted:#52606d; --line:#d9e2ec; --panel:#f7f9fb; --panel2:#eef4f8; --accent:#155e75; --critical:#991b1b; --criticalbg:#fef2f2; --warn:#92400e; --warnbg:#fff7ed; --ok:#166534; --okbg:#f0fdf4; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:#fff; font:16px/1.62 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    .layout { max-width:1120px; margin:0 auto; padding:52px 34px 88px; }
+    header.hero { border-bottom:2px solid var(--line); padding-bottom:32px; margin-bottom:36px; }
+    .eyebrow { color:var(--accent); font-weight:750; letter-spacing:.1em; text-transform:uppercase; font-size:13px; }
+    h1,h2,h3 { line-height:1.2; color:#102a43; scroll-margin-top:24px; }
+    h1 { font-size:clamp(31px,5vw,48px); margin:10px 0 12px; letter-spacing:-.03em; }
+    h2 { font-size:29px; margin-top:58px; margin-bottom:16px; letter-spacing:-.02em; }
+    h3 { font-size:20px; margin-top:30px; margin-bottom:10px; }
+    p { margin:0 0 15px; }
+    .subtitle { color:var(--muted); font-size:20px; max-width:900px; }
+    .meta { display:flex; flex-wrap:wrap; gap:10px 24px; margin-top:22px; color:var(--muted); font-size:14px; }
+    .meta strong { color:var(--ink); }
+    .toc { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:20px 24px; margin:0 0 32px; }
+    .toc h2 { margin:0 0 12px; font-size:18px; }
+    .toc ol { margin:0; padding-left:22px; columns:2; column-gap:36px; font-size:15px; }
+    .toc a { color:var(--accent); text-decoration:none; }
+    .callout { border-left:5px solid var(--accent); background:var(--panel2); border-radius:8px; padding:15px 19px; margin:20px 0; }
+    .callout.warn { border-left-color:#d97706; background:var(--warnbg); color:var(--warn); }
+    .callout.critical { border-left-color:#b91c1c; background:var(--criticalbg); color:var(--critical); }
+    .callout.ok { border-left-color:#15803d; background:var(--okbg); color:var(--ok); }
+    .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; margin:22px 0 30px; }
+    .kpi { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:17px; }
+    .kpi .label { color:var(--muted); font-size:13px; text-transform:uppercase; letter-spacing:.04em; font-weight:700; }
+    .kpi .value { font-size:35px; font-weight:800; color:#102a43; margin:7px 0; }
+    .kpi .detail { color:var(--muted); font-size:14px; }
+    table { width:100%; border-collapse:collapse; margin:18px 0 28px; font-size:15px; }
+    th,td { padding:10px 12px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { background:var(--panel2); color:#243b53; font-size:13px; text-transform:uppercase; letter-spacing:.035em; }
+    tr:nth-child(even) td { background:#fbfdfe; }
+    code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:.94em; background:#f1f5f9; color:#0f172a; padding:2px 5px; border-radius:4px; }
+    ul,ol { margin:0 0 17px; padding-left:23px; }
+    li { margin:4px 0; }
+    .badge { display:inline-block; border-radius:999px; padding:4px 10px; font-size:13px; font-weight:700; border:1px solid var(--line); background:var(--panel2); color:#334e68; }
+    .badge.high { color:var(--critical); background:var(--criticalbg); border-color:#fecaca; }
+    .badge.medium { color:var(--warn); background:var(--warnbg); border-color:#fed7aa; }
+    footer { border-top:2px solid var(--line); margin-top:68px; padding-top:20px; color:var(--muted); font-size:14px; }
+    @media(max-width:720px) { .layout{padding:32px 18px 64px;} .toc ol{columns:1;} table{display:block;overflow-x:auto;} }
+  </style>
+</head>
+<body>
+<div class="layout">
+  <header class="hero">
+    <div class="eyebrow">Post-reduction change analysis</div>
+    <h1>Kernel blast radius outside the <code>cpu_accel</code> module</h1>
+    <p class="subtitle">The reduced footprint after removing the broad <code>*_with_sync_wait()</code> family, retaining three owner-aware workqueue wrappers, and preserving only correctness-required call sites.</p>
+    <div class="meta">
+      <span><strong>Branch:</strong> <code>codex/accelerator-oslat-v2</code></span>
+      <span><strong>Diff baseline:</strong> <code>40288c9206c17eb66a603262e06a58d300d0f279</code></span>
+      <span><strong>State:</strong> uncommitted working tree</span>
+      <span><strong>Generated:</strong> 2026-11-14</span>
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="Report contents">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#executive-summary">Executive summary</a></li>
+      <li><a href="#scope-and-method">Scope and method</a></li>
+      <li><a href="#reduction-outcome">Reduction outcome</a></li>
+      <li><a href="#workqueue-adoption">Workqueue adoption</a></li>
+      <li><a href="#semantic-remainder">Semantic remainder</a></li>
+      <li><a href="#architectural-classes">Architectural classes</a></li>
+      <li><a href="#review-priorities">Review priorities</a></li>
+      <li><a href="#boundaries">Explicit boundaries</a></li>
+    </ol>
+  </nav>
+
+  <section id="executive-summary">
+    <h2>Executive summary</h2>
+    <p>The reduced working tree changes <strong>308 kernel source files outside the <code>cpu_accel</code> module and its direct support tree</strong>, with 2,737 insertions and 855 deletions. It divides into 219 wrapper-family paths and 89 semantic paths.</p>
+    <div class="kpis">
+      <div class="kpi"><div class="label">Non-module paths</div><div class="value">308</div><div class="detail">2,737 insertions / 855 deletions</div></div>
+      <div class="kpi"><div class="label">Wrapper-family paths</div><div class="value">219</div><div class="detail">905 insertions / 570 deletions</div></div>
+      <div class="kpi"><div class="label">Semantic remainder</div><div class="value">89</div><div class="detail">1,832 insertions / 285 deletions</div></div>
+      <div class="kpi"><div class="label">Stale API references</div><div class="value">0</div><div class="detail">No tracked <code>_with_sync_wait</code> references</div></div>
+    </div>
+    <div class="callout ok"><strong>Primary reduction:</strong> the old design required 1,539 wrapper-family paths and a kernel-wide <code>*_with_sync_wait()</code> API. The reduced design retains <code>cpu_accel_flush_workqueue()</code>, <code>cpu_accel_drain_workqueue()</code>, and <code>cpu_accel_destroy_workqueue()</code>, and changes 218 producer, teardown, or cleanup call-site files.</div>
+    <p>The remaining large contributors are intentional: x86 ownership, IRQ quarantine, MMU/TLB/reclaim coordination, SMP and CPU transitions, and the workqueue core. The broad driver conversion is no longer a substitute for identifying sites that can actually wait for work pinned to an accelerator-owned CPU.</p>
+    <div class="callout critical"><strong>Review concentration:</strong> the 89 semantic paths carry two-thirds of changed lines and nearly all correctness-sensitive review risk. They concentrate in <code>arch/x86</code>, <code>kernel</code>, <code>mm</code>, and <code>include</code>, plus a small set of required driver fixes.</div>
+  </section>
+
+  <section id="scope-and-method">
+    <h2>Scope and method</h2>
+    <p>The report covers tracked changes relative to <code>40288c9206c17eb66a603262e06a58d300d0f279</code>. It excludes <code>Documentation/</code>, <code>tools/</code>, <code>drivers/cpu_accel/</code>, and <code>MAINTAINERS</code> so the metrics describe existing kernel source outside the new module and userspace tooling. The full tracked working-tree diff is 312 files, 2,765 insertions, and 859 deletions.</p>
+    <p>A path is <em>wrapper-family</em> when its diff contains one of the retained <code>cpu_accel_*_workqueue()</code> calls. The 219 wrapper-family paths are <code>kernel/workqueue.c</code> plus 218 call-site files; all other paths are the semantic remainder.</p>
+    <table>
+      <thead><tr><th>Population</th><th>Files</th><th>Insertions</th><th>Deletions</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td>Full tracked diff</td><td>312</td><td>2,765</td><td>859</td><td>All tracked working-tree changes</td></tr>
+        <tr><td>Outside module and support scope</td><td>308</td><td>2,737</td><td>855</td><td>Primary blast-radius population</td></tr>
+        <tr><td>Wrapper-family paths</td><td>219</td><td>905</td><td>570</td><td>Workqueue core plus retained call sites</td></tr>
+        <tr><td>Semantic remainder</td><td>89</td><td>1,832</td><td>285</td><td>Architectural and required driver changes</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="reduction-outcome">
+    <h2>Reduction outcome</h2>
+    <p>The earlier report described 1,625 non-module files, 8,807 insertions, and 3,437 deletions. The reduced tree cuts that to 308 files, 2,737 insertions, and 855 deletions.</p>
+    <table>
+      <thead><tr><th>Measure</th><th>Before</th><th>After</th><th>Reduction</th></tr></thead>
+      <tbody>
+        <tr><td>Non-module files</td><td>1,625</td><td>308</td><td>1,317 (81%)</td></tr>
+        <tr><td>Insertions</td><td>8,807</td><td>2,737</td><td>6,070 (69%)</td></tr>
+        <tr><td>Deletions</td><td>3,437</td><td>855</td><td>2,582 (75%)</td></tr>
+        <tr><td>Wrapper-family paths</td><td>1,539</td><td>219</td><td>1,320 (86%)</td></tr>
+      </tbody>
+    </table>
+    <p>The reduction is substantive: the removed API eliminated a second exported synchronous-wait naming convention and removed conversions where asynchronous-work completion is not required for accelerator correctness. Remaining workqueue conversions are tied to work production, teardown, cancellation, resource release, or paths that can deadlock against an owned CPU.</p>
+  </section>
+
+  <section id="workqueue-adoption">
+    <h2>Workqueue adoption</h2>
+    <p>The retained call-site family is:</p>
+    <ul>
+      <li><code>cpu_accel_flush_workqueue()</code> for flush-style waits</li>
+      <li><code>cpu_accel_drain_workqueue()</code> for drain-style waits</li>
+      <li><code>cpu_accel_destroy_workqueue()</code> for destroy-time waits</li>
+    </ul>
+    <p>The diff adds 536 calls to these wrappers and removes 502 direct legacy workqueue calls across 218 call-site files. The sites concentrate in probe/remove, reset, teardown, module unload, and producer/consumer shutdown paths.</p>
+    <div class="callout warn"><strong>Remaining review obligation:</strong> verify each site can execute while an owner is active, preserves the original wait scope, and cannot return from an error path while required work remains unfinished.</div>
+  </section>
+
+  <section id="semantic-remainder">
+    <h2>Semantic remainder</h2>
+    <p>The 89 semantic paths account for 1,832 insertions and 285 deletions.</p>
+    <table>
+      <thead><tr><th>Area</th><th>Paths</th><th>Review character</th></tr></thead>
+      <tbody>
+        <tr><td><code>drivers</code></td><td>27</td><td>Required semantic call sites and targeted deadlock fixes</td></tr>
+        <tr><td><code>arch/x86</code></td><td>25</td><td>Ownership entry, IPI, IDT, TLB, and text-poking paths</td></tr>
+        <tr><td><code>kernel</code></td><td>17</td><td>SMP, CPU transitions, IRQ, RCU, scheduler, debug, tracing</td></tr>
+        <tr><td><code>mm</code></td><td>9</td><td>MMU gather, rmap, reclaim, vmalloc, and SLUB coordination</td></tr>
+        <tr><td><code>include</code></td><td>8</td><td>Core contracts and disabled-config fallbacks</td></tr>
+        <tr><td><code>samples</code>, <code>net</code>, <code>fs</code></td><td>3</td><td>Small required call-site or include-path adjustments</td></tr>
+      </tbody>
+    </table>
+    <p>The largest semantic changes are <code>arch/x86/mm/tlb.c</code>, <code>mm/mmu_gather.c</code>, <code>mm/vmscan.c</code>, <code>mm/rmap.c</code>, <code>arch/x86/mm/pat/set_memory.c</code>, and <code>drivers/net/phy/bcm-phy-ptp.c</code>.</p>
+  </section>
+
+  <section id="architectural-classes">
+    <h2>Architectural classes</h2>
+    <h3>x86 ownership and direct entry</h3>
+    <p><span class="badge high">High</span> The backend adds ownership requests, direct user entry, stop and recovery, deferred reschedule/call-function handling, and architecture counters. The dedicated vector and IDT entry are gated by <code>CONFIG_CPU_ACCEL_CORE</code>. Representative paths include <code>arch/x86/kernel/accel.c</code>, <code>arch/x86/include/asm/cpu_accel.h</code>, <code>arch/x86/include/asm/irq_vectors.h</code>, <code>arch/x86/include/asm/idtentry.h</code>, <code>arch/x86/kernel/idt.c</code>, <code>arch/x86/kernel/apic/ipi.c</code>, and <code>arch/x86/kernel/smp.c</code>.</p>
+    <h3>Workqueue core</h3>
+    <p><span class="badge high">High</span> <code>include/linux/workqueue.h</code> and <code>kernel/workqueue.c</code> implement the three retained wrappers and prevent new work from being scheduled on an owned CPU.</p>
+    <h3>SMP, CPU transitions, and stop-machine</h3>
+    <p><span class="badge high">High</span> Maintenance windows and synchronous remote execution coordinate with CPU online/offline, stop-machine, and freeze/thaw. Representative paths include <code>kernel/smp.c</code>, <code>kernel/cpu.c</code>, <code>kernel/stop_machine.c</code>, and <code>include/linux/smp.h</code>.</p>
+    <h3>IRQ quarantine</h3>
+    <p><span class="badge high">High</span> <code>kernel/irq/accel.c</code>, <code>kernel/irq/chip.c</code>, and <code>kernel/irq/manage.c</code> reserve owned CPUs from new affinity assignments, migrate active IRQs, validate effective routes, and restore affinity during rollback.</p>
+    <h3>MMU, TLB, and reclaim</h3>
+    <p><span class="badge high">High</span> Memory-management paths coordinate ownership with TLB shootdowns, MMU gather batches, rmap, reclaim completion, vmalloc, and SLUB. Representative paths include <code>arch/x86/mm/tlb.c</code>, <code>mm/mmu_gather.c</code>, <code>mm/rmap.c</code>, <code>mm/vmscan.c</code>, and <code>arch/x86/mm/pat/set_memory.c</code>.</p>
+    <h3>Debug, tracing, and executable memory</h3>
+    <p><span class="badge medium">Medium</span> Debugger, kprobe, ftrace, jump-label, alternative, MTRR, cache-info, and ring-buffer paths coordinate operations that send IPIs or require a CPU rendezvous. Representative paths include <code>kernel/debug/debug_core.c</code>, <code>kernel/kprobes.c</code>, <code>kernel/ftrace.c</code>, <code>arch/x86/kernel/alternative.c</code>, and <code>kernel/trace/ring_buffer.c</code>.</p>
+    <h3>Required driver-specific fixes</h3>
+    <p><span class="badge medium">Medium</span> The driver remainder includes target-core TMR handling, Greybus release-path deadlock prevention, and BCM PHY PTP work draining. These change shutdown or error ordering and require subsystem-aware review.</p>
+    <h3>Build and disabled-config boundaries</h3>
+    <p><span class="badge medium">Medium</span> The x86 public API, dedicated vector/IDT entry, and MMU-owner hooks are gated or backed by no-op stubs when <code>CONFIG_CPU_ACCEL_CORE</code> is disabled, keeping the blast radius conditional.</p>
+  </section>
+
+  <section id="review-priorities">
+    <h2>Review priorities</h2>
+    <ol>
+      <li><strong>Ownership state machine:</strong> activation, stop, rollback, manager death, owner exit, and recovery must never strand a CPU or admit an unsafe owner.</li>
+      <li><strong>x86 entry and exception safety:</strong> direct entry, NMI/MCE visibility, vector use, and deferred reschedule/call-function behavior require architecture review.</li>
+      <li><strong>IRQ quarantine:</strong> verify affinity reservation, migration, effective-route validation, rollback, and hotplug interaction.</li>
+      <li><strong>MMU/TLB/reclaim:</strong> validate lifetime, shootdown completion, generation handling, deferred batches, and reclaim ordering.</li>
+      <li><strong>SMP and CPU transitions:</strong> prove no deadlock or missed rendezvous when ownership intersects stop-machine, freeze, online/offline, or synchronous IPI waits.</li>
+      <li><strong>Workqueue semantics:</strong> audit all three wrappers and every class of call-site conversion, especially error and destroy paths.</li>
+      <li><strong>Driver-specific ordering:</strong> review target TMR, Greybus release, and BCM PHY PTP changes with subsystem maintainers.</li>
+    </ol>
+  </section>
+
+  <section id="boundaries">
+    <h2>Explicit boundaries</h2>
+    <div class="callout warn"><strong>Prototype boundary:</strong> this work provides CPU execution ownership and coordination, not device or DMA ownership, and it does not control NMIs, SMIs, machine checks, or arbitrary firmware activity.</div>
+    <p>It does not provide a formal hard latency bound. It reduces and measures asynchronous kernel interference, but worst-case behavior still depends on firmware, hardware events, and paths outside the ownership contract.</p>
+    <p>The reduced workqueue footprint is a review-scope improvement, not a claim that all 218 call sites are trivial. Each still needs confirmation that its original synchronous-work guarantee is preserved.</p>
+  </section>
+
+  <footer>Generated from the uncommitted working tree on 2026-11-14. Metrics use tracked source only and exclude accelerator documentation, userspace tooling, <code>drivers/cpu_accel</code>, and <code>MAINTAINERS</code>.</footer>
+</div>
+</body>
+</html>

@@ -1785,7 +1785,7 @@ static void rnbd_destroy_sessions(void)
 		rnbd_clt_put_sess(sess);
 	}
 	/* Wait for all scheduled unmap works */
-	flush_workqueue(rnbd_clt_wq);
+	cpu_accel_flush_workqueue(rnbd_clt_wq);
 	WARN_ON(!list_empty(&sess_list));
 }
 
@@ -1828,7 +1828,7 @@ static void __exit rnbd_client_exit(void)
 	rnbd_destroy_sessions();
 	unregister_blkdev(rnbd_client_major, "rnbd");
 	ida_destroy(&index_ida);
-	destroy_workqueue(rnbd_clt_wq);
+	cpu_accel_destroy_workqueue(rnbd_clt_wq);
 }
 
 module_init(rnbd_client_init);

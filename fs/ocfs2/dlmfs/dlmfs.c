@@ -607,7 +607,7 @@ bail:
 		if (cleanup_inode)
 			kmem_cache_destroy(dlmfs_inode_cache);
 		if (cleanup_worker)
-			destroy_workqueue(user_dlm_worker);
+			cpu_accel_destroy_workqueue(user_dlm_worker);
 	} else
 		printk("OCFS2 User DLM kernel interface loaded\n");
 	return status;
@@ -617,7 +617,7 @@ static void __exit exit_dlmfs_fs(void)
 {
 	unregister_filesystem(&dlmfs_fs_type);
 
-	destroy_workqueue(user_dlm_worker);
+	cpu_accel_destroy_workqueue(user_dlm_worker);
 
 	/*
 	 * Make sure all delayed rcu free inodes are flushed before we

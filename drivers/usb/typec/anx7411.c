@@ -1544,7 +1544,7 @@ static int anx7411_i2c_probe(struct i2c_client *client)
 	return 0;
 
 free_wq:
-	destroy_workqueue(plat->workqueue);
+	cpu_accel_destroy_workqueue(plat->workqueue);
 
 free_typec_port:
 	anx7411_port_unregister(&plat->typec);
@@ -1569,7 +1569,7 @@ static void anx7411_i2c_remove(struct i2c_client *client)
 	if (plat->workqueue) {
 		disable_irq(plat->intp_irq);
 		cancel_work_sync(&plat->work);
-		destroy_workqueue(plat->workqueue);
+		cpu_accel_destroy_workqueue(plat->workqueue);
 	}
 
 	i2c_unregister_device(plat->spi_client);

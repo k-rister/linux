@@ -1010,13 +1010,13 @@ static int __init cryptd_init(void)
 err_fini_queue:
 	cryptd_fini_queue(&queue);
 err_destroy_wq:
-	destroy_workqueue(cryptd_wq);
+	cpu_accel_destroy_workqueue(cryptd_wq);
 	return err;
 }
 
 static void __exit cryptd_exit(void)
 {
-	destroy_workqueue(cryptd_wq);
+	cpu_accel_destroy_workqueue(cryptd_wq);
 	cryptd_fini_queue(&queue);
 	crypto_unregister_template(&cryptd_tmpl);
 }

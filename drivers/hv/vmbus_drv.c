@@ -1430,11 +1430,15 @@ static int vmbus_alloc_synic_and_connect(void)
 		struct work_struct *work = per_cpu_ptr(works, cpu);
 
 		INIT_WORK(work, vmbus_percpu_work);
+		arch_smp_sync_wait_begin(cpu);
 		schedule_work_on(cpu, work);
+		arch_smp_sync_wait_stop(cpu);
 	}
 
-	for_each_online_cpu(cpu)
+	for_each_online_cpu(cpu) {
 		flush_work(per_cpu_ptr(works, cpu));
+		arch_smp_sync_wait_end(cpu);
+	}
 
 	/* Register the callbacks for possible CPU online/offline'ing */
 	ret = cpuhp_setup_state_nocalls_cpuslocked(CPUHP_AP_ONLINE_DYN, "hyperv/vmbus:online",
@@ -2721,10 +2725,10 @@ static int vmbus_bus_suspend(struct device *dev)
 	tasklet_enable(&hv_cpu->msg_dpc);
 
 	/* Drain all the workqueues as we are in suspend */
-	drain_workqueue(vmbus_connection.rescind_work_queue);
-	drain_workqueue(vmbus_connection.work_queue);
-	drain_workqueue(vmbus_connection.handle_primary_chan_wq);
-	drain_workqueue(vmbus_connection.handle_sub_chan_wq);
+	cpu_accel_drain_workqueue(vmbus_connection.rescind_work_queue);
+	cpu_accel_drain_workqueue(vmbus_connection.work_queue);
+	cpu_accel_drain_workqueue(vmbus_connection.handle_primary_chan_wq);
+	cpu_accel_drain_workqueue(vmbus_connection.handle_sub_chan_wq);
 
 	mutex_lock(&vmbus_connection.channel_mutex);
 	list_for_each_entry(channel, &vmbus_connection.chn_list, listentry) {

@@ -478,7 +478,7 @@ static void ath6kl_usb_flush_all(struct ath6kl_usb *ar_usb)
 	 * Flushing any pending I/O may schedule work this call will block
 	 * until all scheduled work runs to completion.
 	 */
-	flush_workqueue(ar_usb->wq);
+	cpu_accel_flush_workqueue(ar_usb->wq);
 }
 
 static void ath6kl_usb_start_recv_pipes(struct ath6kl_usb *ar_usb)
@@ -619,7 +619,7 @@ static void ath6kl_usb_destroy(struct ath6kl_usb *ar_usb)
 
 	kfree(ar_usb->diag_cmd_buffer);
 	kfree(ar_usb->diag_resp_buffer);
-	destroy_workqueue(ar_usb->wq);
+	cpu_accel_destroy_workqueue(ar_usb->wq);
 
 	kfree(ar_usb);
 }

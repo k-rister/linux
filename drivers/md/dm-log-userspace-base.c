@@ -335,7 +335,7 @@ static void userspace_dtr(struct dm_dirty_log *log)
 		if (atomic_read(&lc->sched_flush))
 			flush_delayed_work(&lc->flush_log_work);
 
-		destroy_workqueue(lc->dmlog_wq);
+		cpu_accel_destroy_workqueue(lc->dmlog_wq);
 	}
 
 	(void) dm_consult_userspace(lc->uuid, lc->luid, DM_ULOG_DTR,

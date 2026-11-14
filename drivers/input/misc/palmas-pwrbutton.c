@@ -230,8 +230,8 @@ static int palmas_pwron_probe(struct platform_device *pdev)
 	return 0;
 
 err_free_irq:
-	cancel_delayed_work_sync(&pwron->input_work);
 	free_irq(pwron->irq, pwron);
+	cancel_delayed_work_sync(&pwron->input_work);
 err_free_input:
 	input_free_device(input_dev);
 err_free_mem:

@@ -42,6 +42,10 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/cpuhp.h>
 
+#ifdef CONFIG_X86
+#include <asm/cpu_accel.h>
+#endif
+
 #include "smpboot.h"
 
 /**
@@ -1412,6 +1416,15 @@ static int __ref _cpu_down(unsigned int cpu, int tasks_frozen,
 	if (!cpu_present(cpu))
 		return -EINVAL;
 
+	/*
+	 * The teardown rendezvous below uses stop_machine_cpuslocked(). Let
+	 * bounded accelerator owners drain before taking the CPU-hotplug
+	 * write lock, which they do not participate in; the stop request
+	 * escalates to owner termination only past the owner's own deadline.
+	 */
+#ifdef CONFIG_X86
+	x86_cpu_accel_maintenance_begin(X86_CPU_ACCEL_STOP_DRAIN);
+#endif
 	cpus_write_lock();
 
 	/*
@@ -1467,6 +1480,9 @@ static int __ref _cpu_down(unsigned int cpu, int tasks_frozen,
 out:
 	cpus_write_unlock();
 	arch_smt_update();
+#ifdef CONFIG_X86
+	x86_cpu_accel_maintenance_end();
+#endif
 	return ret;
 }
 
@@ -1618,7 +1634,20 @@ static int _cpu_up(unsigned int cpu, int tasks_frozen, enum cpuhp_state target)
 	struct cpuhp_cpu_state *st = per_cpu_ptr(&cpuhp_state, cpu);
 	struct task_struct *idle;
 	int ret = 0;
+#ifdef CONFIG_X86
+	bool accel_maintenance = system_state >= SYSTEM_RUNNING;
+#endif
 
+	/*
+	 * CPU startup can call stop_machine_from_inactive_cpu() from the AP
+	 * hotplug thread, where waiting for an owner is not possible. Close
+	 * admission and drain owners before the hotplug write lock, then keep
+	 * that reservation through the inactive-CPU rendezvous.
+	 */
+#ifdef CONFIG_X86
+	if (accel_maintenance)
+		x86_cpu_accel_cpu_up_maintenance_begin(cpu);
+#endif
 	cpus_write_lock();
 
 	if (!cpu_present(cpu)) {
@@ -1675,6 +1704,10 @@ static int _cpu_up(unsigned int cpu, int tasks_frozen, enum cpuhp_state target)
 out:
 	cpus_write_unlock();
 	arch_smt_update();
+#ifdef CONFIG_X86
+	if (accel_maintenance)
+		x86_cpu_accel_cpu_up_maintenance_end(cpu);
+#endif
 	return ret;
 }
 
@@ -1882,12 +1915,25 @@ void __init bringup_nonboot_cpus(unsigned int max_cpus)
 
 #ifdef CONFIG_PM_SLEEP_SMP
 static cpumask_var_t frozen_cpus;
+#ifdef CONFIG_X86
+/* Protected by cpu_add_remove_lock across the freeze/thaw pair. */
+static bool x86_cpu_accel_freeze_maintenance;
+#endif
 
 int freeze_secondary_cpus(int primary)
 {
 	int cpu, error = 0;
 
 	cpu_maps_update_begin();
+	/*
+	 * Keep accelerator owners out for the entire suspend/hibernate window.
+	 * _cpu_down() nests this gate while CPUs are removed, but its per-CPU
+	 * release would otherwise allow an owner onto the retained primary CPU.
+	 */
+#ifdef CONFIG_X86
+	x86_cpu_accel_maintenance_begin(X86_CPU_ACCEL_STOP_TERMINATE);
+	x86_cpu_accel_freeze_maintenance = true;
+#endif
 	if (primary == -1) {
 		primary = cpumask_first(cpu_online_mask);
 		if (!housekeeping_cpu(primary, HK_TYPE_TIMER))
@@ -1979,6 +2025,14 @@ void thaw_secondary_cpus(void)
 	cpumask_clear(frozen_cpus);
 out:
 	cpu_maps_update_done();
+#ifdef CONFIG_X86
+	/* Release only a gate acquired by freeze_secondary_cpus(). */
+	if (x86_cpu_accel_freeze_maintenance) {
+		x86_cpu_accel_freeze_maintenance = false;
+		/* All frozen CPUs are back before accelerator admission reopens. */
+		x86_cpu_accel_maintenance_end();
+	}
+#endif
 }
 
 static int __init alloc_frozen_cpus(void)

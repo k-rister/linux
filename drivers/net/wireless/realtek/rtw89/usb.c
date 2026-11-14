@@ -691,9 +691,10 @@ static void rtw89_usb_deinit_rx(struct rtw89_dev *rtwdev)
 {
 	struct rtw89_usb *rtwusb = rtw89_usb_priv(rtwdev);
 
+	cpu_accel_drain_workqueue(rtwusb->rxwq);
 	skb_queue_purge(&rtwusb->rx_queue);
 
-	destroy_workqueue(rtwusb->rxwq);
+	cpu_accel_destroy_workqueue(rtwusb->rxwq);
 
 	skb_queue_purge(&rtwusb->rx_free_queue);
 }

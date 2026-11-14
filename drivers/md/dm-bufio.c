@@ -2876,7 +2876,7 @@ static void __exit dm_bufio_exit(void)
 {
 	int bug = 0;
 
-	destroy_workqueue(dm_bufio_wq);
+	cpu_accel_destroy_workqueue(dm_bufio_wq);
 
 	if (dm_bufio_client_count) {
 		DMCRIT("%s: dm_bufio_client_count leaked: %d",

@@ -138,7 +138,7 @@ int init_se_kmem_caches(void)
 	return 0;
 
 out_free_completion_wq:
-	destroy_workqueue(target_completion_wq);
+	cpu_accel_destroy_workqueue(target_completion_wq);
 out_free_lba_map_mem_cache:
 	kmem_cache_destroy(t10_alua_lba_map_mem_cache);
 out_free_lba_map_cache:
@@ -161,8 +161,8 @@ out:
 
 void release_se_kmem_caches(void)
 {
-	destroy_workqueue(target_submission_wq);
-	destroy_workqueue(target_completion_wq);
+	cpu_accel_destroy_workqueue(target_submission_wq);
+	cpu_accel_destroy_workqueue(target_completion_wq);
 	kmem_cache_destroy(se_sess_cache);
 	kmem_cache_destroy(se_ua_cache);
 	kmem_cache_destroy(t10_pr_reg_cache);

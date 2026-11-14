@@ -579,7 +579,7 @@ static void rej_tmout_xa_cleanup(struct mlx4_ib_sriov *sriov, int slave)
 	xa_unlock(&sriov->xa_rej_tmout);
 
 	if (flush_needed) {
-		flush_workqueue(cm_wq);
+		cpu_accel_flush_workqueue(cm_wq);
 		pr_debug("Deleted %d entries in xarray for slave %d during cleanup\n",
 			 cnt, slave);
 	}
@@ -610,8 +610,10 @@ void mlx4_ib_cm_paravirt_clean(struct mlx4_ib_dev *dev, int slave)
 
 	spin_unlock(&sriov->id_map_lock);
 
-	if (need_flush)
-		flush_workqueue(cm_wq); /* make sure all timers were flushed */
+	if (need_flush) {
+		/* Make sure all timers were flushed. */
+		cpu_accel_flush_workqueue(cm_wq);
+	}
 
 	/* now, remove all leftover entries from databases*/
 	spin_lock(&sriov->id_map_lock);
@@ -670,5 +672,5 @@ int mlx4_ib_cm_init(void)
 
 void mlx4_ib_cm_destroy(void)
 {
-	destroy_workqueue(cm_wq);
+	cpu_accel_destroy_workqueue(cm_wq);
 }

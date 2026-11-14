@@ -91,7 +91,7 @@ static void fini_sriov(struct drm_device *drm, void *arg)
 {
 	struct xe_device *xe = arg;
 
-	destroy_workqueue(xe->sriov.wq);
+	cpu_accel_destroy_workqueue(xe->sriov.wq);
 	xe->sriov.wq = NULL;
 }
 

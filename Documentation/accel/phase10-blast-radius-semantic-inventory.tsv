@@ -57,10 +57,10 @@ include/linux/mhi_ep.h	include	pending
 include/linux/mm_types.h	include	pending
 include/linux/mm_types_task.h	include	pending
 include/linux/smp.h	include	pass
-include/linux/vmalloc.h	include	pending
+include/linux/vmalloc.h	include	pass
 include/linux/workqueue.h	include	pass
 kernel/cpu.c	kernel	pass
-kernel/debug/debug_core.c	kernel	pending
+kernel/debug/debug_core.c	kernel	pass
 kernel/exit.c	kernel	pending
 kernel/fork.c	kernel	pending
 kernel/irq/Makefile	kernel	pass
@@ -68,7 +68,7 @@ kernel/irq/accel.c	kernel	pass
 kernel/irq/chip.c	kernel	pass
 kernel/irq/internals.h	kernel	pass
 kernel/irq/manage.c	kernel	pass
-kernel/kprobes.c	kernel	pending
+kernel/kprobes.c	kernel	pass
 kernel/rcu/srcutree.c	kernel	pending
 kernel/rcu/tree.c	kernel	pending
 kernel/rcu/tree_nocb.h	kernel	pending
@@ -76,7 +76,7 @@ kernel/sched/isolation.c	kernel	pass
 kernel/smp.c	kernel	pass
 kernel/stop_machine.c	kernel	pass
 kernel/time/timer_migration.c	kernel	pending
-kernel/trace/ring_buffer.c	kernel	pending
+kernel/trace/ring_buffer.c	kernel	pass
 mm/Makefile	mm	pass
 mm/folio.c	mm	pass
 mm/init-mm.c	mm	pass

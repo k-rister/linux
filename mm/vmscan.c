@@ -76,6 +76,13 @@
 
 static mempool_t mmu_reclaim_completion_pool;
 
+static bool mmu_reclaim_completion_candidate(struct folio *folio)
+{
+	return x86_cpu_accel_any_active() && folio_mapped(folio) &&
+	       !folio_test_dirty(folio) && !folio_needs_release(folio) &&
+	       !folio_test_hugetlb(folio);
+}
+
 static void mmu_reclaim_completion_work(struct work_struct *work)
 {
 	struct mmu_reclaim_completion *completion =
@@ -165,6 +172,7 @@ void mmu_reclaim_completion_ready(struct mmu_reclaim_completion *completion,
 
 static int __init mmu_reclaim_completion_pool_init(void)
 {
+#ifdef CONFIG_CPU_ACCEL_CORE
 	int ret;
 
 	ret = mempool_init_kmalloc_pool(&mmu_reclaim_completion_pool,
@@ -173,6 +181,7 @@ static int __init mmu_reclaim_completion_pool_init(void)
 	if (ret)
 		pr_warn("unable to reserve accelerator reclaim completions: %d\n",
 			ret);
+#endif
 	return 0;
 }
 subsys_initcall(mmu_reclaim_completion_pool_init);
@@ -1353,21 +1362,6 @@ retry:
 		}
 
 		/*
-		 * A DMA-pinned folio cannot be reclaimed. Avoid trying to demote
-		 * it or changing its swap state before discovering that it must
-		 * stay resident. Anonymous folios without swap-cache backing keep
-		 * the same locked-list behavior as the swap allocation path below.
-		 * The check after unmapping remains necessary for a pin acquired
-		 * concurrently with this check.
-		 */
-		if (folio_maybe_dma_pinned(folio)) {
-			if (folio_test_anon(folio) && folio_test_swapbacked(folio) &&
-			    !folio_test_swapcache(folio))
-				goto keep_locked;
-			goto activate_locked;
-		}
-
-		/*
 		 * Before reclaiming the folio, try to relocate
 		 * its contents to another node.
 		 */
@@ -1472,8 +1466,7 @@ retry:
 
 #ifdef CONFIG_X86
 			/* Reserve completion storage before clearing any PTE. */
-			if (!folio_test_dirty(folio) && !folio_needs_release(folio) &&
-			    !folio_test_hugetlb(folio))
+			if (mmu_reclaim_completion_candidate(folio))
 				reclaim = mmu_reclaim_completion_alloc();
 			if (reclaim)
 				try_to_unmap_reclaim(folio, flags, reclaim);

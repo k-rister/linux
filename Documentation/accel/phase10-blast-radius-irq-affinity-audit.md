@@ -8,6 +8,7 @@ This note records the semantic review of the IRQ-affinity files in
 - `kernel/irq/Makefile`
 - `kernel/irq/accel.c`
 - `kernel/irq/chip.c`
+- `kernel/irq/internals.h`
 - `kernel/irq/manage.c`
 
 The review baseline is `40288c9206c1` on
@@ -22,6 +23,7 @@ The review compared the baseline-to-current diff with:
 - The complete quarantine, migration, effective-route validation, rollback,
   restore, and release control flow in `kernel/irq/accel.c`.
 - Managed and unmanaged IRQ startup in `kernel/irq/chip.c`.
+- The internal rollback-affinity filter in `kernel/irq/internals.h`.
 - Public, internal, forced, and default affinity selection in
   `kernel/irq/manage.c`.
 - The accelerator admission, worker-exit, domain-failure, and domain-release
@@ -35,6 +37,7 @@ The review compared the baseline-to-current diff with:
 | `kernel/irq/Makefile` | pass | `accel.o` is built only with `CONFIG_CPU_ACCEL_CORE`, and the test object is separately gated by `CONFIG_IRQ_KUNIT_TEST`. No production object is added when the accelerator core is disabled. |
 | `kernel/irq/accel.c` | pass | CPU reservation uses an atomic compare-and-exchange. Quarantine reserves the CPU before scanning, fails closed for blocked or unmovable IRQs, validates the effective route after migration, drains in-flight handlers, and retains rollback state when cleanup is incomplete. Saved-affinity restoration now filters other accelerator-reserved CPUs so one worker cannot direct an IRQ to another worker that may still be active. |
 | `kernel/irq/chip.c` | pass | Normal startup forces affinity selection before chip startup when the requested mask contains a reserved CPU. Managed startup remains shut down when no unreserved target exists and is restarted by `irq_accel_release_cpu()`. The original force warning remains limited to masks with no online CPU. |
+| `kernel/irq/internals.h` | pass | The rollback filter copies the saved affinity and removes only other accelerator-reserved CPUs. With the core disabled, the reservation test is always false and the copy preserves the original mask. |
 | `kernel/irq/manage.c` | pass | Public affinity changes, internal chip programming, forced affinity, and default affinity selection all exclude reserved CPUs. Forced restoration remains available only to the internal rollback path, which now supplies a filtered mask. |
 
 ## Invariants verified
@@ -81,7 +84,7 @@ No semantic defect remains in this class.
 
 ## Evidence
 
-- The complete baseline-to-current diff for all four files was reviewed.
+- The complete baseline-to-current diff for all five files was reviewed.
 - `scripts/checkpatch.pl --strict --no-signoff --no-tree` reports no errors,
   warnings, or checks for the touched source diff.
 - `git diff --check` passes.
@@ -95,5 +98,5 @@ No semantic defect remains in this class.
 ## Status
 
 The IRQ-affinity semantic class is **pass**.  No follow-up defect remains for
-these four semantic-remainder files; the KUnit runtime execution remains an
+these five semantic-remainder files; the KUnit runtime execution remains an
 environment-gated validation item.

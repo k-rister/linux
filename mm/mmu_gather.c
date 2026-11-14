@@ -258,6 +258,7 @@ static struct mmu_gather_completion *mmu_gather_completion_alloc(void)
 
 static int __init mmu_gather_completion_pool_init(void)
 {
+#ifdef CONFIG_CPU_ACCEL_CORE
 	int ret;
 
 	ret = mempool_init_kmalloc_pool(&mmu_gather_completion_pool,
@@ -266,6 +267,7 @@ static int __init mmu_gather_completion_pool_init(void)
 	if (ret)
 		pr_warn("unable to reserve mmu_gather owner completions: %d\n",
 			ret);
+#endif
 	return 0;
 }
 subsys_initcall(mmu_gather_completion_pool_init);
@@ -350,8 +352,25 @@ static void tlb_gather_completion_reset(struct mmu_gather *tlb)
 {
 	struct mmu_gather_completion *completion = tlb->owner_completion;
 
-	if (completion)
+	if (!completion)
+		return;
+
+	if (!x86_cpu_accel_reclaim_has_subscriptions(&completion->arch)) {
 		x86_cpu_accel_reclaim_release(&completion->arch);
+		return;
+	}
+
+	WARN_ON_ONCE(tlb->owner_completion_used);
+	/*
+	 * A bounded registration can fail after attaching earlier owners. Those
+	 * subscriptions still own references, so cancel this object and let the
+	 * completion worker return it only after they reconcile.
+	 */
+	WRITE_ONCE(completion->cancelled, true);
+	tlb->owner_completion = NULL;
+	mmu_gather_completion_put(completion);
+	if (x86_cpu_accel_any_active())
+		tlb->owner_completion = mmu_gather_completion_alloc();
 }
 #endif /* CONFIG_X86 && !CONFIG_MMU_GATHER_NO_GATHER */
 

@@ -497,8 +497,10 @@ typedef void (*ffa_notifier_cb)(int notify_id, void *cb_data);
 typedef void (*ffa_fwk_notifier_cb)(int notify_id, void *cb_data, void *buf);
 
 /*
- * Relinquish waits for in-flight callback invocations to finish and may sleep.
- * It must not be called from the callback being relinquished.
+ * Relinquish removes a callback registration and unbinds the notification.
+ * It does not wait for an invocation that already copied the callback out of
+ * the notifier table, so the caller must keep callback data alive until any
+ * in-flight invocation completes.
  */
 struct ffa_notifier_ops {
 	int (*sched_recv_cb_register)(struct ffa_device *dev,

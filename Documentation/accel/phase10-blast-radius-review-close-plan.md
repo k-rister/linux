@@ -107,18 +107,18 @@ Review the 90 semantic-remainder files by architectural class:
 - [x] MMU gather, rmap, reclaim, vmalloc, SLUB, and TLB shootdown paths.
 - [x] Debug, tracing, kprobe, ftrace, jump-label, alternative, MTRR,
   cache-info, and ring-buffer paths.
-- [ ] Required driver-specific changes, especially target TMR, Greybus
+- [x] Required driver-specific changes, especially target TMR, Greybus
   release, and BCM PHY PTP ordering.
-- [ ] Include-path and small required call-site adjustments.
+- [x] Include-path and small required call-site adjustments.
 
 For each class:
 
-- [ ] Verify state transitions and lifetime rules.
-- [ ] Verify lock ordering and deadlock avoidance.
-- [ ] Verify error and rollback paths.
-- [ ] Verify hotplug and owner-exit interactions.
-- [ ] Verify no unsafe execution on an owned CPU.
-- [ ] Verify no silent semantic change outside the accelerator contract.
+- [x] Verify state transitions and lifetime rules.
+- [x] Verify lock ordering and deadlock avoidance.
+- [x] Verify error and rollback paths.
+- [x] Verify hotplug and owner-exit interactions.
+- [x] Verify no unsafe execution on an owned CPU.
+- [x] Verify no silent semantic change outside the accelerator contract.
 
 ### Required evidence
 
@@ -162,11 +162,15 @@ For each class:
   `Documentation/accel/phase10-blast-radius-debug-tracing-audit.md`; its four
   remaining rows have `pass` verdicts, and the x86 portions of the class were
   closed by the x86 audit.
-- The semantic inventory contains exactly 90 files: 49 have `pass` verdicts
-  and 41 remain pending. The previously omitted `kernel/irq/internals.h` row
-  has been restored and reviewed.
-- The remaining semantic classes and their per-file verdicts are not yet
-  complete.
+- The headerless semantic inventory contains exactly 90 file rows: all 90 have
+  `pass` verdicts and none remain pending. The previously omitted
+  `kernel/irq/internals.h` row has been restored and reviewed.
+- The driver-specific class is reviewed in
+  `Documentation/accel/phase10-blast-radius-driver-specific-audit.md`; its 27
+  rows have `pass` verdicts.
+- The include-path and small-call-site class is reviewed in
+  `Documentation/accel/phase10-blast-radius-include-small-callsite-audit.md`;
+  its 14 rows have `pass` verdicts.
 
 ## 4. Build and configuration audit
 

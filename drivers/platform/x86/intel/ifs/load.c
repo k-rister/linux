@@ -343,8 +343,11 @@ static int scan_chunks_sanity_check(struct device *dev)
 			continue;
 		local_work.dev = dev;
 		INIT_WORK_ONSTACK(&local_work.w, copy_hashes_authenticate_chunks);
+		arch_smp_sync_wait_begin(cpu);
+		arch_smp_sync_wait_stop(cpu);
 		schedule_work_on(cpu, &local_work.w);
 		flush_work(&local_work.w);
+		arch_smp_sync_wait_end(cpu);
 		destroy_work_on_stack(&local_work.w);
 		if (ifsd->loading_error) {
 			ret = -EIO;

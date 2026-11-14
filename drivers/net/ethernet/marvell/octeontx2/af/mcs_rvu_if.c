@@ -90,8 +90,15 @@ int mcs_add_intr_wq_entry(struct mcs *mcs, struct mcs_intr_event *event)
 {
 	struct mcs_intrq_entry *qentry;
 	u16 pcifunc = event->pcifunc;
-	struct rvu *rvu = mcs->rvu;
+	struct rvu *rvu;
 	struct mcs_pfvf *pfvf;
+	int ret = 0;
+
+	rcu_read_lock_sched();
+	rvu = rcu_dereference_sched(mcs->rvu);
+
+	if (!rvu)
+		goto out;
 
 	/* Check if it is PF or VF */
 	if (pcifunc & RVU_PFVF_FUNC_MASK)
@@ -103,11 +110,13 @@ int mcs_add_intr_wq_entry(struct mcs *mcs, struct mcs_intr_event *event)
 
 	/* Check PF/VF interrupt notification is enabled */
 	if (!(pfvf->intr_mask && event->intr_mask))
-		return 0;
+		goto out;
 
 	qentry = kmalloc_obj(*qentry, GFP_ATOMIC);
-	if (!qentry)
-		return -ENOMEM;
+	if (!qentry) {
+		ret = -ENOMEM;
+		goto out;
+	}
 
 	qentry->intr_event = *event;
 	spin_lock(&rvu->mcs_intrq_lock);
@@ -115,7 +124,9 @@ int mcs_add_intr_wq_entry(struct mcs *mcs, struct mcs_intr_event *event)
 	spin_unlock(&rvu->mcs_intrq_lock);
 	queue_work(rvu->mcs_intr_wq, &rvu->mcs_intr_work);
 
-	return 0;
+out:
+	rcu_read_unlock_sched();
+	return ret;
 }
 
 static int mcs_notify_pfvf(struct mcs_intr_event *event, struct rvu *rvu)
@@ -895,8 +906,6 @@ int rvu_mcs_init(struct rvu *rvu)
 		mcs_install_flowid_bypass_entry(mcs);
 		for (lmac = 0; lmac < mcs->hw->lmac_cnt; lmac++)
 			mcs_set_lmac_mode(mcs, lmac, 0);
-
-		mcs->rvu = rvu;
 
 		/* Allocated memory for PFVF data */
 		mcs->pf = devm_kcalloc(mcs->dev, hw->total_pfs,

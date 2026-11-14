@@ -380,6 +380,7 @@ liquidio_vf_probe(struct pci_dev *pdev,
 		  const struct pci_device_id __maybe_unused *ent)
 {
 	struct octeon_device *oct_dev = NULL;
+	struct octeon_device_priv *oct_priv;
 
 	oct_dev = octeon_allocate_device(pdev->device,
 					 sizeof(struct octeon_device_priv));
@@ -388,6 +389,10 @@ liquidio_vf_probe(struct pci_dev *pdev,
 		dev_err(&pdev->dev, "Unable to allocate device\n");
 		return -ENOMEM;
 	}
+
+	oct_priv = oct_dev->priv;
+	spin_lock_init(&oct_priv->link_status_lock);
+
 	oct_dev->msix_on = LIO_FLAG_MSIX_ENABLED;
 
 	dev_info(&pdev->dev, "Initializing device %x:%x.\n",
@@ -667,6 +672,11 @@ static void liquidio_destroy_nic_device(struct octeon_device *oct, int ifidx)
 
 	lio = GET_LIO(netdev);
 
+	spin_lock(&oct_priv->link_status_lock);
+	oct->props[ifidx].netdev = NULL;
+	oct->props[ifidx].gmxport = -1;
+	spin_unlock(&oct_priv->link_status_lock);
+
 	dev_dbg(&oct->pci_dev->dev, "NIC device cleanup\n");
 
 	if (atomic_read(&lio->ifstate) & LIO_IFSTATE_RUNNING)
@@ -697,10 +707,6 @@ static void liquidio_destroy_nic_device(struct octeon_device *oct, int ifidx)
 	lio_delete_glists(lio);
 
 	free_netdev(netdev);
-
-	oct->props[ifidx].gmxport = -1;
-
-	oct->props[ifidx].netdev = NULL;
 }
 
 /**
@@ -1876,6 +1882,7 @@ static const struct net_device_ops lionetdevops = {
 static int lio_nic_info(struct octeon_recv_info *recv_info, void *buf)
 {
 	struct octeon_device *oct = (struct octeon_device *)buf;
+	struct octeon_device_priv *oct_priv = oct->priv;
 	struct octeon_recv_pkt *recv_pkt = recv_info->recv_pkt;
 	union oct_link_status *ls;
 	int gmxport = 0;
@@ -1894,12 +1901,15 @@ static int lio_nic_info(struct octeon_recv_info *recv_info, void *buf)
 
 	octeon_swap_8B_data((u64 *)ls, (sizeof(union oct_link_status)) >> 3);
 
+	spin_lock(&oct_priv->link_status_lock);
 	for (i = 0; i < oct->ifcount; i++) {
 		if (oct->props[i].gmxport == gmxport) {
-			update_link_status(oct->props[i].netdev, ls);
+			if (oct->props[i].netdev)
+				update_link_status(oct->props[i].netdev, ls);
 			break;
 		}
 	}
+	spin_unlock(&oct_priv->link_status_lock);
 
 nic_info_err:
 	for (i = 0; i < recv_pkt->buffer_count; i++)

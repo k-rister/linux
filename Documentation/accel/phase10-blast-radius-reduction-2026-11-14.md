@@ -3,215 +3,368 @@
 ## Header
 
 - **Host:** `simon.lab.gtristers.consone.net`
-- **Kernel:** `7.3.0-rc3-accel-tlbfix-00508-g40288c9206c1-dirty` (`#1`)
+- **Kernel:** `Linux simon.lab.gtristers.consone.net 7.3.0-rc3-accel-tlbfix-00522-gda8c5e8e7e62 #2 SMP PREEMPT_DYNAMIC Sat Nov 14 12:00:20 CST 2026 x86_64 GNU/Linux`
 - **Tuned profile:** `cpu-partitioning`
-- **Window:** `2026-11-14T12:21:42Z` to `2026-11-14T12:31:43Z` (`10m 1s` wall)
-- **Duration:** 600 seconds requested; `user-oslat` active time was approximately `600.0004 s` per worker, and rt-tests `oslat` reported `599.510 s` per thread
+- **Window:** `2026-11-14T22:15:15Z` to `2026-11-14T22:25:16Z`
+- **Duration:** 600 seconds requested
 - **Concurrency:** both tools ran concurrently on four CPUs each
 - **Workloads:** nop-only / no optional workload
 - **cpu-accel ABI:** 25
-- **`cpu_accel.ko` SHA-256:** `41711cd3d7e871ee9c7494e7f1f9e9717a5cae5e1d29b1573f7a00601d1055e8`
-- **`cpu-accel-testctl` SHA-256:** `6fbd77a46d7a45d43dfa7bad620bac624480739bc0618df3fb5fc38dc3a66690`
-- **rt-tests `oslat`:** V2.11; SHA-256 `3e590206dbfb8c13a33beff3e87a4e191bca9e5894b8a22a82d9a9d5558d90d3`
-- **Completion:** both tools exited `0`; all four `user-oslat` workers reported `state=3 result=0`; module refcount returned to `0`
+- **Completion:** `user-oslat` exit `0`; rt-tests `oslat` exit `0`
 
-## Boot Command Line And Isolation
+## Boot command line and isolation
 
 ```text
-earlycon=ttyS0,115200 console=ttyS0,115200 root=/dev/mapper/almalinux-root ro crashkernel=2G-64G:256M,64G-:512M resume=UUID=1a4b3557-9483-455f-be24-1ad6a1fb957c rd.lvm.lv=almalinux/root rd.lvm.lv=almalinux/swap nosmt iommu=pt default_hugepagesz=1G hugepagesz=1G hugepages=16 amd_iommu=on skew_tick=1 tsc=reliable rcupdate.rcu_normal_after_boot=1 rcutree.nohz_full_patience_delay=1000 nohz=on nohz_full=4-11 rcu_nocbs=4-11 tuned.non_isolcpus=0000000f systemd.cpu_affinity=0-3 intel_pstate=disable nosoftlockup isolcpus=managed_irq,4-11 irqaffinity=0-3
+BOOT_IMAGE=(hd0,gpt2)/vmlinuz-7.3.0-rc3-accel-tlbfix-00522-gda8c5e8e7e62 earlycon=ttyS0,115200 console=ttyS0,115200 root=/dev/mapper/almalinux-root ro crashkernel=2G-64G:256M,64G-:512M resume=UUID=1a4b3557-9483-455f-be24-1ad6a1fb957c rd.lvm.lv=almalinux/root rd.lvm.lv=almalinux/swap nosmt iommu=pt default_hugepagesz=1G hugepagesz=1G hugepages=16 amd_iommu=on skew_tick=1 tsc=reliable rcupdate.rcu_normal_after_boot=1 rcutree.nohz_full_patience_delay=1000 nohz=on nohz_full=4-11 rcu_nocbs=4-11 tuned.non_isolcpus=0000000f systemd.cpu_affinity=0-3 intel_pstate=disable nosoftlockup isolcpus=managed_irq,4-11 irqaffinity=0-3
 ```
 
-Observed isolation flags:
-
-- `nohz_full=4-11`
-- `rcu_nocbs=4-11`
-- `skew_tick=1`
-- `rcutree.nohz_full_patience_delay=1000`
-- `nosmt`
-- `tuned.non_isolcpus=0000000f`
-- `systemd.cpu_affinity=0-3`
-- `isolcpus=managed_irq,4-11`
-- `irqaffinity=0-3`
+Observed isolation flags: `nohz_full=4-11`, `rcu_nocbs=4-11`, `skew_tick=1`, `rcutree.nohz_full_patience_delay=1000`, `tuned.non_isolcpus=0000000f`, `systemd.cpu_affinity=0-3`, `isolcpus=managed_irq,4-11`, `irqaffinity=0-3`
 
 ## `user-oslat`
 
 ### Invocation
 
 ```text
-taskset -c 0-3 /root/accel-measure/phase10-blast-v3-4cpu-user-oslat-and-rt-tests-oslat-10m-20261114T122142Z/cpu-accel-testctl run --cpus 5,7,9,11 --duration-ms 600000 --period-us 1000 --workload user-oslat
+taskset -c 0-3 /root/accel-measure/phase10-blast-v3-4cpu-user-oslat-and-rt-tests-oslat-10m-20261114T2215Z-current/cpu-accel-testctl run --cpus 5,7,9,11 --duration-ms 600000 --period-us 1000 --workload user-oslat
 ```
 
 ### Scheduler-class observation
 
-The 10-minute run's `live-processes.txt` captured only the process managers.
-The classes below were confirmed by separate five-second observation runs:
-the manager was `SCHED_OTHER` / CFS on CPU 0, and the worker processes were
-`SCHED_OTHER` / CFS, pinned to CPUs `5,7,9,11`.
+The worker classes below were captured by a separate five-second observation
+run using the same control tool and CPU placement.
+
+```text
+captured_utc=2026-11-14T22:26:44Z
+user_pid=9933
+--- pstree ---
+cpu-accel-testc(9933)-+-exe(9935)
+                      |-exe(9936)
+                      |-exe(9937)
+                      `-exe(9938)
+--- ps ---
+   9933    9887    9933   0  TS  19      -   0 SL   cpu-accel-testc /root/accel-phase10/evidence/phase10-6f200ac0bcad-20261114T2205Z-current-gates/cpu-accel-testctl run --cpus 5,7,9,11 --duration-ms 10000 --period-us 1000 --workload user-oslat
+   9935    9933    9935   5  TS  19      -   0 R    exe             [exe]
+   9936    9933    9936   7  TS  19      -   0 Z    exe             [exe] <defunct>
+   9937    9933    9937   9  TS  19      -   0 Z    exe             [exe] <defunct>
+   9938    9933    9938  11  TS  19      -   0 Z    exe             [exe] <defunct>
+```
 
 ### Per-worker results
 
 | Worker | CPU | State/result | Samples | Rate (samples/s) | Min (ns) | Status avg (ns) | Weighted mean (ns) | Max (ns) | Tool p50/p90/p99/p999 (ns) | >1 µs |
 |---:|---:|---|---:|---:|---:|---:|---:|---:|---|---:|
-| 0 | 5 | `3/0` | 29,779,879,301 | 49633095.340 | 10 | 20 | 20.147772758 | 290 | 32/32/32/32 | 0 |
-| 1 | 7 | `3/0` | 29,779,875,205 | 49633090.232 | 10 | 20 | 20.147775528 | 240 | 32/32/32/32 | 0 |
-| 2 | 9 | `3/0` | 29,779,875,144 | 49633089.632 | 10 | 20 | 20.147775566 | 280 | 32/32/32/32 | 0 |
-| 3 | 11 | `3/0` | 29,779,875,048 | 49633093.035 | 10 | 20 | 20.147775564 | 270 | 32/32/32/32 | 0 |
-
-`user-oslat` reports `hist_p*_ns` as the upper edge of the containing log2 bin. The aggregate 1-ns linear-histogram rank values are `p50=20 ns`, `p90=20 ns`, `p99=30 ns`, and `p999=30 ns`.
+| 0 | 5 | `3/0` | 29,735,249,726 | 49558667.677 | 10 | 20 | 20.178043034 | 140 | 32/32/32/32 | 0 |
+| 1 | 7 | `3/0` | 29,735,246,483 | 49558661.355 | 10 | 20 | 20.178045233 | 250 | 32/32/32/32 | 0 |
+| 2 | 9 | `3/0` | 29,735,246,413 | 49558665.027 | 10 | 20 | 20.178045222 | 250 | 32/32/32/32 | 0 |
+| 3 | 11 | `3/0` | 29,735,246,466 | 49558658.505 | 10 | 20 | 20.178045240 | 220 | 32/32/32/32 | 0 |
 
 ### Isolation counters
 
 | Worker | CPU | Context switches | need_resched | Escapes | Arch IPIs | Arch IRQs | TLB shootdowns | Resched deferred | Call-function deferred | Migration | Recovery state |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 0 | 5 | 0 | 0 | 0 | 0 | 0 | 0 | 2 | 1 | 0 | 0 |
+| 0 | 5 | 0 | 0 | 0 | 0 | 1 | 0 | 1 | 0 | 0 | 0 |
 | 1 | 7 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 1 | 0 | 0 |
-| 2 | 9 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 1 | 0 | 0 |
+| 2 | 9 | 0 | 0 | 0 | 0 | 2 | 0 | 1 | 0 | 0 | 0 |
 | 3 | 11 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 1 | 0 | 0 |
-| **Total** | **5,7,9,11** | **0** | **0** | **0** | **0** | **0** | **0** | **5** | **4** | **0** | **0** |
 
 ### Aggregate result
 
 | Metric | Value |
 |---|---:|
-| Samples | 119,119,504,698 |
-| Aggregate rate | 198532368.239 samples/s |
+| Samples | 118,940,989,088 |
 | Min | 10 ns |
-| Weighted mean | 20.147774854 ns |
-| Max | 290 ns |
-| Tool p50/p90/p99/p999 | 32/32/32/32 ns |
+| Weighted mean | 20.178044682 ns |
+| Max | 250 ns |
 | Linear-rank p50/p90/p99/p999 | 20/20/30/30 ns |
 | Samples >1 µs | 0 |
 
 ### 1-ns histogram summary
 
-All nonzero aggregate bins:
-
 | Lateness (ns) | Count |
 |---:|---:|
-| 10 | 31,150,901 |
-| 20 | 117,296,916,734 |
-| 30 | 1,791,436,983 |
-| 40 | 7 |
-| 60 | 5 |
-| 70 | 23 |
-| 100 | 9 |
-| 110 | 19 |
+| 10 | 22,763,853 |
+| 20 | 116,777,780,702 |
+| 30 | 2,140,444,468 |
+| 40 | 8 |
+| 50 | 1 |
+| 60 | 8 |
+| 70 | 20 |
+| 90 | 1 |
+| 100 | 4 |
+| 110 | 13 |
 | 120 | 4 |
-| 130 | 1 |
-| 140 | 2 |
-| 150 | 1 |
-| 160 | 2 |
-| 170 | 1 |
-| 180 | 1 |
-| 230 | 1 |
-| 240 | 1 |
-| 270 | 1 |
-| 280 | 1 |
-| 290 | 1 |
+| 130 | 2 |
+| 140 | 1 |
+| 220 | 1 |
+| 250 | 2 |
 
 ## rt-tests `oslat`
 
 ### Invocation
 
 ```text
-taskset -c 0-3 /root/accel-measure/oslat -c 4,6,8,10 -w no -D 600 -W 1 -f 99 -z -q --json=/root/accel-measure/phase10-blast-v3-4cpu-user-oslat-and-rt-tests-oslat-10m-20261114T122142Z/rt-tests-oslat.json
+taskset -c 0-3 /root/accel-measure/oslat -c 4,6,8,10 -w no -D 600 -W 1 -f 99 -z -q --json=/root/accel-measure/phase10-blast-v3-4cpu-user-oslat-and-rt-tests-oslat-10m-20261114T2215Z-current/rt-tests-oslat.json
 ```
 
 ### Scheduler-class observation
 
-The 10-minute run's `live-processes.txt` captured only the process managers.
-The classes below were confirmed by a separate five-second observation run:
-the main process was `SCHED_OTHER` / CFS on CPU 0, and the worker threads were
-`SCHED_FIFO 99` on CPUs `4,6,8,10`.
+The live-process capture shows the rt-tests worker threads as `SCHED_FIFO 99` on CPUs `4,6,8,10`.
 
 ### Per-thread results
 
-Percentiles are computed from the 1-ns-resolution histogram; rt-tests `oslat` JSON does not emit percentile fields. Min/avg/max are the tool’s JSON values converted to nanoseconds.
-
 | Thread | CPU | Samples | Rate (samples/s) | Min (ns) | Tool avg (ns) | Weighted mean (ns) | Max (ns) | p50/p90/p99/p999 (ns) | >1 µs |
 |---:|---:|---:|---:|---:|---:|---:|---:|---|---:|
-| 0 | 4 | 26,465,800,993 | 44145720.660 | 19 | 22.671 | 22.670606292 | 7334 | 20/30/30/30 | 592,899 |
-| 1 | 6 | 26,461,982,094 | 44139350.626 | 19 | 22.674 | 22.673878017 | 9842 | 20/30/30/30 | 592,900 |
-| 2 | 8 | 26,466,275,323 | 44146511.856 | 19 | 22.670 | 22.670199996 | 9262 | 20/30/30/30 | 592,899 |
-| 3 | 10 | 26,466,264,175 | 44146493.261 | 19 | 22.670 | 22.670209541 | 9082 | 20/30/30/30 | 592,898 |
+| 0 | 4 | 26,429,753,685 | 44085592.709 | 19 | 22.702 | 22.701518871 | 6374 | 20/30/30/30 | 595,469 |
+| 1 | 6 | 26,425,734,920 | 44078889.293 | 19 | 22.705 | 22.704971250 | 8772 | 20/30/30/30 | 595,470 |
+| 2 | 8 | 26,430,115,903 | 44086196.899 | 19 | 22.701 | 22.701207768 | 8363 | 20/30/30/30 | 595,470 |
+| 3 | 10 | 26,429,883,524 | 44085809.284 | 19 | 22.701 | 22.701407362 | 8453 | 20/30/30/30 | 595,470 |
 
 ### Aggregate result
 
 | Metric | Value |
 |---|---:|
-| Samples | 105,860,322,585 |
-| Aggregate rate | 176578076.404 samples/s |
+| Samples | 105,715,488,032 |
 | Min | 20 ns |
-| Weighted mean | 22.671223357 ns |
-| Max | 9843 ns |
+| Weighted mean | 22.702276206 ns |
+| Max | 8773 ns |
 | Linear-rank p50/p90/p99/p999 | 20/30/30/30 ns |
-| Samples >1 µs | 2,371,596 |
-| Samples >1 µs | 22.403068 ppm |
-| ~1.45 µs cluster (1.30–1.60 µs) | 2,253,170 samples |
-| ~1.45 µs cluster (1.30–1.60 µs) | 21.284367 ppm |
-| Cluster share of >1 µs | 95.006485% |
+| Samples >1 µs | 2,381,879 |
 
-### Histogram summary
+### 1-ns histogram summary
 
-- Dominant bulk bins:
-  - `20 ns`: 77,923,595,546 samples
-  - `30 ns`: 27,934,355,358 samples
-- The `~1.45 µs` cluster (`1.30–1.60 µs`) contains 2,253,170 samples and accounts for 95.006485% of all samples above 1 µs.
-- Per-thread cluster counts:
-  - CPU 4: 561,998
-  - CPU 6: 510,769
-  - CPU 8: 590,910
-  - CPU 10: 589,493
-- Maximum observed latency: 9842 ns on CPU 6.
+| Lateness (ns) | Count |
+|---:|---:|
+| 20 | 77,457,765,218 |
+| 30 | 28,255,340,799 |
+| 40 | 123 |
+| 50 | 6 |
+| 60 | 1 |
+| 70 | 1 |
+| 100 | 1 |
+| 110 | 1 |
+| 120 | 1 |
+| 730 | 1 |
+| 800 | 1 |
+| 1010 | 2 |
+| 1020 | 1 |
+| 1060 | 1 |
+| 1090 | 1 |
+| 1100 | 1 |
+| 1150 | 1 |
+| 1160 | 1 |
+| 1220 | 7 |
+| 1230 | 581 |
+| 1239 | 16,035 |
+| 1249 | 130,055 |
+| 1259 | 303,615 |
+| 1269 | 265,651 |
+| 1279 | 137,688 |
+| 1289 | 192,436 |
+| 1299 | 330,544 |
+| 1309 | 247,852 |
+| 1319 | 81,352 |
+| 1329 | 18,638 |
+| 1339 | 9,911 |
+| 1349 | 10,485 |
+| 1359 | 7,826 |
+| 1369 | 3,749 |
+| 1379 | 2,147 |
+| 1389 | 3,047 |
+| 1399 | 4,972 |
+| 1409 | 26,639 |
+| 1419 | 101,973 |
+| 1429 | 110,511 |
+| 1439 | 40,197 |
+| 1449 | 76,725 |
+| 1459 | 133,905 |
+| 1469 | 60,436 |
+| 1479 | 11,026 |
+| 1489 | 6,126 |
+| 1499 | 5,733 |
+| 1509 | 4,987 |
+| 1519 | 5,553 |
+| 1529 | 6,101 |
+| 1539 | 4,595 |
+| 1549 | 3,227 |
+| 1559 | 2,601 |
+| 1569 | 1,133 |
+| 1579 | 422 |
+| 1589 | 383 |
+| 1599 | 321 |
+| 1609 | 217 |
+| 1619 | 164 |
+| 1629 | 100 |
+| 1639 | 68 |
+| 1649 | 48 |
+| 1659 | 59 |
+| 1669 | 108 |
+| 1679 | 152 |
+| 1689 | 139 |
+| 1699 | 109 |
+| 1709 | 129 |
+| 1719 | 149 |
+| 1729 | 114 |
+| 1739 | 62 |
+| 1749 | 143 |
+| 1759 | 280 |
+| 1769 | 241 |
+| 1779 | 144 |
+| 1789 | 194 |
+| 1799 | 459 |
+| 1809 | 1,001 |
+| 1819 | 1,292 |
+| 1829 | 941 |
+| 1839 | 734 |
+| 1849 | 495 |
+| 1859 | 304 |
+| 1869 | 380 |
+| 1879 | 653 |
+| 1889 | 618 |
+| 1899 | 307 |
+| 1909 | 202 |
+| 1919 | 164 |
+| 1929 | 150 |
+| 1939 | 100 |
+| 1949 | 67 |
+| 1959 | 37 |
+| 1969 | 25 |
+| 1979 | 18 |
+| 1989 | 9 |
+| 1999 | 10 |
+| 2009 | 12 |
+| 2019 | 13 |
+| 2029 | 14 |
+| 2039 | 3 |
+| 2049 | 3 |
+| 2059 | 2 |
+| 2069 | 4 |
+| 2079 | 1 |
+| 2089 | 1 |
+| 2099 | 4 |
+| 2109 | 2 |
+| 2119 | 3 |
+| 2129 | 1 |
+| 2139 | 1 |
+| 2149 | 3 |
+| 2159 | 2 |
+| 2169 | 21 |
+| 2179 | 39 |
+| 2189 | 95 |
+| 2199 | 82 |
+| 2209 | 150 |
+| 2219 | 208 |
+| 2229 | 207 |
+| 2239 | 148 |
+| 2249 | 83 |
+| 2259 | 90 |
+| 2269 | 79 |
+| 2279 | 69 |
+| 2289 | 51 |
+| 2299 | 41 |
+| 2309 | 37 |
+| 2319 | 31 |
+| 2329 | 22 |
+| 2339 | 11 |
+| 2349 | 8 |
+| 2359 | 2 |
+| 2369 | 4 |
+| 2379 | 8 |
+| 2389 | 7 |
+| 2399 | 3 |
+| 2409 | 4 |
+| 2419 | 2 |
+| 2429 | 1 |
+| 2439 | 3 |
+| 2459 | 2 |
+| 2488 | 1 |
+| 2508 | 1 |
+| 2518 | 1 |
+| 2558 | 2 |
+| 2598 | 1 |
+| 2648 | 1 |
+| 2698 | 1 |
+| 2718 | 1 |
+| 3058 | 1 |
+| 3218 | 1 |
+| 3228 | 1 |
+| 3258 | 1 |
+| 3308 | 1 |
+| 3318 | 6 |
+| 3338 | 5 |
+| 3348 | 2 |
+| 3358 | 7 |
+| 3368 | 14 |
+| 3378 | 18 |
+| 3388 | 9 |
+| 3398 | 14 |
+| 3408 | 29 |
+| 3418 | 24 |
+| 3428 | 32 |
+| 3438 | 31 |
+| 3448 | 30 |
+| 3458 | 36 |
+| 3468 | 22 |
+| 3478 | 24 |
+| 3488 | 28 |
+| 3498 | 18 |
+| 3508 | 15 |
+| 3518 | 15 |
+| 3528 | 12 |
+| 3538 | 10 |
+| 3548 | 12 |
+| 3558 | 9 |
+| 3568 | 15 |
+| 3578 | 7 |
+| 3588 | 7 |
+| 3598 | 7 |
+| 3608 | 5 |
+| 3618 | 9 |
+| 3628 | 2 |
+| 3638 | 2 |
+| 3658 | 3 |
+| 3668 | 5 |
+| 3678 | 1 |
+| 3688 | 1 |
+| 3698 | 1 |
+| 3707 | 1 |
+| 3717 | 1 |
+| 3737 | 2 |
+| 3767 | 1 |
+| 3777 | 2 |
+| 3797 | 1 |
+| 3817 | 1 |
+| 3877 | 1 |
+| 3917 | 1 |
+| 4037 | 1 |
+| 4587 | 1 |
+| 4956 | 1 |
+| 5186 | 1 |
+| 6375 | 1 |
+| 6985 | 1 |
+| 7295 | 1 |
+| 7414 | 1 |
+| 8364 | 1 |
+| 8454 | 1 |
+| 8773 | 1 |
 
-## Comparison
+## Raw and supporting artifacts
 
-| Metric | `user-oslat` | rt-tests `oslat` |
-|---|---:|---:|
-| Role | Owned, isolated user workload | Non-owned, in-band FIFO workload |
-| Scheduler class | CFS / `SCHED_OTHER` | `SCHED_FIFO 99` |
-| CPUs | 5, 7, 9, 11 | 4, 6, 8, 10 |
-| Samples | 119,119,504,698 | 105,860,322,585 |
-| Aggregate rate | 198532368.239/s | 176578076.404/s |
-| Min | 10 ns | 20 ns |
-| Weighted mean | 20.147774854 ns | 22.671223357 ns |
-| Max | 290 ns | 9843 ns |
-| Tool/computed p50/p90/p99/p999 | 32/32/32/32 ns tool; 20/20/30/30 ns linear | 20/30/30/30 ns linear |
-| Samples >1 µs | 0 | 2,371,596 |
-| ~1.45 µs cluster | 0 | 2,253,170 |
-| Context switches | 0 | n/a |
-| Arch IPIs / IRQs | 0 / 0 | n/a |
-| Resched / call-function deferred | 5 / 4 | n/a |
-| Migration | 0 | n/a |
-| Recovery state | 0 | n/a |
+- Artifact directory: `/root/accel-measure/phase10-blast-v3-4cpu-user-oslat-and-rt-tests-oslat-10m-20261114T2215Z-current`
+- `meta.txt`
+- `user-oslat.txt`
+- `rt-tests-oslat.json`
+- `rt-tests-oslat.txt`
+- `live-processes.txt`
+- `post-run.txt`
+- `pre-dmesg.txt`
+- `post-dmesg.txt`
+- `sha256sums.txt`
+- Parsed summary: `/root/accel-measure/phase10-blast-v3-4cpu-user-oslat-and-rt-tests-oslat-10m-20261114T2215Z-current/parsed-summary.json`
 
-## Read-Out
+Artifact hashes:
 
-- Bulk behavior is close: `user-oslat` averaged 20.147774854 ns, rt-tests `oslat` averaged 22.671223357 ns, and both linear-rank p99/p999 values were 30/30 ns and 30/30 ns, respectively.
-- `user-oslat` completed 12.433192% more aggregate iterations per second than rt-tests `oslat`.
-- Tail behavior diverged sharply: `user-oslat` peaked at 290 ns with 0 samples above 1 µs; rt-tests `oslat` peaked at 9843 ns with 2,371,596 samples above 1 µs (22.403068 ppm).
-- The rt-tests maximum was 33.941379× the `user-oslat` maximum.
-- The rt-tests `~1.45 µs` cluster contained 2,253,170 samples (21.284367 ppm), or 95.006485% of its above-1-µs samples.
-- The divergence is consistent with ownership and isolation: `user-oslat` ran on owned, isolated CFS workers, while rt-tests `oslat` ran as non-owned, in-band FIFO-99 threads.
-- All four `user-oslat` workers remained healthy with zero context switches, need-resched samples, escapes, migrations, and recovery events. They reported 0 arch IRQ, 5 deferred reschedule IPIs, and 4 deferred call-function IPIs in total.
-- Both processes exited 0, and the cpu-accel module refcount returned to 0.
-- No new NVMe QID 2 I/O timeouts appeared. The only cpu-accel dmesg line was the expected out-of-tree module taint at load; there were no runtime errors.
-
-## Raw And Supporting Artifacts On Simon
-
-- `/root/accel-measure/phase10-blast-v3-4cpu-user-oslat-and-rt-tests-oslat-10m-20261114T122142Z/meta.txt`
-- `/root/accel-measure/phase10-blast-v3-4cpu-user-oslat-and-rt-tests-oslat-10m-20261114T122142Z/live-processes.txt`
-- `/root/accel-measure/phase10-blast-v3-4cpu-user-oslat-and-rt-tests-oslat-10m-20261114T122142Z/user-oslat.txt`
-- `/root/accel-measure/phase10-blast-v3-4cpu-user-oslat-and-rt-tests-oslat-10m-20261114T122142Z/rt-tests-oslat.txt`
-- `/root/accel-measure/phase10-blast-v3-4cpu-user-oslat-and-rt-tests-oslat-10m-20261114T122142Z/rt-tests-oslat.json`
-- `/root/accel-measure/phase10-blast-v3-4cpu-user-oslat-and-rt-tests-oslat-10m-20261114T122142Z/pre-dmesg.txt`
-- `/root/accel-measure/phase10-blast-v3-4cpu-user-oslat-and-rt-tests-oslat-10m-20261114T122142Z/post-dmesg.txt`
-- `/root/accel-measure/phase10-blast-v3-4cpu-user-oslat-and-rt-tests-oslat-10m-20261114T122142Z/post-run.txt`
-- `/root/accel-measure/phase10-blast-v3-4cpu-user-oslat-and-rt-tests-oslat-10m-20261114T122142Z/sha256sums.txt`
-- `/root/accel-measure/phase10-blast-v3-4cpu-user-oslat-and-rt-tests-oslat-10m-20261114T122142Z/cpu_accel.ko`
-- `/root/accel-measure/phase10-blast-v3-4cpu-user-oslat-and-rt-tests-oslat-10m-20261114T122142Z/cpu-accel-testctl`
-- `/root/accel-measure/phase10-blast-v3-4cpu-user-oslat-and-rt-tests-oslat-10m-20261114T122142Z/oslat`
-- `/root/accel-measure/phase10-blast-v3-4cpu-user-oslat-and-rt-tests-oslat-10m-20261114T122142Z/parsed-summary.json`
-- `/root/accel-measure/phase10-blast-v3-4cpu-user-oslat-and-rt-tests-oslat-10m-20261114T122142Z/report.md`
-- `/root/accel-measure/phase10-blast-v3-scheduler-observation-20261114T123349Z`
-- `/root/accel-measure/phase10-blast-v3-scheduler-observation-targetcpus-20261114T123417Z`
+```text
+6fbd77a46d7a45d43dfa7bad620bac624480739bc0618df3fb5fc38dc3a66690  /root/accel-phase10/evidence/phase10-6f200ac0bcad-20261114T2205Z-current-gates/cpu-accel-testctl
+3e590206dbfb8c13a33beff3e87a4e191bca9e5894b8a22a82d9a9d5558d90d3  /root/accel-measure/oslat
+0ea5ae4b8b3b9958567191b6fe44082156cf1b80846916de9fcbed78c4eb2cd2  /lib/modules/7.3.0-rc3-accel-tlbfix-00522-gda8c5e8e7e62/kernel/drivers/cpu_accel/cpu_accel.ko
+```

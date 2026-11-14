@@ -42,6 +42,7 @@ sync_work_flush_loaded=0
 debugfs_root=${DEBUGFS:-/sys/kernel/debug}
 outdir=${CPU_ACCEL_TRACE_DIR:-$(mktemp -d /tmp/cpu-accel-sync-wait.XXXXXX)}
 selected_case=${CPU_ACCEL_TEST_CASE:-all}
+export CPU_ACCEL_ABI_VERSION=${CPU_ACCEL_ABI_VERSION:-24}
 event_trace_pid=
 graph_trace_pid=
 dmesg_pid=

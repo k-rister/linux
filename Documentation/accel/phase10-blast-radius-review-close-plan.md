@@ -99,7 +99,7 @@ subsystem review without an open implementation or review caveat.
 
 Review the 89 semantic-remainder files by architectural class:
 
-- [ ] x86 ownership, entry, vector, IDT, IPI, TLB, and text-patching paths.
+- [x] x86 ownership, entry, vector, IDT, IPI, TLB, and text-patching paths.
 - [ ] Workqueue core and scheduling boundaries.
 - [ ] SMP, stop-machine, CPU online/offline, and freeze/thaw paths.
 - [ ] IRQ affinity reservation, migration, effective-route validation, and
@@ -132,7 +132,13 @@ For each class:
 
 - The semantic population and class breakdown are documented in
   `Documentation/accel/cpu-accel-blast-radius-report.html`.
-- The per-class and per-file reviews are not yet complete.
+- The machine-verifiable semantic inventory is recorded in
+  `Documentation/accel/phase10-blast-radius-semantic-inventory.tsv`.
+- The x86 class is reviewed in
+  `Documentation/accel/phase10-blast-radius-x86-audit.md`; its 25 rows have
+  `pass` verdicts.
+- The remaining semantic classes and their per-file verdicts are not yet
+  complete.
 
 ## 4. Build and configuration audit
 

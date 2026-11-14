@@ -74,6 +74,13 @@ should_run_case()
 	[ "$selected_case" = all ] || [ "$selected_case" = "$1" ]
 }
 
+needs_sync_work_probe()
+{
+	should_run_case sync_work_flush || should_run_case sync_workqueue_flush ||
+		should_run_case sync_workqueue_drain ||
+		should_run_case sync_workqueue_destroy
+}
+
 fail()
 {
 	echo "cpu_accel synchronous-work owner-stop test: $* (logs: $outdir)" >&2
@@ -217,7 +224,7 @@ trap 'exit 1' HUP INT TERM
 case "$selected_case" in
 all|vmstat|lru|slub_shrink|ring_resize|timer_migration|net_backlog|\
 rcu_sheaf|srcu_cleanup|vmalloc_purge|vmalloc_purge_wait|sync_work_flush|\
-sync_workqueue_flush) ;;
+sync_workqueue_flush|sync_workqueue_drain|sync_workqueue_destroy) ;;
 *) fail "unknown test case: $selected_case" ;;
 esac
 [ -x "$tool" ] || fail "cpu-accel-testctl is not executable: $tool"
@@ -252,7 +259,7 @@ if should_run_case vmalloc_purge || should_run_case vmalloc_purge_wait; then
 		[ -e "$path" ] || fail "required vmalloc trace event is unavailable: $path"
 	done
 fi
-if should_run_case sync_work_flush || should_run_case sync_workqueue_flush; then
+if needs_sync_work_probe; then
 	[ -r "$sync_work_flush_probe" ] || \
 		fail "sync-work flush probe is unavailable: $sync_work_flush_probe"
 	[ -d "$debugfs_root" ] || fail "debugfs is unavailable: $debugfs_root"
@@ -347,7 +354,8 @@ owner_stop_trigger="$event_instance/events/cpu_accel/owner_stop_request/trigger"
 echo stacktrace:1 >"$owner_stop_trigger"
 if should_run_case srcu_cleanup || should_run_case vmalloc_purge || \
 	should_run_case vmalloc_purge_wait || should_run_case sync_work_flush || \
-	should_run_case sync_workqueue_flush; then
+	should_run_case sync_workqueue_flush || should_run_case sync_workqueue_drain || \
+	should_run_case sync_workqueue_destroy; then
 	echo 1 >"$event_instance/events/workqueue/workqueue_queue_work/enable"
 	echo 1 >"$event_instance/events/workqueue/workqueue_execute_start/enable"
 fi
@@ -355,12 +363,14 @@ if should_run_case vmalloc_purge || should_run_case vmalloc_purge_wait; then
 	echo 1 >"$event_instance/events/vmalloc/free_vmap_area_noflush/enable"
 	echo 1 >"$event_instance/events/vmalloc/purge_vmap_area_lazy/enable"
 fi
-if should_run_case sync_work_flush || should_run_case sync_workqueue_flush; then
+if needs_sync_work_probe; then
 	insmod "$sync_work_flush_probe" target_cpu="$target_cpu" || \
 		fail "could not load the sync-work flush probe"
 	sync_work_flush_loaded=1
 	sync_work_flush_path="$debugfs_root/cpu_accel_sync_work_flush/run"
 	sync_workqueue_flush_path="$debugfs_root/cpu_accel_sync_work_flush/run_workqueue"
+	sync_workqueue_drain_path="$debugfs_root/cpu_accel_sync_work_flush/run_workqueue_drain"
+	sync_workqueue_destroy_path="$debugfs_root/cpu_accel_sync_work_flush/run_workqueue_destroy"
 	[ -w "$sync_work_flush_path" ] || \
 		fail "sync-work flush trigger is unavailable: $sync_work_flush_path"
 	if should_run_case sync_workqueue_flush; then
@@ -369,6 +379,20 @@ if should_run_case sync_work_flush || should_run_case sync_workqueue_flush; then
 		grep -qw cpu_accel_flush_workqueue \
 			"$trace_root/available_filter_functions" || \
 			fail "cpu_accel_flush_workqueue is not traceable"
+	fi
+	if should_run_case sync_workqueue_drain; then
+		[ -w "$sync_workqueue_drain_path" ] || \
+			fail "sync-workqueue drain trigger unavailable: $sync_workqueue_drain_path"
+		grep -qw cpu_accel_drain_workqueue \
+			"$trace_root/available_filter_functions" || \
+			fail "cpu_accel_drain_workqueue is not traceable"
+	fi
+	if should_run_case sync_workqueue_destroy; then
+		[ -w "$sync_workqueue_destroy_path" ] || \
+			fail "sync-workqueue destroy trigger unavailable: $sync_workqueue_destroy_path"
+		grep -qw cpu_accel_destroy_workqueue \
+			"$trace_root/available_filter_functions" || \
+			fail "cpu_accel_destroy_workqueue is not traceable"
 	fi
 	if should_run_case sync_work_flush; then
 		grep -qw flush_work \
@@ -406,7 +430,15 @@ if should_run_case sync_workqueue_flush; then
 	printf '%s\n' cpu_accel_flush_workqueue \
 		>>"$graph_instance/set_ftrace_filter"
 fi
-if should_run_case sync_work_flush || should_run_case sync_workqueue_flush; then
+if should_run_case sync_workqueue_drain; then
+	printf '%s\n' cpu_accel_drain_workqueue \
+		>>"$graph_instance/set_ftrace_filter"
+fi
+if should_run_case sync_workqueue_destroy; then
+	printf '%s\n' cpu_accel_destroy_workqueue \
+		>>"$graph_instance/set_ftrace_filter"
+fi
+if needs_sync_work_probe; then
 	printf '%s\n' cpu_accel_sync_work_flush_probe_fn \
 		>>"$graph_instance/set_ftrace_filter"
 fi
@@ -795,7 +827,9 @@ END {
 		fi
 	fi
 	if [ "$name" = sync_work_flush ] || \
-		[ "$name" = sync_workqueue_flush ]; then
+		[ "$name" = sync_workqueue_flush ] || \
+		[ "$name" = sync_workqueue_drain ] || \
+		[ "$name" = sync_workqueue_destroy ]; then
 		if ! awk -v target="$case_cpu" '
 function field(line, name, pos, value)
 {
@@ -833,6 +867,14 @@ fi
 if should_run_case sync_workqueue_flush; then
 	run_case sync_workqueue_flush "$sync_workqueue_flush_path" \
 		arch_smp_sync_wait_stop\|cpu_accel_flush_workqueue\|workqueue_sync_wait_begin
+fi
+if should_run_case sync_workqueue_drain; then
+	run_case sync_workqueue_drain "$sync_workqueue_drain_path" \
+		arch_smp_sync_wait_stop\|cpu_accel_drain_workqueue\|workqueue_sync_wait_begin
+fi
+if should_run_case sync_workqueue_destroy; then
+	run_case sync_workqueue_destroy "$sync_workqueue_destroy_path" \
+		arch_smp_sync_wait_stop\|cpu_accel_destroy_workqueue\|workqueue_sync_wait_begin
 fi
 if should_run_case vmstat; then
 	run_case vmstat /proc/sys/vm/stat_refresh schedule_on_each_cpu

@@ -93,6 +93,18 @@ marked review-closed:
   the owner exit handshake.
 - Stress evidence that an owner exit cannot deadlock with a wrapper wait.
 
+## Targeted harness
+
+`tools/cpu_accel/test-sync-work-owner-stop.sh` now provides dedicated
+`sync_workqueue_flush`, `sync_workqueue_drain`, and `sync_workqueue_destroy`
+cases. Each case starts an active owner on the target CPU, triggers the
+wrapper from a separate work CPU, and requires the owner to exit after the
+stop request. The companion probe queues per-CPU work before invoking the
+selected wrapper and records work execution through the existing trace events.
+
+The probe object and script syntax have been validated. Runtime execution on
+the target host is still required before this section can be closed.
+
 ## Status
 
 Wrapper API review is **in progress**. The implementation-level semantic audit

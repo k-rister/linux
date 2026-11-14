@@ -55,6 +55,8 @@ subsystem review without an open implementation or review caveat.
 - A 10-minute four-CPU runtime comparison passed.
 - The implementation-level wrapper semantic audit is recorded in
   `Documentation/accel/phase10-blast-radius-wrapper-api-audit.md`.
+- The targeted harness now provides flush, drain, and destroy cases with
+  active-owner and owner-exit assertions; runtime execution is still pending.
 - The wrapper concurrency, stress, and rollback evidence is not yet complete.
 
 ## 2. Workqueue call-site audit

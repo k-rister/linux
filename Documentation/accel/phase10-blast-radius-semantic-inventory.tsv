@@ -58,7 +58,7 @@ include/linux/mm_types.h	include	pending
 include/linux/mm_types_task.h	include	pending
 include/linux/smp.h	include	pending
 include/linux/vmalloc.h	include	pending
-include/linux/workqueue.h	include	pending
+include/linux/workqueue.h	include	pass
 kernel/cpu.c	kernel	pending
 kernel/debug/debug_core.c	kernel	pending
 kernel/exit.c	kernel	pending
@@ -71,7 +71,7 @@ kernel/kprobes.c	kernel	pending
 kernel/rcu/srcutree.c	kernel	pending
 kernel/rcu/tree.c	kernel	pending
 kernel/rcu/tree_nocb.h	kernel	pending
-kernel/sched/isolation.c	kernel	pending
+kernel/sched/isolation.c	kernel	pass
 kernel/smp.c	kernel	pending
 kernel/stop_machine.c	kernel	pending
 kernel/time/timer_migration.c	kernel	pending

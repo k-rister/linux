@@ -100,7 +100,7 @@ subsystem review without an open implementation or review caveat.
 Review the 89 semantic-remainder files by architectural class:
 
 - [x] x86 ownership, entry, vector, IDT, IPI, TLB, and text-patching paths.
-- [ ] Workqueue core and scheduling boundaries.
+- [x] Workqueue core and scheduling boundaries.
 - [ ] SMP, stop-machine, CPU online/offline, and freeze/thaw paths.
 - [ ] IRQ affinity reservation, migration, effective-route validation, and
   rollback.
@@ -137,6 +137,9 @@ For each class:
 - The x86 class is reviewed in
   `Documentation/accel/phase10-blast-radius-x86-audit.md`; its 25 rows have
   `pass` verdicts.
+- The workqueue-core and scheduling-boundary class is reviewed in
+  `Documentation/accel/phase10-blast-radius-workqueue-scheduling-audit.md`;
+  its two rows have `pass` verdicts.
 - The remaining semantic classes and their per-file verdicts are not yet
   complete.
 

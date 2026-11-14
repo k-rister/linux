@@ -63,10 +63,10 @@ kernel/cpu.c	kernel	pass
 kernel/debug/debug_core.c	kernel	pending
 kernel/exit.c	kernel	pending
 kernel/fork.c	kernel	pending
-kernel/irq/Makefile	kernel	pending
-kernel/irq/accel.c	kernel	pending
-kernel/irq/chip.c	kernel	pending
-kernel/irq/manage.c	kernel	pending
+kernel/irq/Makefile	kernel	pass
+kernel/irq/accel.c	kernel	pass
+kernel/irq/chip.c	kernel	pass
+kernel/irq/manage.c	kernel	pass
 kernel/kprobes.c	kernel	pending
 kernel/rcu/srcutree.c	kernel	pending
 kernel/rcu/tree.c	kernel	pending

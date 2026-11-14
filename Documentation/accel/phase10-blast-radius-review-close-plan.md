@@ -102,7 +102,7 @@ Review the 89 semantic-remainder files by architectural class:
 - [x] x86 ownership, entry, vector, IDT, IPI, TLB, and text-patching paths.
 - [x] Workqueue core and scheduling boundaries.
 - [x] SMP, stop-machine, CPU online/offline, and freeze/thaw paths.
-- [ ] IRQ affinity reservation, migration, effective-route validation, and
+- [x] IRQ affinity reservation, migration, effective-route validation, and
   rollback.
 - [ ] MMU gather, rmap, reclaim, vmalloc, SLUB, and TLB shootdown paths.
 - [ ] Debug, tracing, kprobe, ftrace, jump-label, alternative, MTRR,
@@ -143,6 +143,12 @@ For each class:
 - The SMP, stop-machine, CPU-transition, and freeze/thaw class is reviewed in
   `Documentation/accel/phase10-blast-radius-smp-hotplug-audit.md`; its four
   rows have `pass` verdicts.
+- The IRQ-affinity class is reviewed in
+  `Documentation/accel/phase10-blast-radius-irq-affinity-audit.md`; its four
+  rows have `pass` verdicts. Multi-worker rollback now filters other reserved
+  CPUs from restored affinity masks, and a focused KUnit case covers that
+  invariant. Runtime execution of that suite is currently environment-gated
+  because QEMU is unavailable.
 - The remaining semantic classes and their per-file verdicts are not yet
   complete.
 

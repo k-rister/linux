@@ -159,7 +159,11 @@ static int irq_accel_set_affinity(struct irq_desc *desc,
 static int irq_accel_restore_entries(struct irq_accel_quarantine *quarantine)
 {
 	struct irq_accel_quarantine_entry *entry;
+	cpumask_var_t restore_mask;
 	int first_error = 0;
+
+	if (!zalloc_cpumask_var(&restore_mask, GFP_KERNEL))
+		return -ENOMEM;
 
 	list_for_each_entry(entry, &quarantine->entries, node) {
 		struct irq_desc *desc = irq_to_desc(entry->irq);
@@ -172,12 +176,20 @@ static int irq_accel_restore_entries(struct irq_accel_quarantine *quarantine)
 		 * target is safe here: admission has not completed, or its owner
 		 * has already stopped during teardown.
 		 */
-		ret = desc ? irq_accel_set_affinity(desc, entry->affinity, true) :
-			-EINVAL;
+		irq_accel_filter_restore_affinity(restore_mask,
+						  entry->affinity,
+						  quarantine->cpu);
+		if (cpumask_empty(restore_mask))
+			ret = -ENOSPC;
+		else if (desc)
+			ret = irq_accel_set_affinity(desc, restore_mask, true);
+		else
+			ret = -EINVAL;
 		if (ret && !first_error)
 			first_error = ret;
 	}
 
+	free_cpumask_var(restore_mask);
 	return first_error;
 }
 
@@ -362,6 +374,10 @@ EXPORT_SYMBOL_GPL(irq_accel_quarantine_cpu);
 /**
  * irq_accel_restore_cpu - restore IRQ affinity and release CPU ownership
  * @quarantine: state returned by irq_accel_quarantine_cpu()
+ *
+ * The caller must ensure that the owner of @quarantine->cpu has stopped or
+ * that admission failed. Other accelerator-owned CPUs are filtered from the
+ * restored affinity masks because they may still have active owners.
  */
 int irq_accel_restore_cpu(struct irq_accel_quarantine *quarantine)
 {

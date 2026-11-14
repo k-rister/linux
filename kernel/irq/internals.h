@@ -7,6 +7,7 @@
  * of this file for your non core code.
  */
 #include <linux/irqdesc.h>
+#include <linux/irq_accel.h>
 #include <linux/kernel_stat.h>
 #include <linux/pm_runtime.h>
 #include <linux/rcuref.h>
@@ -159,6 +160,19 @@ extern bool irq_can_set_affinity_usr(unsigned int irq);
 extern int irq_do_set_affinity(struct irq_data *data,
 			       const struct cpumask *dest, bool force);
 extern void irq_affinity_schedule_notify_work(struct irq_desc *desc);
+
+static inline void irq_accel_filter_restore_affinity(struct cpumask *dest,
+						     const struct cpumask *src,
+						     unsigned int cpu)
+{
+	unsigned int other;
+
+	cpumask_copy(dest, src);
+	for_each_cpu(other, src) {
+		if (other != cpu && irq_accel_cpu_reserved(other))
+			cpumask_clear_cpu(other, dest);
+	}
+}
 
 #ifdef CONFIG_SMP
 extern int irq_setup_affinity(struct irq_desc *desc);

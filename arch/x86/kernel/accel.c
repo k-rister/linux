@@ -1131,6 +1131,14 @@ void x86_cpu_accel_reclaim_release(struct x86_cpu_accel_tlb_reclaim_completion *
 }
 EXPORT_SYMBOL_GPL(x86_cpu_accel_reclaim_release);
 
+bool x86_cpu_accel_reclaim_has_subscriptions(const void *comp)
+{
+	const struct x86_cpu_accel_tlb_reclaim_completion *completion = comp;
+
+	return completion && completion->nr_subscriptions != 0;
+}
+EXPORT_SYMBOL_GPL(x86_cpu_accel_reclaim_has_subscriptions);
+
 bool x86_cpu_accel_filter_mm_tlb_shootdown(unsigned int cpu,
 					   const struct mm_struct *mm,
 					   u64 tlb_gen)

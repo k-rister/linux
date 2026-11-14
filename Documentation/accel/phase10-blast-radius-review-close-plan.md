@@ -104,7 +104,7 @@ Review the 89 semantic-remainder files by architectural class:
 - [x] SMP, stop-machine, CPU online/offline, and freeze/thaw paths.
 - [x] IRQ affinity reservation, migration, effective-route validation, and
   rollback.
-- [ ] MMU gather, rmap, reclaim, vmalloc, SLUB, and TLB shootdown paths.
+- [x] MMU gather, rmap, reclaim, vmalloc, SLUB, and TLB shootdown paths.
 - [ ] Debug, tracing, kprobe, ftrace, jump-label, alternative, MTRR,
   cache-info, and ring-buffer paths.
 - [ ] Required driver-specific changes, especially target TMR, Greybus
@@ -144,11 +144,20 @@ For each class:
   `Documentation/accel/phase10-blast-radius-smp-hotplug-audit.md`; its four
   rows have `pass` verdicts.
 - The IRQ-affinity class is reviewed in
-  `Documentation/accel/phase10-blast-radius-irq-affinity-audit.md`; its four
+  `Documentation/accel/phase10-blast-radius-irq-affinity-audit.md`; its five
   rows have `pass` verdicts. Multi-worker rollback now filters other reserved
   CPUs from restored affinity masks, and a focused KUnit case covers that
   invariant. Runtime execution of that suite is currently environment-gated
   because QEMU is unavailable.
+- The MMU, TLB, rmap, reclaim, vmalloc, and SLUB class is reviewed in
+  `Documentation/accel/phase10-blast-radius-mmu-reclaim-audit.md`; its nine
+  rows have `pass` verdicts. The partial-registration overflow race is fixed,
+  and both focused configuration builds pass. Current-tree Simon runtime
+  execution remains pending because Simon is still booted at the review
+  baseline.
+- The semantic inventory contains exactly 89 files: 44 have `pass` verdicts
+  and 45 remain pending. The previously omitted `kernel/irq/internals.h` row
+  has been restored and reviewed.
 - The remaining semantic classes and their per-file verdicts are not yet
   complete.
 

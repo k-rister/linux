@@ -477,10 +477,11 @@ Completion storage is reserved before PTE removal. A stalled owner keeps its
 folio and completion slot; after all 16 slots are occupied, further reclaim
 can wait on the existing synchronous path. This is bounded backpressure, not a
 timeout. If the acknowledgement array fills after some owners were registered,
-the completion-specific stop request is not issued, and the synchronous
-fallback flushes the partial set through the ordinary path. That path may issue
-its own stop requests; the partial completion references drain after local
-reconciliation before the cancelled slot returns to the pool.
+the deferred filter is not armed. Stop requests already delivered to attached
+owners remain generation-scoped, and the synchronous fallback flushes the
+partial set together with every other target. The cancelled completion's
+attached references drain after local reconciliation before its slot returns
+to the pool.
 
 The generic ``arch_tlbbatch_flush()`` remains synchronous. Only the dedicated
 vmscan completion path can defer a matching x86 ring-3 owner, and it retains
@@ -503,21 +504,17 @@ that a returning MM caller can reuse. The crash NMI shootdown waits only one
 second, so a CPU that does not respond is not proven quiescent by that
 timeout.
 
-``mmu_gather`` is a distinct range-flush path. On x86 it calls
-``flush_tlb_mm_range()``; after the flush/generation rules permit reclamation,
-``tlb_flush_mmu_free()`` releases its queued data pages and page-table batches.
-An asynchronous redesign of that path would need to transfer those
-``mmu_gather`` lists to its own completion-managed object. Those lists are not
-part of ``arch_tlbbatch_flush()`` or its architecture batch. The transfer must
-also cover intermediate drains: exhausting a data-page batch can make the
-caller run ``tlb_flush_mmu()``, and a full page-table batch can be flushed and
-freed before ``tlb_finish_mmu()``. Page-table unsharing has an immediate TLB
-flush and a GUP-fast synchronization before a table can be reused; delayed rmap
-removals are also performed after a TLB-only flush. Deferring only the final
-lists in ``tlb_finish_mmu()`` would miss these earlier release points. A
-completion design must preserve those immediate barriers and transfer each
-deferred data-page and table batch, including its software-walker RCU lifetime,
-to the completion owner.
+``mmu_gather`` is a distinct range-flush path. The current implementation
+reserves a separate completion only while an accelerator owner is active and
+transfers eligible intermediate and final leaf data-page batches to it.
+Full-address-space flushes, forced full flushes, page-table batches, delayed
+rmap work, VM_IO/VM_PFN mappings, and unshared page-table paths remain
+synchronous. Exhausting the completion pool or a bounded record array also
+falls back to the synchronous path. If registration attaches some owners and
+then overflows, the gather cancels that completion rather than releasing it
+immediately; the completion worker returns the slot only after those attached
+owners reconcile. A replacement completion is reserved only when owners remain
+active, so subsequent batches otherwise use the synchronous path.
 
 This is address-space deferral, not a general asynchronous reclaim interface.
 Any future path that lets an active owner continue using the affected ``mm``

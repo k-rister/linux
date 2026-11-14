@@ -2,6 +2,7 @@
 #ifndef _LINUX_CPU_ACCEL_WORKQUEUE_H
 #define _LINUX_CPU_ACCEL_WORKQUEUE_H
 
+#include <linux/kernel.h>
 #include <linux/types.h>
 
 struct workqueue_struct;
@@ -21,16 +22,19 @@ void destroy_workqueue(struct workqueue_struct *wq);
 
 static inline void cpu_accel_flush_workqueue(struct workqueue_struct *wq)
 {
+	might_sleep();
 	__flush_workqueue(wq);
 }
 
 static inline void cpu_accel_drain_workqueue(struct workqueue_struct *wq)
 {
+	might_sleep();
 	drain_workqueue(wq);
 }
 
 static inline void cpu_accel_destroy_workqueue(struct workqueue_struct *wq)
 {
+	might_sleep();
 	destroy_workqueue(wq);
 }
 

@@ -70,6 +70,8 @@ No wrapper-level semantic defect was identified in this review:
 - The x86 owner-stop callback is nonblocking:
   `x86_cpu_accel_request_stop_owner_gen()` publishes the stop request under a
   raw spinlock and does not wait for the owner to exit.
+- Each wrapper begins with `might_sleep()` in both enabled and disabled
+  configurations, making the sleep-only API contract explicit.
 - Whenever `workqueue_sync_wait_begin()` succeeds, the wrapper or destroy path
   calls `workqueue_sync_wait_end()` after the underlying operation.
 - The underlying flush, drain, and destroy operations are void and have no
@@ -82,16 +84,15 @@ work remains pending.
 
 ## Remaining evidence
 
-The following items are still required before the wrapper API contract can be
+The following item is still required before the wrapper API contract can be
 marked review-closed:
 
-- A lock-order and control-flow review covering owner entry, owner exit,
-  cancellation, teardown, and hotplug interactions.
 - Targeted stress evidence for flush, drain, and destroy with active and
   exiting owners.
-- Confirmation that no wrapper can sleep in an atomic context or deadlock with
-  the owner exit handshake.
-- Stress evidence that an owner exit cannot deadlock with a wrapper wait.
+
+The lock-order, owner-active, atomic-context, cancellation, teardown, hotplug,
+and owner-exit handshake review is recorded in
+`Documentation/accel/phase10-blast-radius-wrapper-concurrency-audit.md`.
 
 ## Targeted harness
 
@@ -107,7 +108,6 @@ the target host is still required before this section can be closed.
 
 ## Status
 
-Wrapper API review is **in progress**. The implementation-level semantic audit
-is complete, but the concurrency, stress, and rollback evidence required by
-`Documentation/accel/phase10-blast-radius-review-close-plan.md` is not yet
-recorded.
+Wrapper API review is **in progress**. The implementation-level semantic and
+static concurrency audits are complete. Runtime stress evidence remains
+pending.

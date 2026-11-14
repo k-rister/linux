@@ -33,9 +33,9 @@ subsystem review without an open implementation or review caveat.
   `destroy_workqueue()` semantics.
 - [x] Confirm each wrapper preserves the original completion boundary and does
   not silently narrow or broaden the wait scope.
-- [ ] Confirm each wrapper is safe when an accelerator owner is active on any
+- [x] Confirm each wrapper is safe when an accelerator owner is active on any
   CPU in the workqueue's allowed mask.
-- [ ] Confirm each wrapper cannot sleep in an atomic context or deadlock with
+- [x] Confirm each wrapper cannot sleep in an atomic context or deadlock with
   an owner exit handshake.
 - [x] Confirm failure and rollback paths cannot strand a CPU in owner mode or
   return with required work still pending.
@@ -55,9 +55,13 @@ subsystem review without an open implementation or review caveat.
 - A 10-minute four-CPU runtime comparison passed.
 - The implementation-level wrapper semantic audit is recorded in
   `Documentation/accel/phase10-blast-radius-wrapper-api-audit.md`.
+- The static owner-active, lock-order, sleep-context, owner-exit, teardown,
+  and hotplug review is recorded in
+  `Documentation/accel/phase10-blast-radius-wrapper-concurrency-audit.md`.
 - The targeted harness now provides flush, drain, and destroy cases with
   active-owner and owner-exit assertions; runtime execution is still pending.
-- The wrapper concurrency, stress, and rollback evidence is not yet complete.
+- Wrapper concurrency and rollback evidence is statically closed; runtime
+  stress evidence is not yet complete.
 
 ## 2. Workqueue call-site audit
 

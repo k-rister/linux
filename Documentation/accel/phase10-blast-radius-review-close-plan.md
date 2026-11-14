@@ -59,9 +59,9 @@ subsystem review without an open implementation or review caveat.
   and hotplug review is recorded in
   `Documentation/accel/phase10-blast-radius-wrapper-concurrency-audit.md`.
 - The targeted harness now provides flush, drain, and destroy cases with
-  active-owner and owner-exit assertions; runtime execution is still pending.
-- Wrapper concurrency and rollback evidence is statically closed; runtime
-  stress evidence is not yet complete.
+  active-owner and owner-exit assertions; runtime execution is complete.
+- Wrapper concurrency and rollback evidence is closed by the static audits and
+  the ABI 24 runtime stress matrix.
 
 ## 2. Workqueue call-site audit
 
@@ -162,8 +162,9 @@ For each class:
   `Documentation/accel/phase10-blast-radius-mmu-reclaim-audit.md`; its nine
   rows have `pass` verdicts. The partial-registration overflow race is fixed,
   and both focused configuration builds pass. Current-tree Simon runtime
-  execution remains pending because Simon is still booted at the review
-  baseline.
+  execution is complete for the available build, SMP, freeze, wrapper, and
+  latency-comparison gates; the class remains closed by the internal audit and
+  that evidence.
 - The debug, tracing, kprobe, and ring-buffer class is reviewed in
   `Documentation/accel/phase10-blast-radius-debug-tracing-audit.md`; its four
   remaining rows have `pass` verdicts, and the x86 portions of the class were
@@ -182,15 +183,15 @@ For each class:
 
 ### Requirements
 
-- [ ] Build with `CONFIG_CPU_ACCEL_CORE=y`.
-- [ ] Build with `CONFIG_CPU_ACCEL_CORE=n`.
-- [ ] Build an x86-64 production-like configuration.
-- [ ] Build the focused accelerator tooling.
-- [ ] Confirm no new compiler warnings in the changed files.
-- [ ] Confirm disabled-config fallbacks compile and are no-ops.
-- [ ] Confirm the dedicated vector and IDT entry are config-gated.
-- [ ] Confirm `make SPHINXDIRS=accel htmldocs` passes.
-- [ ] Confirm `git diff --check` passes.
+- [x] Build with `CONFIG_CPU_ACCEL_CORE=y`.
+- [x] Build with `CONFIG_CPU_ACCEL_CORE=n`.
+- [x] Build an x86-64 production-like configuration.
+- [x] Build the focused accelerator tooling.
+- [x] Confirm no new compiler warnings in the changed files.
+- [x] Confirm disabled-config fallbacks compile and are no-ops.
+- [x] Confirm the dedicated vector and IDT entry are config-gated.
+- [x] Confirm `make SPHINXDIRS=accel htmldocs` passes.
+- [x] Confirm `git diff --check` passes.
 
 ### Required evidence
 
@@ -201,24 +202,26 @@ For each class:
 
 ### Current state
 
+- Production-like and accelerator-disabled full builds pass.
 - The focused userspace build and accelerator Sphinx build pass.
-- `git diff --check` passes on the committed tree.
-- Full both-config build coverage is not yet recorded.
+- `git diff --check` passes on the final worktree.
+- Build evidence and compiler-warning review are recorded in
+  `Documentation/accel/phase10-blast-radius-review-closure-evidence.md`.
 
 ## 5. Regression and stress validation
 
 ### Requirements
 
-- [ ] Run `tools/cpu_accel/test-phase10-smp-gate.sh`.
-- [ ] Run `tools/cpu_accel/test-phase9-freeze-gate.sh`.
-- [ ] Run the UAPI contract, lifecycle, ABI 23 compatibility, and SDK
+- [x] Run `tools/cpu_accel/test-phase10-smp-gate.sh`.
+- [x] Run `tools/cpu_accel/test-phase9-freeze-gate.sh`.
+- [x] Run the UAPI contract, lifecycle, ABI 23 compatibility, and SDK
   fallback tests.
-- [ ] Run the four-CPU `user-oslat` versus rt-tests `oslat` comparison.
-- [ ] Run a targeted workqueue stress test for each retained wrapper.
-- [ ] Run targeted tests for each architectural class in section 3.
-- [ ] Run subsystem-specific tests for target TMR, Greybus, and BCM PHY PTP
+- [x] Run the four-CPU `user-oslat` versus rt-tests `oslat` comparison.
+- [x] Run a targeted workqueue stress test for each retained wrapper.
+- [x] Run targeted tests for each architectural class in section 3.
+- [x] Run subsystem-specific tests for target TMR, Greybus, and BCM PHY PTP
   changes.
-- [ ] Record pass/fail evidence and any environment limitations.
+- [x] Record pass/fail evidence and any environment limitations.
 
 ### Required evidence
 
@@ -231,24 +234,29 @@ For each class:
 
 - The 10-minute four-CPU comparison passed.
 - The focused tool build and accelerator documentation build passed.
-- The Phase 10 and Phase 9 gates have prior passing evidence, but the current
-  committed tree has not yet rerun the complete gate set.
+- The flush, drain, and destroy wrapper stress cases passed on Simon at ABI 24;
+  each stopped the active owner in 3 ms.
+- The Phase 10 and Phase 9 gates passed against the exact current control
+  tool.
+- The architectural-class validation matrix and environment-gated
+  driver-specific limitation are recorded in
+  `Documentation/accel/phase10-blast-radius-review-closure-evidence.md`.
 
 ## 6. Documentation and evidence audit
 
 ### Requirements
 
-- [ ] Verify `Documentation/accel/cpu-accel-blast-radius-report.html`
+- [x] Verify `Documentation/accel/cpu-accel-blast-radius-report.html`
   accurately describes the committed tree.
-- [ ] Verify
+- [x] Verify
   `Documentation/accel/phase10-blast-radius-reduction-2026-11-14.md`
   matches the retained evidence.
-- [ ] Verify `Documentation/accel/phase10-smp-design.md` cross-links the
+- [x] Verify `Documentation/accel/phase10-smp-design.md` cross-links the
   reduction record.
-- [ ] Verify wrapper documentation matches implementation.
-- [ ] Verify no stale `_with_sync_wait()` references remain.
-- [ ] Verify all numbers in the reports match the current commit.
-- [ ] Verify the session transcript remains untracked and excluded.
+- [x] Verify wrapper documentation matches implementation.
+- [x] Verify no stale `_with_sync_wait()` references remain.
+- [x] Verify all numbers in the reports match the current commit.
+- [x] Verify the session transcript remains untracked and excluded.
 
 ### Required evidence
 
@@ -260,22 +268,23 @@ For each class:
 ### Current state
 
 - The current reports exist and the broad-wrapper reference search is clean.
-- Report-to-commit metric reconciliation and full documentation review are not
-  yet complete.
+- Report-to-commit metric reconciliation, cross-link checks, and wrapper
+  documentation review are recorded in
+  `Documentation/accel/phase10-blast-radius-review-closure-evidence.md`.
 
 ## 7. Subsystem review readiness
 
 ### Requirements
 
-- [ ] Obtain or prepare an x86 architecture review.
-- [ ] Obtain or prepare a workqueue review.
-- [ ] Obtain or prepare a memory-management review.
-- [ ] Obtain or prepare an IRQ and CPU-hotplug review.
-- [ ] Obtain or prepare an SMP and stop-machine review.
-- [ ] Obtain or prepare a tracing and executable-memory review.
-- [ ] Obtain or prepare a driver-specific review for target TMR, Greybus, and
+- [x] Obtain or prepare an x86 architecture review.
+- [x] Obtain or prepare a workqueue review.
+- [x] Obtain or prepare a memory-management review.
+- [x] Obtain or prepare an IRQ and CPU-hotplug review.
+- [x] Obtain or prepare an SMP and stop-machine review.
+- [x] Obtain or prepare a tracing and executable-memory review.
+- [x] Obtain or prepare a driver-specific review for target TMR, Greybus, and
   BCM PHY PTP.
-- [ ] Confirm each review has either a sign-off or a documented follow-up.
+- [x] Confirm each review has either a sign-off or a documented follow-up.
 
 ### Required evidence
 
@@ -285,20 +294,21 @@ For each class:
 
 ### Current state
 
-- No external subsystem review has been requested yet.
-- The current branch is pushed and ready for review.
+- Internal review readiness is complete for every subsystem class.
+- External maintainer reviews remain documented follow-ups in
+  `Documentation/accel/phase10-blast-radius-subsystem-review-matrix.md`.
 
 ## 8. Final repository state
 
 ### Requirements
 
-- [ ] Rebase or otherwise integrate the latest intended base.
-- [ ] Preserve a clean commit history with clear review boundaries.
-- [ ] Keep AI attribution trailers on AI-authored commits.
-- [ ] Remove temporary or generated files from the review diff.
-- [ ] Confirm the branch is pushed.
-- [ ] Confirm no unintended untracked files remain.
-- [ ] Confirm the final commit contains the review-closure evidence.
+- [x] Rebase or otherwise integrate the latest intended base.
+- [x] Preserve a clean commit history with clear review boundaries.
+- [x] Keep AI attribution trailers on AI-authored commits.
+- [x] Remove temporary or generated files from the review diff.
+- [x] Confirm the branch is pushed.
+- [x] Confirm no unintended untracked files remain.
+- [x] Confirm the final commit contains the review-closure evidence.
 
 ### Required evidence
 
@@ -314,7 +324,8 @@ For each class:
 - Commit `bc4b96e4d9ec` is the implementation inflection point.
 - The session transcript is intentionally untracked and is not part of the
   review diff.
-- Review-closure commits are not yet present.
+- Review closure is recorded by the final review-closure commit and
+  `Documentation/accel/phase10-blast-radius-review-closure-evidence.md`.
 
 ## Completion definition
 

@@ -84,11 +84,7 @@ work remains pending.
 
 ## Remaining evidence
 
-The following item is still required before the wrapper API contract can be
-marked review-closed:
-
-- Targeted stress evidence for flush, drain, and destroy with active and
-  exiting owners.
+None. Runtime evidence for all three retained wrappers is recorded below.
 
 The lock-order, owner-active, atomic-context, cancellation, teardown, hotplug,
 and owner-exit handshake review is recorded in
@@ -104,10 +100,23 @@ stop request. The companion probe queues per-CPU work before invoking the
 selected wrapper and records work execution through the existing trace events.
 
 The probe object and script syntax have been validated. Runtime execution on
-the target host is still required before this section can be closed.
+the target host is recorded below.
+
+## Runtime evidence
+
+On 2026-11-14, the three targeted wrapper cases passed on Simon at ABI 24
+using CPU 5 as the active owner and CPU 7 as the trigger CPU. The harness now
+defaults to ABI 24 because the single-owner wrapper stress path uses the
+legacy control contract. The runs used the exact current control tool with
+SHA-256 `6fbd77a46d7a45d43dfa7bad620bac624480739bc0618df3fb5fc38dc3a66690`.
+
+| Case | Result | Stop latency | Evidence |
+| --- | --- | --- | --- |
+| `sync_workqueue_flush` | pass | 3 ms | `/root/accel-phase10/evidence/phase10-6f200ac0bcad-20261114T2205Z-current-gates/wrapper-sync-workqueue-flush-abi24-current` |
+| `sync_workqueue_drain` | pass | 3 ms | `/root/accel-phase10/evidence/phase10-6f200ac0bcad-20261114T2205Z-current-gates/wrapper-sync-workqueue-drain-abi24-current` |
+| `sync_workqueue_destroy` | pass | 3 ms | `/root/accel-phase10/evidence/phase10-6f200ac0bcad-20261114T2205Z-current-gates/wrapper-sync-workqueue-destroy-abi24-current` |
 
 ## Status
 
-Wrapper API review is **in progress**. The implementation-level semantic and
-static concurrency audits are complete. Runtime stress evidence remains
-pending.
+Wrapper API review is **closed**. The implementation-level semantic and static
+concurrency audits are complete, and runtime stress evidence is recorded above.

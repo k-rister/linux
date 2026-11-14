@@ -158,11 +158,12 @@ No concurrency defect was identified:
 
 ## Remaining evidence
 
-Static closure is complete. Runtime stress execution for all six owner-active
-and owner-exit cases remains pending and is tracked by the regression section
-of `Documentation/accel/phase10-blast-radius-review-close-plan.md`.
+None. Runtime stress evidence for the retained wrappers is recorded in
+`Documentation/accel/phase10-blast-radius-wrapper-api-audit.md`; the retained
+runs use the exact current control tool rather than the earlier equivalent
+binary.
 
 ## Status
 
-Wrapper concurrency review is **statically closed**. Runtime stress evidence
-is still required before full review closure.
+Wrapper concurrency review is **closed**. Static analysis is complete and
+runtime stress evidence is recorded in the wrapper API audit.

@@ -4387,7 +4387,10 @@ static void workqueue_sync_wait_end(void)
  */
 void cpu_accel_flush_workqueue(struct workqueue_struct *wq)
 {
-	bool sync_wait = workqueue_sync_wait_begin(wq);
+	bool sync_wait;
+
+	might_sleep();
+	sync_wait = workqueue_sync_wait_begin(wq);
 
 	__flush_workqueue(wq);
 	if (sync_wait)
@@ -4465,7 +4468,10 @@ EXPORT_SYMBOL_GPL(drain_workqueue);
  */
 void cpu_accel_drain_workqueue(struct workqueue_struct *wq)
 {
-	bool sync_wait = workqueue_sync_wait_begin(wq);
+	bool sync_wait;
+
+	might_sleep();
+	sync_wait = workqueue_sync_wait_begin(wq);
 
 	drain_workqueue(wq);
 	if (sync_wait)
@@ -6385,6 +6391,7 @@ EXPORT_SYMBOL_GPL(destroy_workqueue);
  */
 void cpu_accel_destroy_workqueue(struct workqueue_struct *wq)
 {
+	might_sleep();
 	__destroy_workqueue(wq, true);
 }
 EXPORT_SYMBOL_GPL(cpu_accel_destroy_workqueue);

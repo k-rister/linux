@@ -13,7 +13,7 @@ The review population is:
 - Three retained workqueue APIs: `cpu_accel_flush_workqueue()`,
   `cpu_accel_drain_workqueue()`, and `cpu_accel_destroy_workqueue()`.
 - 218 call-site files that use those APIs.
-- 89 semantic-remainder files outside the module and direct support tree.
+- 90 semantic-remainder files outside the module and direct support tree.
 - The x86, kernel, memory-management, IRQ, tracing, and driver-specific
   architectural changes represented by that remainder.
 
@@ -97,7 +97,7 @@ subsystem review without an open implementation or review caveat.
 
 ### Requirements
 
-Review the 89 semantic-remainder files by architectural class:
+Review the 90 semantic-remainder files by architectural class:
 
 - [x] x86 ownership, entry, vector, IDT, IPI, TLB, and text-patching paths.
 - [x] Workqueue core and scheduling boundaries.
@@ -105,7 +105,7 @@ Review the 89 semantic-remainder files by architectural class:
 - [x] IRQ affinity reservation, migration, effective-route validation, and
   rollback.
 - [x] MMU gather, rmap, reclaim, vmalloc, SLUB, and TLB shootdown paths.
-- [ ] Debug, tracing, kprobe, ftrace, jump-label, alternative, MTRR,
+- [x] Debug, tracing, kprobe, ftrace, jump-label, alternative, MTRR,
   cache-info, and ring-buffer paths.
 - [ ] Required driver-specific changes, especially target TMR, Greybus
   release, and BCM PHY PTP ordering.
@@ -123,15 +123,18 @@ For each class:
 ### Required evidence
 
 - A per-class review note.
-- A per-file review verdict for all 89 semantic files.
+- A per-file review verdict for all 90 semantic files.
 - Targeted tests or reasoned invariants for paths that cannot be exercised on
   Simon.
-- A final machine-verifiable count proving all 89 files have a verdict.
+- A final machine-verifiable count proving all 90 files have a verdict.
 
 ### Current state
 
-- The semantic population and class breakdown are documented in
-  `Documentation/accel/cpu-accel-blast-radius-report.html`.
+- The historical semantic population and class breakdown are documented in
+  `Documentation/accel/cpu-accel-blast-radius-report.html`; that report
+  predates restoration of `kernel/irq/internals.h` and later audit commits.
+  The current authoritative population is the machine-verifiable inventory
+  below.
 - The machine-verifiable semantic inventory is recorded in
   `Documentation/accel/phase10-blast-radius-semantic-inventory.tsv`.
 - The x86 class is reviewed in
@@ -155,8 +158,12 @@ For each class:
   and both focused configuration builds pass. Current-tree Simon runtime
   execution remains pending because Simon is still booted at the review
   baseline.
-- The semantic inventory contains exactly 89 files: 44 have `pass` verdicts
-  and 45 remain pending. The previously omitted `kernel/irq/internals.h` row
+- The debug, tracing, kprobe, and ring-buffer class is reviewed in
+  `Documentation/accel/phase10-blast-radius-debug-tracing-audit.md`; its four
+  remaining rows have `pass` verdicts, and the x86 portions of the class were
+  closed by the x86 audit.
+- The semantic inventory contains exactly 90 files: 49 have `pass` verdicts
+  and 41 remain pending. The previously omitted `kernel/irq/internals.h` row
   has been restored and reviewed.
 - The remaining semantic classes and their per-file verdicts are not yet
   complete.

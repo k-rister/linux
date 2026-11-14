@@ -93,7 +93,8 @@ Two defects were found and fixed during this audit:
 
 The semantic inventory also omitted `kernel/irq/internals.h` after the IRQ
 rollback-filter change. That row and the IRQ audit have been corrected in this
-tree; the inventory again contains exactly 89 semantic-remainder files.
+tree; the inventory again contains exactly 90 semantic-remainder files after
+restoring the previously omitted `kernel/irq/internals.h` row.
 
 No unresolved MM semantic defect remains.
 

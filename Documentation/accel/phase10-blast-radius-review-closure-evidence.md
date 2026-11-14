@@ -100,8 +100,8 @@ invariant coverage for those paths.
 
 ## Documentation and evidence audit
 
-- `cpu-accel-blast-radius-report.html` was reconciled against the current
-  tracked diff; the full tracked diff is 436 files, 40,799 insertions, and 876
+- `cpu-accel-blast-radius-report.html` was reconciled against the final
+  tracked diff; the full tracked diff is 438 files, 41,126 insertions, and 876
   deletions.
 - `phase10-smp-design.md` cross-links
   `phase10-blast-radius-reduction-2026-11-14.md`.

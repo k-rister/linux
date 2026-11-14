@@ -25,19 +25,19 @@ subsystem review without an open implementation or review caveat.
 
 ### Requirements
 
-- [ ] Audit `cpu_accel_flush_workqueue()` against original
+- [x] Audit `cpu_accel_flush_workqueue()` against original
   `flush_workqueue()` semantics.
-- [ ] Audit `cpu_accel_drain_workqueue()` against original
+- [x] Audit `cpu_accel_drain_workqueue()` against original
   `drain_workqueue()` semantics.
-- [ ] Audit `cpu_accel_destroy_workqueue()` against original
+- [x] Audit `cpu_accel_destroy_workqueue()` against original
   `destroy_workqueue()` semantics.
-- [ ] Confirm each wrapper preserves the original completion boundary and does
+- [x] Confirm each wrapper preserves the original completion boundary and does
   not silently narrow or broaden the wait scope.
 - [ ] Confirm each wrapper is safe when an accelerator owner is active on any
   CPU in the workqueue's allowed mask.
 - [ ] Confirm each wrapper cannot sleep in an atomic context or deadlock with
   an owner exit handshake.
-- [ ] Confirm failure and rollback paths cannot strand a CPU in owner mode or
+- [x] Confirm failure and rollback paths cannot strand a CPU in owner mode or
   return with required work still pending.
 
 ### Required evidence
@@ -53,7 +53,9 @@ subsystem review without an open implementation or review caveat.
 - The three wrappers are implemented and the broad `*_with_sync_wait()` family
   is removed.
 - A 10-minute four-CPU runtime comparison passed.
-- The wrapper-level semantic audit is not yet complete.
+- The implementation-level wrapper semantic audit is recorded in
+  `Documentation/accel/phase10-blast-radius-wrapper-api-audit.md`.
+- The wrapper concurrency, stress, and rollback evidence is not yet complete.
 
 ## 2. Workqueue call-site audit
 
@@ -82,8 +84,12 @@ subsystem review without an open implementation or review caveat.
 
 ### Current state
 
-- The call-site population is identified.
-- No file-by-file review verdict table exists yet.
+- The call-site population is identified and the machine-verifiable inventory
+  is recorded in
+  `Documentation/accel/phase10-blast-radius-call-site-inventory.tsv`.
+- All 218 rows currently have `pending` verdicts.
+- No file has yet received a final `pass`, `defect`, `follow-up`, or
+  `needs-subsystem-review` verdict.
 - The 10-minute smoke test exercised the overall implementation, not each
   individual call site.
 

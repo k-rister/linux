@@ -23,6 +23,7 @@
 #include <linux/poll.h>
 #include <linux/sched.h>
 #include <linux/sched/mm.h>
+#include <linux/sched/task_stack.h>
 #include <linux/slab.h>
 #include <linux/smp.h>
 #include <linux/string.h>

@@ -190,9 +190,54 @@ out_unlock:
 	cpus_read_unlock();
 }
 
+static void irq_accel_restore_mask_test(struct kunit *test)
+{
+	struct cpumask saved = { };
+	struct cpumask restored = { };
+	unsigned int own_cpu;
+	unsigned int other_cpu;
+	unsigned int available_cpu;
+	int own_ret;
+	int other_ret;
+
+	own_cpu = cpumask_first(cpu_possible_mask);
+	other_cpu = cpumask_next(own_cpu, cpu_possible_mask);
+	available_cpu = cpumask_next(other_cpu, cpu_possible_mask);
+	if (available_cpu >= nr_cpu_ids) {
+		kunit_skip(test, "requires at least three possible CPUs");
+		return;
+	}
+
+	cpus_read_lock();
+	own_ret = irq_accel_reserve_cpu(own_cpu);
+	other_ret = irq_accel_reserve_cpu(other_cpu);
+	KUNIT_EXPECT_EQ(test, own_ret, 0);
+	KUNIT_EXPECT_EQ(test, other_ret, 0);
+	if (own_ret || other_ret)
+		goto out;
+
+	cpumask_set_cpu(own_cpu, &saved);
+	cpumask_set_cpu(other_cpu, &saved);
+	cpumask_set_cpu(available_cpu, &saved);
+
+	irq_accel_filter_restore_affinity(&restored, &saved, own_cpu);
+
+	KUNIT_EXPECT_TRUE(test, cpumask_test_cpu(own_cpu, &restored));
+	KUNIT_EXPECT_FALSE(test, cpumask_test_cpu(other_cpu, &restored));
+	KUNIT_EXPECT_TRUE(test, cpumask_test_cpu(available_cpu, &restored));
+
+out:
+	if (!other_ret)
+		irq_accel_release_cpu(other_cpu);
+	if (!own_ret)
+		irq_accel_release_cpu(own_cpu);
+	cpus_read_unlock();
+}
+
 static struct kunit_case irq_accel_test_cases[] = {
 	KUNIT_CASE(irq_accel_internal_affinity_test),
 	KUNIT_CASE(irq_accel_managed_startup_test),
+	KUNIT_CASE(irq_accel_restore_mask_test),
 	{}
 };
 

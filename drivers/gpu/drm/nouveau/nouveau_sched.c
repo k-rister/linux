@@ -455,7 +455,7 @@ fail_sched:
 	drm_sched_fini(drm_sched);
 fail_wq:
 	if (sched->wq)
-		destroy_workqueue(sched->wq);
+		cpu_accel_destroy_workqueue(sched->wq);
 	return ret;
 }
 
@@ -508,7 +508,7 @@ nouveau_sched_fini(struct nouveau_sched *sched)
 	 * be in use.
 	 */
 	if (sched->wq)
-		destroy_workqueue(sched->wq);
+		cpu_accel_destroy_workqueue(sched->wq);
 }
 
 void

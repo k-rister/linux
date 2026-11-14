@@ -1,0 +1,717 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CPU Accelerator Design and Implementation Report</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #17202a;
+      --muted: #52606d;
+      --line: #d9e2ec;
+      --panel: #f7f9fb;
+      --panel-2: #eef4f8;
+      --accent: #155e75;
+      --accent-2: #0f766e;
+      --warn: #92400e;
+      --warn-bg: #fff7ed;
+      --ok: #166534;
+      --ok-bg: #f0fdf4;
+      --code: #0f172a;
+      --code-bg: #f1f5f9;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: #fff;
+      font: 16px/1.62 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .layout {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 56px 32px 96px;
+    }
+    header.hero {
+      border-bottom: 2px solid var(--line);
+      padding-bottom: 34px;
+      margin-bottom: 38px;
+    }
+    .eyebrow {
+      color: var(--accent);
+      font-weight: 750;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      font-size: 13px;
+    }
+    h1, h2, h3, h4 {
+      line-height: 1.2;
+      color: #102a43;
+      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      scroll-margin-top: 24px;
+    }
+    h1 { font-size: clamp(34px, 5vw, 51px); margin: 10px 0 12px; letter-spacing: -.03em; }
+    h2 { font-size: 30px; margin-top: 62px; margin-bottom: 18px; letter-spacing: -.02em; }
+    h3 { font-size: 21px; margin-top: 34px; margin-bottom: 10px; }
+    h4 { font-size: 17px; margin-top: 24px; margin-bottom: 8px; }
+    p { margin: 0 0 16px; }
+    .subtitle { color: var(--muted); font-size: 20px; max-width: 850px; }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 22px;
+      margin-top: 24px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .meta strong { color: var(--ink); }
+    .toc {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 22px 26px;
+      margin: 0 0 34px;
+    }
+    .toc h2 { margin: 0 0 14px; font-size: 18px; }
+    .toc ol {
+      margin: 0;
+      padding-left: 22px;
+      columns: 2;
+      column-gap: 40px;
+      font-size: 15px;
+    }
+    .toc a { color: var(--accent); text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+    .callout {
+      border-left: 5px solid var(--accent);
+      background: var(--panel-2);
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin: 22px 0;
+    }
+    .callout.warn {
+      border-left-color: #d97706;
+      background: var(--warn-bg);
+      color: var(--warn);
+    }
+    .callout.ok {
+      border-left-color: #16a34a;
+      background: var(--ok-bg);
+      color: var(--ok);
+    }
+    .callout strong { color: inherit; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      margin: 20px 0 30px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 18px;
+    }
+    .card h3 { margin-top: 0; font-size: 17px; }
+    .card p:last-child { margin-bottom: 0; }
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 14px;
+      margin: 22px 0;
+    }
+    .kpi {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 18px;
+      box-shadow: 0 1px 2px rgba(16, 42, 67, .05);
+    }
+    .kpi .label { color: var(--muted); font-size: 13px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; }
+    .kpi .value { font-size: 27px; font-weight: 780; color: #102a43; margin: 4px 0 2px; letter-spacing: -.02em; }
+    .kpi .detail { color: var(--muted); font-size: 14px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0 30px;
+      font-size: 15px;
+      overflow-wrap: anywhere;
+    }
+    th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: var(--panel-2); color: #243b53; font-size: 13px; text-transform: uppercase; letter-spacing: .035em; }
+    tr:nth-child(even) td { background: #fbfdfe; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .94em; }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: .94em;
+      background: var(--code-bg);
+      color: var(--code);
+      padding: 2px 5px;
+      border-radius: 4px;
+    }
+    pre {
+      background: var(--code-bg);
+      color: var(--code);
+      padding: 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; }
+    ul, ol { margin: 0 0 18px; padding-left: 24px; }
+    li { margin: 4px 0; }
+    .two-col {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+      gap: 24px;
+      align-items: start;
+    }
+    .pill {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 13px;
+      font-weight: 700;
+      background: var(--panel-2);
+      color: #334e68;
+      border: 1px solid var(--line);
+      margin-right: 6px;
+    }
+    .pill.done { color: var(--ok); background: var(--ok-bg); border-color: #bbf7d0; }
+    .pill.paused { color: var(--warn); background: var(--warn-bg); border-color: #fed7aa; }
+    .pill.experimental { color: #4338ca; background: #eef2ff; border-color: #c7d2fe; }
+    figure { margin: 28px 0; }
+    figcaption { color: var(--muted); font-size: 14px; margin-top: 10px; }
+    .diagram { width: 100%; height: auto; display: block; background: #fff; }
+    details {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px 18px;
+      margin: 16px 0;
+      background: #fff;
+    }
+    summary { cursor: pointer; font-weight: 700; color: #102a43; }
+    details[open] { background: var(--panel); }
+    .source-list { font-size: 15px; }
+    .source-list li { margin-bottom: 7px; }
+    footer {
+      border-top: 2px solid var(--line);
+      margin-top: 74px;
+      padding-top: 22px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    @media (max-width: 720px) {
+      .layout { padding: 34px 18px 64px; }
+      .toc ol { columns: 1; }
+      table { display: block; overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+<div class="layout">
+  <header class="hero">
+    <div class="eyebrow">Linux-integrated dataplane accelerator</div>
+    <h1>Design, implementation, and validation through Phase 10</h1>
+    <p class="subtitle">A technical status report for low-latency and real-time systems reviewers, covering the original design, the implementation path, the measured results, and the deliberate deviations from the initial plan.</p>
+    <div class="meta">
+      <div><strong>Date:</strong> <time datetime="2026-11-13">November 13, 2026</time></div>
+      <div><strong>Current branch:</strong> <span class="mono">codex/accelerator-oslat</span></div>
+      <div><strong>Current commit:</strong> <span class="mono">808af5cf6676</span></div>
+      <div><strong>Status:</strong> <span class="pill done">Phase 10 complete</span><span class="pill paused">paused before Phase 11</span></div>
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="Report contents">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#executive-summary">Executive summary</a></li>
+      <li><a href="#original-design">Original design</a></li>
+      <li><a href="#architecture">Current architecture</a></li>
+      <li><a href="#implementation-history">Implementation history</a></li>
+      <li><a href="#key-mechanisms">Key mechanisms</a></li>
+      <li><a href="#validation">Validation and results</a></li>
+      <li><a href="#deviations">Deviations and scope changes</a></li>
+      <li><a href="#current-boundary">Current boundary and what is not done</a></li>
+      <li><a href="#sharing-guidance">Suggested sharing narrative</a></li>
+      <li><a href="#source-map">Source map</a></li>
+    </ol>
+  </nav>
+
+  <section id="executive-summary">
+    <h2>Executive summary</h2>
+    <p>
+      The CPU-accelerator work investigates whether Linux can remain the single operating system and control plane while one or more CPUs are leased to a protected, non-scheduler-governed dataplane execution domain. The goal is not a hypervisor or a second kernel. Linux performs admission, lifecycle control, resource accounting, recovery, and observability; the selected CPUs execute a statically admitted workload with ordinary Linux scheduling and routine IPI paths excluded from the active interval.
+    </p>
+    <p>
+      Phase 10 is complete. The implementation now supports an experimental ABI 25 static multi-worker domain with transactional activation, per-worker telemetry, manager-death cleanup, worker-targeted escape, bounded SPSC queues, and a linear static pipeline. ABI 23 and ABI 24 remain frozen compatibility floors. The implementation was validated on Simon with a two-CPU gate, a four-CPU gate, an ABI 23/24 freeze gate, and a twelve-hour corrected-isolation soak running user-oslat and rt-tests oslat concurrently.
+    </p>
+    <p>
+      The most important caveat is that this is still a bounded prototype rather than a production isolation system. NMIs, SMIs, machine checks, firmware effects, and some platform events remain outside the software control plane. Device and DMA ownership have not started. The current result demonstrates the lifecycle, memory, recovery, and static SMP model; it does not yet demonstrate a NIC-backed dataplane or a formal hard latency bound.
+    </p>
+    <div class="kpi-grid">
+      <div class="kpi">
+        <div class="label">Current ABI</div>
+        <div class="value">25</div>
+        <div class="detail">Experimental static SMP domain</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Compatibility floor</div>
+        <div class="value">23</div>
+        <div class="detail">Frozen ABI 23/24 control plane</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Validated CPUs</div>
+        <div class="value">4</div>
+        <div class="detail">CPUs 5, 7, 9, 11</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Longest soak</div>
+        <div class="value">12 h</div>
+        <div class="detail">Concurrent user-oslat and rt-tests oslat</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Maximum user-oslat latency</div>
+        <div class="value">400 ns</div>
+        <div class="detail">12-hour corrected-isolation run</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Samples above 1 µs</div>
+        <div class="value">0</div>
+        <div class="detail">user-oslat, 12-hour soak</div>
+      </div>
+    </div>
+    <div class="callout ok">
+      <strong>Bottom line:</strong> Phase 10 successfully demonstrates a static multi-CPU accelerator domain, bounded shared-memory communication, recovery, and ABI compatibility on real hardware. Phase 11 device and static-DMA ownership has not begun.
+    </div>
+  </section>
+
+  <section id="original-design">
+    <h2>Original design</h2>
+    <p>
+      The original v1.1 design was written to make a Linux-integrated accelerator practical without changing Linux into a microkernel or adding a second operating system. It starts from a simple rule: every CPU boots online under ordinary Linux control. A user-controlled, coarse-grained transition can then move selected CPUs into accelerator mode and later return them to Linux without rebooting. There is deliberately no scheduler-driven time sharing between Linux and accelerator execution.
+    </p>
+
+    <div class="two-col">
+      <div class="card">
+        <h3>Primary goals</h3>
+        <ul>
+          <li>Single booted Linux OS with an accelerator execution domain.</li>
+          <li>User-controlled coarse-grained CPU lease and return.</li>
+          <li>No ordinary Linux scheduler or routine IPI path on active accelerator CPUs.</li>
+          <li>Preallocated shared-memory communication with bounded queues.</li>
+          <li>Fail-stop recovery and manager-death cleanup without host reboot.</li>
+          <li>Static multi-CPU domains before dynamic scheduling or device ownership.</li>
+          <li>Architecture-independent control plane with x86-specific backends.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Explicit non-goals</h3>
+        <ul>
+          <li>No hypervisor, guest, or second kernel.</li>
+          <li>No general accelerator scheduler.</li>
+          <li>No automatic rapid mode switching or time slicing.</li>
+          <li>No unbounded service execution during the dataplane interval.</li>
+          <li>No hard latency claim before platform and firmware effects are qualified.</li>
+          <li>No networking or device ownership until CPU ownership is stable.</li>
+          <li>No demand-paged DMA or mutable active address space in the target model.</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>Original phase sequence</h3>
+    <p>
+      The v1.1 plan used the following order. It is useful to compare it to the actual implementation because phase numbering shifted slightly as implementation reality forced prerequisite work to move earlier.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Original phase</th><th>Intent</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>0</td><td>Requirements, contracts, and architecture.</td></tr>
+        <tr><td>1</td><td>Baseline latency measurement.</td></tr>
+        <tr><td>2</td><td>Dynamic mode-transition feasibility.</td></tr>
+        <tr><td>3</td><td>Kernel subsystem and lifecycle.</td></tr>
+        <tr><td>4</td><td>Sealed execution environment.</td></tr>
+        <tr><td>5</td><td>Recovery and emergency control.</td></tr>
+        <tr><td>6</td><td>Memory, IPC, and experimental SDK.</td></tr>
+        <tr><td>7</td><td>Accelerator-oslat prototype.</td></tr>
+        <tr><td>8</td><td>Adversarial validation.</td></tr>
+        <tr><td>9</td><td>Stable UAPI and SDK.</td></tr>
+        <tr><td>10</td><td>SMP accelerator domains.</td></tr>
+        <tr><td>11</td><td>Device and DMA ownership.</td></tr>
+        <tr><td>12</td><td>PMD/DPDK adaptation.</td></tr>
+        <tr><td>13</td><td>Networking.</td></tr>
+        <tr><td>14</td><td>Bound synthesis and portability.</td></tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <strong>Plan principle:</strong> The project was intentionally ordered to prove CPU ownership, bounded communication, and no-reboot recovery before introducing device ownership or networking.
+    </div>
+  </section>
+
+  <section id="architecture">
+    <h2>Current architecture</h2>
+    <p>
+      The current implementation is an experimental kernel module and userspace SDK. Linux remains responsible for admission, configuration, resource accounting, and recovery. The accelerator domain receives a fixed CPU set, explicit shared-memory regions, and a statically admitted user image. The manager never remotely enters another process’s address space; each user worker joins the domain from its own execution context.
+    </p>
+
+    <figure>
+      <svg class="diagram" viewBox="0 0 920 430" role="img" aria-label="CPU accelerator architecture diagram">
+        <rect x="18" y="18" width="884" height="394" rx="20" fill="#f8fafc" stroke="#d9e2ec"/>
+        <rect x="48" y="48" width="260" height="122" rx="14" fill="#e0f2fe" stroke="#0284c7"/>
+        <text x="68" y="82" font-family="Inter, sans-serif" font-size="18" font-weight="700" fill="#075985">Linux control plane</text>
+        <text x="68" y="108" font-size="14" fill="#0c4a6e">Manager process</text>
+        <text x="68" y="130" font-size="14" fill="#0c4a6e">Lifecycle, admission, recovery</text>
+        <rect x="48" y="205" width="260" height="86" rx="14" fill="#f0fdf4" stroke="#16a34a"/>
+        <text x="68" y="238" font-size="18" font-weight="700" fill="#166534">/dev/cpu_accel</text>
+        <text x="68" y="262" font-size="14" fill="#166534">ABI 23/24/25</text>
+        <rect x="48" y="325" width="260" height="60" rx="14" fill="#eef2ff" stroke="#6366f1"/>
+        <text x="68" y="351" font-size="16" font-weight="700" fill="#3730a3">Telemetry and status</text>
+        <rect x="398" y="48" width="250" height="112" rx="14" fill="#fff7ed" stroke="#f97316"/>
+        <text x="418" y="82" font-size="18" font-weight="700" fill="#9a3412">Shared regions</text>
+        <text x="418" y="108" font-size="14" fill="#9a3412">CONTROL, SHARED, SPSC</text>
+        <text x="418" y="130" font-size="14" fill="#9a3412">Prefaulted and immutable while active</text>
+        <rect x="398" y="205" width="250" height="86" rx="14" fill="#f8fafc" stroke="#64748b"/>
+        <text x="418" y="238" font-size="18" font-weight="700" fill="#334155">Kernel module</text>
+        <text x="418" y="262" font-size="14" fill="#334155">cpu_accel driver</text>
+        <rect x="712" y="48" width="160" height="337" rx="16" fill="#ecfeff" stroke="#0891b2"/>
+        <text x="734" y="86" font-size="18" font-weight="700" fill="#155e75">Accelerator</text>
+        <text x="734" y="110" font-size="14" fill="#155e75">CPUs 5,7,9,11</text>
+        <text x="734" y="142" font-size="14" fill="#155e75">Static workers</text>
+        <text x="734" y="168" font-size="14" fill="#155e75">No migration</text>
+        <text x="734" y="194" font-size="14" fill="#155e75">No time slicing</text>
+        <text x="734" y="220" font-size="14" fill="#155e75">No routine IPI</text>
+        <text x="734" y="250" font-size="14" fill="#155e75">SPSC queues</text>
+        <path d="M318 100 H388" stroke="#0f172a" stroke-width="3" marker-end="url(#arrow)"/>
+        <path d="M318 248 H388" stroke="#0f172a" stroke-width="3" marker-end="url(#arrow)"/>
+        <path d="M308 355 H700 V335" stroke="#0f172a" stroke-width="3" fill="none" marker-end="url(#arrow)"/>
+        <path d="M648 100 H700 V128" stroke="#0f172a" stroke-width="3" fill="none" marker-end="url(#arrow)"/>
+        <path d="M648 248 H700 V188" stroke="#0f172a" stroke-width="3" fill="none" marker-end="url(#arrow)"/>
+        <defs>
+          <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#0f172a"/>
+          </marker>
+        </defs>
+      </svg>
+      <figcaption>High-level architecture. Linux owns configuration and recovery; selected CPUs execute a static admitted workload and communicate through bounded shared-memory regions.</figcaption>
+    </figure>
+
+    <h3>Control plane</h3>
+    <p>
+      <code>/dev/cpu_accel</code> exposes a singleton administrative domain. Opening the device requires <code>CAP_SYS_ADMIN</code>. A descriptor may be passed with <code>SCM_RIGHTS</code>. The manager owns the control mapping and creates or attaches shared regions. For user workloads, each worker process is pinned to its selected CPU, maps its own region and telemetry object, and joins the domain from its own memory map. This prevents the kernel from moving or redirecting another process’s address space.
+    </p>
+
+    <h3>ABI model</h3>
+    <table>
+      <thead>
+        <tr><th>ABI</th><th>Status</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>23</td><td>Frozen compatibility floor</td><td>Core commands and legacy control mapping</td></tr>
+        <tr><td>24</td><td>Frozen control-plane extension</td><td>Explicit version negotiation, architecture telemetry, x86 image admission, terminal-state poll</td></tr>
+        <tr><td>25</td><td><span class="pill experimental">Experimental</span></td><td>Static multi-worker domain, per-worker telemetry, worker-targeted escape, bounded SPSC queues</td></tr>
+      </tbody>
+    </table>
+    <p>
+      Existing command numbers, argument types, and encoded sizes are immutable. New capabilities use new commands and new argument objects rather than appending fields to frozen structures. ABI 25 does not grow <code>struct cpu_accel_config</code>, <code>struct cpu_accel_shared</code>, or any ABI 23/24 object.
+    </p>
+
+    <h3>Memory model</h3>
+    <p>
+      The design separates four mapping classes:
+    </p>
+    <ul>
+      <li><strong>CONTROL:</strong> Linux-owned control and status pages, mapped read-only by the worker.</li>
+      <li><strong>ACCEL_PRIVATE:</strong> code, stack, and private state; mapped only in the accelerator address space and prefaulted before activation.</li>
+      <li><strong>SHARED_REGION:</strong> explicit shared-memory regions between manager and worker.</li>
+      <li><strong>DMA:</strong> registered pages additionally mapped into an IOMMU domain; not yet implemented.</li>
+    </ul>
+    <p>
+      ABI 22 replaced the fixed workload-data mapping with explicit variable-size regions. Regions are created while the device is idle, attached before configuration, and remain immutable while active. Region epochs change on attach, detach, reset, and reuse so stale mappings can be rejected. Active topology—region count, size, permissions, and tokens—is immutable.
+    </p>
+
+    <h3>Static SMP execution</h3>
+    <p>
+      An ABI 25 domain contains one fixed worker per selected CPU. The CPU set is immutable while configured. Admission rejects repeated CPUs, CPU 0, offline CPUs, multiple NUMA nodes, incomplete SMT sibling sets, and any set that leaves no usable Linux housekeeping CPU. Domain activation is transactional: every worker is prepared, entered, and published only after all workers report active. If any step fails, every started worker is stopped or unwound, Linux ownership is restored for every selected CPU, and the domain publishes <code>ERROR</code>.
+    </p>
+
+    <h3>Bounded SPSC pipeline</h3>
+    <p>
+      ABI 25 adds a second region type for single-producer/single-consumer queues. A static linear pipeline uses worker <code>i</code> as producer for queue <code>i</code> and worker <code>i+1</code> as consumer. Queue capacity is a uniform power of two from 1 through 1024 slots. Producers and consumers spin without overwriting a full slot or consuming an empty slot. Slot publication and consumption use release/acquire ordering, and the producer-done bit terminates the drain only after the queue is empty. Queue coordination uses shared-memory polling; it does not use routine accelerator IPIs.
+    </p>
+  </section>
+
+  <section id="implementation-history">
+    <h2>Implementation history</h2>
+    <p>
+      The project evolved from a minimal single-CPU prototype to a static multi-CPU domain with ABI compatibility and bounded communication. The table below summarizes the most important milestones; it is not intended to list every commit.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Milestone</th><th>Commit</th><th>What it added</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Foundation</td><td class="mono">99ed8a5d9afe</td><td>Initial <code>cpu_accel</code> module, control UAPI, SDK, and <code>cpu-accelctl</code>.</td></tr>
+        <tr><td>CPU ownership</td><td class="mono">64c00d324252</td><td>CPU-hotplug-backed teardown and reattachment workflow.</td></tr>
+        <tr><td>x86 backend</td><td class="mono">df0bc13d1e87</td><td>Staged x86 backend foundation and dedicated APIC entry vector.</td></tr>
+        <tr><td>IRQ/workqueue quarantine</td><td class="mono">7e629cda3ae3</td><td>Reserved selected CPUs against unbound work and migrated IRQs away.</td></tr>
+        <tr><td>Recovery instrumentation</td><td class="mono">1b8d7514e477</td><td>Escape-drop accounting and recovery path validation.</td></tr>
+        <tr><td>Latency reporting</td><td class="mono">4668a82bea38</td><td>Lateness histogram and worst-case latency report.</td></tr>
+        <tr><td>ABI 22 regions</td><td class="mono">cc20e09851f7</td><td>Workload-agnostic variable-size shared regions.</td></tr>
+        <tr><td>Exception counters</td><td class="mono">54786ab8e1a7</td><td>Exception and event counters integrated into WCL reporting.</td></tr>
+        <tr><td>Phase 9 ABI negotiation</td><td class="mono">16229a9cac58</td><td>ABI 24 negotiation, architecture extensions, CAP_SYS_ADMIN, poll support, SDK compatibility tests.</td></tr>
+        <tr><td>Phase 9 freeze</td><td class="mono">8de4a5e44af6</td><td>Frozen ABI 24 control plane and ABI 23 compatibility gate.</td></tr>
+        <tr><td>Phase 10 SMP</td><td class="mono">5ab535344464</td><td>ABI 25 static multi-worker domains, per-worker telemetry, transactional activation, and recovery.</td></tr>
+        <tr><td>Phase 10 pipeline</td><td class="mono">98fa3ac9a48a</td><td>Bounded SPSC queues and static user-pipeline topology.</td></tr>
+        <tr><td>Full SMP metrics</td><td class="mono">8bb589d30e8e</td><td>Complete per-worker metrics and reporting.</td></tr>
+        <tr><td>Phase 10 soak record</td><td class="mono">808af5cf6676</td><td>Twelve-hour corrected-isolation soak documentation.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="key-mechanisms">
+    <h2>Key mechanisms</h2>
+
+    <h3>1. Transactional domain lifecycle</h3>
+    <p>
+      Domain activation is all-or-nothing. The driver validates every CPU, prepares every worker, reserves workqueue and IRQ resources, enters every worker, and publishes <code>RUNNING</code> only after every worker reports active. Any failure before full activation stops or unwinds every started worker, restores Linux ownership for every selected CPU, and publishes <code>ERROR</code>. A partially active or mixed Linux/accelerator domain is not an observable success state.
+    </p>
+
+    <h3>2. Sealed user image admission</h3>
+    <p>
+      A user workload is admitted from the exact task and memory map that will execute it. The worker’s image, stack, control mapping, registered RSEQ area, attached regions, and exact VMA set are validated before entry. The image and stack are pinned for the active epoch, and the worker’s <code>mm</code> is write-locked while active. The path deliberately excludes ordinary libc services, threads, signals, syscalls, dynamic allocation, and page-fault-driven initialization during the active interval.
+    </p>
+
+    <h3>3. Recovery and escape</h3>
+    <p>
+      ABI 25 provides a worker-indexed escape command. On x86, the kernel can send a local-APIC NMI to the target CPU; the registered handler redirects only a prevalidated user-mode frame for the active image to a prevalidated escape entry and stack. The escape path performs the terminal <code>USER_EXIT</code> syscall. This is an experimental recovery mechanism for the prototype, not a general interrupt-safe user ABI. Manager death, worker fault, watchdog expiry, and forced stop are domain-wide and fail closed.
+    </p>
+
+    <h3>4. TLB and memory ownership</h3>
+    <p>
+      The x86 path tracks TLB generations and owner acknowledgements for eligible same-<code>mm</code> work. Remote TLB flushes that target the owned <code>mm</code> can be deferred and reconciled on owner exit. The active <code>mm</code> is write-locked, excluding ordinary VMA changes while the worker is active. Page-table releases and drains with immediate walker barriers remain synchronous. This is one of the largest deviations from the original simple “stop Linux work on this CPU” model: real TLB, reclaim, and page-table interactions required explicit kernel-side coordination.
+    </p>
+
+    <h3>5. Workqueue and IRQ quarantine</h3>
+    <p>
+      While the target is entering or in accelerator mode, the workqueue core reserves it against unbound-work selection and redirects eligible unbound work to another online CPU. Per-CPU work remains associated with its target and is deferred until Linux mode resumes. IRQ quarantine is an explicit admission step that reserves the target against new normal IRQ affinity assignments, snapshots active affinity, moves migratable IRQs, and waits for in-flight handlers. It fails closed if an IRQ cannot be moved safely.
+    </p>
+
+    <h3>6. Per-worker telemetry</h3>
+    <p>
+      ABI 25 reports per-worker state, timestamps, counters, histograms, and terminal records through a separate telemetry mapping. The legacy shared mapping remains authoritative for ABI 23/24 and summarizes the domain when ABI 25 is selected. Telemetry includes context switches, migration, escapes, architecture interrupt and IPI counters, TLB events, workqueue activity, and lateness distributions.
+    </p>
+  </section>
+
+  <section id="validation">
+    <h2>Validation and results</h2>
+    <p>
+      The implementation was validated incrementally, with each phase gated on runtime behavior rather than only static builds. The most significant hardware validation is the Phase 10 SMP gate and the twelve-hour corrected-isolation soak on Simon.
+    </p>
+
+    <h3>Phase 9 ABI freeze gate</h3>
+    <p>
+      The Phase 9 gate validated ABI 23 and ABI 24 compatibility, manager crash recovery, descriptor passing, <code>execve()</code> behavior, fork without exec, terminal state, and latency equivalence. ABI 24 had to remain within twice the ABI 23 p99, p999, and maximum latency. The gate passed on Simon on CPU 5 with CPUs 0–3 reserved for housekeeping.
+    </p>
+
+    <h3>Phase 10 four-CPU independent-worker run</h3>
+    <table>
+      <thead>
+        <tr><th>Worker</th><th>CPU</th><th>Samples</th><th>p50 / p99</th><th>Max lateness</th><th>Context switches</th><th>Migrations</th><th>Escapes</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>0</td><td>5</td><td>51,283,259</td><td>32 / 32 ns</td><td>110 ns</td><td>0</td><td>0</td><td>0</td></tr>
+        <tr><td>1</td><td>7</td><td>51,283,218</td><td>32 / 32 ns</td><td>270 ns</td><td>0</td><td>0</td><td>0</td></tr>
+        <tr><td>2</td><td>9</td><td>51,283,213</td><td>32 / 32 ns</td><td>230 ns</td><td>0</td><td>0</td><td>0</td></tr>
+        <tr><td>3</td><td>11</td><td>51,270,875</td><td>32 / 32 ns</td><td>280 ns</td><td>0</td><td>0</td><td>0</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Phase 10 bounded SPSC pipeline run</h3>
+    <table>
+      <thead>
+        <tr><th>Metric</th><th>Result</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Topology</td><td>Four workers, three capacity-one SPSC queues</td></tr>
+        <tr><td>Queue throughput</td><td>2,652,145 enqueued and dequeued records per queue</td></tr>
+        <tr><td>Backlog</td><td>Zero final backlog</td></tr>
+        <tr><td>Checksum</td><td>238,693,050, producer and consumer matched</td></tr>
+        <tr><td>Queue pressure</td><td>Nonzero full or empty events observed</td></tr>
+        <tr><td>Worker max lateness</td><td>1,910 / 760 / 2,320 / 2,790 ns</td></tr>
+        <tr><td>Context switches, migrations, escapes</td><td>Zero for all healthy workers</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Twelve-hour corrected-isolation soak</h3>
+    <p>
+      The longest validation ran user-oslat on CPUs 5, 7, 9, and 11 and rt-tests oslat on CPUs 4, 6, 8, and 10. Launchers were constrained to housekeeping CPUs 0–3. The isolated CPU set remained 4–11.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Tool</th><th>Samples</th><th>Weighted mean</th><th>Maximum</th><th>Samples above 1 µs</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>user-oslat</td><td>8,549,070,197,760</td><td>20.212646461 ns</td><td>400 ns</td><td>0</td></tr>
+        <tr><td>rt-tests oslat</td><td>7,597,747,542,365</td><td>22.743470781 ns</td><td>9,762 ns</td><td>172,757,496</td></tr>
+      </tbody>
+    </table>
+    <p>
+      Both tools exited successfully. The module refcount returned to zero. No new NVMe QID 2 timeouts or <code>cpu_accel</code> runtime errors appeared.
+    </p>
+
+    <h3>Phase 8 adversarial validation</h3>
+    <p>
+      Phase 8 added a stress-class matrix that correlated user-oslat latency with external kernel activity. It covered baseline, CPU load, memory pressure, synchronous work, call-function IPIs, irq_work, timerlat, device lifecycle operations, power-policy transitions, resctrl, perf, ftrace, TLB flushes, hotplug, stop-machine, user escape faults, user death, RCU callback routing, migration, net backlog, and timer migration. The purpose was not to prove a universal bound, but to identify ordinary kernel paths that could stop the owned CPU and to validate that owner-aware handling kept those paths bounded and recoverable.
+    </p>
+    <div class="callout warn">
+      <strong>Important:</strong> The twelve-hour soak and Phase 10 gate are strong empirical evidence for the implemented execution model, but they are not a proof of absence of every ordinary Linux path or a formal hard latency bound.
+    </div>
+  </section>
+
+  <section id="deviations">
+    <h2>Deviations and scope changes</h2>
+    <p>
+      The implementation stayed close to the architectural intent but deviated from the initial plan in several deliberate ways. These deviations are important because they explain why the project took longer in some areas and why device ownership has not yet begun.
+    </p>
+
+    <h3>1. Phase numbering shifted</h3>
+    <p>
+      The original v1.0 plan placed SMP at Phase 9, device/DMA ownership at Phase 10, and DPDK integration at Phase 11. The current implementation instead completed Phase 9 as UAPI/SDK freeze and Phase 10 as SMP. Device and static-DMA ownership moved to Phase 11 and have not started. This reordering reflects the prerequisite nature of ABI stability and static multi-CPU behavior.
+    </p>
+
+    <h3>2. Phase 8 expanded into kernel-wide work</h3>
+    <p>
+      The original plan treated adversarial validation primarily as a test phase. In practice, the audit found that many ordinary kernel paths could wait synchronously for work on an owned CPU. The project therefore added owner-aware synchronous-wait handling across several subsystems, including workqueue cancellation, device teardown, power policy, memory pressure, resctrl, perf, TLB, hotplug, stop-machine, and net backlog. This was necessary to make the ownership model viable rather than merely observable.
+    </p>
+
+    <h3>3. Memory and TLB ownership became a major subsystem</h3>
+    <p>
+      The initial design expected a sealed address space and prefaulted mappings. Real kernel interactions with TLB shootdown, <code>mmu_gather</code>, page reclaim, and same-<code>mm</code> ownership required explicit completion and acknowledgement paths. The current model write-locks the active <code>mm</code>, tracks TLB generations, and defers only eligible data-page batches while keeping page-table releases synchronous.
+    </p>
+
+    <h3>4. ABI evolution was more extensive than planned</h3>
+    <p>
+      The control plane evolved from a fixed mapping and small ioctl set to ABI 22 shared regions, ABI 23 exception telemetry, ABI 24 negotiation and architecture extensions, and ABI 25 SMP. ABI 23 and ABI 24 are now frozen compatibility surfaces, while ABI 25 remains experimental. The extension policy deliberately avoids growing frozen objects.
+    </p>
+
+    <h3>5. Device and DMA ownership were deferred</h3>
+    <p>
+      Device ownership remains Phase 11 and has not started. The plan intentionally requires a stable CPU ownership model, bounded communication, recovery, and ABI compatibility before introducing VFIO/IOMMUFD, BAR/MMIO exposure, interrupt routing, DMA quiesce, and device fault injection.
+    </p>
+
+    <h3>6. The implementation remains a bounded prototype</h3>
+    <p>
+      The current system does not fully own the local APIC, does not provide an IOMMU domain, and does not eliminate NMIs, SMIs, machine checks, firmware activity, or hardware execution effects. It also does not provide a general user-program ABI. The x86 ring-3 path is a cooperative proof with strict admission and escape constraints.
+    </p>
+
+    <h3>7. A twelve-hour soak was added after the Phase 10 gate</h3>
+    <p>
+      The original Phase 10 gate was a bounded validation. A twelve-hour corrected-isolation soak was added after the gate to provide stronger confidence in the corrected CPU-isolation configuration and in concurrent user-oslat and rt-tests oslat behavior. This was an extension of the validation plan, not a change to the architecture.
+    </p>
+  </section>
+
+  <section id="current-boundary">
+    <h2>Current boundary and what is not done</h2>
+    <p>
+      The project is paused before Phase 11. The current branch is complete through Phase 10 and pushed at commit <span class="mono">808af5cf6676</span>.
+    </p>
+    <div class="two-col">
+      <div class="card">
+        <h3>Completed</h3>
+        <ul>
+          <li>Single-OS Linux control plane.</li>
+          <li>User-controlled CPU lease and return.</li>
+          <li>Static multi-worker domains.</li>
+          <li>Transactional activation and rollback.</li>
+          <li>Per-worker telemetry.</li>
+          <li>Manager-death cleanup.</li>
+          <li>Worker-targeted escape.</li>
+          <li>Bounded SPSC queues and static pipeline.</li>
+          <li>ABI 23/24 compatibility.</li>
+          <li>Four-CPU Phase 10 gate.</li>
+          <li>Twelve-hour corrected-isolation soak.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Not yet done</h3>
+        <ul>
+          <li>Device ownership and static DMA.</li>
+          <li>VFIO or IOMMUFD integration.</li>
+          <li>BAR/MMIO exposure.</li>
+          <li>Device interrupt masking or routing.</li>
+          <li>DMA quiesce, reset, and fault-injection suite.</li>
+          <li>DPDK or PMD adaptation.</li>
+          <li>Networking workloads.</li>
+          <li>Formal hard latency bound and platform qualification.</li>
+          <li>Portable non-x86 backend.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="callout">
+      <strong>Resume point:</strong> Phase 11 should begin with device and static-DMA ownership design, specifically VFIO/IOMMUFD ownership, domain-bound lifecycle, fixed DMA mappings, BAR/MMIO exposure, interrupt masking/routing, quiesce/reset, and fault injection.
+    </div>
+  </section>
+
+  <section id="sharing-guidance">
+    <h2>Suggested sharing narrative</h2>
+    <p>
+      For a technical audience experienced in low-latency and real-time workloads, the strongest narrative is not “we built a faster scheduler.” It is:
+    </p>
+    <ol>
+      <li><strong>Problem:</strong> Linux scheduling, IPIs, workqueues, TLB maintenance, and device activity can introduce latency that is difficult to bound on a CPU that must service a deterministic dataplane.</li>
+      <li><strong>Approach:</strong> Keep Linux as the control plane, but lease a static set of CPUs to a protected accelerator domain with explicit admission, bounded shared memory, and fail-stop recovery.</li>
+      <li><strong>Key mechanism:</strong> Use a transactional domain lifecycle, sealed user image, workqueue and IRQ quarantine, TLB ownership tracking, and per-worker telemetry.</li>
+      <li><strong>Result:</strong> A four-CPU static SMP domain and bounded SPSC pipeline passed the Phase 10 gate, and a twelve-hour concurrent soak showed zero user-oslat samples above 1 µs with a 400 ns maximum.</li>
+      <li><strong>Limit:</strong> Device/DMA ownership, networking, and formal hard latency bounds remain future work.</li>
+    </ol>
+
+    <h3>What is worth highlighting</h3>
+    <ul>
+      <li>The single-OS design and explicit non-hypervisor boundary.</li>
+      <li>The static multi-CPU execution model and absence of a general scheduler.</li>
+      <li>The transactional lifecycle and fail-closed recovery semantics.</li>
+      <li>The ABI compatibility discipline around versions 23, 24, and 25.</li>
+      <li>The bounded SPSC pipeline and memory-ordering contract.</li>
+      <li>The empirical validation on real hardware, including the twelve-hour soak.</li>
+    </ul>
+
+    <h3>What can probably be omitted</h3>
+    <ul>
+      <li>Most individual commit-level implementation details.</li>
+      <li>Test harness plumbing and routine build-validation commands.</li>
+      <li>Host-specific tuned-profile tuning unless the audience asks about the test environment.</li>
+      <li>Every Phase 8 subsystem audit row; summarize the class categories and outcomes.</li>
+      <li>Exact per-bin histogram tables unless latency methodology is the focus.</li>
+    </ul>
+  </section>
+
+  <section id="source-map">
+    <h2>Source map</h2>
+    <p>
+      The report was assembled from the in-tree documentation, Git history, and recorded project memory. The most relevant sources are:
+    </p>
+    <ul class="source-list">
+      <li><code>Documentation/accel/cpu-accel.rst</code> — architecture, control plane, and implementation overview.</li>
+      <li><code>Documentation/accel/cpu-accel-uapi.rst</code> — normative ABI 23/24/25 contract and compatibility policy.</li>
+      <li><code>Documentation/accel/cpu-accel-memory.rst</code> — memory classes, region lifecycle, VMA admission, and TLB ownership model.</li>
+      <li><code>Documentation/accel/phase9-uapi-sdk-implementation.md</code> — ABI 24 negotiation, security, polling, and freeze gate.</li>
+      <li><code>Documentation/accel/phase10-smp-design.md</code> — static SMP domain, SPSC pipeline, validation gate, and Simon results.</li>
+      <li><code>Documentation/accel/phase8-wcl-report.md</code> — worst-case latency methodology and stress-class evidence.</li>
+      <li><code>Documentation/accel/oslat-sidebyside-*.md</code> — user-oslat and rt-tests oslat comparison reports.</li>
+      <li><code>drivers/cpu_accel/cpu_accel.c</code> — implementation.</li>
+      <li><code>include/uapi/linux/cpu_accel.h</code> — UAPI definitions.</li>
+      <li><code>tools/cpu_accel/</code> — SDK, control tools, and phase gates.</li>
+    </ul>
+  </section>
+
+  <footer>
+    <p>Prepared on <time datetime="2026-11-13">November 13, 2026</time> from the current branch <span class="mono">codex/accelerator-oslat</span> at <span class="mono">808af5cf6676</span>.</p>
+  </footer>
+</div>
+</body>
+</html>

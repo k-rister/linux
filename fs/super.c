@@ -747,7 +747,7 @@ void generic_shutdown_super(struct super_block *sb)
 		security_sb_delete(sb);
 
 		if (sb->s_dio_done_wq) {
-			destroy_workqueue(sb->s_dio_done_wq);
+			cpu_accel_destroy_workqueue(sb->s_dio_done_wq);
 			sb->s_dio_done_wq = NULL;
 		}
 
@@ -2447,7 +2447,7 @@ int sb_init_dio_done_wq(struct super_block *sb)
 	 */
 	if (!try_cmpxchg(&sb->s_dio_done_wq, &old, wq)) {
 		/* Someone created workqueue before us? Free ours... */
-		destroy_workqueue(wq);
+		cpu_accel_destroy_workqueue(wq);
 	}
 	return 0;
 }

@@ -2292,7 +2292,7 @@ static void close_ctx(struct rtrs_srv_ctx *ctx)
 	list_for_each_entry(srv, &ctx->srv_list, ctx_list)
 		close_paths(srv);
 	mutex_unlock(&ctx->srv_mutex);
-	flush_workqueue(rtrs_wq);
+	cpu_accel_flush_workqueue(rtrs_wq);
 }
 
 /**
@@ -2405,7 +2405,7 @@ out_err:
 
 static void __exit rtrs_server_exit(void)
 {
-	destroy_workqueue(rtrs_wq);
+	cpu_accel_destroy_workqueue(rtrs_wq);
 	class_unregister(&rtrs_dev_class);
 	rtrs_rdma_dev_pd_deinit(&dev_pd);
 }

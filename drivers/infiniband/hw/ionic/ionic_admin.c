@@ -1038,7 +1038,7 @@ static struct ionic_eq *ionic_create_eq(struct ionic_ibdev *dev, int eqid)
 err_cmd:
 	eq->enable = false;
 	free_irq(eq->irq, eq);
-	flush_work(&eq->work);
+	cancel_work_sync(&eq->work);
 err_irq:
 	ionic_intr_free(dev->lif_cfg.lif, eq->intr);
 err_intr:
@@ -1055,7 +1055,7 @@ static void ionic_destroy_eq(struct ionic_eq *eq)
 
 	eq->enable = false;
 	free_irq(eq->irq, eq);
-	flush_work(&eq->work);
+	cancel_work_sync(&eq->work);
 
 	ionic_intr_free(dev->lif_cfg.lif, eq->intr);
 	ionic_queue_destroy(&eq->q, dev->lif_cfg.hwdev);

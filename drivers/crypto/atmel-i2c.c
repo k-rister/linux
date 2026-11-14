@@ -303,7 +303,7 @@ EXPORT_SYMBOL(atmel_i2c_enqueue);
 
 void atmel_i2c_flush_queue(void)
 {
-	flush_workqueue(atmel_wq);
+	cpu_accel_flush_workqueue(atmel_wq);
 }
 EXPORT_SYMBOL(atmel_i2c_flush_queue);
 
@@ -407,7 +407,7 @@ static int __init atmel_i2c_init(void)
 
 static void __exit atmel_i2c_exit(void)
 {
-	destroy_workqueue(atmel_wq);
+	cpu_accel_destroy_workqueue(atmel_wq);
 }
 
 module_init(atmel_i2c_init);

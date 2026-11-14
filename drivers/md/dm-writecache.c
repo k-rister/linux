@@ -941,7 +941,7 @@ static void writecache_suspend(struct dm_target *ti)
 	}
 	wc_unlock(wc);
 
-	drain_workqueue(wc->writeback_wq);
+	cpu_accel_drain_workqueue(wc->writeback_wq);
 
 	wc_lock(wc);
 	if (flush_on_suspend)
@@ -1130,7 +1130,7 @@ static int process_flush_mesg(unsigned int argc, char **argv, struct dm_writecac
 	queue_work(wc->writeback_wq, &wc->writeback_work);
 	wc_unlock(wc);
 
-	flush_workqueue(wc->writeback_wq);
+	cpu_accel_flush_workqueue(wc->writeback_wq);
 
 	wc_lock(wc);
 	wc->writeback_all--;
@@ -2190,7 +2190,7 @@ static void writecache_dtr(struct dm_target *ti)
 	mempool_exit(&wc->copy_pool);
 
 	if (wc->writeback_wq)
-		destroy_workqueue(wc->writeback_wq);
+		cpu_accel_destroy_workqueue(wc->writeback_wq);
 
 	if (wc->dev)
 		dm_put_device(ti, wc->dev);

@@ -2417,7 +2417,7 @@ static void __qedi_remove(struct pci_dev *pdev, int mode)
 		}
 
 		if (qedi->offload_thread) {
-			destroy_workqueue(qedi->offload_thread);
+			cpu_accel_destroy_workqueue(qedi->offload_thread);
 			qedi->offload_thread = NULL;
 		}
 	}

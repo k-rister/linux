@@ -1,0 +1,347 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+#ifndef _ASM_X86_CPU_ACCEL_H
+#define _ASM_X86_CPU_ACCEL_H
+
+#include <linux/cpumask.h>
+#include <linux/list.h>
+#include <linux/mmu_owner.h>
+#include <linux/mutex.h>
+
+typedef void (*x86_cpu_accel_entry_fn)(void *data);
+/* Optional stop callbacks must be nonblocking; no accelerator lock is held. */
+typedef void (*x86_cpu_accel_stop_fn)(void *data, unsigned int stop_flags);
+
+/*
+ * Owner stop request modes. TERMINATE publishes the stop request and
+ * escalates to the owner's terminating recovery. DRAIN lets bounded owner
+ * work complete first and escalates only if the owner is still active
+ * past its own deadline. SKIP_OK marks an op that may proceed without the
+ * owned CPU: an active ring-3 (user_mm) owner is not executing the op's
+ * target, so it is left running, exempted from the drain, and dropped from
+ * the op's all-CPU stop. Must-stop ops (MTRR, microcode, hotplug, reboot,
+ * TDX) must not set it.
+ */
+#define X86_CPU_ACCEL_STOP_TERMINATE	0
+#define X86_CPU_ACCEL_STOP_DRAIN	1
+#define X86_CPU_ACCEL_STOP_SKIP_OK	2
+
+struct x86_cpu_accel_tlb_flush {
+	cpumask_t targets;
+	u64 id;
+	unsigned long caller;
+	unsigned int owner_targets;
+	bool no_owners;
+};
+
+struct mm_struct;
+
+#define X86_CPU_ACCEL_TLB_RECLAIM_MAX_MMS	16
+#define X86_CPU_ACCEL_TLB_RECLAIM_MAX_ACKS	16
+
+struct x86_cpu_accel_tlb_reclaim_completion {
+	struct {
+		struct mm_struct *mm;
+		u64 tlb_gen;
+	} mms[X86_CPU_ACCEL_TLB_RECLAIM_MAX_MMS];
+	struct mmu_owner_subscription
+		subscriptions[X86_CPU_ACCEL_TLB_RECLAIM_MAX_ACKS];
+	/* Subscriptions key on callback data, not this architecture record. */
+	void *subscription_data;
+	unsigned int nr_mms;
+	unsigned int nr_subscriptions;
+	bool overflow;
+};
+
+extern struct mutex text_mutex;
+
+int x86_cpu_accel_direct_enter(unsigned int cpu,
+			       x86_cpu_accel_entry_fn entry,
+			       x86_cpu_accel_stop_fn stop, void *data);
+#ifdef CONFIG_CPU_ACCEL_CORE
+bool x86_cpu_accel_defer_reschedule(unsigned int cpu);
+u64 x86_cpu_accel_reschedule_deferred(unsigned int cpu);
+bool x86_cpu_accel_defer_call_function(unsigned int cpu);
+u64 x86_cpu_accel_call_function_deferred(unsigned int cpu);
+/* Keep mm write-locked until user_exit() has reconciled its TLB state. */
+int x86_cpu_accel_user_enter(unsigned int cpu, struct mm_struct *mm,
+			     x86_cpu_accel_stop_fn stop, void *data,
+			     u64 *tlb_targets);
+u64 x86_cpu_accel_user_exit(unsigned int cpu);
+/* Complete an escaped owner's exit from the stop NMI before the CSD drains. */
+u64 x86_cpu_accel_user_stop_exit(unsigned int cpu);
+void x86_cpu_accel_tlb_unmap_begin(struct mm_struct *mm);
+void x86_cpu_accel_tlb_unmap_end(struct mm_struct *mm);
+bool x86_cpu_accel_any_active(void);
+/* True while the CPU is running an admitted ring-3 (user_mm) owner image. */
+bool x86_cpu_accel_cpu_active_user_owner(unsigned int cpu);
+/* Drain owners, block admission, and allow same-task nesting. */
+void x86_cpu_accel_maintenance_begin(unsigned int stop_flags);
+void x86_cpu_accel_maintenance_end(void);
+/* Keep admission closed across a CPU-up transition and its inactive rendezvous. */
+void x86_cpu_accel_cpu_up_maintenance_begin(unsigned int cpu);
+void x86_cpu_accel_cpu_up_maintenance_end(unsigned int cpu);
+/* Succeed only with no owners; block admission until try_end(). */
+bool x86_cpu_accel_maintenance_try_begin(void);
+/* Also permit the matching CPU-up rendezvous inside its maintenance window. */
+bool x86_cpu_accel_maintenance_try_begin_inactive(unsigned int cpu);
+void x86_cpu_accel_maintenance_try_end(void);
+/* Keep owners out while KGDB software or hardware breakpoints are armed. */
+void x86_cpu_accel_kgdb_breakpoint_get(void);
+void x86_cpu_accel_kgdb_breakpoint_put(void);
+/*
+ * Call before recording owners; reserve admission until end.
+ * no_owners permits a broadcast.
+ */
+void x86_cpu_accel_tlb_flush_begin(struct x86_cpu_accel_tlb_flush *flush,
+				   const struct cpumask *targets);
+void x86_cpu_accel_tlb_flush_end(struct x86_cpu_accel_tlb_flush *flush);
+/* Request a registered, nonblocking owner stop before a synchronous flush. */
+void x86_cpu_accel_request_stop_owner(unsigned int cpu, unsigned int stop_flags);
+/* Associate the stop request with the active synchronous TLB flush. */
+void x86_cpu_accel_request_stop_owner_tlb_flush(unsigned int cpu, u64 flush_id);
+bool x86_cpu_accel_note_tlb_shootdown(unsigned int cpu,
+				      const struct mm_struct *mm, u64 tlb_gen);
+void x86_cpu_accel_note_tlb_unmap(struct mm_struct *mm, u64 tlb_gen);
+bool x86_cpu_accel_reclaim_record(struct x86_cpu_accel_tlb_reclaim_completion *comp,
+				  struct mm_struct *mm, u64 tlb_gen);
+int x86_cpu_accel_reclaim_register(struct x86_cpu_accel_tlb_reclaim_completion *comp,
+				   void *data,
+				   const struct mmu_owner_subscription_ops *ops);
+void x86_cpu_accel_reclaim_release(struct x86_cpu_accel_tlb_reclaim_completion *comp);
+/* Filter only owners running a different mm from an mm-scoped IPI mask. */
+bool x86_cpu_accel_filter_mm_tlb_shootdown(unsigned int cpu,
+					   const struct mm_struct *mm,
+					   u64 tlb_gen);
+/* Filter unchanged-mm owners or owners registered to this reclaim completion. */
+bool x86_cpu_accel_filter_tlb_unmap(unsigned int cpu,
+				    const void *completion);
+u64 x86_cpu_accel_tlb_shootdown_targets(unsigned int cpu);
+#else
+static inline bool x86_cpu_accel_defer_reschedule(unsigned int cpu)
+{
+	(void)cpu;
+	return false;
+}
+
+static inline u64 x86_cpu_accel_reschedule_deferred(unsigned int cpu)
+{
+	(void)cpu;
+	return 0;
+}
+
+static inline bool x86_cpu_accel_defer_call_function(unsigned int cpu)
+{
+	(void)cpu;
+	return false;
+}
+
+static inline u64 x86_cpu_accel_call_function_deferred(unsigned int cpu)
+{
+	(void)cpu;
+	return 0;
+}
+
+static inline int x86_cpu_accel_user_enter(unsigned int cpu,
+					   struct mm_struct *mm,
+					   x86_cpu_accel_stop_fn stop,
+					   void *data,
+					   u64 *tlb_targets)
+{
+	(void)cpu;
+	(void)mm;
+	(void)stop;
+	(void)data;
+	if (tlb_targets)
+		*tlb_targets = 0;
+	return 0;
+}
+
+static inline u64 x86_cpu_accel_user_exit(unsigned int cpu)
+{
+	(void)cpu;
+	return 0;
+}
+
+static inline u64 x86_cpu_accel_user_stop_exit(unsigned int cpu)
+{
+	(void)cpu;
+	return 0;
+}
+
+static inline void x86_cpu_accel_tlb_unmap_begin(struct mm_struct *mm)
+{
+	(void)mm;
+}
+
+static inline void x86_cpu_accel_tlb_unmap_end(struct mm_struct *mm)
+{
+	(void)mm;
+}
+
+static inline bool
+x86_cpu_accel_reclaim_record(struct x86_cpu_accel_tlb_reclaim_completion *comp,
+			     struct mm_struct *mm, u64 tlb_gen)
+{
+	(void)comp;
+	(void)mm;
+	(void)tlb_gen;
+	return false;
+}
+
+static inline int
+x86_cpu_accel_reclaim_register(struct x86_cpu_accel_tlb_reclaim_completion *comp,
+			       void *data,
+			       const struct mmu_owner_subscription_ops *ops)
+{
+	(void)comp;
+	(void)data;
+	(void)ops;
+	return 0;
+}
+
+static inline void
+x86_cpu_accel_reclaim_release(struct x86_cpu_accel_tlb_reclaim_completion *comp)
+{
+	(void)comp;
+}
+
+static inline bool x86_cpu_accel_any_active(void)
+{
+	return false;
+}
+
+static inline bool x86_cpu_accel_cpu_active_user_owner(unsigned int cpu)
+{
+	(void)cpu;
+	return false;
+}
+
+static inline void x86_cpu_accel_maintenance_begin(unsigned int stop_flags)
+{
+	(void)stop_flags;
+}
+
+static inline void x86_cpu_accel_maintenance_end(void)
+{
+}
+
+static inline void
+x86_cpu_accel_cpu_up_maintenance_begin(unsigned int cpu)
+{
+}
+
+static inline void
+x86_cpu_accel_cpu_up_maintenance_end(unsigned int cpu)
+{
+}
+
+static inline bool x86_cpu_accel_maintenance_try_begin(void)
+{
+	return true;
+}
+
+static inline bool
+x86_cpu_accel_maintenance_try_begin_inactive(unsigned int cpu)
+{
+	return true;
+}
+
+static inline void x86_cpu_accel_maintenance_try_end(void)
+{
+}
+
+static inline void x86_cpu_accel_kgdb_breakpoint_get(void)
+{
+}
+
+static inline void x86_cpu_accel_kgdb_breakpoint_put(void)
+{
+}
+
+static inline void
+x86_cpu_accel_tlb_flush_begin(struct x86_cpu_accel_tlb_flush *flush,
+			      const struct cpumask *targets)
+{
+	cpumask_copy(&flush->targets, targets);
+	flush->no_owners = true;
+}
+
+static inline void
+x86_cpu_accel_tlb_flush_end(struct x86_cpu_accel_tlb_flush *flush)
+{
+	(void)flush;
+}
+
+static inline void
+x86_cpu_accel_request_stop_owner(unsigned int cpu, unsigned int stop_flags)
+{
+	(void)cpu;
+	(void)stop_flags;
+}
+
+static inline void
+x86_cpu_accel_request_stop_owner_tlb_flush(unsigned int cpu, u64 flush_id)
+{
+	(void)cpu;
+	(void)flush_id;
+}
+
+static inline bool x86_cpu_accel_note_tlb_shootdown(unsigned int cpu,
+						    const struct mm_struct *mm,
+						    u64 tlb_gen)
+{
+	(void)cpu;
+	(void)mm;
+	(void)tlb_gen;
+	return false;
+}
+
+static inline void x86_cpu_accel_note_tlb_unmap(struct mm_struct *mm,
+						u64 tlb_gen)
+{
+	(void)mm;
+	(void)tlb_gen;
+}
+
+static inline bool
+x86_cpu_accel_filter_mm_tlb_shootdown(unsigned int cpu,
+				      const struct mm_struct *mm,
+				      u64 tlb_gen)
+{
+	(void)cpu;
+	(void)mm;
+	(void)tlb_gen;
+	return false;
+}
+
+static inline bool x86_cpu_accel_filter_tlb_unmap(unsigned int cpu,
+						  const void *completion)
+{
+	(void)cpu;
+	(void)completion;
+	return false;
+}
+
+static inline u64 x86_cpu_accel_tlb_shootdown_targets(unsigned int cpu)
+{
+	(void)cpu;
+	return 0;
+}
+#endif
+
+static inline void x86_cpu_accel_text_mutex_lock(void)
+	__acquires(&text_mutex)
+{
+	x86_cpu_accel_maintenance_begin(X86_CPU_ACCEL_STOP_TERMINATE |
+					 X86_CPU_ACCEL_STOP_SKIP_OK);
+	mutex_lock(&text_mutex);
+}
+
+static inline void x86_cpu_accel_text_mutex_unlock(void)
+	__releases(&text_mutex)
+{
+	mutex_unlock(&text_mutex);
+	x86_cpu_accel_maintenance_end();
+}
+
+#endif

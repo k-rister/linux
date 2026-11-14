@@ -806,7 +806,12 @@ int w5100_probe(struct device *dev, const struct w5100_ops *ops,
 	return 0;
 
 err_hw:
-	destroy_workqueue(priv->xfer_wq);
+	unregister_netdev(ndev);
+	cpu_accel_flush_workqueue(priv->xfer_wq);
+	flush_work(&priv->setrx_work);
+	flush_work(&priv->restart_work);
+	cpu_accel_destroy_workqueue(priv->xfer_wq);
+	goto err_register;
 err_wq:
 	unregister_netdev(ndev);
 err_register:
@@ -820,14 +825,15 @@ void w5100_remove(struct device *dev)
 	struct net_device *ndev = dev_get_drvdata(dev);
 	struct w5100_priv *priv = netdev_priv(ndev);
 
-	w5100_hw_reset(priv);
+	unregister_netdev(ndev);
 	free_irq(priv->irq, ndev);
 
+	cpu_accel_flush_workqueue(priv->xfer_wq);
 	flush_work(&priv->setrx_work);
 	flush_work(&priv->restart_work);
-	destroy_workqueue(priv->xfer_wq);
+	w5100_hw_reset(priv);
+	cpu_accel_destroy_workqueue(priv->xfer_wq);
 
-	unregister_netdev(ndev);
 	free_netdev(ndev);
 }
 EXPORT_SYMBOL_GPL(w5100_remove);

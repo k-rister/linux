@@ -851,6 +851,29 @@ static void qla_do_work(struct work_struct *work)
 
 }
 
+/*
+ * q_work runs on ha->wq, a WQ_PERCPU | WQ_MEM_RECLAIM queue. Its rescuer can
+ * execute work away from the pool CPU, so coordinate every possible CPU while
+ * canceling it. Callers must quiesce the response-queue IRQ first.
+ */
+void qla2xxx_cancel_q_work_sync(struct work_struct *work)
+{
+	unsigned int cpu;
+
+	if (!work_busy(work))
+		return;
+
+	for_each_possible_cpu(cpu)
+		arch_smp_sync_wait_begin(cpu);
+	for_each_possible_cpu(cpu)
+		arch_smp_sync_wait_stop(cpu);
+
+	cancel_work_sync(work);
+
+	for_each_possible_cpu(cpu)
+		arch_smp_sync_wait_end(cpu);
+}
+
 /* create response queue */
 int
 qla25xx_create_rsp_que(struct qla_hw_data *ha, uint16_t options,

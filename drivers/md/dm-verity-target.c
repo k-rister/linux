@@ -828,7 +828,7 @@ static int verity_map(struct dm_target *ti, struct bio *bio)
 static void verity_postsuspend(struct dm_target *ti)
 {
 	struct dm_verity *v = ti->private;
-	flush_workqueue(v->verify_wq);
+	cpu_accel_flush_workqueue(v->verify_wq);
 	dm_bufio_client_reset(v->bufio);
 }
 
@@ -1062,7 +1062,7 @@ static void verity_dtr(struct dm_target *ti)
 	struct dm_verity *v = ti->private;
 
 	if (v->verify_wq)
-		destroy_workqueue(v->verify_wq);
+		cpu_accel_destroy_workqueue(v->verify_wq);
 
 	mempool_exit(&v->recheck_pool);
 	if (v->io)

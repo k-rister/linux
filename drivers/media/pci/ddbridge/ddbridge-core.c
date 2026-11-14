@@ -3407,7 +3407,7 @@ int ddb_exit_ddbridge(int stage, int error)
 	switch (stage) {
 	default:
 	case 2:
-		destroy_workqueue(ddb_wq);
+		cpu_accel_destroy_workqueue(ddb_wq);
 		fallthrough;
 	case 1:
 		ddb_class_destroy();

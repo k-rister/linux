@@ -36,6 +36,7 @@
 #include <linux/panic.h>
 #include <linux/panic_notifier.h>
 #include <linux/percpu.h>
+#include <linux/rcu_nocb.h>
 #include <linux/notifier.h>
 #include <linux/cpu.h>
 #include <linux/mutex.h>
@@ -5002,3 +5003,12 @@ void __init rcu_init(void)
 #include "tree_exp.h"
 #include "tree_nocb.h"
 #include "tree_plugin.h"
+
+#ifdef CONFIG_RCU_NOCB_CPU
+/* Caller must disable preemption to keep the local rcu_data stable. */
+bool rcu_current_cpu_is_offloaded(void)
+{
+	return rcu_rdp_is_offloaded(this_cpu_ptr(&rcu_data));
+}
+EXPORT_SYMBOL_GPL(rcu_current_cpu_is_offloaded);
+#endif

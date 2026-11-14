@@ -919,14 +919,32 @@ int rvu_mcs_init(struct rvu *rvu)
 		return -ENOMEM;
 	}
 
+	/* Publish the RVU only after its interrupt workqueue is ready. */
+	for (mcs_id = 0; mcs_id < rvu->mcs_blk_cnt; mcs_id++) {
+		mcs = mcs_get_pdata(mcs_id);
+		rcu_assign_pointer(mcs->rvu, rvu);
+	}
+
 	return err;
 }
 
 void rvu_mcs_exit(struct rvu *rvu)
 {
+	int mcs_id;
+	struct mcs *mcs;
+
 	if (!rvu->mcs_intr_wq)
 		return;
 
-	destroy_workqueue(rvu->mcs_intr_wq);
+	/* Unpublish rvu so IRQ handlers cannot submit new work. */
+	for (mcs_id = 0; mcs_id < rvu->mcs_blk_cnt; mcs_id++) {
+		mcs = mcs_get_pdata(mcs_id);
+		rcu_assign_pointer(mcs->rvu, NULL);
+	}
+	/* Wait for IRQ handlers that already entered mcs_add_intr_wq_entry(). */
+	synchronize_rcu();
+
+	cpu_accel_drain_workqueue(rvu->mcs_intr_wq);
+	cpu_accel_destroy_workqueue(rvu->mcs_intr_wq);
 	rvu->mcs_intr_wq = NULL;
 }

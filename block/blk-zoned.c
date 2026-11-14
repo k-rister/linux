@@ -1984,7 +1984,7 @@ static void disk_free_zone_resources(struct gendisk *disk)
 	WARN_ON_ONCE(!list_empty(&disk->zone_wplugs_list));
 
 	if (disk->zone_wplugs_wq)
-		drain_workqueue(disk->zone_wplugs_wq);
+		cpu_accel_drain_workqueue(disk->zone_wplugs_wq);
 
 	disk_destroy_zone_wplugs_hash_table(disk);
 
@@ -1997,7 +1997,7 @@ static void disk_free_zone_resources(struct gendisk *disk)
 void disk_release_zone_resources(struct gendisk *disk)
 {
 	if (disk->zone_wplugs_wq) {
-		destroy_workqueue(disk->zone_wplugs_wq);
+		cpu_accel_destroy_workqueue(disk->zone_wplugs_wq);
 		disk->zone_wplugs_wq = NULL;
 	}
 

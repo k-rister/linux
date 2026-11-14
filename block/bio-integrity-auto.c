@@ -102,7 +102,7 @@ EXPORT_SYMBOL(bio_integrity_prep);
 
 void blk_flush_integrity(void)
 {
-	flush_workqueue(kintegrityd_wq);
+	cpu_accel_flush_workqueue(kintegrityd_wq);
 }
 
 static int __init blk_integrity_auto_init(void)

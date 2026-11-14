@@ -162,7 +162,7 @@ static void delay_dtr(struct dm_target *ti)
 
 	if (dc->kdelayd_wq) {
 		timer_shutdown_sync(&dc->delay_timer);
-		destroy_workqueue(dc->kdelayd_wq);
+		cpu_accel_destroy_workqueue(dc->kdelayd_wq);
 	}
 
 	if (dc->read.dev)

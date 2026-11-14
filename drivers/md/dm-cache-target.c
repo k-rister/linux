@@ -1958,7 +1958,7 @@ static void __destroy(struct cache *cache)
 		dm_bio_prison_destroy_v2(cache->prison);
 
 	if (cache->wq)
-		destroy_workqueue(cache->wq);
+		cpu_accel_destroy_workqueue(cache->wq);
 
 	if (cache->dirty_bitset)
 		free_bitset(cache->dirty_bitset);
@@ -2814,7 +2814,7 @@ static void cache_postsuspend(struct dm_target *ti)
 	BUG_ON(atomic_read(&cache->nr_io_migrations));
 
 	cancel_delayed_work_sync(&cache->waker);
-	drain_workqueue(cache->wq);
+	cpu_accel_drain_workqueue(cache->wq);
 	WARN_ON(cache->tracker.in_flight);
 
 	/*

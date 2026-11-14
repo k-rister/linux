@@ -259,7 +259,7 @@ static struct se_portal_group *ft_add_tpg(struct se_wwn *wwn, const char *name)
 
 	ret = core_tpg_register(wwn, &tpg->se_tpg, SCSI_PROTOCOL_FCP);
 	if (ret < 0) {
-		destroy_workqueue(wq);
+		cpu_accel_destroy_workqueue(wq);
 		kfree(tpg);
 		return NULL;
 	}
@@ -280,7 +280,7 @@ static void ft_del_tpg(struct se_portal_group *se_tpg)
 	pr_debug("del tpg %s\n",
 		    config_item_name(&tpg->se_tpg.tpg_group.cg_item));
 
-	destroy_workqueue(tpg->workqueue);
+	cpu_accel_destroy_workqueue(tpg->workqueue);
 
 	/* Wait for sessions to be freed thru RCU, for BUG_ON below */
 	synchronize_rcu();

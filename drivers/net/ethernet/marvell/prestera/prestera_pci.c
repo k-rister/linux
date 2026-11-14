@@ -931,9 +931,10 @@ static int prestera_pci_probe(struct pci_dev *pdev,
 err_prestera_dev_register:
 	free_irq(pci_irq_vector(pdev, 0), fw);
 err_request_irq:
+	cpu_accel_drain_workqueue(fw->wq);
 	pci_free_irq_vectors(pdev);
 err_irq_alloc:
-	destroy_workqueue(fw->wq);
+	cpu_accel_destroy_workqueue(fw->wq);
 err_wq_alloc:
 	prestera_fw_uninit(fw);
 err_prestera_fw_init:
@@ -952,8 +953,9 @@ static void prestera_pci_remove(struct pci_dev *pdev)
 
 	prestera_device_unregister(&fw->dev);
 	free_irq(pci_irq_vector(pdev, 0), fw);
+	cpu_accel_drain_workqueue(fw->wq);
 	pci_free_irq_vectors(pdev);
-	destroy_workqueue(fw->wq);
+	cpu_accel_destroy_workqueue(fw->wq);
 	prestera_fw_uninit(fw);
 }
 

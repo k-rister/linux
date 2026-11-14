@@ -2193,8 +2193,8 @@ static void riocm_remove_mport(struct device *dev)
 	if (!found)
 		return;
 
-	flush_workqueue(cm->rx_wq);
-	destroy_workqueue(cm->rx_wq);
+	cpu_accel_flush_workqueue(cm->rx_wq);
+	cpu_accel_destroy_workqueue(cm->rx_wq);
 
 	/* Release channels bound to this mport */
 	spin_lock_bh(&idr_lock);

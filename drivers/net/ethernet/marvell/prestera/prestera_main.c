@@ -43,7 +43,7 @@ void prestera_queue_delayed_work(struct delayed_work *work, unsigned long delay)
 
 void prestera_queue_drain(void)
 {
-	drain_workqueue(prestera_wq);
+	cpu_accel_drain_workqueue(prestera_wq);
 	drain_workqueue(prestera_owq);
 }
 
@@ -1506,7 +1506,7 @@ static int __init prestera_module_init(void)
 
 	prestera_owq = alloc_ordered_workqueue("prestera_ordered", 0);
 	if (!prestera_owq) {
-		destroy_workqueue(prestera_wq);
+		cpu_accel_destroy_workqueue(prestera_wq);
 		return -ENOMEM;
 	}
 
@@ -1515,7 +1515,7 @@ static int __init prestera_module_init(void)
 
 static void __exit prestera_module_exit(void)
 {
-	destroy_workqueue(prestera_wq);
+	cpu_accel_destroy_workqueue(prestera_wq);
 	destroy_workqueue(prestera_owq);
 }
 

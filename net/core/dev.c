@@ -80,6 +80,7 @@
 #include <linux/sched/isolation.h>
 #include <linux/sched/mm.h>
 #include <linux/smpboot.h>
+#include <linux/smp.h>
 #include <linux/mutex.h>
 #include <linux/rwsem.h>
 #include <linux/string.h>
@@ -6640,7 +6641,9 @@ static void flush_all_backlogs(void)
 	for_each_online_cpu(cpu) {
 		if (flush_required(cpu)) {
 			INIT_WORK(&ptr->w[cpu], flush_backlog);
+			arch_smp_sync_wait_begin(cpu);
 			queue_work_on(cpu, system_highpri_wq, &ptr->w[cpu]);
+			arch_smp_sync_wait_stop(cpu);
 			__cpumask_set_cpu(cpu, &ptr->flush_cpus);
 		}
 	}
@@ -6649,8 +6652,10 @@ static void flush_all_backlogs(void)
 	 * synchronize_net() in unregister_netdevice_many() will take care of
 	 * them.
 	 */
-	for_each_cpu(cpu, &ptr->flush_cpus)
+	for_each_cpu(cpu, &ptr->flush_cpus) {
 		flush_work(&ptr->w[cpu]);
+		arch_smp_sync_wait_end(cpu);
+	}
 
 	cpus_read_unlock();
 

@@ -20,6 +20,7 @@
 #include <linux/random.h>
 #include <linux/memory.h>
 
+#include <asm/cpu_accel.h>
 #include <asm/text-patching.h>
 #include <asm/page.h>
 #include <asm/setup.h>
@@ -187,7 +188,7 @@ static int write_relocate_add(Elf64_Shdr *sechdrs,
 
 	if (!early) {
 		write = text_poke;
-		mutex_lock(&text_mutex);
+		x86_cpu_accel_text_mutex_lock();
 	}
 
 	ret = __write_relocate_add(sechdrs, strtab, symindex, relsec, me,
@@ -195,7 +196,7 @@ static int write_relocate_add(Elf64_Shdr *sechdrs,
 
 	if (!early) {
 		smp_text_poke_sync_each_cpu();
-		mutex_unlock(&text_mutex);
+		x86_cpu_accel_text_mutex_unlock();
 	}
 
 	return ret;

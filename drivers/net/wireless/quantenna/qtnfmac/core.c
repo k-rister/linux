@@ -803,7 +803,7 @@ void qtnf_core_detach(struct qtnf_bus *bus)
 	}
 
 	if (bus->hprio_workqueue) {
-		destroy_workqueue(bus->hprio_workqueue);
+		cpu_accel_destroy_workqueue(bus->hprio_workqueue);
 		bus->hprio_workqueue = NULL;
 	}
 

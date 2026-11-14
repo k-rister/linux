@@ -8,6 +8,7 @@
 #include <linux/sched.h>
 
 #include <asm/barrier.h>
+#include <asm/cpu_accel.h>
 #include <asm/processor.h>
 #include <asm/cpufeature.h>
 #include <asm/special_insns.h>
@@ -256,6 +257,11 @@ struct flush_tlb_info {
 	u8			stride_shift;
 	u8			freed_tables;
 	u8			trim_cpumask;
+	/* Batched unmap: defer only owners whose current mm is unaffected. */
+	u8			accel_tlb_unmap_batch;
+	/* One reclaim handoff may additionally defer its registered owners. */
+	struct x86_cpu_accel_tlb_reclaim_completion
+			*accel_tlb_reclaim_completion;
 } __aligned(FLUSH_TLB_INFO_ALIGN);
 
 void flush_tlb_local(void);
@@ -345,6 +351,10 @@ extern void flush_tlb_all(void);
 extern void flush_tlb_mm_range(struct mm_struct *mm, unsigned long start,
 				unsigned long end, unsigned int stride_shift,
 				bool freed_tables);
+bool flush_tlb_mm_range_completion(struct mm_struct *mm,
+				   unsigned long start, unsigned long end,
+				   unsigned int stride_shift, bool freed_tables,
+				   void *completion_data);
 extern void flush_tlb_kernel_range(unsigned long start, unsigned long end);
 
 static inline void flush_tlb_page(struct vm_area_struct *vma, unsigned long a)
@@ -364,6 +374,16 @@ static inline bool arch_tlbbatch_should_defer(struct mm_struct *mm)
 	return should_defer;
 }
 
+static inline void arch_tlbbatch_unmap_begin(struct mm_struct *mm)
+{
+	x86_cpu_accel_tlb_unmap_begin(mm);
+}
+
+static inline void arch_tlbbatch_unmap_end(struct mm_struct *mm)
+{
+	x86_cpu_accel_tlb_unmap_end(mm);
+}
+
 static inline u64 inc_mm_tlb_gen(struct mm_struct *mm)
 {
 	/*
@@ -378,13 +398,20 @@ static inline u64 inc_mm_tlb_gen(struct mm_struct *mm)
 static inline void arch_tlbbatch_add_pending(struct arch_tlbflush_unmap_batch *batch,
 		struct mm_struct *mm, unsigned long start, unsigned long end)
 {
-	inc_mm_tlb_gen(mm);
+	u64 tlb_gen = inc_mm_tlb_gen(mm);
+
+	/* Keep active owners of this mm from deferring its own stale mappings. */
+	x86_cpu_accel_note_tlb_unmap(mm, tlb_gen);
 	cpumask_or(&batch->cpumask, &batch->cpumask, mm_cpumask(mm));
 	batch->unmapped_pages = true;
 	mmu_notifier_arch_invalidate_secondary_tlbs(mm, 0, -1UL);
 }
 
 extern void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch);
+bool arch_tlbbatch_flush_reclaim(struct arch_tlbflush_unmap_batch *batch,
+				 struct x86_cpu_accel_tlb_reclaim_completion *completion,
+				 void *data,
+				 const struct mmu_owner_subscription_ops *ops);
 
 static inline bool pte_flags_need_flush(unsigned long oldflags,
 					unsigned long newflags,

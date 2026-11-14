@@ -824,7 +824,8 @@ void cn10k_ipsec_clean(struct otx2_nic *pf)
 		return;
 
 	if (pf->ipsec.sa_workq) {
-		destroy_workqueue(pf->ipsec.sa_workq);
+		cpu_accel_drain_workqueue(pf->ipsec.sa_workq);
+		cpu_accel_destroy_workqueue(pf->ipsec.sa_workq);
 		pf->ipsec.sa_workq = NULL;
 	}
 

@@ -1909,7 +1909,7 @@ out_with_mempool:
 out_with_kcopyd:
 	dm_kcopyd_client_destroy(clone->kcopyd_client);
 out_with_wq:
-	destroy_workqueue(clone->wq);
+	cpu_accel_destroy_workqueue(clone->wq);
 out_with_ht:
 	hash_table_exit(clone);
 out_with_metadata:
@@ -1940,7 +1940,7 @@ static void clone_dtr(struct dm_target *ti)
 	mempool_exit(&clone->hydration_pool);
 	dm_kcopyd_client_destroy(clone->kcopyd_client);
 	cancel_delayed_work_sync(&clone->waker);
-	destroy_workqueue(clone->wq);
+	cpu_accel_destroy_workqueue(clone->wq);
 	hash_table_exit(clone);
 	dm_clone_metadata_close(clone->cmd);
 	dm_put_device(ti, clone->source_dev);
@@ -1985,7 +1985,7 @@ static void clone_postsuspend(struct dm_target *ti)
 	smp_mb__after_atomic();
 
 	wait_event(clone->hydration_stopped, !atomic_read(&clone->hydrations_in_flight));
-	flush_workqueue(clone->wq);
+	cpu_accel_flush_workqueue(clone->wq);
 
 	(void) commit_metadata(clone, NULL);
 }

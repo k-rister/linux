@@ -10,6 +10,7 @@
 #include <linux/spinlock.h>
 #include <linux/module.h>
 #include <linux/list.h>
+#include <linux/workqueue.h>
 #include <linux/virtio_vsock.h>
 
 struct vsock_loopback {
@@ -164,7 +165,7 @@ static int __init vsock_loopback_init(void)
 	return 0;
 
 out_wq:
-	destroy_workqueue(vsock->workqueue);
+	cpu_accel_destroy_workqueue(vsock->workqueue);
 	return ret;
 }
 
@@ -178,7 +179,7 @@ static void __exit vsock_loopback_exit(void)
 
 	virtio_vsock_skb_queue_purge(&vsock->pkt_queue);
 
-	destroy_workqueue(vsock->workqueue);
+	cpu_accel_destroy_workqueue(vsock->workqueue);
 }
 
 module_init(vsock_loopback_init);

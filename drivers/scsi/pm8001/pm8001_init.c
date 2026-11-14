@@ -197,7 +197,7 @@ static void pm8001_free(struct pm8001_hba_info *pm8001_ha)
 			}
 	}
 	PM8001_CHIP_DISP->chip_iounmap(pm8001_ha);
-	flush_workqueue(pm8001_wq);
+	cpu_accel_flush_workqueue(pm8001_wq);
 	bitmap_free(pm8001_ha->rsvd_tags);
 	kfree(pm8001_ha);
 }
@@ -1339,7 +1339,7 @@ static int __maybe_unused pm8001_pci_suspend(struct device *dev)
 	struct pm8001_hba_info *pm8001_ha = sha->lldd_ha;
 
 	sas_suspend_ha(sha);
-	flush_workqueue(pm8001_wq);
+	cpu_accel_flush_workqueue(pm8001_wq);
 	scsi_block_requests(pm8001_ha->shost);
 	if (!pdev->pm_cap) {
 		dev_err(dev, " PCI PM not supported\n");
@@ -1550,7 +1550,7 @@ static int __init pm8001_init(void)
 err_tp:
 	sas_release_transport(pm8001_stt);
 err_wq:
-	destroy_workqueue(pm8001_wq);
+	cpu_accel_destroy_workqueue(pm8001_wq);
 err:
 	return rc;
 }
@@ -1559,7 +1559,7 @@ static void __exit pm8001_exit(void)
 {
 	pci_unregister_driver(&pm8001_pci_driver);
 	sas_release_transport(pm8001_stt);
-	destroy_workqueue(pm8001_wq);
+	cpu_accel_destroy_workqueue(pm8001_wq);
 }
 
 module_init(pm8001_init);

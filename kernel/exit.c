@@ -52,6 +52,9 @@
 #include <linux/fs_struct.h>
 #include <linux/init_task.h>
 #include <linux/perf_event.h>
+#ifdef CONFIG_CPU_ACCEL_CORE
+#include <trace/events/cpu_accel.h>
+#endif
 #include <trace/events/sched.h>
 #include <linux/hw_breakpoint.h>
 #include <linux/oom.h>
@@ -951,6 +954,9 @@ void __noreturn do_exit(long code)
 	io_uring_files_cancel();
 	sched_mm_cid_exit(tsk);
 	exit_signals(tsk);  /* sets PF_EXITING */
+#ifdef CONFIG_CPU_ACCEL_CORE
+	trace_cpu_accel_process_exit_early(tsk);
+#endif
 
 	seccomp_filter_release(tsk);
 
@@ -2037,4 +2043,6 @@ __weak __function_aligned void abort(void)
 	/* if that doesn't kill us, halt */
 	panic("Oops failed to kill thread");
 }
+
+EXPORT_TRACEPOINT_SYMBOL_GPL(sched_process_exit);
 EXPORT_SYMBOL(abort);

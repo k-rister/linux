@@ -1691,7 +1691,7 @@ static void work_stop(void)
 	}
 
 	if (process_workqueue) {
-		destroy_workqueue(process_workqueue);
+		cpu_accel_destroy_workqueue(process_workqueue);
 		process_workqueue = NULL;
 	}
 }
@@ -1735,7 +1735,7 @@ void dlm_lowcomms_shutdown(void)
 				srcu_read_lock_held(&connections_srcu)) {
 			shutdown_connection(con, true);
 			stop_connection_io(con);
-			flush_workqueue(process_workqueue);
+			cpu_accel_flush_workqueue(process_workqueue);
 			close_connection(con, true);
 
 			clean_one_writequeue(con);

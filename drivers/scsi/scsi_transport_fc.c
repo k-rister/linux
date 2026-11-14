@@ -2849,7 +2849,7 @@ fc_flush_work(struct Scsi_Host *shost)
 		return;
 	}
 
-	flush_workqueue(fc_host_work_q(shost));
+	cpu_accel_flush_workqueue(fc_host_work_q(shost));
 }
 
 /**
@@ -2894,7 +2894,7 @@ fc_flush_devloss(struct Scsi_Host *shost, struct fc_rport *rport)
 		return;
 	}
 
-	flush_workqueue(rport->devloss_work_q);
+	cpu_accel_flush_workqueue(rport->devloss_work_q);
 }
 
 
@@ -2954,7 +2954,7 @@ fc_remove_host(struct Scsi_Host *shost)
 	if (fc_host->work_q) {
 		work_q = fc_host->work_q;
 		fc_host->work_q = NULL;
-		destroy_workqueue(work_q);
+		cpu_accel_destroy_workqueue(work_q);
 	}
 }
 EXPORT_SYMBOL(fc_remove_host);
@@ -3061,7 +3061,7 @@ fc_rport_final_delete(struct work_struct *work)
 	if (rport->devloss_work_q) {
 		work_q = rport->devloss_work_q;
 		rport->devloss_work_q = NULL;
-		destroy_workqueue(work_q);
+		cpu_accel_destroy_workqueue(work_q);
 	}
 
 	transport_remove_device(dev);

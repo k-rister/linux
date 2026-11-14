@@ -6331,7 +6331,7 @@ struct mddev *md_alloc(dev_t dev, char *name)
 	 * Wait for any previous instance of this device to be completely
 	 * removed (mddev_delayed_delete).
 	 */
-	flush_workqueue(md_misc_wq);
+	cpu_accel_flush_workqueue(md_misc_wq);
 
 	mutex_lock(&disks_mutex);
 	mddev = mddev_alloc(dev);
@@ -10783,7 +10783,7 @@ static int __init md_init(void)
 err_mdp:
 	unregister_blkdev(MD_MAJOR, "md");
 err_md:
-	destroy_workqueue(md_misc_wq);
+	cpu_accel_destroy_workqueue(md_misc_wq);
 err_misc_wq:
 	md_llbitmap_exit();
 err_bitmap:
@@ -11092,7 +11092,7 @@ static __exit void md_exit(void)
 	}
 	spin_unlock(&all_mddevs_lock);
 
-	destroy_workqueue(md_misc_wq);
+	cpu_accel_destroy_workqueue(md_misc_wq);
 	md_bitmap_exit();
 }
 

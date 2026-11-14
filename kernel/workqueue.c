@@ -43,6 +43,7 @@
 #include <linux/debug_locks.h>
 #include <linux/device/devres.h>
 #include <linux/lockdep.h>
+#include <linux/smp.h>
 #include <linux/idr.h>
 #include <linux/jhash.h>
 #include <linux/hashtable.h>
@@ -505,6 +506,37 @@ static DEFINE_PER_CPU_SHARED_ALIGNED(struct worker_pool [NR_STD_WORKER_POOLS], b
 /* the per-cpu worker pools */
 static DEFINE_PER_CPU_SHARED_ALIGNED(struct worker_pool [NR_STD_WORKER_POOLS], cpu_worker_pools);
 
+#ifdef CONFIG_CPU_ACCEL_CORE
+/* CPUs owned by an accelerator must not receive unbound workqueue work. */
+static DEFINE_PER_CPU(atomic_t, workqueue_accel_reserved);
+
+bool workqueue_accel_cpu_reserved(unsigned int cpu)
+{
+	if (cpu >= nr_cpu_ids)
+		return false;
+	return atomic_read(per_cpu_ptr(&workqueue_accel_reserved, cpu));
+}
+EXPORT_SYMBOL_GPL(workqueue_accel_cpu_reserved);
+
+int workqueue_accel_cpu_reserve(unsigned int cpu)
+{
+	if (cpu >= nr_cpu_ids)
+		return -EINVAL;
+	if (atomic_cmpxchg(per_cpu_ptr(&workqueue_accel_reserved, cpu),
+			  0, 1))
+		return -EBUSY;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(workqueue_accel_cpu_reserve);
+
+void workqueue_accel_cpu_release(unsigned int cpu)
+{
+	if (cpu < nr_cpu_ids)
+		atomic_set(per_cpu_ptr(&workqueue_accel_reserved, cpu), 0);
+}
+EXPORT_SYMBOL_GPL(workqueue_accel_cpu_release);
+#endif
+
 static DEFINE_IDR(worker_pool_idr);	/* PR: idr of all pools */
 
 /* PL: hash of all unbound pools keyed by pool->attrs */
@@ -555,6 +587,8 @@ static void show_one_worker_pool(struct worker_pool *pool);
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/workqueue.h>
+EXPORT_TRACEPOINT_SYMBOL_GPL(workqueue_queue_work);
+EXPORT_TRACEPOINT_SYMBOL_GPL(workqueue_execute_start);
 
 #define assert_rcu_or_pool_mutex()					\
 	RCU_LOCKDEP_WARN(!rcu_read_lock_any_held() &&			\
@@ -2300,22 +2334,47 @@ static bool is_chained_work(struct workqueue_struct *wq)
  */
 static int wq_select_unbound_cpu(int cpu)
 {
-	int new_cpu;
+	int new_cpu, first_cpu;
 
-	if (likely(!wq_debug_force_rr_cpu)) {
+	if (likely(!wq_debug_force_rr_cpu) &&
+	    !workqueue_accel_cpu_reserved(cpu)) {
 		if (cpumask_test_cpu(cpu, wq_unbound_cpumask))
 			return cpu;
 	} else {
 		pr_warn_once("workqueue: round-robin CPU selection forced, expect performance impact\n");
 	}
 
-	new_cpu = __this_cpu_read(wq_rr_cpu_last);
-	new_cpu = cpumask_next_and_wrap(new_cpu, wq_unbound_cpumask, cpu_online_mask);
-	if (unlikely(new_cpu >= nr_cpu_ids))
+	first_cpu = cpumask_first_and(wq_unbound_cpumask, cpu_online_mask);
+	if (unlikely(first_cpu >= nr_cpu_ids))
 		return cpu;
-	__this_cpu_write(wq_rr_cpu_last, new_cpu);
 
-	return new_cpu;
+	new_cpu = __this_cpu_read(wq_rr_cpu_last);
+	new_cpu = cpumask_next_and_wrap(new_cpu, wq_unbound_cpumask,
+					cpu_online_mask);
+	if (new_cpu >= nr_cpu_ids)
+		new_cpu = first_cpu;
+
+	for (;;) {
+		if (!workqueue_accel_cpu_reserved(new_cpu)) {
+			__this_cpu_write(wq_rr_cpu_last, new_cpu);
+			return new_cpu;
+		}
+		new_cpu = cpumask_next_and_wrap(new_cpu, wq_unbound_cpumask,
+						cpu_online_mask);
+		if (new_cpu >= nr_cpu_ids)
+			new_cpu = first_cpu;
+		if (new_cpu == first_cpu)
+			break;
+	}
+
+	/* The wraparound candidate still needs to be checked. */
+	if (!workqueue_accel_cpu_reserved(first_cpu)) {
+		__this_cpu_write(wq_rr_cpu_last, first_cpu);
+		return first_cpu;
+	}
+
+	/* All eligible CPUs are reserved; leave the work deferred on @cpu. */
+	return cpu;
 }
 
 static void __queue_work(int cpu, struct workqueue_struct *wq,
@@ -2374,6 +2433,9 @@ retry:
 		else
 			cpu = raw_smp_processor_id();
 	}
+	if ((wq->flags & WQ_UNBOUND) &&
+	    workqueue_accel_cpu_reserved(cpu))
+		cpu = wq_select_unbound_cpu(cpu);
 
 	pwq = rcu_dereference(*per_cpu_ptr(wq->cpu_pwq, cpu));
 	pool = pwq->pool;
@@ -4288,6 +4350,52 @@ out_unlock:
 }
 EXPORT_SYMBOL(__flush_workqueue);
 
+static bool workqueue_sync_wait_begin(struct workqueue_struct *wq)
+{
+	unsigned int cpu;
+
+	if (!(wq->flags & WQ_PERCPU))
+		return false;
+
+	for_each_possible_cpu(cpu)
+		arch_smp_sync_wait_begin(cpu);
+	for_each_possible_cpu(cpu)
+		arch_smp_sync_wait_stop(cpu);
+
+	return true;
+}
+
+static void workqueue_sync_wait_end(void)
+{
+	unsigned int cpu;
+
+	for_each_possible_cpu(cpu)
+		arch_smp_sync_wait_end(cpu);
+}
+
+#ifdef CONFIG_CPU_ACCEL_CORE
+/**
+ * cpu_accel_flush_workqueue - implement the sync-wait flush API
+ * @wq: workqueue to flush
+ *
+ * Like flush_workqueue(), but reserves every possible CPU and requests active
+ * owners to stop while flushing a per-CPU workqueue. This covers work that a
+ * reclaim rescuer may execute away from its pool CPU. Workqueues without
+ * WQ_PERCPU use the ordinary flush path. Because all possible CPUs are
+ * reserved for the duration, use this only when the flush may wait for
+ * per-CPU work that needs to run on an accelerator-owned CPU.
+ */
+void cpu_accel_flush_workqueue(struct workqueue_struct *wq)
+{
+	bool sync_wait = workqueue_sync_wait_begin(wq);
+
+	__flush_workqueue(wq);
+	if (sync_wait)
+		workqueue_sync_wait_end();
+}
+EXPORT_SYMBOL_GPL(cpu_accel_flush_workqueue);
+#endif
+
 /**
  * drain_workqueue - drain a workqueue
  * @wq: workqueue to drain
@@ -4343,8 +4451,31 @@ reflush:
 }
 EXPORT_SYMBOL_GPL(drain_workqueue);
 
+#ifdef CONFIG_CPU_ACCEL_CORE
+/**
+ * cpu_accel_drain_workqueue - drain a workqueue with owner coordination
+ * @wq: workqueue to drain
+ *
+ * Like drain_workqueue(), but reserves every possible CPU and requests active
+ * owners to stop while draining a per-CPU workqueue. Keep the reservations
+ * across all flush rounds so chained work retains the usual drain semantics.
+ * Workqueues without WQ_PERCPU use the ordinary drain path. Because all
+ * possible CPUs are reserved for the duration, use this only when draining
+ * the queue may wait for work that needs to run on an accelerator-owned CPU.
+ */
+void cpu_accel_drain_workqueue(struct workqueue_struct *wq)
+{
+	bool sync_wait = workqueue_sync_wait_begin(wq);
+
+	drain_workqueue(wq);
+	if (sync_wait)
+		workqueue_sync_wait_end();
+}
+EXPORT_SYMBOL_GPL(cpu_accel_drain_workqueue);
+#endif
+
 static bool start_flush_work(struct work_struct *work, struct wq_barrier *barr,
-			     bool from_cancel)
+			     bool from_cancel, bool sync_wait, int *cpu)
 {
 	struct worker *worker = NULL;
 	struct worker_pool *pool;
@@ -4372,7 +4503,11 @@ static bool start_flush_work(struct work_struct *work, struct wq_barrier *barr,
 	}
 
 	wq = pwq->wq;
+	/* A rescuer may execute this work away from the pool's associated CPU. */
+	*cpu = wq->rescuer ? WORK_CPU_UNBOUND : pool->cpu;
 	check_flush_dependency(wq, work, from_cancel);
+	if (sync_wait && *cpu >= 0 && *cpu < nr_cpu_ids)
+		arch_smp_sync_wait_begin(*cpu);
 
 	insert_wq_barrier(pwq, barr, work, worker);
 	raw_spin_unlock_irq(&pool->lock);
@@ -4399,9 +4534,11 @@ already_gone:
 	return false;
 }
 
-static bool __flush_work(struct work_struct *work, bool from_cancel)
+static bool __flush_work(struct work_struct *work, bool from_cancel,
+			 bool sync_wait)
 {
 	struct wq_barrier barr;
+	int cpu;
 
 	if (WARN_ON(!wq_online))
 		return false;
@@ -4409,8 +4546,11 @@ static bool __flush_work(struct work_struct *work, bool from_cancel)
 	if (WARN_ON(!work->func))
 		return false;
 
-	if (!start_flush_work(work, &barr, from_cancel))
+	if (!start_flush_work(work, &barr, from_cancel, sync_wait, &cpu))
 		return false;
+
+	if (sync_wait && cpu >= 0 && cpu < nr_cpu_ids)
+		arch_smp_sync_wait_stop(cpu);
 
 	/*
 	 * start_flush_work() returned %true. If @from_cancel is set, we know
@@ -4448,6 +4588,8 @@ static bool __flush_work(struct work_struct *work, bool from_cancel)
 	wait_for_completion(&barr.done);
 
 out_destroy:
+	if (sync_wait && cpu >= 0 && cpu < nr_cpu_ids)
+		arch_smp_sync_wait_end(cpu);
 	destroy_work_on_stack(&barr.work);
 	return true;
 }
@@ -4466,9 +4608,19 @@ out_destroy:
 bool flush_work(struct work_struct *work)
 {
 	might_sleep();
-	return __flush_work(work, false);
+	return __flush_work(work, false, true);
 }
 EXPORT_SYMBOL_GPL(flush_work);
+
+static bool __flush_delayed_work(struct delayed_work *dwork, bool sync_wait)
+{
+	local_irq_disable();
+	if (timer_delete_sync(&dwork->timer))
+		__queue_work(dwork->cpu, dwork->wq, &dwork->work);
+	local_irq_enable();
+	might_sleep();
+	return __flush_work(&dwork->work, false, sync_wait);
+}
 
 /**
  * flush_delayed_work - wait for a dwork to finish executing the last queueing
@@ -4484,14 +4636,9 @@ EXPORT_SYMBOL_GPL(flush_work);
  */
 bool flush_delayed_work(struct delayed_work *dwork)
 {
-	local_irq_disable();
-	if (timer_delete_sync(&dwork->timer))
-		__queue_work(dwork->cpu, dwork->wq, &dwork->work);
-	local_irq_enable();
-	return flush_work(&dwork->work);
+	return __flush_delayed_work(dwork, true);
 }
 EXPORT_SYMBOL(flush_delayed_work);
-
 /**
  * flush_rcu_work - wait for a rwork to finish executing the last queueing
  * @rwork: the rcu work to flush
@@ -4499,6 +4646,9 @@ EXPORT_SYMBOL(flush_delayed_work);
  * Return:
  * %true if flush_rcu_work() waited for the work to finish execution,
  * %false if it was already idle.
+ *
+ * If @rwork was queued on a fixed-CPU workqueue, the flush coordinates with
+ * that CPU through the architecture synchronous CPU-wait hooks.
  */
 bool flush_rcu_work(struct rcu_work *rwork)
 {
@@ -4549,7 +4699,8 @@ static bool __cancel_work(struct work_struct *work, u32 cflags)
 	return ret;
 }
 
-static bool __cancel_work_sync(struct work_struct *work, u32 cflags)
+static bool __cancel_work_sync(struct work_struct *work, u32 cflags,
+			       bool sync_wait)
 {
 	bool ret;
 
@@ -4565,7 +4716,7 @@ static bool __cancel_work_sync(struct work_struct *work, u32 cflags)
 	 * executing. This allows canceling during early boot.
 	 */
 	if (wq_online)
-		__flush_work(work, true);
+		__flush_work(work, true, sync_wait);
 
 	if (!(cflags & WORK_CANCEL_DISABLE))
 		enable_work(work);
@@ -4602,7 +4753,7 @@ EXPORT_SYMBOL(cancel_work);
  */
 bool cancel_work_sync(struct work_struct *work)
 {
-	return __cancel_work_sync(work, 0);
+	return __cancel_work_sync(work, 0, true);
 }
 EXPORT_SYMBOL_GPL(cancel_work_sync);
 
@@ -4639,10 +4790,9 @@ EXPORT_SYMBOL(cancel_delayed_work);
  */
 bool cancel_delayed_work_sync(struct delayed_work *dwork)
 {
-	return __cancel_work_sync(&dwork->work, WORK_CANCEL_DELAYED);
+	return __cancel_work_sync(&dwork->work, WORK_CANCEL_DELAYED, true);
 }
 EXPORT_SYMBOL(cancel_delayed_work_sync);
-
 /**
  * disable_work - Disable and cancel a work item
  * @work: work item to disable
@@ -4676,7 +4826,7 @@ EXPORT_SYMBOL_GPL(disable_work);
  */
 bool disable_work_sync(struct work_struct *work)
 {
-	return __cancel_work_sync(work, WORK_CANCEL_DISABLE);
+	return __cancel_work_sync(work, WORK_CANCEL_DISABLE, true);
 }
 EXPORT_SYMBOL_GPL(disable_work_sync);
 
@@ -4729,7 +4879,7 @@ EXPORT_SYMBOL_GPL(disable_delayed_work);
 bool disable_delayed_work_sync(struct delayed_work *dwork)
 {
 	return __cancel_work_sync(&dwork->work,
-				  WORK_CANCEL_DELAYED | WORK_CANCEL_DISABLE);
+				  WORK_CANCEL_DELAYED | WORK_CANCEL_DISABLE, true);
 }
 EXPORT_SYMBOL_GPL(disable_delayed_work_sync);
 
@@ -4771,11 +4921,15 @@ int schedule_on_each_cpu(work_func_t func)
 		struct work_struct *work = per_cpu_ptr(works, cpu);
 
 		INIT_WORK(work, func);
+		arch_smp_sync_wait_begin(cpu);
 		schedule_work_on(cpu, work);
+		arch_smp_sync_wait_stop(cpu);
 	}
 
-	for_each_online_cpu(cpu)
-		flush_work(per_cpu_ptr(works, cpu));
+	for_each_online_cpu(cpu) {
+		__flush_work(per_cpu_ptr(works, cpu), false, false);
+		arch_smp_sync_wait_end(cpu);
+	}
 
 	cpus_read_unlock();
 	free_percpu(works);
@@ -6055,7 +6209,7 @@ EXPORT_SYMBOL_GPL(alloc_workqueue_noprof);
 
 static void devm_workqueue_release(void *res)
 {
-	destroy_workqueue(res);
+	cpu_accel_destroy_workqueue(res);
 }
 
 __printf(2, 5) struct workqueue_struct *
@@ -6135,9 +6289,10 @@ static bool pwq_busy(struct pool_workqueue *pwq)
  * destroy_workqueue() would cleanly cancel all pending and non-pending
  * delayed_work.
  */
-void destroy_workqueue(struct workqueue_struct *wq)
+static void __destroy_workqueue(struct workqueue_struct *wq, bool sync_wait)
 {
 	struct pool_workqueue *pwq;
+	bool sync_waiting;
 	int cpu;
 
 	/*
@@ -6151,8 +6306,11 @@ void destroy_workqueue(struct workqueue_struct *wq)
 	wq->flags |= __WQ_DESTROYING;
 	mutex_unlock(&wq->mutex);
 
-	/* drain it before proceeding with destruction */
+	/* Drain before proceeding with destruction. */
+	sync_waiting = sync_wait && workqueue_sync_wait_begin(wq);
 	drain_workqueue(wq);
+	if (sync_waiting)
+		workqueue_sync_wait_end();
 
 	/* kill rescuer, if sanity checks fail, leave it w/o rescuer */
 	if (wq->rescuer) {
@@ -6208,7 +6366,29 @@ void destroy_workqueue(struct workqueue_struct *wq)
 
 	rcu_read_unlock();
 }
+
+void destroy_workqueue(struct workqueue_struct *wq)
+{
+	__destroy_workqueue(wq, false);
+}
 EXPORT_SYMBOL_GPL(destroy_workqueue);
+
+#ifdef CONFIG_CPU_ACCEL_CORE
+/**
+ * cpu_accel_destroy_workqueue - destroy a workqueue with owner coordination
+ * @wq: target workqueue
+ *
+ * Like destroy_workqueue(), but requests active owners to stop while draining
+ * a per-CPU workqueue. Workqueues without WQ_PERCPU use the ordinary drain
+ * path. Use this only when destroying the queue may wait for work that needs
+ * to run on an accelerator-owned CPU.
+ */
+void cpu_accel_destroy_workqueue(struct workqueue_struct *wq)
+{
+	__destroy_workqueue(wq, true);
+}
+EXPORT_SYMBOL_GPL(cpu_accel_destroy_workqueue);
+#endif
 
 /**
  * workqueue_set_max_active - adjust max_active of a workqueue
@@ -7064,10 +7244,22 @@ long work_on_cpu_key(int cpu, long (*fn)(void *),
 		     void *arg, struct lock_class_key *key)
 {
 	struct work_for_cpu wfc = { .fn = fn, .arg = arg };
+	bool accel_wait;
 
 	INIT_WORK_ONSTACK_KEY(&wfc.work, work_for_cpu_fn, key);
+	/* Keep an active accelerator owner from starving the queued work. */
+	get_cpu();
+	accel_wait = cpu != raw_smp_processor_id();
+	if (accel_wait)
+		arch_smp_sync_wait_begin(cpu);
 	schedule_work_on(cpu, &wfc.work);
-	flush_work(&wfc.work);
+	if (accel_wait)
+		arch_smp_sync_wait_stop(cpu);
+	put_cpu();
+
+	__flush_work(&wfc.work, false, false);
+	if (accel_wait)
+		arch_smp_sync_wait_end(cpu);
 	destroy_work_on_stack(&wfc.work);
 	return wfc.ret;
 }

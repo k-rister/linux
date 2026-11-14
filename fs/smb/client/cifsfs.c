@@ -307,9 +307,9 @@ static void cifs_kill_sb(struct super_block *sb)
 		cifs_close_all_deferred_files_sb(cifs_sb);
 
 		/* Wait for all pending oplock breaks to complete */
-		flush_workqueue(cifsoplockd_wq);
+		cpu_accel_flush_workqueue(cifsoplockd_wq);
 		/* Wait for all opened files to release */
-		flush_workqueue(deferredclose_wq);
+		cpu_accel_flush_workqueue(deferredclose_wq);
 
 		/*
 		 * Wait for all in-flight netfs I/O requests to finish their
@@ -320,7 +320,7 @@ static void cifs_kill_sb(struct super_block *sb)
 		 */
 		wait_var_event(&cifs_sb->outstanding_rreq,
 			       !atomic_read(&cifs_sb->outstanding_rreq));
-		flush_workqueue(serverclose_wq);
+		cpu_accel_flush_workqueue(serverclose_wq);
 		flush_workqueue(fileinfo_put_wq);
 
 		/* finally release root dentry */
@@ -2168,19 +2168,19 @@ out_destroy_netfs:
 out_destroy_inodecache:
 	cifs_destroy_inodecache();
 out_destroy_cfid_put_wq:
-	destroy_workqueue(cfid_put_wq);
+	cpu_accel_destroy_workqueue(cfid_put_wq);
 out_destroy_serverclose_wq:
-	destroy_workqueue(serverclose_wq);
+	cpu_accel_destroy_workqueue(serverclose_wq);
 out_destroy_deferredclose_wq:
-	destroy_workqueue(deferredclose_wq);
+	cpu_accel_destroy_workqueue(deferredclose_wq);
 out_destroy_cifsoplockd_wq:
-	destroy_workqueue(cifsoplockd_wq);
+	cpu_accel_destroy_workqueue(cifsoplockd_wq);
 out_destroy_fileinfo_put_wq:
 	destroy_workqueue(fileinfo_put_wq);
 out_destroy_decrypt_wq:
 	destroy_workqueue(decrypt_wq);
 out_destroy_cifsiod_wq:
-	destroy_workqueue(cifsiod_wq);
+	cpu_accel_destroy_workqueue(cifsiod_wq);
 out_clean_proc:
 	cifs_proc_clean();
 	return rc;
@@ -2207,13 +2207,13 @@ exit_cifs(void)
 	destroy_mids();
 	cifs_destroy_netfs();
 	cifs_destroy_inodecache();
-	destroy_workqueue(deferredclose_wq);
-	destroy_workqueue(cifsoplockd_wq);
+	cpu_accel_destroy_workqueue(deferredclose_wq);
+	cpu_accel_destroy_workqueue(cifsoplockd_wq);
 	destroy_workqueue(decrypt_wq);
 	destroy_workqueue(fileinfo_put_wq);
-	destroy_workqueue(serverclose_wq);
-	destroy_workqueue(cfid_put_wq);
-	destroy_workqueue(cifsiod_wq);
+	cpu_accel_destroy_workqueue(serverclose_wq);
+	cpu_accel_destroy_workqueue(cfid_put_wq);
+	cpu_accel_destroy_workqueue(cifsiod_wq);
 	cifs_proc_clean();
 }
 

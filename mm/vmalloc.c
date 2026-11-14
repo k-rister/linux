@@ -40,6 +40,7 @@
 #include <linux/pgtable.h>
 #include <linux/hugetlb.h>
 #include <linux/sched/mm.h>
+#include <linux/smp.h>
 #include <asm/tlbflush.h>
 #include <asm/shmparam.h>
 #include <linux/page_owner.h>
@@ -2360,6 +2361,7 @@ static bool __purge_vmap_area_lazy(unsigned long start, unsigned long end,
 	unsigned long nr_purged_areas = 0;
 	unsigned int nr_purge_helpers;
 	static cpumask_t purge_nodes;
+	static cpumask_t purge_waiters;
 	unsigned int nr_purge_nodes;
 	struct vmap_node *vn;
 	int i;
@@ -2370,6 +2372,7 @@ static bool __purge_vmap_area_lazy(unsigned long start, unsigned long end,
 	 * Use cpumask to mark which node has to be processed.
 	 */
 	purge_nodes = CPU_MASK_NONE;
+	cpumask_clear(&purge_waiters);
 
 	for_each_vmap_node(vn) {
 		INIT_LIST_HEAD(&vn->purge_list);
@@ -2407,10 +2410,14 @@ static bool __purge_vmap_area_lazy(unsigned long start, unsigned long end,
 			if (nr_purge_helpers > 0) {
 				INIT_WORK(&vn->purge_work, purge_vmap_node);
 
-				if (cpumask_test_cpu(i, cpu_online_mask))
+				if (cpumask_test_cpu(i, cpu_online_mask)) {
+					arch_smp_sync_wait_begin(i);
+					cpumask_set_cpu(i, &purge_waiters);
 					schedule_work_on(i, &vn->purge_work);
-				else
+					arch_smp_sync_wait_stop(i);
+				} else {
 					schedule_work(&vn->purge_work);
+				}
 
 				nr_purge_helpers--;
 			} else {
@@ -2424,7 +2431,13 @@ static bool __purge_vmap_area_lazy(unsigned long start, unsigned long end,
 			vn = &vmap_nodes[i];
 
 			if (vn->purge_work.func) {
-				flush_work(&vn->purge_work);
+				if (cpumask_test_and_clear_cpu(i, &purge_waiters)) {
+					flush_work(&vn->purge_work);
+					arch_smp_sync_wait_end(i);
+				} else {
+					/* Offline nodes queue on the local system pool. */
+					flush_work(&vn->purge_work);
+				}
 				nr_purged_areas += vn->nr_purged;
 			}
 		}
@@ -4262,6 +4275,22 @@ void *vmalloc_user_noprof(unsigned long size)
 				    __builtin_return_address(0));
 }
 EXPORT_SYMBOL(vmalloc_user_noprof);
+
+/**
+ * vmalloc_user_node - allocate zeroed user-mappable memory on a NUMA node
+ * @size:	  size of allocation
+ * @node:	  numa node or NUMA_NO_NODE
+ *
+ * Return: pointer to virtual memory or %NULL.
+ */
+void *vmalloc_user_node_noprof(unsigned long size, int node)
+{
+	return __vmalloc_node_range_noprof(size, SHMLBA, VMALLOC_START,
+					   VMALLOC_END, GFP_KERNEL | __GFP_ZERO,
+					   PAGE_KERNEL, VM_USERMAP, node,
+					   __builtin_return_address(0));
+}
+EXPORT_SYMBOL(vmalloc_user_node_noprof);
 
 /**
  * vmalloc_node - allocate memory on a specific node

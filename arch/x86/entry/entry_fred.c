@@ -102,6 +102,7 @@ static idtentry_t sysvec_table[NR_SYSTEM_VECTORS] __ro_after_init = {
 	SYSVEC(SPURIOUS_APIC_VECTOR,		spurious_apic_interrupt),
 	SYSVEC(LOCAL_TIMER_VECTOR,		apic_timer_interrupt),
 	SYSVEC(X86_PLATFORM_IPI_VECTOR,		x86_platform_ipi),
+	SYSVEC(CPU_ACCEL_VECTOR,		cpu_accel),
 
 	SYSVEC(RESCHEDULE_VECTOR,		reschedule_ipi),
 	SYSVEC(CALL_FUNCTION_SINGLE_VECTOR,	call_function_single),

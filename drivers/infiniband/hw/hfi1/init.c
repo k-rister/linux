@@ -766,7 +766,7 @@ wq_error:
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		ppd = dd->pport + pidx;
 		if (ppd->hfi1_wq) {
-			destroy_workqueue(ppd->hfi1_wq);
+			cpu_accel_destroy_workqueue(ppd->hfi1_wq);
 			ppd->hfi1_wq = NULL;
 		}
 		if (ppd->link_wq) {
@@ -790,7 +790,7 @@ static void destroy_workqueues(struct hfi1_devdata *dd)
 		ppd = dd->pport + pidx;
 
 		if (ppd->hfi1_wq) {
-			destroy_workqueue(ppd->hfi1_wq);
+			cpu_accel_destroy_workqueue(ppd->hfi1_wq);
 			ppd->hfi1_wq = NULL;
 		}
 		if (ppd->link_wq) {
@@ -1058,7 +1058,7 @@ static void shutdown_device(struct hfi1_devdata *dd)
 		 */
 		hfi1_quiet_serdes(ppd);
 		if (ppd->hfi1_wq)
-			flush_workqueue(ppd->hfi1_wq);
+			cpu_accel_flush_workqueue(ppd->hfi1_wq);
 		if (ppd->link_wq)
 			flush_workqueue(ppd->link_wq);
 	}

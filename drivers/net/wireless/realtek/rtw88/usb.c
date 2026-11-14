@@ -1015,9 +1015,10 @@ static void rtw_usb_deinit_rx(struct rtw_dev *rtwdev)
 {
 	struct rtw_usb *rtwusb = rtw_get_usb_priv(rtwdev);
 
+	cpu_accel_drain_workqueue(rtwusb->rxwq);
 	skb_queue_purge(&rtwusb->rx_queue);
 
-	destroy_workqueue(rtwusb->rxwq);
+	cpu_accel_destroy_workqueue(rtwusb->rxwq);
 
 	skb_queue_purge(&rtwusb->rx_free_queue);
 }

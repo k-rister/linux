@@ -3879,7 +3879,7 @@ lpfc_offline_prep(struct lpfc_hba *phba, int mbx_action)
 	lpfc_sli_mbox_sys_shutdown(phba, mbx_action);
 
 	if (phba->wq)
-		flush_workqueue(phba->wq);
+		cpu_accel_flush_workqueue(phba->wq);
 }
 
 /**
@@ -5103,7 +5103,7 @@ lpfc_stop_port(struct lpfc_hba *phba)
 	phba->lpfc_stop_port(phba);
 
 	if (phba->wq)
-		flush_workqueue(phba->wq);
+		cpu_accel_flush_workqueue(phba->wq);
 }
 
 /**
@@ -8462,7 +8462,7 @@ out_free_bsmbx:
 out_free_mem:
 	lpfc_mem_free(phba);
 out_destroy_workqueue:
-	destroy_workqueue(phba->wq);
+	cpu_accel_destroy_workqueue(phba->wq);
 	phba->wq = NULL;
 	return rc;
 }
@@ -8606,7 +8606,7 @@ static void
 lpfc_unset_driver_resource_phase2(struct lpfc_hba *phba)
 {
 	if (phba->wq) {
-		destroy_workqueue(phba->wq);
+		cpu_accel_destroy_workqueue(phba->wq);
 		phba->wq = NULL;
 	}
 

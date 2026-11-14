@@ -7,6 +7,7 @@
 #include <linux/auxvec.h>
 #include <linux/kref.h>
 #include <linux/list.h>
+#include <linux/mmu_owner.h>
 #include <linux/spinlock.h>
 #include <linux/rbtree.h>
 #include <linux/maple_tree.h>
@@ -1379,6 +1380,11 @@ struct mm_struct {
 		atomic_long_t hugetlb_usage;
 #endif
 		struct work_struct async_put_work;
+
+		/* Non-task execution owners registered against this address space. */
+		raw_spinlock_t execution_owner_lock;
+		struct list_head execution_owners;
+		unsigned int execution_owner_update_depth;
 
 #ifdef CONFIG_IOMMU_MM_DATA
 		struct iommu_mm_data *iommu_mm;

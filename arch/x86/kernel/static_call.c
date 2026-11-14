@@ -2,6 +2,7 @@
 #include <linux/static_call.h>
 #include <linux/memory.h>
 #include <linux/bug.h>
+#include <asm/cpu_accel.h>
 #include <asm/text-patching.h>
 
 /* Declared locally to avoid pulling asm/paravirt-spinlock.h header. */
@@ -192,7 +193,7 @@ static inline enum insn_type __sc_insn(bool null, bool tail)
 
 void arch_static_call_transform(void *site, void *tramp, void *func, bool tail)
 {
-	mutex_lock(&text_mutex);
+	x86_cpu_accel_text_mutex_lock();
 
 	if (tramp && !site) {
 		__static_call_validate(tramp, true, true);
@@ -204,7 +205,7 @@ void arch_static_call_transform(void *site, void *tramp, void *func, bool tail)
 		__static_call_transform(site, __sc_insn(!func, tail), func, false);
 	}
 
-	mutex_unlock(&text_mutex);
+	x86_cpu_accel_text_mutex_unlock();
 }
 EXPORT_SYMBOL_GPL(arch_static_call_transform);
 
@@ -248,10 +249,10 @@ bool __static_call_fixup(void *tramp, u8 op, void *dest)
 		return false;
 	}
 
-	mutex_lock(&text_mutex);
+	x86_cpu_accel_text_mutex_lock();
 	if (op == RET_INSN_OPCODE || dest == &__x86_return_thunk)
 		__static_call_transform(tramp, RET, NULL, true);
-	mutex_unlock(&text_mutex);
+	x86_cpu_accel_text_mutex_unlock();
 
 	return true;
 }

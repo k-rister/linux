@@ -3553,11 +3553,11 @@ out_proto:
 out_core:
 	smc_core_exit();
 out_alloc_wqs:
-	destroy_workqueue(smc_close_wq);
+	cpu_accel_destroy_workqueue(smc_close_wq);
 out_alloc_hs_wq:
-	destroy_workqueue(smc_hs_wq);
+	cpu_accel_destroy_workqueue(smc_hs_wq);
 out_alloc_tcp_ls_wq:
-	destroy_workqueue(smc_tcp_ls_wq);
+	cpu_accel_destroy_workqueue(smc_tcp_ls_wq);
 out_pnet:
 	smc_pnet_exit();
 out_nl:
@@ -3581,9 +3581,9 @@ static void __exit smc_exit(void)
 	smc_core_exit();
 	smc_ib_unregister_client();
 	smc_ism_exit();
-	destroy_workqueue(smc_close_wq);
-	destroy_workqueue(smc_tcp_ls_wq);
-	destroy_workqueue(smc_hs_wq);
+	cpu_accel_destroy_workqueue(smc_close_wq);
+	cpu_accel_destroy_workqueue(smc_tcp_ls_wq);
+	cpu_accel_destroy_workqueue(smc_hs_wq);
 	proto_unregister(&smc_proto6);
 	proto_unregister(&smc_proto);
 	smc_pnet_exit();

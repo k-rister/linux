@@ -2132,7 +2132,7 @@ static DECLARE_DEFERRABLE_WORK(shepherd, vmstat_shepherd);
 
 void vmstat_flush_workqueue(void)
 {
-	flush_workqueue(mm_percpu_wq);
+	cpu_accel_flush_workqueue(mm_percpu_wq);
 }
 
 static void vmstat_shepherd(struct work_struct *w)

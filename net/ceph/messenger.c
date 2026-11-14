@@ -228,7 +228,7 @@ static void ceph_msgr_slab_exit(void)
 static void _ceph_msgr_exit(void)
 {
 	if (ceph_msgr_wq) {
-		destroy_workqueue(ceph_msgr_wq);
+		cpu_accel_destroy_workqueue(ceph_msgr_wq);
 		ceph_msgr_wq = NULL;
 	}
 
@@ -272,7 +272,7 @@ void ceph_msgr_exit(void)
 
 void ceph_msgr_flush(void)
 {
-	flush_workqueue(ceph_msgr_wq);
+	cpu_accel_flush_workqueue(ceph_msgr_wq);
 }
 EXPORT_SYMBOL(ceph_msgr_flush);
 

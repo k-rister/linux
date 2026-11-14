@@ -630,7 +630,7 @@ static void pci_epf_mhi_edma_flush_async(struct mhi_ep_cntrl *mhi_cntrl)
 
 	dmaengine_synchronize(epf_mhi->dma_chan_rx);
 	dmaengine_synchronize(epf_mhi->dma_chan_tx);
-	flush_workqueue(epf_mhi->dma_wq);
+	cpu_accel_flush_workqueue(epf_mhi->dma_wq);
 }
 
 struct epf_dma_filter {
@@ -703,7 +703,7 @@ err_release_tx:
 
 static void pci_epf_mhi_dma_deinit(struct pci_epf_mhi *epf_mhi)
 {
-	destroy_workqueue(epf_mhi->dma_wq);
+	cpu_accel_destroy_workqueue(epf_mhi->dma_wq);
 	dma_release_channel(epf_mhi->dma_chan_tx);
 	dma_release_channel(epf_mhi->dma_chan_rx);
 	epf_mhi->dma_chan_tx = NULL;

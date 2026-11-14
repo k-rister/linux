@@ -4159,7 +4159,7 @@ static void srp_remove_one(struct ib_device *device, void *client_data)
 		 * target->tl_err_work so waiting for the remove works to
 		 * finish is sufficient.
 		 */
-		flush_workqueue(srp_remove_wq);
+		cpu_accel_flush_workqueue(srp_remove_wq);
 
 		put_device(&host->dev);
 	}
@@ -4257,7 +4257,7 @@ release_tr:
 	srp_release_transport(ib_srp_transport_template);
 
 destroy_wq:
-	destroy_workqueue(srp_remove_wq);
+	cpu_accel_destroy_workqueue(srp_remove_wq);
 	goto out;
 }
 
@@ -4267,7 +4267,7 @@ static void __exit srp_cleanup_module(void)
 	ib_sa_unregister_client(&srp_sa_client);
 	class_unregister(&srp_class);
 	srp_release_transport(ib_srp_transport_template);
-	destroy_workqueue(srp_remove_wq);
+	cpu_accel_destroy_workqueue(srp_remove_wq);
 }
 
 module_init(srp_init_module);

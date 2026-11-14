@@ -3213,5 +3213,5 @@ int __init ata_sff_init(void)
 
 void ata_sff_exit(void)
 {
-	destroy_workqueue(ata_sff_wq);
+	cpu_accel_destroy_workqueue(ata_sff_wq);
 }

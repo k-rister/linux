@@ -1175,8 +1175,8 @@ void acpi_os_wait_events_complete(void)
 	 */
 	if (acpi_sci_irq_valid())
 		synchronize_hardirq(acpi_sci_irq);
-	flush_workqueue(kacpid_wq);
-	flush_workqueue(kacpi_notify_wq);
+	cpu_accel_flush_workqueue(kacpid_wq);
+	cpu_accel_flush_workqueue(kacpi_notify_wq);
 }
 EXPORT_SYMBOL(acpi_os_wait_events_complete);
 
@@ -1739,8 +1739,8 @@ acpi_status acpi_os_terminate(void)
 	if (acpi_gbl_FADT.flags & ACPI_FADT_RESET_REGISTER)
 		acpi_os_unmap_generic_address(&acpi_gbl_FADT.reset_register);
 
-	destroy_workqueue(kacpid_wq);
-	destroy_workqueue(kacpi_notify_wq);
+	cpu_accel_destroy_workqueue(kacpid_wq);
+	cpu_accel_destroy_workqueue(kacpi_notify_wq);
 	destroy_workqueue(kacpi_hotplug_wq);
 
 	return AE_OK;

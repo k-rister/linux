@@ -102,6 +102,8 @@ static struct mm_struct tboot_mm = {
 	.write_protect_seq = SEQCNT_ZERO(tboot_mm.write_protect_seq),
 	MMAP_LOCK_INITIALIZER(init_mm)
 	.page_table_lock =  __SPIN_LOCK_UNLOCKED(init_mm.page_table_lock),
+	.execution_owner_lock = __RAW_SPIN_LOCK_UNLOCKED(tboot_mm.execution_owner_lock),
+	.execution_owners = LIST_HEAD_INIT(tboot_mm.execution_owners),
 	.mmlist         = LIST_HEAD_INIT(init_mm.mmlist),
 };
 

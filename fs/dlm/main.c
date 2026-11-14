@@ -81,7 +81,7 @@ static int __init init_dlm(void)
 static void __exit exit_dlm(void)
 {
 	/* be sure every pending work e.g. freeing is done */
-	destroy_workqueue(dlm_wq);
+	cpu_accel_destroy_workqueue(dlm_wq);
 	dlm_plock_exit();
 	dlm_user_exit();
 	dlm_config_exit();

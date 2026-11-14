@@ -36,7 +36,7 @@ aoe_exit(void)
 	aoechr_exit();
 	aoedev_exit();
 	aoeblk_exit();		/* free cache after de-allocating bufs */
-	destroy_workqueue(aoe_wq);
+	cpu_accel_destroy_workqueue(aoe_wq);
 }
 
 static int __init
@@ -84,7 +84,7 @@ aoe_init(void)
  chr_fail:
 	aoedev_exit();
  dev_fail:
-	destroy_workqueue(aoe_wq);
+	cpu_accel_destroy_workqueue(aoe_wq);
 
 	printk(KERN_INFO "aoe: initialisation failure.\n");
 	return ret;

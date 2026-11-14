@@ -24,6 +24,7 @@
 #include <linux/memremap.h>
 #include <linux/percpu.h>
 #include <linux/cpu.h>
+#include <linux/smp.h>
 #include <linux/notifier.h>
 #include <linux/backing-dev.h>
 #include <linux/memcontrol.h>
@@ -859,13 +860,17 @@ static inline void __lru_add_drain_all(bool force_all_cpus)
 
 		if (cpu_needs_drain(cpu)) {
 			INIT_WORK(work, lru_add_drain_per_cpu);
+			arch_smp_sync_wait_begin(cpu);
 			queue_work_on(cpu, mm_percpu_wq, work);
+			arch_smp_sync_wait_stop(cpu);
 			__cpumask_set_cpu(cpu, &has_work);
 		}
 	}
 
-	for_each_cpu(cpu, &has_work)
+	for_each_cpu(cpu, &has_work) {
 		flush_work(&per_cpu(lru_add_drain_work, cpu));
+		arch_smp_sync_wait_end(cpu);
+	}
 
 done:
 	mutex_unlock(&lock);

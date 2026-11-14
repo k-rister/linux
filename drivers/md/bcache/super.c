@@ -1702,7 +1702,7 @@ static CLOSURE_CALLBACK(cache_set_free)
 
 
 	if (c->moving_gc_wq)
-		destroy_workqueue(c->moving_gc_wq);
+		cpu_accel_destroy_workqueue(c->moving_gc_wq);
 	bioset_exit(&c->bio_split);
 	mempool_exit(&c->fill_iter);
 	mempool_exit(&c->bio_meta);
@@ -2854,11 +2854,11 @@ static void bcache_exit(void)
 	if (bcache_kobj)
 		kobject_put(bcache_kobj);
 	if (bcache_wq)
-		destroy_workqueue(bcache_wq);
+		cpu_accel_destroy_workqueue(bcache_wq);
 	if (bch_journal_wq)
-		destroy_workqueue(bch_journal_wq);
+		cpu_accel_destroy_workqueue(bch_journal_wq);
 	if (bch_flush_wq)
-		destroy_workqueue(bch_flush_wq);
+		cpu_accel_destroy_workqueue(bch_flush_wq);
 	bch_btree_exit();
 
 	if (bcache_major)

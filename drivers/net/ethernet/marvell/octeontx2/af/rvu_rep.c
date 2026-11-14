@@ -392,6 +392,17 @@ int rvu_rep_install_mcam_rules(struct rvu *rvu)
 	return 0;
 }
 
+/* Call after AF-PF interrupts and mailbox work are quiesced. */
+void rvu_rep_exit(struct rvu *rvu)
+{
+	if (!rvu->rep_evt_wq)
+		return;
+
+	cpu_accel_drain_workqueue(rvu->rep_evt_wq);
+	cpu_accel_destroy_workqueue(rvu->rep_evt_wq);
+	rvu->rep_evt_wq = NULL;
+}
+
 void rvu_rep_update_rules(struct rvu *rvu, u16 pcifunc, bool ena)
 {
 	struct rvu_switch *rswitch = &rvu->rswitch;

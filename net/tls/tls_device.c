@@ -1371,7 +1371,7 @@ static int tls_device_down(struct net_device *netdev)
 
 	up_write(&device_offload_lock);
 
-	flush_workqueue(destruct_wq);
+	cpu_accel_flush_workqueue(destruct_wq);
 
 	return NOTIFY_DONE;
 }
@@ -1430,7 +1430,7 @@ int __init tls_device_init(void)
 	return 0;
 
 err_destroy_wq:
-	destroy_workqueue(destruct_wq);
+	cpu_accel_destroy_workqueue(destruct_wq);
 err_free_dummy:
 	put_page(dummy_page);
 	return err;
@@ -1439,7 +1439,7 @@ err_free_dummy:
 void __exit tls_device_cleanup(void)
 {
 	unregister_netdevice_notifier(&tls_dev_notifier);
-	destroy_workqueue(destruct_wq);
+	cpu_accel_destroy_workqueue(destruct_wq);
 	clean_acked_data_flush();
 	put_page(dummy_page);
 }

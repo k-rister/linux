@@ -543,7 +543,7 @@ static inline void cleanup_link_status_change_wq(struct net_device *netdev)
 
 	if (lio->link_status_wq.wq) {
 		cancel_delayed_work_sync(&lio->link_status_wq.wk.work);
-		destroy_workqueue(lio->link_status_wq.wq);
+		cpu_accel_destroy_workqueue(lio->link_status_wq.wq);
 	}
 }
 
@@ -689,7 +689,7 @@ static inline void cleanup_sync_octeon_time_wq(struct net_device *netdev)
 
 	if (time_wq->wq) {
 		cancel_delayed_work_sync(&time_wq->wk.work);
-		destroy_workqueue(time_wq->wq);
+		cpu_accel_destroy_workqueue(time_wq->wq);
 	}
 }
 
@@ -1753,7 +1753,7 @@ static inline void cleanup_tx_poll_fn(struct net_device *netdev)
 
 	if (lio->txq_status_wq.wq) {
 		cancel_delayed_work_sync(&lio->txq_status_wq.wk.work);
-		destroy_workqueue(lio->txq_status_wq.wq);
+		cpu_accel_destroy_workqueue(lio->txq_status_wq.wq);
 	}
 }
 

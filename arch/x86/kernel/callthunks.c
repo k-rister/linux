@@ -10,6 +10,7 @@
 
 #include <asm/alternative.h>
 #include <asm/asm-offsets.h>
+#include <asm/cpu_accel.h>
 #include <asm/cpu.h>
 #include <asm/ftrace.h>
 #include <asm/insn.h>
@@ -256,10 +257,10 @@ void __init callthunks_patch_builtin_calls(void)
 		return;
 
 	pr_info("Setting up call depth tracking\n");
-	mutex_lock(&text_mutex);
+	x86_cpu_accel_text_mutex_lock();
 	callthunks_setup(&cs, &builtin_coretext);
 	thunks_initialized = true;
-	mutex_unlock(&text_mutex);
+	x86_cpu_accel_text_mutex_unlock();
 }
 
 void *callthunks_translate_call_dest(void *dest)
@@ -332,9 +333,9 @@ void noinline callthunks_patch_module_calls(struct callthunk_sites *cs,
 	if (!thunks_initialized)
 		return;
 
-	mutex_lock(&text_mutex);
+	x86_cpu_accel_text_mutex_lock();
 	callthunks_setup(cs, &ct);
-	mutex_unlock(&text_mutex);
+	x86_cpu_accel_text_mutex_unlock();
 }
 #endif /* CONFIG_MODULES */
 

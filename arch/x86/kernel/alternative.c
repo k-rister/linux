@@ -16,6 +16,7 @@
 #include <asm/ibt.h>
 #include <asm/set_memory.h>
 #include <asm/nmi.h>
+#include <asm/cpu_accel.h>
 
 int __read_mostly alternatives_patched;
 
@@ -185,7 +186,7 @@ void its_init_mod(struct module *mod)
 	if (!cpu_feature_enabled(X86_FEATURE_INDIRECT_THUNK_ITS))
 		return;
 
-	mutex_lock(&text_mutex);
+	x86_cpu_accel_text_mutex_lock();
 	its_mod = mod;
 	its_page = NULL;
 }
@@ -199,7 +200,7 @@ void its_fini_mod(struct module *mod)
 
 	its_mod = NULL;
 	its_page = NULL;
-	mutex_unlock(&text_mutex);
+	x86_cpu_accel_text_mutex_unlock();
 
 	if (IS_ENABLED(CONFIG_STRICT_MODULE_RWX))
 		its_pages_protect(&mod->arch.its_pages);
@@ -2592,9 +2593,9 @@ void *text_poke_copy_locked(void *addr, const void *opcode, size_t len,
  */
 void *text_poke_copy(void *addr, const void *opcode, size_t len)
 {
-	mutex_lock(&text_mutex);
+	x86_cpu_accel_text_mutex_lock();
 	addr = text_poke_copy_locked(addr, opcode, len, false);
-	mutex_unlock(&text_mutex);
+	x86_cpu_accel_text_mutex_unlock();
 	return addr;
 }
 
@@ -2615,7 +2616,7 @@ void *text_poke_set(void *addr, int c, size_t len)
 	if (WARN_ON_ONCE(core_kernel_text(start)))
 		return NULL;
 
-	mutex_lock(&text_mutex);
+	x86_cpu_accel_text_mutex_lock();
 	while (patched < len) {
 		unsigned long ptr = start + patched;
 		size_t s;
@@ -2625,7 +2626,7 @@ void *text_poke_set(void *addr, int c, size_t len)
 		__text_poke(text_poke_memset, (void *)ptr, (void *)&c, s);
 		patched += s;
 	}
-	mutex_unlock(&text_mutex);
+	x86_cpu_accel_text_mutex_unlock();
 	return addr;
 }
 
@@ -2636,7 +2637,19 @@ static void do_sync_core(void *info)
 
 void smp_text_poke_sync_each_cpu(void)
 {
-	on_each_cpu(do_sync_core, NULL, 1);
+	cpumask_t mask;
+	unsigned int cpu;
+
+	/*
+	 * A ring-3 owned CPU is not executing the patched kernel text, so it
+	 * needs no sync_core(); excluding it keeps the run from being stopped
+	 * (its lazy commit lands on re-entry via i-cache coherence).
+	 */
+	cpumask_copy(&mask, cpu_online_mask);
+	for_each_online_cpu(cpu)
+		if (x86_cpu_accel_cpu_active_user_owner(cpu))
+			cpumask_clear_cpu(cpu, &mask);
+	on_each_cpu_mask(&mask, do_sync_core, NULL, 1);
 }
 
 /*

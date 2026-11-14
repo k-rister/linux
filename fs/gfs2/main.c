@@ -188,11 +188,11 @@ fail_fs2:
 fail_fs1:
 	mempool_destroy(gfs2_page_pool);
 fail_mempool:
-	destroy_workqueue(gfs2_freeze_wq);
+	cpu_accel_destroy_workqueue(gfs2_freeze_wq);
 fail_wq3:
 	destroy_workqueue(gfs2_control_wq);
 fail_wq2:
-	destroy_workqueue(gfs2_recovery_wq);
+	cpu_accel_destroy_workqueue(gfs2_recovery_wq);
 fail_wq1:
 	gfs2_qd_shrinker_exit();
 fail_shrinker:
@@ -232,9 +232,9 @@ static void __exit exit_gfs2_fs(void)
 	gfs2_unregister_debugfs();
 	unregister_filesystem(&gfs2_fs_type);
 	unregister_filesystem(&gfs2meta_fs_type);
-	destroy_workqueue(gfs2_recovery_wq);
+	cpu_accel_destroy_workqueue(gfs2_recovery_wq);
 	destroy_workqueue(gfs2_control_wq);
-	destroy_workqueue(gfs2_freeze_wq);
+	cpu_accel_destroy_workqueue(gfs2_freeze_wq);
 	list_lru_destroy(&gfs2_qd_lru);
 
 	rcu_barrier();

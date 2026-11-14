@@ -15,6 +15,7 @@
 #include <linux/sort.h>
 #include <linux/execmem.h>
 #include <asm/extable.h>
+#include <asm/cpu_accel.h>
 #include <asm/ftrace.h>
 #include <asm/set_memory.h>
 #include <asm/nospec-branch.h>
@@ -649,7 +650,7 @@ static int __bpf_arch_text_poke(void *ip, enum bpf_text_poke_type old_t,
 	}
 
 	ret = -EBUSY;
-	mutex_lock(&text_mutex);
+	x86_cpu_accel_text_mutex_lock();
 	if (memcmp(ip, old_insn, X86_PATCH_SIZE))
 		goto out;
 	ret = 1;
@@ -658,7 +659,7 @@ static int __bpf_arch_text_poke(void *ip, enum bpf_text_poke_type old_t,
 		ret = 0;
 	}
 out:
-	mutex_unlock(&text_mutex);
+	x86_cpu_accel_text_mutex_unlock();
 	return ret;
 }
 

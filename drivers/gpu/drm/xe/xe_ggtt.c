@@ -318,7 +318,7 @@ static void ggtt_fini_early(struct drm_device *drm, void *arg)
 {
 	struct xe_ggtt *ggtt = arg;
 
-	destroy_workqueue(ggtt->wq);
+	cpu_accel_destroy_workqueue(ggtt->wq);
 	drm_mm_takedown(&ggtt->mm);
 }
 
@@ -374,7 +374,7 @@ static void dev_fini_ggtt(void *arg)
 
 	scoped_guard(mutex, &ggtt->lock)
 		ggtt->flags &= ~XE_GGTT_FLAGS_ONLINE;
-	drain_workqueue(ggtt->wq);
+	cpu_accel_drain_workqueue(ggtt->wq);
 }
 
 /**

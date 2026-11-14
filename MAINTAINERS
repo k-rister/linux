@@ -6758,6 +6758,17 @@ M:	Bence Csókás <bence98@sch.bme.hu>
 S:	Maintained
 F:	drivers/i2c/busses/i2c-cp2615.c
 
+CPU ACCELERATOR FRAMEWORK
+M:	Karl Rister <krister@redhat.com>
+L:	linux-kernel@vger.kernel.org
+S:	Maintained
+F:	Documentation/accel/
+F:	arch/x86/include/asm/cpu_accel.h
+F:	arch/x86/kernel/accel.c
+F:	include/trace/events/cpu_accel.h
+F:	include/uapi/linux/cpu_accel.h
+F:	tools/cpu_accel/
+
 CPU FREQUENCY DRIVERS - CPPC CPUFREQ
 M:	"Rafael J. Wysocki" <rafael@kernel.org>
 M:	Viresh Kumar <viresh.kumar@linaro.org>

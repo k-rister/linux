@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+config CPU_ACCEL_CORE
+	bool
+	depends on X86 && X86_LOCAL_APIC
+	default n
+
+config CPU_ACCEL
+	tristate "Static SMP accelerator prototype"
+	depends on X86 && X86_LOCAL_APIC
+	depends on SMP
+	depends on MMU
+	depends on GENERIC_IRQ_MIGRATION
+	select CPU_ACCEL_CORE
+	help
+	  Build the experimental static multi-CPU accelerator control plane and
+	  architecture-staged lifecycle backend.
+
+	  The prototype exposes /dev/cpu_accel. A control process selects up to
+	  16 distinct online CPUs, maps shared control and sample areas, and starts
+	  a bounded timestamp workload. On x86 each target is entered through one
+	  staged IPI, then runs with preemption and local interrupts disabled until
+	  completion or recovery. This is a development experiment, not a production
+	  isolation mechanism or a hard latency guarantee.

@@ -890,7 +890,7 @@ fail:
 static void flush_fs_workqueues(struct ceph_fs_client *fsc)
 {
 	flush_workqueue(fsc->inode_wq);
-	flush_workqueue(fsc->cap_wq);
+	cpu_accel_flush_workqueue(fsc->cap_wq);
 }
 
 static void destroy_fs_client(struct ceph_fs_client *fsc)
@@ -903,7 +903,7 @@ static void destroy_fs_client(struct ceph_fs_client *fsc)
 
 	ceph_mdsc_destroy(fsc);
 	destroy_workqueue(fsc->inode_wq);
-	destroy_workqueue(fsc->cap_wq);
+	cpu_accel_destroy_workqueue(fsc->cap_wq);
 
 	destroy_mount_options(fsc->mount_options);
 

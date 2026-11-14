@@ -2696,7 +2696,8 @@ static int rvu_mbox_init(struct rvu *rvu, struct mbox_wq_info *mw,
 	return 0;
 
 exit:
-	destroy_workqueue(mw->mbox_wq);
+	cpu_accel_drain_workqueue(mw->mbox_wq);
+	cpu_accel_destroy_workqueue(mw->mbox_wq);
 unmap_regions:
 	while (num--)
 		iounmap((void __iomem *)mbox_regions[num]);
@@ -2722,7 +2723,8 @@ static void rvu_mbox_destroy(struct mbox_wq_info *mw)
 	int devid;
 
 	if (mw->mbox_wq) {
-		destroy_workqueue(mw->mbox_wq);
+		cpu_accel_drain_workqueue(mw->mbox_wq);
+		cpu_accel_destroy_workqueue(mw->mbox_wq);
 		mw->mbox_wq = NULL;
 	}
 
@@ -3352,7 +3354,7 @@ fail:
 static void rvu_flr_wq_destroy(struct rvu *rvu)
 {
 	if (rvu->flr_wq) {
-		destroy_workqueue(rvu->flr_wq);
+		cpu_accel_destroy_workqueue(rvu->flr_wq);
 		rvu->flr_wq = NULL;
 	}
 }
@@ -3379,7 +3381,7 @@ static int rvu_flr_init(struct rvu *rvu)
 	rvu->flr_wrk = devm_kcalloc(rvu->dev, num_devs,
 				    sizeof(struct rvu_work), GFP_KERNEL);
 	if (!rvu->flr_wrk) {
-		destroy_workqueue(rvu->flr_wq);
+		cpu_accel_destroy_workqueue(rvu->flr_wq);
 		return -ENOMEM;
 	}
 
@@ -3687,6 +3689,9 @@ err_dl:
 	rvu_unregister_dl(rvu);
 err_irq:
 	rvu_unregister_interrupts(rvu);
+	if (rvu->afpf_wq_info.mbox_wq)
+		cpu_accel_drain_workqueue(rvu->afpf_wq_info.mbox_wq);
+	rvu_rep_exit(rvu);
 err_flr:
 	rvu_flr_wq_destroy(rvu);
 err_mbox:
@@ -3720,6 +3725,8 @@ static void rvu_remove(struct pci_dev *pdev)
 	rvu_dbg_exit(rvu);
 	rvu_unregister_dl(rvu);
 	rvu_unregister_interrupts(rvu);
+	cpu_accel_drain_workqueue(rvu->afpf_wq_info.mbox_wq);
+	rvu_rep_exit(rvu);
 	rvu_flr_wq_destroy(rvu);
 	rvu_cgx_exit(rvu);
 	rvu_fwdata_exit(rvu);

@@ -2475,7 +2475,7 @@ out_free:
 	mutex_unlock(&fcoe_config_mutex);
 	fcoe_transport_detach(&fcoe_sw_transport);
 out_destroy:
-	destroy_workqueue(fcoe_wq);
+	cpu_accel_destroy_workqueue(fcoe_wq);
 	return rc;
 }
 module_init(fcoe_init);
@@ -2515,7 +2515,7 @@ static void __exit fcoe_exit(void)
 	 * destroy_work's may be chained but destroy_workqueue()
 	 * can take care of them. Just kill the fcoe_wq.
 	 */
-	destroy_workqueue(fcoe_wq);
+	cpu_accel_destroy_workqueue(fcoe_wq);
 
 	/*
 	 * Detaching from the scsi transport must happen after all
@@ -2717,7 +2717,7 @@ static void fcoe_vport_remove(struct fc_lport *lport)
 	}
 	spin_unlock_irqrestore(shost->host_lock, flags);
 
-	flush_workqueue(fc_host_work_q(shost));
+	cpu_accel_flush_workqueue(fc_host_work_q(shost));
 }
 
 /**

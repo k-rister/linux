@@ -1620,10 +1620,14 @@ int tmigr_isolated_exclude_cpumask(struct cpumask *exclude_cpumask)
 		struct work_struct *work = per_cpu_ptr(works, cpu);
 
 		INIT_WORK(work, tmigr_cpu_unisolate);
+		arch_smp_sync_wait_begin(cpu);
 		schedule_work_on(cpu, work);
+		arch_smp_sync_wait_stop(cpu);
 	}
-	for_each_cpu(cpu, cpumask)
+	for_each_cpu(cpu, cpumask) {
 		flush_work(per_cpu_ptr(works, cpu));
+		arch_smp_sync_wait_end(cpu);
+	}
 
 	/*
 	 * Then clear previously available CPUs (isolate).
@@ -1647,10 +1651,14 @@ int tmigr_isolated_exclude_cpumask(struct cpumask *exclude_cpumask)
 		struct work_struct *work = per_cpu_ptr(works, cpu);
 
 		INIT_WORK(work, tmigr_cpu_isolate);
+		arch_smp_sync_wait_begin(cpu);
 		schedule_work_on(cpu, work);
+		arch_smp_sync_wait_stop(cpu);
 	}
-	for_each_cpu(cpu, cpumask)
+	for_each_cpu(cpu, cpumask) {
 		flush_work(per_cpu_ptr(works, cpu));
+		arch_smp_sync_wait_end(cpu);
+	}
 
 	return 0;
 }

@@ -2488,9 +2488,9 @@ offload_to_thread:
 			remove_range_unlocked(ic, &dio->range);
 			spin_unlock_irq(&ic->endio_wait.lock);
 			queue_work(ic->commit_wq, &ic->commit_work);
-			flush_workqueue(ic->commit_wq);
+			cpu_accel_flush_workqueue(ic->commit_wq);
 			queue_work(ic->writer_wq, &ic->writer_work);
-			flush_workqueue(ic->writer_wq);
+			cpu_accel_flush_workqueue(ic->writer_wq);
 			discard_retried = true;
 			goto lock_retry;
 		}
@@ -3794,7 +3794,7 @@ static void dm_integrity_enter_synchronous_mode(struct dm_integrity_c *ic)
 
 		cancel_delayed_work_sync(&ic->bitmap_flush_work);
 		queue_delayed_work(ic->commit_wq, &ic->bitmap_flush_work, 0);
-		flush_workqueue(ic->commit_wq);
+		cpu_accel_flush_workqueue(ic->commit_wq);
 	}
 }
 
@@ -3819,17 +3819,17 @@ static void dm_integrity_postsuspend(struct dm_target *ti)
 	timer_delete_sync(&ic->autocommit_timer);
 
 	if (ic->recalc_wq)
-		drain_workqueue(ic->recalc_wq);
+		cpu_accel_drain_workqueue(ic->recalc_wq);
 
 	if (ic->mode == 'B')
 		cancel_delayed_work_sync(&ic->bitmap_flush_work);
 
 	queue_work(ic->commit_wq, &ic->commit_work);
-	drain_workqueue(ic->commit_wq);
+	cpu_accel_drain_workqueue(ic->commit_wq);
 
 	if (ic->mode == 'J') {
 		queue_work(ic->writer_wq, &ic->writer_work);
-		drain_workqueue(ic->writer_wq);
+		cpu_accel_drain_workqueue(ic->writer_wq);
 		dm_integrity_flush_buffers(ic, true);
 		if (ic->wrote_to_journal) {
 			init_journal(ic, ic->free_section,
@@ -5473,17 +5473,17 @@ static void dm_integrity_dtr(struct dm_target *ti)
 	if (ic->mode == 'B' && ic->bitmap_flush_work.work.func)
 		cancel_delayed_work_sync(&ic->bitmap_flush_work);
 	if (ic->metadata_wq)
-		destroy_workqueue(ic->metadata_wq);
+		cpu_accel_destroy_workqueue(ic->metadata_wq);
 	if (ic->wait_wq)
 		destroy_workqueue(ic->wait_wq);
 	if (ic->offload_wq)
-		destroy_workqueue(ic->offload_wq);
+		cpu_accel_destroy_workqueue(ic->offload_wq);
 	if (ic->commit_wq)
-		destroy_workqueue(ic->commit_wq);
+		cpu_accel_destroy_workqueue(ic->commit_wq);
 	if (ic->writer_wq)
-		destroy_workqueue(ic->writer_wq);
+		cpu_accel_destroy_workqueue(ic->writer_wq);
 	if (ic->recalc_wq)
-		destroy_workqueue(ic->recalc_wq);
+		cpu_accel_destroy_workqueue(ic->recalc_wq);
 	kvfree(ic->bbs);
 	if (ic->bufio)
 		dm_bufio_client_destroy(ic->bufio);

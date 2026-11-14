@@ -5655,7 +5655,7 @@ void mem_cgroup_sk_uncharge(const struct sock *sk, unsigned int nr_pages)
 
 void mem_cgroup_flush_workqueue(void)
 {
-	flush_workqueue(memcg_wq);
+	cpu_accel_flush_workqueue(memcg_wq);
 }
 
 static int __init cgroup_memory(char *s)

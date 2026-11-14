@@ -659,7 +659,7 @@ static void acpi_thermal_zone_unregister(void *data)
 {
 	struct acpi_thermal *tz = data;
 
-	flush_workqueue(acpi_thermal_pm_queue);
+	cpu_accel_flush_workqueue(acpi_thermal_pm_queue);
 
 	thermal_zone_device_disable(tz->thermal_zone);
 	acpi_thermal_zone_sysfs_remove(tz);
@@ -901,7 +901,7 @@ static int acpi_thermal_probe(struct platform_device *pdev)
 static int acpi_thermal_prepare(struct device *dev)
 {
 	/* Make sure the previously queued thermal check work has been done */
-	flush_workqueue(acpi_thermal_pm_queue);
+	cpu_accel_flush_workqueue(acpi_thermal_pm_queue);
 	return 0;
 }
 
@@ -1031,7 +1031,7 @@ static int __init acpi_thermal_init(void)
 
 	result = platform_driver_register(&acpi_thermal_driver);
 	if (result < 0) {
-		destroy_workqueue(acpi_thermal_pm_queue);
+		cpu_accel_destroy_workqueue(acpi_thermal_pm_queue);
 		return -ENODEV;
 	}
 
@@ -1041,7 +1041,7 @@ static int __init acpi_thermal_init(void)
 static void __exit acpi_thermal_exit(void)
 {
 	platform_driver_unregister(&acpi_thermal_driver);
-	destroy_workqueue(acpi_thermal_pm_queue);
+	cpu_accel_destroy_workqueue(acpi_thermal_pm_queue);
 }
 
 module_init(acpi_thermal_init);

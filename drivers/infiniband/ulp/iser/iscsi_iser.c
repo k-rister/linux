@@ -1047,7 +1047,7 @@ static int __init iser_init(void)
 	return 0;
 
 err_reg:
-	destroy_workqueue(release_wq);
+	cpu_accel_destroy_workqueue(release_wq);
 err_alloc_wq:
 	kmem_cache_destroy(ig.desc_cache);
 
@@ -1060,7 +1060,7 @@ static void __exit iser_exit(void)
 	int connlist_empty;
 
 	iser_dbg("Removing iSER datamover...\n");
-	destroy_workqueue(release_wq);
+	cpu_accel_destroy_workqueue(release_wq);
 
 	mutex_lock(&ig.connlist_mutex);
 	connlist_empty = list_empty(&ig.connlist);

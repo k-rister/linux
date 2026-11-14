@@ -86,7 +86,8 @@ void cw1200_unregister_bh(struct cw1200_common *priv)
 	atomic_inc(&priv->bh_term);
 	wake_up(&priv->bh_wq);
 
-	destroy_workqueue(priv->bh_workqueue);
+	flush_work(&priv->bh_work);
+	cpu_accel_destroy_workqueue(priv->bh_workqueue);
 	priv->bh_workqueue = NULL;
 
 	pr_debug("[BH] unregistered.\n");

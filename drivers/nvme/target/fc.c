@@ -826,7 +826,7 @@ nvmet_fc_alloc_target_queue(struct nvmet_fc_tgt_assoc *assoc,
 out_fail_iodlist:
 	nvmet_cq_put(&queue->nvme_cq);
 	nvmet_fc_destroy_fcp_iodlist(assoc->tgtport, queue);
-	destroy_workqueue(queue->work_q);
+	cpu_accel_destroy_workqueue(queue->work_q);
 out_free_queue:
 	kfree(queue);
 	return NULL;
@@ -841,7 +841,7 @@ nvmet_fc_tgt_queue_free(struct kref *ref)
 
 	nvmet_fc_destroy_fcp_iodlist(queue->assoc->tgtport, queue);
 
-	destroy_workqueue(queue->work_q);
+	cpu_accel_destroy_workqueue(queue->work_q);
 
 	kfree(queue);
 }
@@ -930,7 +930,7 @@ nvmet_fc_delete_target_queue(struct nvmet_fc_tgt_queue *queue)
 	}
 	spin_unlock_irqrestore(&queue->qlock, flags);
 
-	flush_workqueue(queue->work_q);
+	cpu_accel_flush_workqueue(queue->work_q);
 
 	nvmet_sq_destroy(&queue->nvme_sq);
 	nvmet_cq_put(&queue->nvme_cq);
@@ -1217,7 +1217,7 @@ nvmet_fc_delete_target_assoc(struct nvmet_fc_tgt_assoc *assoc)
 	/* ensure all in-flight I/Os have been processed */
 	for (i = NVMET_NR_QUEUES; i >= 0; i--) {
 		if (assoc->queues[i])
-			flush_workqueue(assoc->queues[i]->work_q);
+			cpu_accel_flush_workqueue(assoc->queues[i]->work_q);
 	}
 
 	pr_info("{%d:%d}: Association deleted\n",

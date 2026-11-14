@@ -1,0 +1,14 @@
+cpu-accel-testctl
+test-uapi-contract
+test-tlb-generation
+test-tlb-cow-churn
+test-seccomp-jit-churn
+test-sync-wait-prime
+test-perf-event-open
+test-user-escape-rescue
+test-migration-owner-helper
+test-uapi-lifecycle
+test-uapi-abi23-compat
+test-uapi-sdk-fallback
+test-region-lifecycle
+libcpu-accel-sdk-fallback.so

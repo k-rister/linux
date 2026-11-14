@@ -2605,7 +2605,7 @@ static void anx7625_bridge_atomic_disable(struct drm_bridge *bridge,
 
 	dev_dbg(dev, "drm atomic disable\n");
 
-	flush_workqueue(ctx->hdcp_workqueue);
+	cpu_accel_flush_workqueue(ctx->hdcp_workqueue);
 
 	if (ctx->connector &&
 	    ctx->hdcp_cp == DRM_MODE_CONTENT_PROTECTION_ENABLED) {
@@ -2960,11 +2960,11 @@ pm_suspend:
 
 free_wq:
 	if (platform->workqueue)
-		destroy_workqueue(platform->workqueue);
+		cpu_accel_destroy_workqueue(platform->workqueue);
 
 free_hdcp_wq:
 	if (platform->hdcp_workqueue)
-		destroy_workqueue(platform->hdcp_workqueue);
+		cpu_accel_destroy_workqueue(platform->hdcp_workqueue);
 
 	return ret;
 }
@@ -2973,16 +2973,21 @@ static void anx7625_i2c_remove(struct i2c_client *client)
 {
 	struct anx7625_data *platform = i2c_get_clientdata(client);
 
+	if (platform->pdata.intp_irq) {
+		disable_irq(platform->pdata.intp_irq);
+		cancel_work_sync(&platform->work);
+	}
+
 	anx7625_typec_unregister(platform);
 
 	drm_bridge_remove(&platform->bridge);
 
 	if (platform->pdata.intp_irq)
-		destroy_workqueue(platform->workqueue);
+		cpu_accel_destroy_workqueue(platform->workqueue);
 
 	if (platform->hdcp_workqueue) {
 		cancel_delayed_work(&platform->hdcp_work);
-		destroy_workqueue(platform->hdcp_workqueue);
+		cpu_accel_destroy_workqueue(platform->hdcp_workqueue);
 	}
 
 	if (!platform->pdata.low_power_mode)

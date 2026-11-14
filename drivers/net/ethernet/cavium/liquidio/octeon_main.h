@@ -24,6 +24,7 @@
 #define  _OCTEON_MAIN_H_
 
 #include <linux/sched/signal.h>
+#include <linux/spinlock.h>
 
 #if BITS_PER_LONG == 32
 #define CVM_CAST64(v) ((long long)(v))
@@ -38,6 +39,8 @@
 struct octeon_device_priv {
 	/** Tasklet structures for this device. */
 	struct tasklet_struct droq_tasklet;
+	/** Protect NIC_INFO access to per-interface net devices. */
+	spinlock_t link_status_lock;
 	unsigned long napi_mask;
 	struct octeon_device *dev;
 };

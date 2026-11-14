@@ -2817,7 +2817,7 @@ void bch_keybuf_init(struct keybuf *buf)
 void bch_btree_exit(void)
 {
 	if (btree_io_wq)
-		destroy_workqueue(btree_io_wq);
+		cpu_accel_destroy_workqueue(btree_io_wq);
 }
 
 int __init bch_btree_init(void)

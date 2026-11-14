@@ -132,8 +132,8 @@ void mdp_video_device_release(struct video_device *vdev)
 
 	scp_put(mdp->scp);
 
-	destroy_workqueue(mdp->job_wq);
-	destroy_workqueue(mdp->clock_wq);
+	cpu_accel_destroy_workqueue(mdp->job_wq);
+	cpu_accel_destroy_workqueue(mdp->clock_wq);
 
 	pm_runtime_disable(&mdp->pdev->dev);
 
@@ -347,9 +347,9 @@ err_mbox_destroy:
 		cmdq_mbox_destroy(mdp->cmdq_clt[i]);
 	scp_put(mdp->scp);
 err_destroy_clock_wq:
-	destroy_workqueue(mdp->clock_wq);
+	cpu_accel_destroy_workqueue(mdp->clock_wq);
 err_destroy_job_wq:
-	destroy_workqueue(mdp->job_wq);
+	cpu_accel_destroy_workqueue(mdp->job_wq);
 err_deinit_comp:
 	mdp_comp_destroy(mdp);
 err_free_mutex:

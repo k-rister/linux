@@ -6,6 +6,7 @@
 #include <linux/string_choices.h>
 
 #include <asm/io_apic.h>
+#include <asm/cpu_accel.h>
 
 #include "local.h"
 
@@ -71,16 +72,37 @@ void native_smp_send_reschedule(int cpu)
 		WARN(1, "sched: Unexpected reschedule of offline CPU#%d!\n", cpu);
 		return;
 	}
+	if (x86_cpu_accel_defer_reschedule(cpu))
+		return;
 	__apic_send_IPI(cpu, RESCHEDULE_VECTOR);
 }
 
 void native_send_call_func_single_ipi(int cpu)
 {
+	if (x86_cpu_accel_defer_call_function(cpu))
+		return;
 	__apic_send_IPI(cpu, CALL_FUNCTION_SINGLE_VECTOR);
 }
 
 void native_send_call_func_ipi(const struct cpumask *mask)
 {
+	struct cpumask sendmask;
+	unsigned int cpu;
+	bool filtered = false;
+
+	cpumask_copy(&sendmask, mask);
+	for_each_cpu(cpu, mask) {
+		if (x86_cpu_accel_defer_call_function(cpu)) {
+			cpumask_clear_cpu(cpu, &sendmask);
+			filtered = true;
+		}
+	}
+	if (filtered) {
+		if (!cpumask_empty(&sendmask))
+			__apic_send_IPI_mask(&sendmask, CALL_FUNCTION_VECTOR);
+		return;
+	}
+
 	if (static_branch_likely(&apic_use_ipi_shorthand)) {
 		unsigned int cpu = smp_processor_id();
 

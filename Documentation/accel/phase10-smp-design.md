@@ -273,3 +273,6 @@ remained, and dmesg contained no `BUG`, `WARNING`, `Oops`,
 `scheduling while atomic`, or accelerator error.  The EDS4100 serial captures
 for the final two-CPU Phase 10, four-CPU Phase 10, and Phase 9 gates contained
 only their explicit start and end console markers.
+
+The review-closure checklist for the blast-radius reduction is recorded in
+`Documentation/accel/phase10-blast-radius-review-close-plan.md`.

@@ -101,7 +101,7 @@ Review the 89 semantic-remainder files by architectural class:
 
 - [x] x86 ownership, entry, vector, IDT, IPI, TLB, and text-patching paths.
 - [x] Workqueue core and scheduling boundaries.
-- [ ] SMP, stop-machine, CPU online/offline, and freeze/thaw paths.
+- [x] SMP, stop-machine, CPU online/offline, and freeze/thaw paths.
 - [ ] IRQ affinity reservation, migration, effective-route validation, and
   rollback.
 - [ ] MMU gather, rmap, reclaim, vmalloc, SLUB, and TLB shootdown paths.
@@ -140,6 +140,9 @@ For each class:
 - The workqueue-core and scheduling-boundary class is reviewed in
   `Documentation/accel/phase10-blast-radius-workqueue-scheduling-audit.md`;
   its two rows have `pass` verdicts.
+- The SMP, stop-machine, CPU-transition, and freeze/thaw class is reviewed in
+  `Documentation/accel/phase10-blast-radius-smp-hotplug-audit.md`; its four
+  rows have `pass` verdicts.
 - The remaining semantic classes and their per-file verdicts are not yet
   complete.
 

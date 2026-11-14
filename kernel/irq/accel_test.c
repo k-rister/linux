@@ -192,13 +192,23 @@ out_unlock:
 
 static void irq_accel_restore_mask_test(struct kunit *test)
 {
-	struct cpumask saved = { };
-	struct cpumask restored = { };
+	cpumask_var_t saved;
+	cpumask_var_t restored;
 	unsigned int own_cpu;
 	unsigned int other_cpu;
 	unsigned int available_cpu;
 	int own_ret;
 	int other_ret;
+
+	if (!zalloc_cpumask_var(&saved, GFP_KERNEL)) {
+		kunit_skip(test, "failed to allocate saved cpumask");
+		return;
+	}
+	if (!zalloc_cpumask_var(&restored, GFP_KERNEL)) {
+		free_cpumask_var(saved);
+		kunit_skip(test, "failed to allocate restored cpumask");
+		return;
+	}
 
 	own_cpu = cpumask_first(cpu_possible_mask);
 	other_cpu = cpumask_next(own_cpu, cpu_possible_mask);
@@ -216,15 +226,15 @@ static void irq_accel_restore_mask_test(struct kunit *test)
 	if (own_ret || other_ret)
 		goto out;
 
-	cpumask_set_cpu(own_cpu, &saved);
-	cpumask_set_cpu(other_cpu, &saved);
-	cpumask_set_cpu(available_cpu, &saved);
+	cpumask_set_cpu(own_cpu, saved);
+	cpumask_set_cpu(other_cpu, saved);
+	cpumask_set_cpu(available_cpu, saved);
 
-	irq_accel_filter_restore_affinity(&restored, &saved, own_cpu);
+	irq_accel_filter_restore_affinity(restored, saved, own_cpu);
 
-	KUNIT_EXPECT_TRUE(test, cpumask_test_cpu(own_cpu, &restored));
-	KUNIT_EXPECT_FALSE(test, cpumask_test_cpu(other_cpu, &restored));
-	KUNIT_EXPECT_TRUE(test, cpumask_test_cpu(available_cpu, &restored));
+	KUNIT_EXPECT_TRUE(test, cpumask_test_cpu(own_cpu, restored));
+	KUNIT_EXPECT_FALSE(test, cpumask_test_cpu(other_cpu, restored));
+	KUNIT_EXPECT_TRUE(test, cpumask_test_cpu(available_cpu, restored));
 
 out:
 	if (!other_ret)
@@ -232,6 +242,8 @@ out:
 	if (!own_ret)
 		irq_accel_release_cpu(own_cpu);
 	cpus_read_unlock();
+	free_cpumask_var(saved);
+	free_cpumask_var(restored);
 }
 
 static struct kunit_case irq_accel_test_cases[] = {

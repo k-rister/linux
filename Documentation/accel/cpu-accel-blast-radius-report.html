@@ -53,9 +53,9 @@
     <h1>Kernel blast radius outside the <code>cpu_accel</code> module</h1>
     <p class="subtitle">The reduced footprint after removing the broad <code>*_with_sync_wait()</code> family, retaining three owner-aware workqueue wrappers, and preserving only correctness-required call sites.</p>
     <div class="meta">
-      <span><strong>Branch:</strong> <code>codex/accelerator-oslat-v2</code></span>
+      <span><strong>Branch:</strong> <code>codex/accelerator-blast-radius-v2</code></span>
       <span><strong>Diff baseline:</strong> <code>40288c9206c17eb66a603262e06a58d300d0f279</code></span>
-      <span><strong>State:</strong> uncommitted working tree</span>
+      <span><strong>State:</strong> review-closure worktree</span>
       <span><strong>Generated:</strong> 2026-11-14</span>
     </div>
   </header>
@@ -76,42 +76,55 @@
 
   <section id="executive-summary">
     <h2>Executive summary</h2>
-    <p>The reduced working tree changes <strong>308 kernel source files outside the <code>cpu_accel</code> module and its direct support tree</strong>, with 2,737 insertions and 855 deletions. It divides into 219 wrapper-family paths and 89 semantic paths.</p>
+    <p>The review-closure tree changes <strong>309 kernel source files outside the <code>cpu_accel</code> module and its direct support tree</strong>, with 3,215 insertions and 872 deletions. It divides into 219 wrapper-family paths and 90 semantic paths.</p>
     <div class="kpis">
-      <div class="kpi"><div class="label">Non-module paths</div><div class="value">308</div><div class="detail">2,737 insertions / 855 deletions</div></div>
-      <div class="kpi"><div class="label">Wrapper-family paths</div><div class="value">219</div><div class="detail">905 insertions / 570 deletions</div></div>
-      <div class="kpi"><div class="label">Semantic remainder</div><div class="value">89</div><div class="detail">1,832 insertions / 285 deletions</div></div>
+      <div class="kpi"><div class="label">Non-module paths</div><div class="value">309</div><div class="detail">3,215 insertions / 872 deletions</div></div>
+      <div class="kpi"><div class="label">Wrapper-family paths</div><div class="value">219</div><div class="detail">957 insertions / 587 deletions</div></div>
+      <div class="kpi"><div class="label">Semantic remainder</div><div class="value">90</div><div class="detail">2,258 insertions / 285 deletions</div></div>
       <div class="kpi"><div class="label">Stale API references</div><div class="value">0</div><div class="detail">No tracked <code>_with_sync_wait</code> references</div></div>
     </div>
     <div class="callout ok"><strong>Primary reduction:</strong> the old design required 1,539 wrapper-family paths and a kernel-wide <code>*_with_sync_wait()</code> API. The reduced design retains <code>cpu_accel_flush_workqueue()</code>, <code>cpu_accel_drain_workqueue()</code>, and <code>cpu_accel_destroy_workqueue()</code>, and changes 218 producer, teardown, or cleanup call-site files.</div>
     <p>The remaining large contributors are intentional: x86 ownership, IRQ quarantine, MMU/TLB/reclaim coordination, SMP and CPU transitions, and the workqueue core. The broad driver conversion is no longer a substitute for identifying sites that can actually wait for work pinned to an accelerator-owned CPU.</p>
-    <div class="callout critical"><strong>Review concentration:</strong> the 89 semantic paths carry two-thirds of changed lines and nearly all correctness-sensitive review risk. They concentrate in <code>arch/x86</code>, <code>kernel</code>, <code>mm</code>, and <code>include</code>, plus a small set of required driver fixes.</div>
+    <div class="callout critical"><strong>Review concentration:</strong> the 90 semantic paths carry about 62% of changed lines and nearly all correctness-sensitive review risk. They concentrate in <code>arch/x86</code>, <code>kernel</code>, <code>mm</code>, and <code>include</code>, plus a small set of required driver fixes.</div>
   </section>
 
   <section id="scope-and-method">
     <h2>Scope and method</h2>
-    <p>The report covers tracked changes relative to <code>40288c9206c17eb66a603262e06a58d300d0f279</code>. It excludes <code>Documentation/</code>, <code>tools/</code>, <code>drivers/cpu_accel/</code>, and <code>MAINTAINERS</code> so the metrics describe existing kernel source outside the new module and userspace tooling. The full tracked working-tree diff is 312 files, 2,765 insertions, and 859 deletions.</p>
+    <p>The report covers tracked changes relative to <code>40288c9206c17eb66a603262e06a58d300d0f279</code>. It excludes <code>Documentation/</code>, <code>tools/</code>, <code>drivers/cpu_accel/</code>, <code>MAINTAINERS</code>, and direct accelerator support/API/test paths so the metrics describe existing kernel source outside the new module, userspace tooling, and direct support tree. The full tracked diff is 436 files, 40,774 insertions, and 876 deletions.</p>
+    <p>The direct support/API/test paths excluded from the primary population are:</p>
+    <ul>
+      <li><code>arch/x86/include/asm/cpu_accel.h</code></li>
+      <li><code>arch/x86/kernel/accel.c</code></li>
+      <li><code>include/linux/cpu_accel_workqueue.h</code></li>
+      <li><code>include/linux/irq_accel.h</code></li>
+      <li><code>include/linux/mmu_owner.h</code></li>
+      <li><code>include/trace/events/cpu_accel.h</code></li>
+      <li><code>include/uapi/linux/cpu_accel.h</code></li>
+      <li><code>kernel/irq/accel.c</code></li>
+      <li><code>kernel/irq/accel_test.c</code></li>
+      <li><code>drivers/platform/x86/intel/ifs/runtest.c</code></li>
+    </ul>
     <p>A path is <em>wrapper-family</em> when its diff contains one of the retained <code>cpu_accel_*_workqueue()</code> calls. The 219 wrapper-family paths are <code>kernel/workqueue.c</code> plus 218 call-site files; all other paths are the semantic remainder.</p>
     <table>
       <thead><tr><th>Population</th><th>Files</th><th>Insertions</th><th>Deletions</th><th>Meaning</th></tr></thead>
       <tbody>
-        <tr><td>Full tracked diff</td><td>312</td><td>2,765</td><td>859</td><td>All tracked working-tree changes</td></tr>
-        <tr><td>Outside module and support scope</td><td>308</td><td>2,737</td><td>855</td><td>Primary blast-radius population</td></tr>
-        <tr><td>Wrapper-family paths</td><td>219</td><td>905</td><td>570</td><td>Workqueue core plus retained call sites</td></tr>
-        <tr><td>Semantic remainder</td><td>89</td><td>1,832</td><td>285</td><td>Architectural and required driver changes</td></tr>
+        <tr><td>Full tracked diff</td><td>436</td><td>40,774</td><td>876</td><td>All tracked review-closure changes</td></tr>
+        <tr><td>Outside module and support scope</td><td>309</td><td>3,215</td><td>872</td><td>Primary blast-radius population</td></tr>
+        <tr><td>Wrapper-family paths</td><td>219</td><td>957</td><td>587</td><td>Workqueue core plus retained call sites</td></tr>
+        <tr><td>Semantic remainder</td><td>90</td><td>2,258</td><td>285</td><td>Architectural and required driver changes</td></tr>
       </tbody>
     </table>
   </section>
 
   <section id="reduction-outcome">
     <h2>Reduction outcome</h2>
-    <p>The earlier report described 1,625 non-module files, 8,807 insertions, and 3,437 deletions. The reduced tree cuts that to 308 files, 2,737 insertions, and 855 deletions.</p>
+    <p>The earlier report described 1,625 non-module files, 8,807 insertions, and 3,437 deletions. The reduced tree cuts that to 309 files, 3,215 insertions, and 872 deletions.</p>
     <table>
       <thead><tr><th>Measure</th><th>Before</th><th>After</th><th>Reduction</th></tr></thead>
       <tbody>
-        <tr><td>Non-module files</td><td>1,625</td><td>308</td><td>1,317 (81%)</td></tr>
-        <tr><td>Insertions</td><td>8,807</td><td>2,737</td><td>6,070 (69%)</td></tr>
-        <tr><td>Deletions</td><td>3,437</td><td>855</td><td>2,582 (75%)</td></tr>
+        <tr><td>Non-module files</td><td>1,625</td><td>309</td><td>1,316 (81%)</td></tr>
+        <tr><td>Insertions</td><td>8,807</td><td>3,215</td><td>5,592 (64%)</td></tr>
+        <tr><td>Deletions</td><td>3,437</td><td>872</td><td>2,565 (75%)</td></tr>
         <tr><td>Wrapper-family paths</td><td>1,539</td><td>219</td><td>1,320 (86%)</td></tr>
       </tbody>
     </table>
@@ -126,19 +139,19 @@
       <li><code>cpu_accel_drain_workqueue()</code> for drain-style waits</li>
       <li><code>cpu_accel_destroy_workqueue()</code> for destroy-time waits</li>
     </ul>
-    <p>The diff adds 536 calls to these wrappers and removes 502 direct legacy workqueue calls across 218 call-site files. The sites concentrate in probe/remove, reset, teardown, module unload, and producer/consumer shutdown paths.</p>
+    <p>The diff adds 526 calls to these wrappers and removes 499 direct legacy workqueue calls across 218 call-site files. The sites concentrate in probe/remove, reset, teardown, module unload, and producer/consumer shutdown paths.</p>
     <div class="callout warn"><strong>Remaining review obligation:</strong> verify each site can execute while an owner is active, preserves the original wait scope, and cannot return from an error path while required work remains unfinished.</div>
   </section>
 
   <section id="semantic-remainder">
     <h2>Semantic remainder</h2>
-    <p>The 89 semantic paths account for 1,832 insertions and 285 deletions.</p>
+    <p>The 90 semantic paths account for 2,258 insertions and 285 deletions.</p>
     <table>
       <thead><tr><th>Area</th><th>Paths</th><th>Review character</th></tr></thead>
       <tbody>
         <tr><td><code>drivers</code></td><td>27</td><td>Required semantic call sites and targeted deadlock fixes</td></tr>
         <tr><td><code>arch/x86</code></td><td>25</td><td>Ownership entry, IPI, IDT, TLB, and text-poking paths</td></tr>
-        <tr><td><code>kernel</code></td><td>17</td><td>SMP, CPU transitions, IRQ, RCU, scheduler, debug, tracing</td></tr>
+        <tr><td><code>kernel</code></td><td>18</td><td>SMP, CPU transitions, IRQ, RCU, scheduler, debug, tracing</td></tr>
         <tr><td><code>mm</code></td><td>9</td><td>MMU gather, rmap, reclaim, vmalloc, and SLUB coordination</td></tr>
         <tr><td><code>include</code></td><td>8</td><td>Core contracts and disabled-config fallbacks</td></tr>
         <tr><td><code>samples</code>, <code>net</code>, <code>fs</code></td><td>3</td><td>Small required call-site or include-path adjustments</td></tr>
@@ -187,7 +200,7 @@
     <p>The reduced workqueue footprint is a review-scope improvement, not a claim that all 218 call sites are trivial. Each still needs confirmation that its original synchronous-work guarantee is preserved.</p>
   </section>
 
-  <footer>Generated from the uncommitted working tree on 2026-11-14. Metrics use tracked source only and exclude accelerator documentation, userspace tooling, <code>drivers/cpu_accel</code>, and <code>MAINTAINERS</code>.</footer>
+  <footer>Generated from the review-closure worktree on 2026-11-14. Metrics use tracked source only and exclude accelerator documentation, userspace tooling, <code>drivers/cpu_accel</code>, <code>MAINTAINERS</code>, and direct accelerator support/API/test paths.</footer>
 </div>
 </body>
 </html>

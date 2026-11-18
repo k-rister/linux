@@ -42,6 +42,9 @@
     .badge { display:inline-block; border-radius:999px; padding:4px 10px; font-size:13px; font-weight:700; border:1px solid var(--line); background:var(--panel2); color:#334e68; }
     .badge.high { color:var(--critical); background:var(--criticalbg); border-color:#fecaca; }
     .badge.medium { color:var(--warn); background:var(--warnbg); border-color:#fed7aa; }
+    .badge.done { color:var(--ok); background:var(--okbg); border-color:#bbf7d0; }
+    .badge.pending { color:var(--warn); background:var(--warnbg); border-color:#fed7aa; }
+    .badge.running { color:#0f766e; background:#ecfdf5; border-color:#99f6e4; }
     footer { border-top:2px solid var(--line); margin-top:68px; padding-top:20px; color:var(--muted); font-size:14px; }
     @media(max-width:720px) { .layout{padding:32px 18px 64px;} .toc ol{columns:1;} table{display:block;overflow-x:auto;} }
   </style>
@@ -55,8 +58,9 @@
     <div class="meta">
       <span><strong>Branch:</strong> <code>codex/accelerator-blast-radius-v2</code></span>
       <span><strong>Diff baseline:</strong> <code>40288c9206c17eb66a603262e06a58d300d0f279</code></span>
-      <span><strong>State:</strong> review-closure worktree</span>
-      <span><strong>Generated:</strong> 2026-11-14</span>
+      <span><strong>Current commit:</strong> <code>70ba38ae38fb</code></span>
+      <span><strong>State:</strong> <span class="badge done">reduction closed</span> <span class="badge done">internal review complete</span> <span class="badge pending">external review pending</span> <span class="badge done">24-hour soak passed</span></span>
+      <span><strong>Generated:</strong> 2026-11-15</span>
     </div>
   </header>
 
@@ -70,6 +74,7 @@
       <li><a href="#semantic-remainder">Semantic remainder</a></li>
       <li><a href="#architectural-classes">Architectural classes</a></li>
       <li><a href="#review-priorities">Review priorities</a></li>
+      <li><a href="#closure-evidence">Current closure evidence</a></li>
       <li><a href="#boundaries">Explicit boundaries</a></li>
     </ol>
   </nav>
@@ -82,15 +87,17 @@
       <div class="kpi"><div class="label">Wrapper-family paths</div><div class="value">219</div><div class="detail">957 insertions / 587 deletions</div></div>
       <div class="kpi"><div class="label">Semantic remainder</div><div class="value">90</div><div class="detail">2,258 insertions / 285 deletions</div></div>
       <div class="kpi"><div class="label">Stale API references</div><div class="value">0</div><div class="detail">No tracked <code>_with_sync_wait</code> references</div></div>
+      <div class="kpi"><div class="label">Internal review closure</div><div class="value">100%</div><div class="detail">218/218 call-site files and 90/90 semantic files</div></div>
+      <div class="kpi"><div class="label">External sign-offs</div><div class="value">0</div><div class="detail">Maintainer reviews remain documented follow-ups</div></div>
     </div>
     <div class="callout ok"><strong>Primary reduction:</strong> the old design required 1,539 wrapper-family paths and a kernel-wide <code>*_with_sync_wait()</code> API. The reduced design retains <code>cpu_accel_flush_workqueue()</code>, <code>cpu_accel_drain_workqueue()</code>, and <code>cpu_accel_destroy_workqueue()</code>, and changes 218 producer, teardown, or cleanup call-site files.</div>
     <p>The remaining large contributors are intentional: x86 ownership, IRQ quarantine, MMU/TLB/reclaim coordination, SMP and CPU transitions, and the workqueue core. The broad driver conversion is no longer a substitute for identifying sites that can actually wait for work pinned to an accelerator-owned CPU.</p>
-    <div class="callout critical"><strong>Review concentration:</strong> the 90 semantic paths carry about 62% of changed lines and nearly all correctness-sensitive review risk. They concentrate in <code>arch/x86</code>, <code>kernel</code>, <code>mm</code>, and <code>include</code>, plus a small set of required driver fixes.</div>
+    <div class="callout warn"><strong>External review concentration:</strong> the 90 semantic paths carry about 62% of changed lines and nearly all correctness-sensitive review risk. Internal audits are complete, but external review should concentrate on <code>arch/x86</code>, <code>kernel</code>, <code>mm</code>, and <code>include</code>, plus the required driver fixes.</div>
   </section>
 
   <section id="scope-and-method">
     <h2>Scope and method</h2>
-    <p>The report covers tracked changes relative to <code>40288c9206c17eb66a603262e06a58d300d0f279</code>. The primary population excludes <code>Documentation/</code>, <code>tools/</code>, <code>drivers/cpu_accel/</code>, <code>MAINTAINERS</code>, and direct accelerator support/API/test paths so the metrics describe existing kernel source outside the new module, userspace tooling, and direct support tree. The full tracked diff is 438 files, 41,126 insertions, and 876 deletions.</p>
+    <p>The report covers tracked changes at <code>70ba38ae38fb</code> relative to <code>40288c9206c17eb66a603262e06a58d300d0f279</code>. The primary population excludes <code>Documentation/</code>, <code>tools/</code>, <code>drivers/cpu_accel/</code>, <code>MAINTAINERS</code>, and direct accelerator support/API/test paths so the metrics describe existing kernel source outside the new module, userspace tooling, and direct support tree. The full tracked diff is 438 files, 41,126 insertions, and 876 deletions.</p>
     <p>The direct support/API/test paths excluded from the primary population are:</p>
     <ul>
       <li><code>arch/x86/include/asm/cpu_accel.h</code></li>
@@ -140,7 +147,8 @@
       <li><code>cpu_accel_destroy_workqueue()</code> for destroy-time waits</li>
     </ul>
     <p>The diff adds 526 calls to these wrappers and removes 499 direct legacy workqueue calls across 218 call-site files. The sites concentrate in probe/remove, reset, teardown, module unload, and producer/consumer shutdown paths.</p>
-    <div class="callout warn"><strong>Remaining review obligation:</strong> verify each site can execute while an owner is active, preserves the original wait scope, and cannot return from an error path while required work remains unfinished.</div>
+    <div class="callout ok"><strong>Internal review closure:</strong> all 218 call-site files pass the call-site audit. Each reviewed site was checked for execution while an owner is active, preservation of the original wait scope, and error paths that cannot return while required work remains unfinished. External workqueue and subsystem reviews remain follow-ups.</div>
+    <p>The three retained wrappers also passed focused stress cases for flush, drain, and destroy. Each case stopped its owner in 3 ms and returned the module refcount to zero.</p>
   </section>
 
   <section id="semantic-remainder">
@@ -158,6 +166,7 @@
       </tbody>
     </table>
     <p>The largest semantic changes are <code>arch/x86/mm/tlb.c</code>, <code>mm/mmu_gather.c</code>, <code>mm/vmscan.c</code>, <code>mm/rmap.c</code>, <code>arch/x86/mm/pat/set_memory.c</code>, and <code>drivers/net/phy/bcm-phy-ptp.c</code>.</p>
+    <p>All 90 semantic-remainder files pass the internal semantic audit. Target-hardware validation remains environment-gated for the touched TMR, Greybus, and BCM PHY PTP paths; internal invariant review and build coverage are the current substitute evidence.</p>
   </section>
 
   <section id="architectural-classes">
@@ -181,7 +190,8 @@
   </section>
 
   <section id="review-priorities">
-    <h2>Review priorities</h2>
+    <h2>External review priorities</h2>
+    <p>Internal audits are complete and have no unresolved findings. The priorities below describe where external maintainer review should focus.</p>
     <ol>
       <li><strong>Ownership state machine:</strong> activation, stop, rollback, manager death, owner exit, and recovery must never strand a CPU or admit an unsafe owner.</li>
       <li><strong>x86 entry and exception safety:</strong> direct entry, NMI/MCE visibility, vector use, and deferred reschedule/call-function behavior require architecture review.</li>
@@ -193,14 +203,34 @@
     </ol>
   </section>
 
+  <section id="closure-evidence">
+    <h2>Current closure evidence</h2>
+    <p>The reduction is closed internally at <code>70ba38ae38fb</code>. The evidence below is exact-current for the reduced implementation and does not substitute for external maintainer review.</p>
+    <table>
+      <thead><tr><th>Evidence</th><th>Result</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Production-like full build, <code>CONFIG_CPU_ACCEL_CORE=y</code></td><td>Exit 0</td><td><span class="badge done">Pass</span></td></tr>
+        <tr><td>Accelerator-disabled full build, <code>CONFIG_CPU_ACCEL</code> unset</td><td>Exit 0</td><td><span class="badge done">Pass</span></td></tr>
+        <tr><td>Phase 9 freeze and Phase 10 SMP runtime gates</td><td>Exit 0</td><td><span class="badge done">Pass</span></td></tr>
+        <tr><td>Wrapper flush, drain, and destroy stress cases</td><td>Owner stopped in 3 ms; module refcount zero</td><td><span class="badge done">Pass</span></td></tr>
+        <tr><td>Internal call-site audit</td><td>218/218 files pass</td><td><span class="badge done">Closed</span></td></tr>
+        <tr><td>Internal semantic-remainder audit</td><td>90/90 files pass</td><td><span class="badge done">Closed</span></td></tr>
+        <tr><td>External subsystem maintainer review</td><td>Not requested</td><td><span class="badge pending">Follow-up</span></td></tr>
+        <tr><td>Exact-current four-CPU 10-minute comparison</td><td>user-oslat max 450 ns, 0 samples over 1 µs; rt-tests max 9,273 ns</td><td><span class="badge done">Pass</span></td></tr>
+        <tr><td>Exact-current four-CPU 24-hour soak</td><td>user-oslat max 320 ns, 0 samples over 1 µs; rt-tests max 8,543 ns</td><td><span class="badge done">Pass</span></td></tr>
+      </tbody>
+    </table>
+    <p>The 24-hour soak completed from 2026-11-15 00:51:30 UTC to 2026-11-16 00:51:31 UTC. Both tools exited zero, the module refcount returned to zero, no new NVMe QID 2 timeout appeared, and all raw artifact checksums passed. The complete agreed-format report is <code>Documentation/accel/phase10-4cpu-user-oslat-and-rt-tests-oslat-24h-2026-11-15.md</code>.</p>
+  </section>
+
   <section id="boundaries">
     <h2>Explicit boundaries</h2>
     <div class="callout warn"><strong>Prototype boundary:</strong> this work provides CPU execution ownership and coordination, not device or DMA ownership, and it does not control NMIs, SMIs, machine checks, or arbitrary firmware activity.</div>
     <p>It does not provide a formal hard latency bound. It reduces and measures asynchronous kernel interference, but worst-case behavior still depends on firmware, hardware events, and paths outside the ownership contract.</p>
-    <p>The reduced workqueue footprint is a review-scope improvement, not a claim that all 218 call sites are trivial. Each still needs confirmation that its original synchronous-work guarantee is preserved.</p>
+    <p>The reduced workqueue footprint is a review-scope improvement, not a claim that all 218 call sites are trivial. Internal audits confirmed each site’s original synchronous-work guarantee, but external maintainers have not yet reviewed or signed off on those conversions.</p>
   </section>
 
-  <footer>Generated from the review-closure worktree on 2026-11-14. Metrics use tracked source only and exclude accelerator documentation, userspace tooling, <code>drivers/cpu_accel</code>, <code>MAINTAINERS</code>, and direct accelerator support/API/test paths.</footer>
+  <footer>Generated on 2026-11-15 from <code>codex/accelerator-blast-radius-v2</code> at <code>70ba38ae38fb</code>. Metrics use tracked source only and exclude accelerator documentation, userspace tooling, <code>drivers/cpu_accel</code>, <code>MAINTAINERS</code>, and direct accelerator support/API/test paths. The 24-hour soak completed successfully before this report was prepared.</footer>
 </div>
 </body>
 </html>

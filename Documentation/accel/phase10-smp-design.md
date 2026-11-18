@@ -276,3 +276,15 @@ only their explicit start and end console markers.
 
 The review-closure checklist for the blast-radius reduction is recorded in
 `Documentation/accel/phase10-blast-radius-review-close-plan.md`.
+
+On 2026-11-15, after the reduction closure, Simon completed a 24-hour
+exact-current concurrent soak with `user-oslat` on CPUs 5, 7, 9, and 11 and
+rt-tests `oslat` on CPUs 4, 6, 8, and 10.  `user-oslat` completed
+17,099,665,434,460 samples with a weighted mean of 20.210846691 ns, a maximum
+of 320 ns, and no samples above 1 us.  rt-tests `oslat` completed
+15,198,785,413,327 samples with a weighted mean of 22.738551069 ns, a maximum
+of 8,543 ns, and 345,560,083 samples above 1 us.  Both tools exited
+successfully, the module refcount returned to zero, no new NVMe QID 2 timeout
+appeared, and all raw artifact checksums passed.  The complete agreed-format
+comparison is recorded in
+`Documentation/accel/phase10-4cpu-user-oslat-and-rt-tests-oslat-24h-2026-11-15.md`.

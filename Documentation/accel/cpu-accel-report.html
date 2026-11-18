@@ -182,6 +182,7 @@
     }
     .pill.done { color: var(--ok); background: var(--ok-bg); border-color: #bbf7d0; }
     .pill.paused { color: var(--warn); background: var(--warn-bg); border-color: #fed7aa; }
+    .pill.running { color: var(--accent-2); background: #ecfdf5; border-color: #99f6e4; }
     .pill.experimental { color: #4338ca; background: #eef2ff; border-color: #c7d2fe; }
     figure { margin: 28px 0; }
     figcaption { color: var(--muted); font-size: 14px; margin-top: 10px; }
@@ -215,13 +216,13 @@
 <div class="layout">
   <header class="hero">
     <div class="eyebrow">Linux-integrated dataplane accelerator</div>
-    <h1>Design, implementation, and validation through Phase 10</h1>
-    <p class="subtitle">A technical status report for low-latency and real-time systems reviewers, covering the original design, the implementation path, the measured results, and the deliberate deviations from the initial plan.</p>
+    <h1>Design, implementation, and validation through Phase 10 and blast-radius reduction</h1>
+    <p class="subtitle">A technical status report for low-latency and real-time systems reviewers, covering the original design, the implementation path, the post-Phase-10 scope reduction, the measured results, and the deliberate deviations from the initial plan.</p>
     <div class="meta">
-      <div><strong>Date:</strong> <time datetime="2026-11-13">November 13, 2026</time></div>
-      <div><strong>Current branch:</strong> <span class="mono">codex/accelerator-oslat</span></div>
-      <div><strong>Current commit:</strong> <span class="mono">808af5cf6676</span></div>
-      <div><strong>Status:</strong> <span class="pill done">Phase 10 complete</span><span class="pill paused">paused before Phase 11</span></div>
+      <div><strong>Date:</strong> <time datetime="2026-11-15">November 15, 2026</time></div>
+      <div><strong>Current branch:</strong> <span class="mono">codex/accelerator-blast-radius-v2</span></div>
+      <div><strong>Current commit:</strong> <span class="mono">70ba38ae38fb</span></div>
+      <div><strong>Status:</strong> <span class="pill done">Phase 10 complete</span><span class="pill done">Blast-radius reduction closed</span><span class="pill done">24-hour soak passed</span><span class="pill paused">paused before Phase 11</span></div>
     </div>
   </header>
 
@@ -247,7 +248,10 @@
       The CPU-accelerator work investigates whether Linux can remain the single operating system and control plane while one or more CPUs are leased to a protected, non-scheduler-governed dataplane execution domain. The goal is not a hypervisor or a second kernel. Linux performs admission, lifecycle control, resource accounting, recovery, and observability; the selected CPUs execute a statically admitted workload with ordinary Linux scheduling and routine IPI paths excluded from the active interval.
     </p>
     <p>
-      Phase 10 is complete. The implementation now supports an experimental ABI 25 static multi-worker domain with transactional activation, per-worker telemetry, manager-death cleanup, worker-targeted escape, bounded SPSC queues, and a linear static pipeline. ABI 23 and ABI 24 remain frozen compatibility floors. The implementation was validated on Simon with a two-CPU gate, a four-CPU gate, an ABI 23/24 freeze gate, and a twelve-hour corrected-isolation soak running user-oslat and rt-tests oslat concurrently.
+      Phase 10 is complete, and the subsequent blast-radius reduction is closed. The implementation supports an experimental ABI 25 static multi-worker domain with transactional activation, per-worker telemetry, manager-death cleanup, worker-targeted escape, bounded SPSC queues, and a linear static pipeline. ABI 23 and ABI 24 remain frozen compatibility floors. The reduction removed the broad kernel-wide <code>*_with_sync_wait()</code> API family and retained only three owner-aware workqueue operations: <code>cpu_accel_flush_workqueue()</code>, <code>cpu_accel_drain_workqueue()</code>, and <code>cpu_accel_destroy_workqueue()</code>.
+    </p>
+    <p>
+      Exact-current validation passed production-like and accelerator-disabled builds, the Phase 9 and Phase 10 runtime gates, the three wrapper stress cases, a ten-minute four-CPU comparison, and a twenty-four-hour four-CPU concurrent soak. The prior twelve-hour corrected-isolation soak also passed.
     </p>
     <p>
       The most important caveat is that this is still a bounded prototype rather than a production isolation system. NMIs, SMIs, machine checks, firmware effects, and some platform events remain outside the software control plane. Device and DMA ownership have not started. The current result demonstrates the lifecycle, memory, recovery, and static SMP model; it does not yet demonstrate a NIC-backed dataplane or a formal hard latency bound.
@@ -269,23 +273,38 @@
         <div class="detail">CPUs 5, 7, 9, 11</div>
       </div>
       <div class="kpi">
-        <div class="label">Longest soak</div>
-        <div class="value">12 h</div>
-        <div class="detail">Concurrent user-oslat and rt-tests oslat</div>
+        <div class="label">Retained wrapper APIs</div>
+        <div class="value">3</div>
+        <div class="detail">Flush, drain, and destroy workqueue operations</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Final tracked diff</div>
+        <div class="value">438 files</div>
+        <div class="detail">41,126 insertions and 876 deletions</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Internal review closure</div>
+        <div class="value">100%</div>
+        <div class="detail">218/218 call-site files and 90/90 semantic files</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Longest completed soak</div>
+        <div class="value">24 h</div>
+        <div class="detail">Post-reduction exact-current run</div>
       </div>
       <div class="kpi">
         <div class="label">Maximum user-oslat latency</div>
-        <div class="value">400 ns</div>
-        <div class="detail">12-hour corrected-isolation run</div>
+        <div class="value">320 ns</div>
+        <div class="detail">Post-reduction 24-hour soak</div>
       </div>
       <div class="kpi">
         <div class="label">Samples above 1 µs</div>
         <div class="value">0</div>
-        <div class="detail">user-oslat, 12-hour soak</div>
+        <div class="detail">user-oslat, post-reduction 24-hour soak</div>
       </div>
     </div>
     <div class="callout ok">
-      <strong>Bottom line:</strong> Phase 10 successfully demonstrates a static multi-CPU accelerator domain, bounded shared-memory communication, recovery, and ABI compatibility on real hardware. Phase 11 device and static-DMA ownership has not begun.
+      <strong>Bottom line:</strong> Phase 10 and the post-Phase-10 blast-radius reduction demonstrate a static multi-CPU accelerator domain, bounded shared-memory communication, recovery, ABI compatibility, and a substantially smaller owner-aware kernel interface on real hardware. Phase 11 device and static-DMA ownership has not begun, and external maintainer reviews are still follow-ups.
     </div>
   </section>
 
@@ -469,6 +488,9 @@
         <tr><td>Phase 10 pipeline</td><td class="mono">98fa3ac9a48a</td><td>Bounded SPSC queues and static user-pipeline topology.</td></tr>
         <tr><td>Full SMP metrics</td><td class="mono">8bb589d30e8e</td><td>Complete per-worker metrics and reporting.</td></tr>
         <tr><td>Phase 10 soak record</td><td class="mono">808af5cf6676</td><td>Twelve-hour corrected-isolation soak documentation.</td></tr>
+        <tr><td>Blast-radius reduction</td><td class="mono">bc4b96e4d9ec</td><td>Removed the broad <code>*_with_sync_wait()</code> family and retained three whole-workqueue wrappers.</td></tr>
+        <tr><td>Blast-radius review closure</td><td class="mono">0703304bc4cd</td><td>Completed internal subsystem audits, builds, runtime gates, and wrapper stress evidence.</td></tr>
+        <tr><td>Current scope reconciliation</td><td class="mono">70ba38ae38fb</td><td>Clarified the final 438-file diff, retained interface boundary, and review state.</td></tr>
       </tbody>
     </table>
   </section>
@@ -498,7 +520,7 @@
 
     <h3>5. Workqueue and IRQ quarantine</h3>
     <p>
-      While the target is entering or in accelerator mode, the workqueue core reserves it against unbound-work selection and redirects eligible unbound work to another online CPU. Per-CPU work remains associated with its target and is deferred until Linux mode resumes. IRQ quarantine is an explicit admission step that reserves the target against new normal IRQ affinity assignments, snapshots active affinity, moves migratable IRQs, and waits for in-flight handlers. It fails closed if an IRQ cannot be moved safely.
+      While the target is entering or in accelerator mode, the workqueue core reserves it against unbound-work selection and redirects eligible unbound work to another online CPU. Per-CPU work remains associated with its target and is deferred until Linux mode resumes. The post-Phase-10 reduction replaced the broad call-site-specific synchronous-wait API with three whole-workqueue operations: flush, drain, and destroy. Their owner reservation is limited to the CPUs that a <code>WQ_PERCPU</code> queue can possibly select. IRQ quarantine is an explicit admission step that reserves the target against new normal IRQ affinity assignments, snapshots active affinity, moves migratable IRQs, and waits for in-flight handlers. It fails closed if an IRQ cannot be moved safely.
     </p>
 
     <h3>6. Per-worker telemetry</h3>
@@ -510,7 +532,7 @@
   <section id="validation">
     <h2>Validation and results</h2>
     <p>
-      The implementation was validated incrementally, with each phase gated on runtime behavior rather than only static builds. The most significant hardware validation is the Phase 10 SMP gate and the twelve-hour corrected-isolation soak on Simon.
+      The implementation was validated incrementally, with each phase gated on runtime behavior rather than only static builds. The most significant completed hardware evidence is the Phase 10 SMP gate, the twelve-hour corrected-isolation soak, and the post-reduction exact-current ten-minute and twenty-four-hour comparisons.
     </p>
 
     <h3>Phase 9 ABI freeze gate</h3>
@@ -547,7 +569,7 @@
       </tbody>
     </table>
 
-    <h3>Twelve-hour corrected-isolation soak</h3>
+    <h3>Twelve-hour corrected-isolation soak, pre-reduction baseline</h3>
     <p>
       The longest validation ran user-oslat on CPUs 5, 7, 9, and 11 and rt-tests oslat on CPUs 4, 6, 8, and 10. Launchers were constrained to housekeeping CPUs 0–3. The isolated CPU set remained 4–11.
     </p>
@@ -564,12 +586,59 @@
       Both tools exited successfully. The module refcount returned to zero. No new NVMe QID 2 timeouts or <code>cpu_accel</code> runtime errors appeared.
     </p>
 
+    <h3>Post-reduction exact-current ten-minute comparison</h3>
+    <p>
+      The comparison ran both tools concurrently on Simon after the blast-radius reduction, using the current control tool and module binaries. user-oslat used CPUs 5, 7, 9, and 11; rt-tests oslat used CPUs 4, 6, 8, and 10. Launchers were constrained to housekeeping CPUs 0–3.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Tool</th><th>Samples</th><th>Weighted mean</th><th>Maximum</th><th>Samples above 1 µs</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>user-oslat</td><td>119,050,252,505</td><td>20.159525043 ns</td><td>450 ns</td><td>0</td></tr>
+        <tr><td>rt-tests oslat</td><td>105,815,580,214</td><td>22.680814291 ns</td><td>9,273 ns</td><td>2,370,319</td></tr>
+      </tbody>
+    </table>
+    <p>
+      Both tools exited successfully, the module refcount returned to zero, and no new NVMe QID 2 timeouts appeared. The evidence directory is <span class="mono">/root/accel-measure/phase10-4cpu-user-oslat-and-rt-tests-oslat-10m-20261115T0030Z</span>.
+    </p>
+
+    <h3>Blast-radius review closure</h3>
+    <p>
+      The final tracked diff from review baseline <span class="mono">40288c9206c1</span> to <span class="mono">70ba38ae38fb</span> contains 438 files, 41,126 insertions, and 876 deletions. The primary review population is 309 non-module changed paths: 219 wrapper-family paths and 90 semantic-remainder paths. Internal review closure covers all 218 call-site files and all 90 semantic-remainder files.
+    </p>
+    <ul>
+      <li>Production-like <code>CONFIG_CPU_ACCEL_CORE=y</code> and accelerator-disabled full builds passed.</li>
+      <li>Phase 9 freeze, Phase 10 SMP, and the three retained-wrapper stress gates passed.</li>
+      <li>The wrapper stress cases stopped their owner in 3 ms and returned the module refcount to zero.</li>
+      <li>No unresolved internal review finding remains.</li>
+      <li>External maintainer reviews are documented follow-ups; they have not been requested or received and must not be represented as sign-offs.</li>
+      <li>Target-hardware validation remains environment-gated for the touched TMR, Greybus, and BCM PHY PTP driver paths.</li>
+    </ul>
+
+    <h3>Twenty-four-hour exact-current soak</h3>
+    <p>
+      The post-reduction concurrent soak ran from <time datetime="2026-11-15T00:51:30Z">2026-11-15 00:51:30 UTC</time> to <time datetime="2026-11-16T00:51:31Z">2026-11-16 00:51:31 UTC</time>. The complete agreed-format report is <span class="mono">Documentation/accel/phase10-4cpu-user-oslat-and-rt-tests-oslat-24h-2026-11-15.md</span>.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Tool</th><th>Samples</th><th>Weighted mean</th><th>Maximum</th><th>Samples above 1 µs</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>user-oslat</td><td>17,099,665,434,460</td><td>20.210846691 ns</td><td>320 ns</td><td>0</td></tr>
+        <tr><td>rt-tests oslat</td><td>15,198,785,413,327</td><td>22.738551069 ns</td><td>8,543 ns</td><td>345,560,083</td></tr>
+      </tbody>
+    </table>
+    <p>
+      Both tools exited successfully, the module refcount returned to zero, and no new NVMe QID 2 timeouts or <code>cpu_accel</code> runtime errors appeared. All raw artifact checksums passed.
+    </p>
+
     <h3>Phase 8 adversarial validation</h3>
     <p>
       Phase 8 added a stress-class matrix that correlated user-oslat latency with external kernel activity. It covered baseline, CPU load, memory pressure, synchronous work, call-function IPIs, irq_work, timerlat, device lifecycle operations, power-policy transitions, resctrl, perf, ftrace, TLB flushes, hotplug, stop-machine, user escape faults, user death, RCU callback routing, migration, net backlog, and timer migration. The purpose was not to prove a universal bound, but to identify ordinary kernel paths that could stop the owned CPU and to validate that owner-aware handling kept those paths bounded and recoverable.
     </p>
     <div class="callout warn">
-      <strong>Important:</strong> The twelve-hour soak and Phase 10 gate are strong empirical evidence for the implemented execution model, but they are not a proof of absence of every ordinary Linux path or a formal hard latency bound.
+      <strong>Important:</strong> The twelve-hour soak, Phase 10 gate, and post-reduction ten-minute and twenty-four-hour comparisons are strong empirical evidence for the implemented execution model, but they are not a proof of absence of every ordinary Linux path or a formal hard latency bound.
     </div>
   </section>
 
@@ -586,7 +655,7 @@
 
     <h3>2. Phase 8 expanded into kernel-wide work</h3>
     <p>
-      The original plan treated adversarial validation primarily as a test phase. In practice, the audit found that many ordinary kernel paths could wait synchronously for work on an owned CPU. The project therefore added owner-aware synchronous-wait handling across several subsystems, including workqueue cancellation, device teardown, power policy, memory pressure, resctrl, perf, TLB, hotplug, stop-machine, and net backlog. This was necessary to make the ownership model viable rather than merely observable.
+      The original plan treated adversarial validation primarily as a test phase. In practice, the audit found that many ordinary kernel paths could wait synchronously for work on an owned CPU. The first response introduced a broad kernel-wide <code>*_with_sync_wait()</code> family. That design was deliberately reversed after review: the broad family was removed, and only three whole-workqueue operations remain. This reduced the exported interface and moved the concurrency contract into workqueue code while preserving the producer, teardown, and cleanup call-site semantics that require an owner to stop.
     </p>
 
     <h3>3. Memory and TLB ownership became a major subsystem</h3>
@@ -613,12 +682,17 @@
     <p>
       The original Phase 10 gate was a bounded validation. A twelve-hour corrected-isolation soak was added after the gate to provide stronger confidence in the corrected CPU-isolation configuration and in concurrent user-oslat and rt-tests oslat behavior. This was an extension of the validation plan, not a change to the architecture.
     </p>
+
+    <h3>8. A post-Phase-10 reduction changed the review boundary</h3>
+    <p>
+      The branch was intentionally split at <span class="mono">codex/accelerator-blast-radius-v2</span> to create a clear inflection point. The reduction removed the broad synchronous-wait API family, retained only flush, drain, and destroy workqueue wrappers, and replaced the previous review question—whether each transformed call site preserved an individual wrapper’s semantics—with a smaller set of whole-workqueue invariants. This did not remove all non-module changes; it reduced the exported API surface and concentrated the concurrency reasoning.
+    </p>
   </section>
 
   <section id="current-boundary">
     <h2>Current boundary and what is not done</h2>
     <p>
-      The project is paused before Phase 11. The current branch is complete through Phase 10 and pushed at commit <span class="mono">808af5cf6676</span>.
+      The project is paused before Phase 11. The current branch is complete through Phase 10 and blast-radius reduction, and is pushed at commit <span class="mono">70ba38ae38fb</span>.
     </p>
     <div class="two-col">
       <div class="card">
@@ -635,6 +709,10 @@
           <li>ABI 23/24 compatibility.</li>
           <li>Four-CPU Phase 10 gate.</li>
           <li>Twelve-hour corrected-isolation soak.</li>
+          <li>Blast-radius reduction with three retained workqueue wrappers.</li>
+          <li>Internal review closure for all 218 call-site files and 90 semantic-remainder files.</li>
+          <li>Post-reduction production, accelerator-disabled, and runtime gates.</li>
+          <li>Post-reduction ten-minute four-CPU comparison.</li>
         </ul>
       </div>
       <div class="card">
@@ -649,11 +727,13 @@
           <li>Networking workloads.</li>
           <li>Formal hard latency bound and platform qualification.</li>
           <li>Portable non-x86 backend.</li>
+          <li>External maintainer review and sign-off.</li>
+          <li>Target-hardware validation for environment-gated driver-specific paths.</li>
         </ul>
       </div>
     </div>
     <div class="callout">
-      <strong>Resume point:</strong> Phase 11 should begin with device and static-DMA ownership design, specifically VFIO/IOMMUFD ownership, domain-bound lifecycle, fixed DMA mappings, BAR/MMIO exposure, interrupt masking/routing, quiesce/reset, and fault injection.
+      <strong>Resume point:</strong> Phase 11 should begin with device and static-DMA ownership design, specifically VFIO/IOMMUFD ownership, domain-bound lifecycle, fixed DMA mappings, BAR/MMIO exposure, interrupt masking/routing, quiesce/reset, and fault injection. External subsystem reviews remain follow-ups and are not prerequisites to designing Phase 11, but they must not be described as complete.
     </div>
   </section>
 
@@ -666,8 +746,9 @@
       <li><strong>Problem:</strong> Linux scheduling, IPIs, workqueues, TLB maintenance, and device activity can introduce latency that is difficult to bound on a CPU that must service a deterministic dataplane.</li>
       <li><strong>Approach:</strong> Keep Linux as the control plane, but lease a static set of CPUs to a protected accelerator domain with explicit admission, bounded shared memory, and fail-stop recovery.</li>
       <li><strong>Key mechanism:</strong> Use a transactional domain lifecycle, sealed user image, workqueue and IRQ quarantine, TLB ownership tracking, and per-worker telemetry.</li>
-      <li><strong>Result:</strong> A four-CPU static SMP domain and bounded SPSC pipeline passed the Phase 10 gate, and a twelve-hour concurrent soak showed zero user-oslat samples above 1 µs with a 400 ns maximum.</li>
-      <li><strong>Limit:</strong> Device/DMA ownership, networking, and formal hard latency bounds remain future work.</li>
+      <li><strong>Reduction:</strong> The broad kernel-wide synchronous-wait API was removed; only three whole-workqueue wrappers remain, with their concurrency reasoning centralized in workqueue code.</li>
+      <li><strong>Result:</strong> A four-CPU static SMP domain and bounded SPSC pipeline passed the Phase 10 gate, a twelve-hour concurrent soak showed zero user-oslat samples above 1 µs with a 400 ns maximum, and the post-reduction ten-minute and twenty-four-hour comparisons showed zero samples above 1 µs with maxima of 450 ns and 320 ns.</li>
+      <li><strong>Limit:</strong> Device/DMA ownership, networking, formal hard latency bounds, and external maintainer review remain future work.</li>
     </ol>
 
     <h3>What is worth highlighting</h3>
@@ -677,7 +758,8 @@
       <li>The transactional lifecycle and fail-closed recovery semantics.</li>
       <li>The ABI compatibility discipline around versions 23, 24, and 25.</li>
       <li>The bounded SPSC pipeline and memory-ordering contract.</li>
-      <li>The empirical validation on real hardware, including the twelve-hour soak.</li>
+      <li>The blast-radius reduction and the small retained workqueue wrapper surface.</li>
+      <li>The empirical validation on real hardware, including the twelve-hour soak and exact-current post-reduction comparison.</li>
     </ul>
 
     <h3>What can probably be omitted</h3>
@@ -687,6 +769,7 @@
       <li>Host-specific tuned-profile tuning unless the audience asks about the test environment.</li>
       <li>Every Phase 8 subsystem audit row; summarize the class categories and outcomes.</li>
       <li>Exact per-bin histogram tables unless latency methodology is the focus.</li>
+      <li>Most rows from the 24-hour histogram unless latency methodology is the focus.</li>
     </ul>
   </section>
 
@@ -701,6 +784,11 @@
       <li><code>Documentation/accel/cpu-accel-memory.rst</code> — memory classes, region lifecycle, VMA admission, and TLB ownership model.</li>
       <li><code>Documentation/accel/phase9-uapi-sdk-implementation.md</code> — ABI 24 negotiation, security, polling, and freeze gate.</li>
       <li><code>Documentation/accel/phase10-smp-design.md</code> — static SMP domain, SPSC pipeline, validation gate, and Simon results.</li>
+      <li><code>Documentation/accel/cpu-accel-blast-radius-report.html</code> — final reduced-footprint scope, class breakdown, and review evidence.</li>
+      <li><code>Documentation/accel/phase10-blast-radius-review-closure-evidence.md</code> — build, runtime, and internal review-closure record.</li>
+      <li><code>Documentation/accel/phase10-blast-radius-subsystem-review-matrix.md</code> — internal readiness and external follow-up matrix.</li>
+      <li><code>Documentation/accel/phase10-blast-radius-reduction-2026-11-14.md</code> — post-reduction latency comparison methodology and results.</li>
+      <li><code>Documentation/accel/phase10-4cpu-user-oslat-and-rt-tests-oslat-24h-2026-11-15.md</code> — complete post-reduction 24-hour comparison report.</li>
       <li><code>Documentation/accel/phase8-wcl-report.md</code> — worst-case latency methodology and stress-class evidence.</li>
       <li><code>Documentation/accel/oslat-sidebyside-*.md</code> — user-oslat and rt-tests oslat comparison reports.</li>
       <li><code>drivers/cpu_accel/cpu_accel.c</code> — implementation.</li>
@@ -710,7 +798,7 @@
   </section>
 
   <footer>
-    <p>Prepared on <time datetime="2026-11-13">November 13, 2026</time> from the current branch <span class="mono">codex/accelerator-oslat</span> at <span class="mono">808af5cf6676</span>.</p>
+    <p>Prepared on <time datetime="2026-11-15">November 15, 2026</time> from the current branch <span class="mono">codex/accelerator-blast-radius-v2</span> at <span class="mono">70ba38ae38fb</span>. The 24-hour exact-current soak completed successfully before this report was prepared.</p>
   </footer>
 </div>
 </body>

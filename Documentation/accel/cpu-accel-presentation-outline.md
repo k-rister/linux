@@ -15,10 +15,10 @@ low-latency performance optimization.
    implementation details, audit results, and evidence without reading a full
    paper.
 
-**Source state:** Code and committed documentation links are pinned to commit
-`e4bcafcc86d44b6e8e800f54a9394dbc9ff507d` on
-`codex/accelerator-v7.3-rebase`. The v7.3-final rebase and soak ladder are
-documented in
+**Source state:** Code links are pinned to commit
+`e4bcafcc86d44b6e8e800f54a9394dbc9ff507d`; the v7.3-final rebase and soak
+ladder report is pinned to commit `cee53c1374a5`. Both commits are on
+`codex/accelerator-v7.3-rebase`, and the report is
 `Documentation/accel/v7.3-rebase-4cpu-user-oslat-and-rt-tests-oslat-2026-11-26.md`.
 
 ### Link policy
@@ -216,7 +216,7 @@ successfully, the module refcount returned to zero, no new NVMe QID 2 timeout
 appeared, no new cpu-accel runtime error appeared, and all raw artifacts passed
 checksum verification.
 
-**Source link:** [v7.3-final rebase validation report](https://github.com/k-rister/linux/blob/codex/accelerator-v7.3-rebase/Documentation/accel/v7.3-rebase-4cpu-user-oslat-and-rt-tests-oslat-2026-11-26.md#L1-L118)
+**Source link:** [v7.3-final rebase validation report](https://github.com/k-rister/linux/blob/cee53c1374a5/Documentation/accel/v7.3-rebase-4cpu-user-oslat-and-rt-tests-oslat-2026-11-26.md#L1-L118)
 
 **Time:** approximately 90 seconds.
 
@@ -574,7 +574,7 @@ process capture could otherwise perturb the measured interval. The cpu-accel
 workers were CFS tasks before entering the accelerator domain; the rt-tests
 workers were `SCHED_FIFO 99`.
 
-**Source link:** [Test environment and placement](https://github.com/k-rister/linux/blob/codex/accelerator-v7.3-rebase/Documentation/accel/v7.3-rebase-4cpu-user-oslat-and-rt-tests-oslat-2026-11-26.md#L1-L18)
+**Source link:** [Test environment and placement](https://github.com/k-rister/linux/blob/cee53c1374a5/Documentation/accel/v7.3-rebase-4cpu-user-oslat-and-rt-tests-oslat-2026-11-26.md#L1-L18)
 
 ## Backing slide 9 — Detailed v7.3-final 24-hour results
 
@@ -611,7 +611,7 @@ This comparison is evidence that the post-reduction implementation sustained
 the intended execution model under a long, concurrent, real-hardware run. It is
 not a formal worst-case latency proof.
 
-**Source link:** [Detailed user-oslat and rt-tests results](https://github.com/k-rister/linux/blob/codex/accelerator-v7.3-rebase/Documentation/accel/v7.3-rebase-4cpu-user-oslat-and-rt-tests-oslat-2026-11-26.md#L20-L77)
+**Source link:** [Detailed user-oslat and rt-tests results](https://github.com/k-rister/linux/blob/cee53c1374a5/Documentation/accel/v7.3-rebase-4cpu-user-oslat-and-rt-tests-oslat-2026-11-26.md#L20-L77)
 
 ## Backing slide 10 — Run health and artifact integrity
 
@@ -638,7 +638,7 @@ passed verification.
 Raw evidence remains on Simon under:
 `/root/accel-measure/v7.3-rebase-4cpu-user-oslat-and-rt-tests-oslat-24h-20261125T025126Z`.
 
-**Source link:** [Run health and artifact integrity](https://github.com/k-rister/linux/blob/codex/accelerator-v7.3-rebase/Documentation/accel/v7.3-rebase-4cpu-user-oslat-and-rt-tests-oslat-2026-11-26.md#L79-L118)
+**Source link:** [Run health and artifact integrity](https://github.com/k-rister/linux/blob/cee53c1374a5/Documentation/accel/v7.3-rebase-4cpu-user-oslat-and-rt-tests-oslat-2026-11-26.md#L79-L118)
 
 ## Backing slide 11 — Review, limitations, and next work
 
@@ -742,5 +742,5 @@ review risk even after the substantial blast-radius reduction.
 | Blast-radius reduction metrics | [Blast-radius report](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/Documentation/accel/cpu-accel-blast-radius-report.html#L78-L146) |
 | Wrapper semantic audit | [Wrapper API audit](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/Documentation/accel/phase10-blast-radius-wrapper-api-audit.md#L15-L119) |
 | Call-site audit closure | [Call-site audit](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/Documentation/accel/phase10-blast-radius-call-site-audit.md#L1-L104) |
-| v7.3-final results and health | [v7.3-final rebase validation report](https://github.com/k-rister/linux/blob/codex/accelerator-v7.3-rebase/Documentation/accel/v7.3-rebase-4cpu-user-oslat-and-rt-tests-oslat-2026-11-26.md#L1-L118) |
+| v7.3-final results and health | [v7.3-final rebase validation report](https://github.com/k-rister/linux/blob/cee53c1374a5/Documentation/accel/v7.3-rebase-4cpu-user-oslat-and-rt-tests-oslat-2026-11-26.md#L1-L118) |
 | Current boundary and unfinished work | [Design report](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/Documentation/accel/cpu-accel-report.html#L619-L660) |

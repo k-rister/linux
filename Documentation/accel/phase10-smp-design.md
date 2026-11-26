@@ -1,9 +1,9 @@
 # CPU accelerator Phase 10 SMP design
 
 Date: 2026-11-11
-Branch: `codex/accelerator-oslat`
+Branch: `codex/accelerator-v7.3-rebase`
 Status: independent SMP stage and bounded SPSC static pipeline implemented and
-validated on Simon
+validated on Simon against Linux `v7.3` final
 
 ## Objective
 
@@ -288,3 +288,18 @@ successfully, the module refcount returned to zero, no new NVMe QID 2 timeout
 appeared, and all raw artifact checksums passed.  The complete agreed-format
 comparison is recorded in
 `Documentation/accel/phase10-4cpu-user-oslat-and-rt-tests-oslat-24h-2026-11-15.md`.
+
+On 2026-11-26, after rebasing the branch onto Linux `v7.3` final, Simon
+completed an increasing-duration validation ladder with concurrent four-CPU
+`user-oslat` and rt-tests `oslat` runs of 60 seconds, 10 minutes, one hour,
+and 24 hours.  The final kernel was
+`7.3.0-accel-tlbfix-00019-ge4bcafcc86d4`, based on final `v7.3` commit
+`c03c1a14507dfaf8b856c2608f9ac216021fc222`.  The 24-hour rerun completed
+17,146,540,420,604 `user-oslat` samples with a weighted mean of
+20.155598190 ns, a maximum of 380 ns, and no samples above 1 us.  rt-tests
+`oslat` completed 15,240,596,761,793 samples with a weighted mean of
+22.676174219 ns, a maximum of 9,232 ns, and 345,581,176 samples above 1 us.
+All stages passed, both tools exited successfully, all raw checksums passed,
+and every `user-oslat` worker remained active for its full requested duration.
+The complete validation ladder is recorded in
+`Documentation/accel/v7.3-rebase-4cpu-user-oslat-and-rt-tests-oslat-2026-11-26.md`.

@@ -16,8 +16,10 @@ low-latency performance optimization.
    paper.
 
 **Source state:** Code and committed documentation links are pinned to commit
-`70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9`. The 24-hour soak report is pinned
-to result commit `7803c712b18fb24998baf3de4eca26f0e9416270`.
+`e4bcafcc86d44b6e8e800f54a9394dbc9ff507d` on
+`codex/accelerator-v7.3-rebase`. The v7.3-final rebase and soak ladder are
+documented in
+`Documentation/accel/v7.3-rebase-4cpu-user-oslat-and-rt-tests-oslat-2026-11-26.md`.
 
 ### Link policy
 
@@ -121,10 +123,10 @@ bounded queues as a new experimental extension.
 
 **Source links:**
 
-- [ABI 25 version and compatibility floor](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/include/uapi/linux/cpu_accel.h#L9-L10)
-- [ABI 25 domain, worker, status, and queue objects](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/include/uapi/linux/cpu_accel.h#L294-L326)
-- [ABI command encodings](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/include/uapi/linux/cpu_accel.h#L398-L446)
-- [Architecture report](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/Documentation/accel/cpu-accel-report.html#L357-L448)
+- [ABI 25 version and compatibility floor](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/include/uapi/linux/cpu_accel.h#L9-L10)
+- [ABI 25 domain, worker, status, and queue objects](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/include/uapi/linux/cpu_accel.h#L294-L326)
+- [ABI command encodings](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/include/uapi/linux/cpu_accel.h#L398-L446)
+- [Architecture report](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/Documentation/accel/cpu-accel-report.html#L357-L448)
 
 **Time:** approximately 90 seconds.
 
@@ -164,43 +166,46 @@ against an owned CPU.
 
 **Source links:**
 
-- [Architecture sync-wait begin and stop sequence](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/kernel/workqueue.c#L4353-L4374)
-- [`cpu_accel_flush_workqueue()`](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/kernel/workqueue.c#L4376-L4400)
-- [`cpu_accel_drain_workqueue()`](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/kernel/workqueue.c#L4457-L4481)
-- [Ordinary `flush_work()` using internal owner coordination](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/kernel/workqueue.c#L4614-L4618)
-- [Synchronous cancel path using internal owner coordination](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/kernel/workqueue.c#L4708-L4764)
-- [Destroy-time sync-wait coordination](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/kernel/workqueue.c#L6298-L6397)
-- [Retained wrapper declarations and disabled-config fallbacks](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/include/linux/cpu_accel_workqueue.h#L10-L39)
-- [Blast-radius reduction report](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/Documentation/accel/cpu-accel-blast-radius-report.html#L78-L146)
+- [Architecture sync-wait begin and stop sequence](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/kernel/workqueue.c#L4353-L4374)
+- [`cpu_accel_flush_workqueue()`](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/kernel/workqueue.c#L4376-L4400)
+- [`cpu_accel_drain_workqueue()`](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/kernel/workqueue.c#L4457-L4481)
+- [Ordinary `flush_work()` using internal owner coordination](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/kernel/workqueue.c#L4614-L4618)
+- [Synchronous cancel path using internal owner coordination](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/kernel/workqueue.c#L4708-L4764)
+- [Destroy-time sync-wait coordination](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/kernel/workqueue.c#L6298-L6397)
+- [Retained wrapper declarations and disabled-config fallbacks](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/include/linux/cpu_accel_workqueue.h#L10-L39)
+- [Blast-radius reduction report](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/Documentation/accel/cpu-accel-blast-radius-report.html#L78-L146)
 
 **Time:** approximately 90 seconds.
 
-## Slide 5 — Exact-current 24-hour performance result
+## Slide 5 — v7.3-final rebase and 24-hour result
 
 ### On-slide content
 
 | Tool | CPUs | Samples | Weighted mean | Maximum | Samples > 1 µs |
 |---|---|---:|---:|---:|---:|
-| cpu-accel `user-oslat` | 5, 7, 9, 11 | 17,099,665,434,460 | 20.210846691 ns | 320 ns | 0 |
-| rt-tests `oslat` | 4, 6, 8, 10 | 15,198,785,413,327 | 22.738551069 ns | 8,543 ns | 345,560,083 |
+| cpu-accel `user-oslat` | 5, 7, 9, 11 | 17,146,540,420,604 | 20.155598190 ns | 380 ns | 0 |
+| rt-tests `oslat` | 4, 6, 8, 10 | 15,240,596,761,793 | 22.676174219 ns | 9,232 ns | 345,581,176 |
 
 - Both tools exited `0`.
-- Module refcount returned to `0`.
-- No new NVMe QID 2 timeout or `cpu_accel` runtime error.
-- All 14 raw-artifact checksums passed.
-- `user-oslat` per-CPU maxima: 180, 320, 260, and 250 ns.
+- Kernel: `7.3.0-accel-tlbfix-00019-ge4bcafcc86d4`.
+- Base: Linux `v7.3` final (`c03c1a14507d…`).
+- Validation ladder: 60 seconds, 10 minutes, one hour, and 24 hours.
+- `user-oslat` per-CPU maxima: 380, 280, 270, and 330 ns.
+- All workers stayed active for the full requested duration.
 
 ### Speaker notes
 
 Present this as exact-current empirical evidence, not as a formal hard latency
-proof. The run used the post-reduction module and control tool. Both workloads
-ran concurrently for 24 hours on Simon: cpu-accel user workers on CPUs 5, 7, 9,
-and 11, and rt-tests `oslat` on CPUs 4, 6, 8, and 10. Launchers were constrained
-to housekeeping CPUs 0–3.
+proof. The branch was rebased onto Linux `v7.3` final, built as kernel
+`7.3.0-accel-tlbfix-00019-ge4bcafcc86d4`, and validated with an
+increasing-duration ladder. Both workloads ran concurrently for the final 24
+hours on Simon: cpu-accel user workers on CPUs 5, 7, 9, and 11, and rt-tests
+`oslat` on CPUs 4, 6, 8, and 10. Launchers were constrained to housekeeping
+CPUs 0–3.
 
 The cpu-accel workers completed more than 17 trillion samples with a maximum
-lateness of 320 ns and no samples above 1 µs. The concurrent rt-tests workers
-completed more than 15 trillion samples, with a maximum of 8,543 ns and roughly
+lateness of 380 ns and no samples above 1 µs. The concurrent rt-tests workers
+completed more than 15 trillion samples, with a maximum of 9,232 ns and roughly
 345.6 million samples above 1 µs. The two tools are not identical measurement
 programs and use different CPU sets and scheduling classes, so this is a
 same-host, exact-current comparison rather than a claim that one benchmark is
@@ -211,7 +216,7 @@ successfully, the module refcount returned to zero, no new NVMe QID 2 timeout
 appeared, no new cpu-accel runtime error appeared, and all raw artifacts passed
 checksum verification.
 
-**Source link:** [24-hour exact-current soak report](https://github.com/k-rister/linux/blob/7803c712b18fb24998baf3de4eca26f0e9416270/Documentation/accel/phase10-4cpu-user-oslat-and-rt-tests-oslat-24h-2026-11-15.md#L1-L494)
+**Source link:** [v7.3-final rebase validation report](https://github.com/k-rister/linux/blob/codex/accelerator-v7.3-rebase/Documentation/accel/v7.3-rebase-4cpu-user-oslat-and-rt-tests-oslat-2026-11-26.md#L1-L118)
 
 **Time:** approximately 90 seconds.
 
@@ -244,7 +249,7 @@ Internal audits, builds, runtime gates, wrapper stress cases, and the 24-hour
 soak are complete. External subsystem-maintainer reviews have not been requested
 or received and must not be represented as sign-offs.
 
-**Source link:** [Explicit boundary section](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/Documentation/accel/cpu-accel-blast-radius-report.html#L197-L205)
+**Source link:** [Explicit boundary section](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/Documentation/accel/cpu-accel-blast-radius-report.html#L197-L205)
 
 **Time:** approximately 45 seconds.
 
@@ -254,7 +259,7 @@ or received and must not be represented as sign-offs.
 
 **Takeaway:** A single Linux OS can lease a static set of CPUs to a protected
 dataplane, coordinate the kernel paths that can wait for those CPUs, recover
-them without rebooting, and sustain a four-CPU 24-hour exact-current run with no
+them without rebooting, and sustain a four-CPU v7.3-final 24-hour run with no
 measured user-oslat samples above 1 µs.
 
 **Next:** Device and static-DMA ownership; external subsystem review.
@@ -311,7 +316,7 @@ The ordering was intentional. CPU ownership, bounded communication, and
 no-reboot recovery were prerequisites before device ownership, DMA, PMD
 integration, or networking.
 
-**Source link:** [Original design section](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/Documentation/accel/cpu-accel-report.html#L293-L355)
+**Source link:** [Original design section](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/Documentation/accel/cpu-accel-report.html#L293-L355)
 
 ## Backing slide 2 — Control plane and memory model
 
@@ -344,8 +349,8 @@ yet, which keeps this phase clearly within CPU execution ownership.
 
 **Source links:**
 
-- [Architecture report: control plane, ABI, and memory model](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/Documentation/accel/cpu-accel-report.html#L357-L448)
-- [Driver region and control mmap implementation](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/drivers/cpu_accel/cpu_accel.c#L823-L998)
+- [Architecture report: control plane, ABI, and memory model](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/Documentation/accel/cpu-accel-report.html#L357-L448)
+- [Driver region and control mmap implementation](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/drivers/cpu_accel/cpu_accel.c#L823-L998)
 
 ## Backing slide 3 — Static SMP execution and bounded queues
 
@@ -379,10 +384,10 @@ coordinate through shared memory without routine IPIs.
 
 **Source links:**
 
-- [SMP execution model](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/Documentation/accel/phase10-smp-design.md#L8-L35)
-- [Bounded queue contract](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/Documentation/accel/phase10-smp-design.md#L149-L165)
-- [Driver topology and queue validation](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/drivers/cpu_accel/cpu_accel.c#L3169-L3340)
-- [UAPI queue configuration object](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/include/uapi/linux/cpu_accel.h#L398-L446)
+- [SMP execution model](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/Documentation/accel/phase10-smp-design.md#L8-L35)
+- [Bounded queue contract](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/Documentation/accel/phase10-smp-design.md#L149-L165)
+- [Driver topology and queue validation](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/drivers/cpu_accel/cpu_accel.c#L3169-L3340)
+- [UAPI queue configuration object](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/include/uapi/linux/cpu_accel.h#L398-L446)
 
 ## Backing slide 4 — Transactional lifecycle and recovery
 
@@ -417,10 +422,10 @@ prototype, not a general interrupt-safe user ABI.
 
 **Source links:**
 
-- [Lifecycle design](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/Documentation/accel/phase10-smp-design.md#L36-L65)
-- [Domain configuration and start implementation](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/drivers/cpu_accel/cpu_accel.c#L3383-L3686)
-- [User worker join implementation](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/drivers/cpu_accel/cpu_accel.c#L3747-L3847)
-- [Ioctl command dispatch and ABI negotiation](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/drivers/cpu_accel/cpu_accel.c#L3849-L3895)
+- [Lifecycle design](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/Documentation/accel/phase10-smp-design.md#L36-L65)
+- [Domain configuration and start implementation](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/drivers/cpu_accel/cpu_accel.c#L3383-L3686)
+- [User worker join implementation](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/drivers/cpu_accel/cpu_accel.c#L3747-L3847)
+- [Ioctl command dispatch and ABI negotiation](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/drivers/cpu_accel/cpu_accel.c#L3849-L3895)
 
 ## Backing slide 5 — x86 ownership and direct entry
 
@@ -453,10 +458,10 @@ major subsystem rather than a simple CPU mask operation.
 
 **Source links:**
 
-- [x86 owner admission and state setup](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/arch/x86/kernel/accel.c#L139-L242)
-- [x86 direct entry path](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/arch/x86/kernel/accel.c#L891-L916)
-- [Deferred reschedule and call-function handling](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/arch/x86/kernel/accel.c#L918-L978)
-- [TLB shootdown recording](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/arch/x86/kernel/accel.c#L980-L1008)
+- [x86 owner admission and state setup](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/arch/x86/kernel/accel.c#L139-L242)
+- [x86 direct entry path](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/arch/x86/kernel/accel.c#L891-L916)
+- [Deferred reschedule and call-function handling](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/arch/x86/kernel/accel.c#L918-L978)
+- [TLB shootdown recording](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/arch/x86/kernel/accel.c#L980-L1008)
 
 ## Backing slide 6 — Workqueue and IRQ quarantine
 
@@ -488,8 +493,8 @@ TLB maintenance, and synchronous IPI waits.
 
 **Source links:**
 
-- [Key mechanisms report](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/Documentation/accel/cpu-accel-report.html#L477-L510)
-- [Single-CPU workqueue and IRQ reservation path](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/drivers/cpu_accel/cpu_accel.c#L2937-L3065)
+- [Key mechanisms report](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/Documentation/accel/cpu-accel-report.html#L477-L510)
+- [Single-CPU workqueue and IRQ reservation path](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/drivers/cpu_accel/cpu_accel.c#L2937-L3065)
 
 ## Backing slide 7 — Blast-radius reduction
 
@@ -531,11 +536,11 @@ pending.
 
 **Source links:**
 
-- [Reduction outcome](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/Documentation/accel/cpu-accel-blast-radius-report.html#L120-L146)
-- [Wrapper implementation review](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/Documentation/accel/phase10-blast-radius-wrapper-api-audit.md#L15-L83)
-- [Call-site audit method](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/Documentation/accel/phase10-blast-radius-call-site-audit.md#L16-L33)
-- [`workqueue_sync_wait_begin()`](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/kernel/workqueue.c#L4353-L4374)
-- [`cpu_accel_destroy_workqueue()`](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/kernel/workqueue.c#L6382-L6397)
+- [Reduction outcome](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/Documentation/accel/cpu-accel-blast-radius-report.html#L120-L146)
+- [Wrapper implementation review](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/Documentation/accel/phase10-blast-radius-wrapper-api-audit.md#L15-L83)
+- [Call-site audit method](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/Documentation/accel/phase10-blast-radius-call-site-audit.md#L16-L33)
+- [`workqueue_sync_wait_begin()`](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/kernel/workqueue.c#L4353-L4374)
+- [`cpu_accel_destroy_workqueue()`](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/kernel/workqueue.c#L6382-L6397)
 
 ## Backing slide 8 — Validation methodology
 
@@ -569,34 +574,34 @@ process capture could otherwise perturb the measured interval. The cpu-accel
 workers were CFS tasks before entering the accelerator domain; the rt-tests
 workers were `SCHED_FIFO 99`.
 
-**Source link:** [Test environment and placement](https://github.com/k-rister/linux/blob/7803c712b18fb24998baf3de4eca26f0e9416270/Documentation/accel/phase10-4cpu-user-oslat-and-rt-tests-oslat-24h-2026-11-15.md#L1-L22)
+**Source link:** [Test environment and placement](https://github.com/k-rister/linux/blob/codex/accelerator-v7.3-rebase/Documentation/accel/v7.3-rebase-4cpu-user-oslat-and-rt-tests-oslat-2026-11-26.md#L1-L18)
 
-## Backing slide 9 — Detailed 24-hour results
+## Backing slide 9 — Detailed v7.3-final 24-hour results
 
 ### On-slide content
 
 | Tool | Samples | Weighted mean | Linear-rank p50/p90/p99/p999 | Maximum | Samples > 1 µs |
 |---|---:|---:|---|---:|---:|
-| cpu-accel `user-oslat` | 17,099,665,434,460 | 20.210846691 ns | 20/20/30/30 ns | 320 ns | 0 |
-| rt-tests `oslat` | 15,198,785,413,327 | 22.738551069 ns | 20/30/30/30 ns | 8,543 ns | 345,560,083 |
+| cpu-accel `user-oslat` | 17,146,540,420,604 | 20.155598190 ns | 20/20/30/30 ns | 380 ns | 0 |
+| rt-tests `oslat` | 15,240,596,761,793 | 22.676174219 ns | 20/30/30/30 ns | 9,232 ns | 345,581,176 |
 
 Per-worker cpu-accel maxima:
 
 | CPU | Maximum |
 |---:|---:|
-| 5 | 180 ns |
-| 7 | 320 ns |
-| 9 | 260 ns |
-| 11 | 250 ns |
+| 5 | 380 ns |
+| 7 | 280 ns |
+| 9 | 270 ns |
+| 11 | 330 ns |
 
 ### Speaker notes
 
-The user-oslat aggregate maximum is 320 ns, and every per-worker maximum is at
+The user-oslat aggregate maximum is 380 ns, and every per-worker maximum is at
 or below that value. All four workers report zero context switches, zero
-migrations, and zero escapes. Architecture IPIs are zero, and architecture IRQs
-are one per worker for the full run.
+migrations, and zero escapes. Architecture IPIs are zero; one architecture IRQ
+was recorded on CPU 5, and the other workers recorded none.
 
-The rt-tests maximum is 8,543 ns, with approximately 345.6 million samples
+The rt-tests maximum is 9,232 ns, with approximately 345.6 million samples
 above 1 µs. Its tool-reported internal measurement duration is 86,329.680
 seconds per thread despite the 86,400-second requested wall duration. The
 report uses that tool-reported duration when calculating rt-tests sample rates
@@ -606,19 +611,19 @@ This comparison is evidence that the post-reduction implementation sustained
 the intended execution model under a long, concurrent, real-hardware run. It is
 not a formal worst-case latency proof.
 
-**Source link:** [Detailed user-oslat and rt-tests results](https://github.com/k-rister/linux/blob/7803c712b18fb24998baf3de4eca26f0e9416270/Documentation/accel/phase10-4cpu-user-oslat-and-rt-tests-oslat-24h-2026-11-15.md#L23-L458)
+**Source link:** [Detailed user-oslat and rt-tests results](https://github.com/k-rister/linux/blob/codex/accelerator-v7.3-rebase/Documentation/accel/v7.3-rebase-4cpu-user-oslat-and-rt-tests-oslat-2026-11-26.md#L20-L77)
 
 ## Backing slide 10 — Run health and artifact integrity
 
 ### On-slide content
 
-- Window: 2026-11-15 00:51:30 UTC to 2026-11-16 00:51:31 UTC.
+- Window: 2026-11-25 02:51:26 UTC to 2026-11-26 02:51:27 UTC.
 - `user-oslat` exit: `0`.
 - rt-tests `oslat` exit: `0`.
 - Module refcount before and after: `0`.
 - New NVMe QID 2 timeouts: none.
 - New `cpu_accel` runtime errors: none.
-- `sha256sum -c` passed for all 14 raw artifacts.
+- `sha256sum -c` passed for all raw artifacts.
 
 ### Speaker notes
 
@@ -627,21 +632,21 @@ health invariants also hold. The module was loaded before the run and returned
 to refcount zero afterward. Both measurement tools exited successfully. The
 kernel log showed no new NVMe QID 2 timeout and no new cpu-accel runtime error.
 The raw evidence directory contains the tool outputs, scheduler observations,
-pre/post kernel logs, run metadata, and a checksum manifest. All 14 artifacts
+pre/post kernel logs, run metadata, and a checksum manifest. All raw artifacts
 passed verification.
 
 Raw evidence remains on Simon under:
-`/root/accel-measure/phase10-4cpu-user-oslat-and-rt-tests-oslat-24h-20261115T0050Z`.
+`/root/accel-measure/v7.3-rebase-4cpu-user-oslat-and-rt-tests-oslat-24h-20261125T025126Z`.
 
-**Source link:** [Run health and artifact integrity](https://github.com/k-rister/linux/blob/7803c712b18fb24998baf3de4eca26f0e9416270/Documentation/accel/phase10-4cpu-user-oslat-and-rt-tests-oslat-24h-2026-11-15.md#L459-L494)
+**Source link:** [Run health and artifact integrity](https://github.com/k-rister/linux/blob/codex/accelerator-v7.3-rebase/Documentation/accel/v7.3-rebase-4cpu-user-oslat-and-rt-tests-oslat-2026-11-26.md#L79-L118)
 
 ## Backing slide 11 — Review, limitations, and next work
 
 ### On-slide content
 
 - Completed: CPU ownership, protected execution, static SMP, bounded queues,
-  recovery, ABI compatibility, blast-radius reduction, internal audits, and
-  exact-current soak.
+  recovery, ABI compatibility, blast-radius reduction, internal audits, the
+  v7.3-final rebase, and increasing-duration soak ladder.
 - Not completed: device/DMA ownership, VFIO/IOMMUFD, BAR/MMIO, device
   interrupts, DMA quiesce/reset, DPDK/PMD adaptation, networking, formal bound,
   non-x86 backend, external review.
@@ -664,8 +669,8 @@ adaptation and networking workloads be considered.
 
 **Source links:**
 
-- [Current boundary and unfinished work](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/Documentation/accel/cpu-accel-report.html#L619-L660)
-- [External review priorities](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/Documentation/accel/cpu-accel-blast-radius-report.html#L184-L196)
+- [Current boundary and unfinished work](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/Documentation/accel/cpu-accel-report.html#L619-L660)
+- [External review priorities](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/Documentation/accel/cpu-accel-blast-radius-report.html#L184-L196)
 
 ---
 
@@ -724,18 +729,18 @@ review risk even after the substantial blast-radius reduction.
 
 | Claim or area | Source |
 |---|---|
-| Original goals and non-goals | [Design report](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/Documentation/accel/cpu-accel-report.html#L293-L355) |
-| Control plane, memory, static SMP, and queues | [Architecture report](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/Documentation/accel/cpu-accel-report.html#L357-L448) |
-| Transactional lifecycle and recovery | [Phase 10 design](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/Documentation/accel/phase10-smp-design.md#L36-L65) |
-| ABI 25 objects and commands | [UAPI header](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/include/uapi/linux/cpu_accel.h#L294-L446) |
-| Domain configuration, start, and worker join | [cpu-accel driver](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/drivers/cpu_accel/cpu_accel.c#L3383-L3847) |
-| x86 owner admission and direct entry | [x86 accelerator backend](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/arch/x86/kernel/accel.c#L139-L916) |
-| Deferred IPI and TLB recording | [x86 accelerator backend](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/arch/x86/kernel/accel.c#L918-L1008) |
-| Workqueue owner coordination | [workqueue core](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/kernel/workqueue.c#L4353-L4481) |
-| Per-work and destroy-time coordination | [workqueue core](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/kernel/workqueue.c#L4614-L6397) |
-| Retained wrapper API and fallbacks | [cpu-accel workqueue header](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/include/linux/cpu_accel_workqueue.h#L10-L39) |
-| Blast-radius reduction metrics | [Blast-radius report](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/Documentation/accel/cpu-accel-blast-radius-report.html#L78-L146) |
-| Wrapper semantic audit | [Wrapper API audit](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/Documentation/accel/phase10-blast-radius-wrapper-api-audit.md#L15-L119) |
-| Call-site audit closure | [Call-site audit](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/Documentation/accel/phase10-blast-radius-call-site-audit.md#L1-L104) |
-| 24-hour results and health | [24-hour exact-current soak report](https://github.com/k-rister/linux/blob/7803c712b18fb24998baf3de4eca26f0e9416270/Documentation/accel/phase10-4cpu-user-oslat-and-rt-tests-oslat-24h-2026-11-15.md#L1-L494) |
-| Current boundary and unfinished work | [Design report](https://github.com/k-rister/linux/blob/70ba38ae38fbc4a1ad01b4ddc8e64d12b7b3c7c9/Documentation/accel/cpu-accel-report.html#L619-L660) |
+| Original goals and non-goals | [Design report](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/Documentation/accel/cpu-accel-report.html#L293-L355) |
+| Control plane, memory, static SMP, and queues | [Architecture report](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/Documentation/accel/cpu-accel-report.html#L357-L448) |
+| Transactional lifecycle and recovery | [Phase 10 design](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/Documentation/accel/phase10-smp-design.md#L36-L65) |
+| ABI 25 objects and commands | [UAPI header](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/include/uapi/linux/cpu_accel.h#L294-L446) |
+| Domain configuration, start, and worker join | [cpu-accel driver](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/drivers/cpu_accel/cpu_accel.c#L3383-L3847) |
+| x86 owner admission and direct entry | [x86 accelerator backend](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/arch/x86/kernel/accel.c#L139-L916) |
+| Deferred IPI and TLB recording | [x86 accelerator backend](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/arch/x86/kernel/accel.c#L918-L1008) |
+| Workqueue owner coordination | [workqueue core](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/kernel/workqueue.c#L4353-L4481) |
+| Per-work and destroy-time coordination | [workqueue core](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/kernel/workqueue.c#L4614-L6397) |
+| Retained wrapper API and fallbacks | [cpu-accel workqueue header](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/include/linux/cpu_accel_workqueue.h#L10-L39) |
+| Blast-radius reduction metrics | [Blast-radius report](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/Documentation/accel/cpu-accel-blast-radius-report.html#L78-L146) |
+| Wrapper semantic audit | [Wrapper API audit](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/Documentation/accel/phase10-blast-radius-wrapper-api-audit.md#L15-L119) |
+| Call-site audit closure | [Call-site audit](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/Documentation/accel/phase10-blast-radius-call-site-audit.md#L1-L104) |
+| v7.3-final results and health | [v7.3-final rebase validation report](https://github.com/k-rister/linux/blob/codex/accelerator-v7.3-rebase/Documentation/accel/v7.3-rebase-4cpu-user-oslat-and-rt-tests-oslat-2026-11-26.md#L1-L118) |
+| Current boundary and unfinished work | [Design report](https://github.com/k-rister/linux/blob/e4bcafcc86d44b6e8e800f54a9394dbc9ff507d/Documentation/accel/cpu-accel-report.html#L619-L660) |

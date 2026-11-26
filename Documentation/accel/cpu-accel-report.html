@@ -219,10 +219,11 @@
     <h1>Design, implementation, and validation through Phase 10 and blast-radius reduction</h1>
     <p class="subtitle">A technical status report for low-latency and real-time systems reviewers, covering the original design, the implementation path, the post-Phase-10 scope reduction, the measured results, and the deliberate deviations from the initial plan.</p>
     <div class="meta">
-      <div><strong>Date:</strong> <time datetime="2026-11-15">November 15, 2026</time></div>
-      <div><strong>Current branch:</strong> <span class="mono">codex/accelerator-blast-radius-v2</span></div>
-      <div><strong>Current commit:</strong> <span class="mono">70ba38ae38fb</span></div>
-      <div><strong>Status:</strong> <span class="pill done">Phase 10 complete</span><span class="pill done">Blast-radius reduction closed</span><span class="pill done">24-hour soak passed</span><span class="pill paused">paused before Phase 11</span></div>
+      <div><strong>Date:</strong> <time datetime="2026-11-26">November 26, 2026</time></div>
+      <div><strong>Current branch:</strong> <span class="mono">codex/accelerator-v7.3-rebase</span></div>
+      <div><strong>Current commit:</strong> <span class="mono">e4bcafcc86d4</span></div>
+      <div><strong>Kernel:</strong> <span class="mono">7.3.0-accel-tlbfix-00019-ge4bcafcc86d4</span></div>
+      <div><strong>Status:</strong> <span class="pill done">Phase 10 complete</span><span class="pill done">Blast-radius reduction closed</span><span class="pill done">v7.3-final soak ladder passed</span><span class="pill paused">paused before Phase 11</span></div>
     </div>
   </header>
 
@@ -280,7 +281,7 @@
       <div class="kpi">
         <div class="label">Final tracked diff</div>
         <div class="value">438 files</div>
-        <div class="detail">41,126 insertions and 876 deletions</div>
+        <div class="detail">42,491 insertions and 876 deletions</div>
       </div>
       <div class="kpi">
         <div class="label">Internal review closure</div>
@@ -290,21 +291,21 @@
       <div class="kpi">
         <div class="label">Longest completed soak</div>
         <div class="value">24 h</div>
-        <div class="detail">Post-reduction exact-current run</div>
+        <div class="detail">v7.3-final rebase validation</div>
       </div>
       <div class="kpi">
         <div class="label">Maximum user-oslat latency</div>
-        <div class="value">320 ns</div>
-        <div class="detail">Post-reduction 24-hour soak</div>
+        <div class="value">380 ns</div>
+        <div class="detail">v7.3-final 24-hour soak</div>
       </div>
       <div class="kpi">
         <div class="label">Samples above 1 µs</div>
         <div class="value">0</div>
-        <div class="detail">user-oslat, post-reduction 24-hour soak</div>
+        <div class="detail">user-oslat, v7.3-final 24-hour soak</div>
       </div>
     </div>
     <div class="callout ok">
-      <strong>Bottom line:</strong> Phase 10 and the post-Phase-10 blast-radius reduction demonstrate a static multi-CPU accelerator domain, bounded shared-memory communication, recovery, ABI compatibility, and a substantially smaller owner-aware kernel interface on real hardware. Phase 11 device and static-DMA ownership has not begun, and external maintainer reviews are still follow-ups.
+      <strong>Bottom line:</strong> Phase 10 and the post-Phase-10 blast-radius reduction demonstrate a static multi-CPU accelerator domain, bounded shared-memory communication, recovery, ABI compatibility, and a substantially smaller owner-aware kernel interface on real hardware. The v7.3-final rebase passed the increasing-duration soak ladder. Phase 11 device and static-DMA ownership has not begun, and external maintainer reviews are still follow-ups.
     </div>
   </section>
 
@@ -605,7 +606,7 @@
 
     <h3>Blast-radius review closure</h3>
     <p>
-      The final tracked diff from review baseline <span class="mono">40288c9206c1</span> to <span class="mono">70ba38ae38fb</span> contains 438 files, 41,126 insertions, and 876 deletions. The primary review population is 309 non-module changed paths: 219 wrapper-family paths and 90 semantic-remainder paths. Internal review closure covers all 218 call-site files and all 90 semantic-remainder files.
+      The current tracked diff from final <span class="mono">v7.3</span> to <span class="mono">e4bcafcc86d4</span> contains 440 files, 42,491 insertions, and 876 deletions. The primary review population remains 309 non-module changed paths: 219 wrapper-family paths and 90 semantic-remainder paths. Internal review closure covers all 218 call-site files and all 90 semantic-remainder files.
     </p>
     <ul>
       <li>Production-like <code>CONFIG_CPU_ACCEL_CORE=y</code> and accelerator-disabled full builds passed.</li>
@@ -616,7 +617,7 @@
       <li>Target-hardware validation remains environment-gated for the touched TMR, Greybus, and BCM PHY PTP driver paths.</li>
     </ul>
 
-    <h3>Twenty-four-hour exact-current soak</h3>
+    <h3>Original post-reduction twenty-four-hour soak</h3>
     <p>
       The post-reduction concurrent soak ran from <time datetime="2026-11-15T00:51:30Z">2026-11-15 00:51:30 UTC</time> to <time datetime="2026-11-16T00:51:31Z">2026-11-16 00:51:31 UTC</time>. The complete agreed-format report is <span class="mono">Documentation/accel/phase10-4cpu-user-oslat-and-rt-tests-oslat-24h-2026-11-15.md</span>.
     </p>
@@ -631,6 +632,25 @@
     </table>
     <p>
       Both tools exited successfully, the module refcount returned to zero, and no new NVMe QID 2 timeouts or <code>cpu_accel</code> runtime errors appeared. All raw artifact checksums passed.
+    </p>
+
+    <h3>v7.3-final rebase validation ladder</h3>
+    <p>
+      The branch was rebased onto Linux <span class="mono">v7.3</span> final commit <span class="mono">c03c1a14507d</span>, built as kernel <span class="mono">7.3.0-accel-tlbfix-00019-ge4bcafcc86d4</span>, and validated with concurrent four-CPU runs of 60 seconds, 10 minutes, one hour, and 24 hours. The one-hour rerun and 24-hour final stage both kept every cpu-accel worker active for the full requested duration.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Stage</th><th>user-oslat samples</th><th>user-oslat max</th><th>user-oslat above 1 µs</th><th>rt-tests samples</th><th>rt-tests max</th><th>rt-tests above 1 µs</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>60 seconds</td><td>11,982,652,322</td><td>280 ns</td><td>0</td><td>10,649,275,920</td><td>9,782 ns</td><td>204,123</td></tr>
+        <tr><td>10 minutes</td><td>119,157,145,044</td><td>290 ns</td><td>0</td><td>105,908,634,148</td><td>11,460 ns</td><td>2,393,639</td></tr>
+        <tr><td>1 hour rerun</td><td>714,269,771,504</td><td>610 ns</td><td>0</td><td>634,871,182,299</td><td>9,502 ns</td><td>14,372,706</td></tr>
+        <tr><td>24 hours</td><td>17,146,540,420,604</td><td>380 ns</td><td>0</td><td>15,240,596,761,793</td><td>9,232 ns</td><td>345,581,176</td></tr>
+      </tbody>
+    </table>
+    <p>
+      Both tools exited successfully in every counted stage, all raw checksums passed, and the complete validation record is <span class="mono">Documentation/accel/v7.3-rebase-4cpu-user-oslat-and-rt-tests-oslat-2026-11-26.md</span>.
     </p>
 
     <h3>Phase 8 adversarial validation</h3>
@@ -692,7 +712,7 @@
   <section id="current-boundary">
     <h2>Current boundary and what is not done</h2>
     <p>
-      The project is paused before Phase 11. The current branch is complete through Phase 10 and blast-radius reduction, and is pushed at commit <span class="mono">70ba38ae38fb</span>.
+      The project is paused before Phase 11. The current branch is complete through Phase 10, blast-radius reduction, and the v7.3-final rebase validation at commit <span class="mono">e4bcafcc86d4</span>.
     </p>
     <div class="two-col">
       <div class="card">
@@ -789,6 +809,7 @@
       <li><code>Documentation/accel/phase10-blast-radius-subsystem-review-matrix.md</code> — internal readiness and external follow-up matrix.</li>
       <li><code>Documentation/accel/phase10-blast-radius-reduction-2026-11-14.md</code> — post-reduction latency comparison methodology and results.</li>
       <li><code>Documentation/accel/phase10-4cpu-user-oslat-and-rt-tests-oslat-24h-2026-11-15.md</code> — complete post-reduction 24-hour comparison report.</li>
+      <li><code>Documentation/accel/v7.3-rebase-4cpu-user-oslat-and-rt-tests-oslat-2026-11-26.md</code> — v7.3-final rebase validation ladder and 24-hour results.</li>
       <li><code>Documentation/accel/phase8-wcl-report.md</code> — worst-case latency methodology and stress-class evidence.</li>
       <li><code>Documentation/accel/oslat-sidebyside-*.md</code> — user-oslat and rt-tests oslat comparison reports.</li>
       <li><code>drivers/cpu_accel/cpu_accel.c</code> — implementation.</li>
@@ -798,7 +819,7 @@
   </section>
 
   <footer>
-    <p>Prepared on <time datetime="2026-11-15">November 15, 2026</time> from the current branch <span class="mono">codex/accelerator-blast-radius-v2</span> at <span class="mono">70ba38ae38fb</span>. The 24-hour exact-current soak completed successfully before this report was prepared.</p>
+    <p>Prepared on <time datetime="2026-11-26">November 26, 2026</time> from the current branch <span class="mono">codex/accelerator-v7.3-rebase</span> at <span class="mono">e4bcafcc86d4</span>. The v7.3-final rebase and increasing-duration soak ladder completed successfully before this report was prepared.</p>
   </footer>
 </div>
 </body>
